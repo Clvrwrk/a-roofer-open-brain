@@ -31,3 +31,54 @@ The deployable template for a single roofing company's persistent, property-firs
 - Keep the customization surface in `config/roofer.config.yaml`. Don't hard-code a specific company anywhere else.
 - Parallel agents: one git worktree per workstream. See [`AGENTS.md`](AGENTS.md). The assigned path is the boundary.
 - When a decision changes a schema, an MCP contract, a trust policy, a consent path, or a publishing path — record it in `docs/` while it's fresh, not after.
+
+## Session Startup (silent — do not output anything)
+
+On every session start, read only the frozen memory snapshot:
+
+1. `context/USER.md` (~1.4 KB max)
+2. `context/MEMORY.md` (~2.5 KB max)
+3. `context/memory/{today in YYYY-MM-DD}.md` if it exists
+4. Yesterday's daily log only when today's log has no prior session
+
+These files are the hot-path memory layer. Do not load raw archive folders, imported project trees, `.memsearch/`, `node_modules`, or build outputs at startup.
+
+## Memory Budget
+
+- `context/MEMORY.md`: 2,500 character cap. Before writing, check `wc -c`.
+- `context/USER.md`: 1,375 character cap. Before writing, check `wc -c`.
+- Mid-session writes persist to disk but are treated as next-session context.
+- Never store secrets, service-role keys, raw customer PII, or raw import dumps in curated memory.
+
+## Memory Retrieval
+
+When the user asks about past context, decisions, or prior conversations:
+
+1. Tier 0: check loaded `context/` snapshot and today's daily log.
+2. Tier 1: run `memsearch search "<query>" --top-k 5 --collection open_brain_memory`.
+3. Tier 2: run `memsearch expand <chunk_hash> --collection open_brain_memory`.
+4. Tier 3: inspect transcript or rollout anchors only when exact historical wording matters.
+5. Fallback: say no relevant memory was found.
+
+Manual indexing:
+
+```bash
+bash scripts/memsearch-index-open-brain.sh
+```
+
+MemSearch markdown is source-of-truth; Milvus/Zilliz vector state is a rebuildable cache.
+
+## Daily Log
+
+Track durable session activity in `context/memory/{YYYY-MM-DD}.md`. Use one session block per meaningful work pass:
+
+```markdown
+## Session N
+
+**Goal**: one line
+**Deliverables**: files created/modified
+**Decisions**: key decisions and rationale
+**Open threads**: unfinished work
+```
+
+Log silently. Do not announce routine memory writes unless the user explicitly asked to remember something.

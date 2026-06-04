@@ -1,0 +1,29 @@
+[milvus]
+uri = "~/.memsearch/milvus.db"
+token = ""
+collection = "open_brain_memory"
+
+[embedding]
+provider = "onnx"
+model = "gpahal/bge-m3-onnx-int8"
+
+[plugins.codex.summarize]
+enabled = true
+provider = ""
+model = ""
+
+[plugins.codex.project_review]
+enabled = false
+provider = "native"
+model = ""
+min_interval_hours = 24
+input_dir = ".memsearch/memory"
+output_file = ".memsearch/PROJECT.md"
+
+[plugins.codex.user_profile]
+enabled = false
+provider = "native"
+model = ""
+min_interval_hours = 24
+input_dir = ".memsearch/memory"
+output_file = ".memsearch/USER.md"

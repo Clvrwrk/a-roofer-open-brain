@@ -40,6 +40,14 @@ When multiple AI agents work on this repo, do not share a checkout.
 - Before staging: `git status --short`; stage only files belonging to the current task.
 - After merge + clean worktree: `git worktree remove <path>`.
 
+## Memory discipline
+
+- Read the frozen startup memory in `context/USER.md`, `context/MEMORY.md`, and today's `context/memory/YYYY-MM-DD.md` before broad repo exploration.
+- Use MemSearch for historical recall: `memsearch search "<query>" --top-k 5 --collection open_brain_memory`, then `memsearch expand <chunk_hash> --collection open_brain_memory` when more context is needed.
+- Treat `.memsearch/` and Milvus/Zilliz state as generated cache. Markdown under `context/` is the durable source-of-truth.
+- Never index `archive/local-uncommitted-*` directly. Maintenance must sanitize/extract archived imports before promotion into memory, Supabase, or active source paths.
+- Do not store secrets, service-role keys, raw PII, or raw customer exports in curated memory.
+
 ### Assignment template
 
 ```text
