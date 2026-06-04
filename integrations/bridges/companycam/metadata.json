@@ -1,0 +1,18 @@
+{
+  "name": "companycam-bridge",
+  "display_name": "CompanyCam",
+  "version": "1.0.0",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["capture", "conductor"],
+  "env_vars": {
+    "required": ["COMPANYCAM_API_KEY"],
+    "optional": ["COMPANYCAM_WEBHOOK_SECRET"]
+  },
+  "webhook_topics": ["photo.created", "photo.updated", "project.created"],
+  "objects_ingested": ["projects", "photos", "videos", "comments", "tags"],
+  "debrief_trigger_milestone": null,
+  "notes": "Primary EEAT signal source. Photo URLs are stored, not downloaded. damage_tags list is configurable in roofer.config.yaml."
+}

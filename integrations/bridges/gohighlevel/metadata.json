@@ -1,0 +1,23 @@
+{
+  "name": "gohighlevel",
+  "version": "0.1.0",
+  "tier": 1,
+  "role": "front-of-funnel-crm",
+  "binding": "api+webhooks",
+  "origin": "cleverwork",
+  "authoritative": "pre-contract",
+  "base_url": "https://services.leadconnectorhq.com",
+  "auth": ["oauth2", "location_api_key"],
+  "env": ["GHL_API_KEY", "GHL_LOCATION_ID", "GHL_WEBHOOK_SECRET"],
+  "webhook_topics": [
+    "ContactCreate", "ContactUpdate",
+    "OpportunityCreate", "OpportunityUpdate", "OpportunityStageUpdate",
+    "AppointmentCreate", "AppointmentUpdate",
+    "InboundMessage", "OutboundMessage",
+    "FormSubmit", "CampaignStatusUpdate", "InvoicePaid"
+  ],
+  "writes": ["property", "job", "thoughts"],
+  "handoff_to": "acculynx",
+  "handoff_trigger": "opportunity.stage=won",
+  "a3_ref": null
+}

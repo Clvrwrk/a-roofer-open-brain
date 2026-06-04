@@ -1,0 +1,119 @@
+# ──────────────────────────────────────────────────────────────────────────
+# a-roofers-open-brain — client configuration
+# Copy to config/roofer.config.yaml and edit. This is the ONLY file most
+# roofers need to touch. Secrets go in .env (see config/.env.example), never here.
+# scripts/new-client.sh reads this file to provision the brain.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Identity of THIS brain's owning client. In a single-client brain this is 'self'.
+client:
+  id: "self"                        # FK value written onto every atom (client_id)
+
+# Runtime wiring read by agents/bridges at runtime (filled after Coolify apps exist).
+supabase:
+  project_url: ""                   # e.g. https://YOUR-PROJECT.supabase.co
+runtime:
+  brain_mcp_url: ""                 # e.g. https://brain-mcp.CLIENT.brain.cleverwork.io
+  researcher_mcp_url: ""            # e.g. https://researcher.CLIENT.brain.cleverwork.io
+  acculynx_bridge_url: ""           # e.g. https://acculynx.CLIENT.brain.cleverwork.io
+  dashboard_url: ""                 # e.g. https://CLIENT.brain.cleverwork.io
+
+company:
+  name: "Acme Roofing Co."          # legal/operating name
+  dba: "Acme Roofing"               # how customers know you
+  license_no: "ROC-000000"          # contractor license #
+  phone: "+1-555-0100"
+  website: "https://acmeroofing.example"
+  service_area:                     # cities/counties you work in (drives jurisdictions)
+    - "Travis County, TX"
+    - "Williamson County, TX"
+  trades:                           # your trade(s); used for cross-client trade restriction
+    - "roofing"
+
+# Jurisdictions you pull permits in. era/code fields seed regulatory_snapshot rows.
+jurisdictions:
+  - name: "City of Austin, TX"
+    ahj: "Austin Development Services"
+    building_code: "IRC-2021 + local amendments"
+    wind_zone: "Vult 115 mph"
+    notes: "Ice-and-water shield not required; radiant barrier common."
+  - name: "Round Rock, TX"
+    ahj: "Round Rock Building Inspection"
+    building_code: "IRC-2021"
+    wind_zone: "Vult 115 mph"
+
+# Manufacturers you're certified with — drives warranty registration + EEAT cert badges.
+manufacturers:
+  - brand: "GAF"
+    certification: "Master Elite"
+    warranty_portal: "https://www.gaf.com/en-us/roofing-contractors"
+  - brand: "Owens Corning"
+    certification: "Platinum Preferred"
+
+# Which agents are turned on, and their skill packs. Start small (80/20); add via the A3 gate.
+agents:
+  vertical:
+    ops:        { enabled: true,  skills: [scheduling, crews-subs, daily-logs, materials, tearoff-sequencing, safety, permits] }
+    sales:      { enabled: true,  skills: [leads, storm-canvassing, estimating, insurance-claims, proposals, follow-up] }
+    accounting: { enabled: false, skills: [invoicing, ar-aging, job-costing, change-orders, insurance-supplement-accounting] }
+    marketing:  { enabled: false, skills: [content, reviews, photo-handling, eeat-publishing, schema-markup] }
+    exec:       { enabled: false, skills: [dashboards, kpi-trees, strategy, hiring] }
+  horizontal:   # infrastructure; capture/historian/conductor/auditor are always on
+    capture:         { enabled: true }
+    historian:       { enabled: true }
+    researcher:      { enabled: false }   # stub OK for first client (Phase 1)
+    conductor:       { enabled: true }
+    auditor:         { enabled: true }
+    quality_control: { enabled: true, mode: "observe" }   # observe → enforce later
+    innovator:       { enabled: true, mode: "log" }        # log candidates only
+    maintenance:     { enabled: true, phases: [sort, set-in-order] }  # add shine/standardize/sustain in Phase 1.5
+
+# Data bridges. Toggle what this client uses; secrets/keys live in .env.
+integrations:
+  gohighlevel:   { enabled: true,  tier: 1, webhook: true, role: "front-of-funnel-crm" }  # PRIMARY CRM: leadgen + pre/post-contract nurture; authoritative pre-contract
+  acculynx:      { enabled: true,  tier: 1, webhook: true }    # production PM tool; authoritative during-job (mirrored to Supabase)
+  companycam:    { enabled: true,  tier: 1 }                   # photos → claim + EEAT atoms
+  quickbooks:    { enabled: false, tier: 1, edition: "online" }
+  startinfinity: { enabled: false, tier: 1 }
+  eagleview:     { enabled: false, tier: 1 }                   # aerial measurement / takeoff
+  slack:
+    enabled: true
+    workspace: "acme-roofing"
+    app_strategy: "single-conductor-app-v1"
+    app_manifest: "deployment/remote/slack/<client-slug>-open-brain.manifest.yaml"
+    primary_bot_handle: "ob-conductor"
+    bot_handles: ["ob-conductor"]
+    logical_agent_handles: ["ob-ops", "ob-sales", "ob-accounting", "ob-marketing", "ob-exec"]
+    channels:
+      conductor_digest: "ob-conductor-digest"
+      agent_audit_log: "ob-agent-audit-log"
+  meeting_capture:
+    provider: "granola"          # granola | fireflies | none ; used for debrief transcription
+    enabled: true
+
+# Cross-client property history (the moat). Carrot, not stick.
+consent:
+  cross_client_default: "opt_in"     # opt_in | opt_out
+  trade_restriction: ["roofing"]     # never share with same-trade competitors
+  publishable_external_default: false
+
+# Deployment. Default: managed Supabase brain + agents/MCP on Hetzner (Coolify) + self-hosted dashboard.
+deployment:
+  profile: "remote"                  # remote | local (see docs/04-going-local.md, docs/08-stack-and-topology.md)
+  runtime: "hetzner-coolify"         # where agents + MCP servers run (CPX41 via Coolify)
+  remote:
+    supabase_project_ref: ""         # the brain DB; filled by new-client.sh if blank
+    region: "us-west"                # Supabase region (Hetzner box is Oregon)
+  dashboard:
+    enabled: true
+    host: "coolify"                  # self-hosted on Hostinger KVM via Coolify (Astro) — Cleverwork-owned, no Vercel
+  local:                             # only used if profile: local (see docs/04-going-local.md)
+    compose_file: "deployment/local/docker-compose.yml"
+    ollama_embeddings: true
+
+# Which model tier each agent role maps to. See docs/05-model-matrix.md.
+model_tiers:
+  reasoning:  "frontier"   # Auditor, QC, Innovator, exec strategy
+  workhorse:  "standard"   # vertical agents day-to-day
+  capture:    "fast"       # atomization, dedup, classification
+  embeddings: "managed"    # managed cloud embeddings (or 'ollama' in local profile)

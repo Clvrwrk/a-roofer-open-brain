@@ -1,0 +1,8 @@
+{
+  "name": "ontology-creator",
+  "version": "0.1.0",
+  "origin": "infranodus",
+  "license": "MIT",
+  "bound_agents": ["quality-control", "innovator"],
+  "a3_ref": null
+}

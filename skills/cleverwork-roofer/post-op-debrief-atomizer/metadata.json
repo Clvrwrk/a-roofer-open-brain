@@ -1,0 +1,8 @@
+{
+  "name": "post-op-debrief-atomizer",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["capture"],
+  "a3_ref": null
+}

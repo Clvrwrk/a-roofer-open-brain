@@ -1,0 +1,35 @@
+{
+  "name": "startinfinity-bridge",
+  "display_name": "StartInfinity",
+  "version": "1.0.0",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["capture", "conductor"],
+  "env_vars": {
+    "required": ["STARTINFINITY_API_KEY"],
+    "optional": []
+  },
+  "webhook_topics": ["card.moved", "card.created", "card.updated", "card.comment_added"],
+  "objects_ingested": ["boards", "columns", "cards", "comments", "custom_fields", "attachments"],
+  "job_phase_map": {
+    "New Lead": "lead",
+    "Inquiry": "lead",
+    "Estimate Scheduled": "estimate",
+    "Proposal Sent": "estimate",
+    "Contract Signed": "won",
+    "Approved": "won",
+    "In Progress": "in_progress",
+    "On the Roof": "in_progress",
+    "Punch List": "punch",
+    "Complete": "closed",
+    "Closed": "closed",
+    "Warranty": "warranty",
+    "Lost": "lost",
+    "Not Interested": "lost"
+  },
+  "debrief_trigger_milestone": ["closed", "warranty"],
+  "coexistence_note": "If AccuLynx bridge also active, AccuLynx is authoritative for public.job rows. StartInfinity cards are linked via address match.",
+  "notes": "Column names in job_phase_map vary by client board setup. Override via config/roofer.config.yaml → integrations.startinfinity.column_map."
+}

@@ -1,0 +1,8 @@
+{
+  "name": "eeat-publishing",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["ob-marketing", "auditor"],
+  "a3_ref": null
+}

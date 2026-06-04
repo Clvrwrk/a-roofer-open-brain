@@ -1,0 +1,166 @@
+# debrief.config.example.yaml
+# Post-Op Debrief recipe configuration.
+# Copy to debrief.config.yaml and fill in client-specific values.
+# No secrets here — API keys and tokens belong in .env (see config/.env.example).
+
+# ─── Scheduling ────────────────────────────────────────────────────────────────
+scheduling:
+  # Days after job.closed webhook before debrief must be completed.
+  # Conductor sends a reminder if this window is missed.
+  debrief_window_days: 5
+
+  # If true, Conductor auto-schedules a calendar invite to participants.
+  # If false, Conductor posts a Slack prompt to the PM to schedule manually.
+  auto_schedule: true
+
+  # Calendar integration used for auto-scheduling.
+  # Options: google_calendar | outlook | none
+  calendar_provider: google_calendar
+
+# ─── Participants ───────────────────────────────────────────────────────────────
+participants:
+  # Slack user IDs or role slugs resolved at runtime from roofer.config.yaml.
+  required:
+    - role: pm                  # Resolved to the PM assigned to the job
+    - role: foreman             # Resolved to the foreman assigned to the job
+    - role: client_contact      # Resolved to the primary client contact on the job
+  optional:
+    - role: estimator           # Included automatically if scope deviated >= 15%
+    - role: qc_lead             # Included automatically if any QC event fired during job
+    - role: sub_lead            # Included only if a sub-relationship issue was escalated
+
+# ─── Recording and transcription ───────────────────────────────────────────────
+transcription:
+  # Primary transcription provider.
+  # Options: granola | fireflies | whisper_local
+  provider: granola
+
+  # Fallback if primary is unavailable.
+  fallback_provider: fireflies
+
+  # Language for transcription. ISO 639-1 code.
+  language: en
+
+  # Attach raw audio file to the job's atom set.
+  attach_audio: true
+
+  # Attach transcript text to the job's atom set.
+  attach_transcript: true
+
+# ─── Blameless framing (read verbatim by Conductor at meeting open) ───────────
+blameless_framing: >
+  This is a blameless review. We are capturing what happened so we can do
+  it better, and so a future crew briefed on you will know what mattered.
+  Nothing said here is used against anyone. If you want anything redacted,
+  tell us now or within 24 hours and we will pull it before atomization.
+
+# ─── Anchor questions (v1) ─────────────────────────────────────────────────────
+# These are templates. Facilitator adapts wording to the job context.
+# Do not reorder — sequence is intentional (positive → technical → relational).
+questions:
+  - id: q1
+    label: what_went_right
+    prompt: >
+      What did we get right on this job?
+    probe: >
+      Was there anything the crew did that you were not expecting but appreciated?
+    atom_track: both
+    eeat_signal_type: Experience
+
+  - id: q2
+    label: what_diverged
+    prompt: >
+      What went wrong, or where did the plan diverge from what actually happened?
+    probe: >
+      Were there any moments when the plan and reality were out of sync — even briefly?
+    atom_track: hard
+    eeat_signal_type: null
+
+  - id: q3
+    label: era_aware
+    prompt: >
+      What did current code or current materials force us to do differently
+      than we would have done five years ago?
+    probe: >
+      Any moment where you said "we used to do this differently" — what changed and why?
+    atom_track: hard
+    eeat_signal_type: Expertise
+
+  - id: q4
+    label: practitioner_attribution
+    prompt: >
+      Were there moments where a specific crew member's experience made the difference?
+    probe: >
+      Was there a moment where someone said "I have seen this before" and that
+      changed how you handled it?
+    atom_track: hard
+    eeat_signal_type: null
+    # If named practitioner has tenure_years >= this threshold, flag for
+    # standalone knowledge-harvest session.
+    knowledge_harvest_tenure_threshold_years: 10
+
+  - id: q5
+    label: property_forward
+    prompt: >
+      What would you tell a foreman starting on this same property next year?
+    probe: >
+      Think about the address — the pitch, the soil, the inspector's preferences.
+      What would save the next crew time?
+    atom_track: hard
+    eeat_signal_type: Authoritativeness
+    # cross_client_shareable defaults to true for Q5 atoms unless client overrides.
+    default_cross_client_shareable: true
+
+  - id: q6
+    label: flowers
+    prompt: >
+      What mattered to you that we should remember if you ever call us again?
+    probe: >
+      Is there anything about how this job went — or about your situation,
+      your property, what matters to you — that you would want us to carry forward?
+    atom_track: soft
+    eeat_signal_type: Trustworthiness
+    # Default EEAT signal value for Q6 soft atoms (0.0–1.0).
+    eeat_signal_value_default: 0.85
+
+# ─── Consent prompt (shown to client before recording begins) ──────────────────
+consent:
+  # Consent is captured once at client onboarding, not per-debrief.
+  # This message confirms consent is on file before the recording starts.
+  confirmation_message: >
+    Recording consent for this session is on file from your onboarding agreement.
+    This session will be recorded and transcribed for the purpose of capturing
+    institutional knowledge about this job. You may request redaction of any
+    statement within 24 hours.
+
+  # Hours after debrief in which client may request redaction.
+  redaction_window_hours: 24
+
+# ─── Atom defaults ─────────────────────────────────────────────────────────────
+atom_defaults:
+  # Default trust_tier for all debrief atoms. Do not change without QC approval.
+  trust_tier: evidence
+
+  # Default cold_archive_status for new debrief atoms.
+  cold_archive_status: live
+
+  # Default eeat_signal.value for soft atoms from questions other than Q6.
+  soft_eeat_signal_value_default: 0.75
+
+# ─── Post-debrief routing ──────────────────────────────────────────────────────
+routing:
+  # Notify QC with hard-atom summary after atomization completes.
+  notify_qc: true
+
+  # Notify Marketing with soft-atom queue after atomization completes.
+  notify_marketing: true
+
+  # Notify Innovator with full transcript after atomization completes.
+  notify_innovator: true
+
+  # eeat_signal.value threshold above which soft atoms are routed to Marketing.
+  eeat_routing_threshold: 0.7
+
+  # Slack channel for Conductor's post-debrief routing notifications (internal).
+  # Value is a config key resolved from roofer.config.yaml.
+  internal_channel: config.slack.internal_ops_channel

@@ -1,0 +1,8 @@
+{
+  "name": "gaf-warranty-registration",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["ob-accounting", "ob-ops"],
+  "a3_ref": null
+}

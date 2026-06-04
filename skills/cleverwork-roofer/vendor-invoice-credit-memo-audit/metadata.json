@@ -1,0 +1,8 @@
+{
+  "name": "vendor-invoice-credit-memo-audit",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["ob-accounting", "ob-ops", "auditor", "conductor"],
+  "a3_ref": "proposals/2026-05-30-vendor-invoice-credit-memo-audit.md"
+}

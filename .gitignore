@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Client config holds live company data (see config/.env.example for secret names)
+config/roofer.config.yaml
+
+# OS / editor
+.DS_Store
+
+# Dashboard build output
+deployment/remote/dashboard/dist/
+
+# Supabase local/link state
+supabase/.temp/
+supabase/.branches/
+
+# Node
+node_modules/

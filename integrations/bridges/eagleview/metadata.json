@@ -1,0 +1,19 @@
+{
+  "name": "eagleview-bridge",
+  "display_name": "EagleView",
+  "version": "1.0.0",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["capture", "conductor"],
+  "env_vars": {
+    "required": ["EAGLEVIEW_API_KEY"],
+    "optional": []
+  },
+  "webhook_topics": ["report.completed", "report.revised"],
+  "objects_ingested": ["measurement_reports"],
+  "debrief_trigger_milestone": null,
+  "trust_tier_override": "instruction",
+  "notes": "EagleView measurement atoms are set to trust_tier=instruction (third-party verified). Imagery date is used as original_capture_date, not order date."
+}

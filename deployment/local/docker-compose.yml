@@ -1,0 +1,53 @@
+# deployment/local/docker-compose.yml
+# Local-capable profile — held in reserve (see docs/04-going-local.md).
+# Use only when a client requires data residency or an air-gap. The MCP contract
+# is identical to the remote profile, so a brain migrates remote↔local without loss.
+# Pattern credit: Cole Medin / Dynamous "second brain" local stack (re-expressed; not their file).
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: roofbrain-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-roofbrain}
+    ports:
+      - "5432:5432"
+    volumes:
+      - roofbrain_pgdata:/var/lib/postgresql/data
+      # schema applied by new-client.sh via psql; nothing auto-mounted to avoid surprise re-runs
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: roofbrain-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - roofbrain_ollama:/root/.ollama
+    # Pull an embedding model after start: docker exec roofbrain-ollama ollama pull nomic-embed-text
+
+  brain-mcp:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile        # create from denoland/deno:alpine; runs index.ts
+    container_name: roofbrain-mcp
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-http://db:5432}   # local PostgREST or direct; see docs/04
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set in .env}
+      OB_ACCESS_KEY_HISTORIAN: ${OB_ACCESS_KEY_HISTORIAN:?set in .env}
+      EMBEDDINGS_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  roofbrain_pgdata:
+  roofbrain_ollama:

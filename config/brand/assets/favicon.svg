@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pro Exteriors">
+  <title>Pro Exteriors</title>
+  <rect width="64" height="64" rx="12" fill="#11133F" />
+  <polygon points="10,40 31,18 33,18 54,40 54,48 33,26 31,26 10,48" fill="#FFFFFF" />
+  <rect x="22" y="16" width="9" height="9" fill="#FFFFFF" />
+  <rect x="14" y="52" width="36" height="6" fill="#c22326" />
+</svg>

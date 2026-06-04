@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 210" role="img" aria-label="Pro Exteriors LLC">
+  <title>Pro Exteriors LLC — reversed</title>
+  <!-- All-white knockout for deep-navy / dark surfaces (admin rail, footer).
+       Vector recreation in brand geometry; replace with official artwork when available. -->
+  <defs>
+    <style>
+      .wm { font-family: "Inter", "Arial Black", Arial, sans-serif; font-weight: 800; font-style: italic; }
+    </style>
+  </defs>
+
+  <g fill="#FFFFFF">
+    <polygon points="150,92 300,40 322,40 360,53 360,99 322,58 300,58 150,104" />
+    <rect x="356" y="52" width="124" height="48" />
+    <rect x="246" y="36" width="22" height="20" />
+    <rect x="36" y="74" width="100" height="12" />
+    <rect x="496" y="74" width="90" height="12" />
+    <rect x="46" y="184" width="150" height="8" />
+    <rect x="360" y="184" width="150" height="8" />
+  </g>
+
+  <!-- PRO reads navy on the white roof panel; rest of the lockup is white -->
+  <text class="wm" x="366" y="88" font-size="38" fill="#11133F">PRO</text>
+  <text class="wm" x="46" y="170" font-size="74" fill="#FFFFFF" letter-spacing="1">EXTERIORS</text>
+  <text class="wm" x="520" y="192" font-size="24" fill="#FFFFFF">LLC</text>
+</svg>

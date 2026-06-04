@@ -1,0 +1,8 @@
+{
+  "name": "competitive-analysis",
+  "version": "0.1.0",
+  "origin": "ob1",
+  "license": "MIT",
+  "bound_agents": ["ob-sales", "ob-marketing", "innovator"],
+  "a3_ref": null
+}

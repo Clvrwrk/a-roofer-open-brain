@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-06-01T15:08:13Z",
+  "scope": "unpaid invoices only",
+  "note": "Baked from Supabase invoice_gate_snapshot(). Historical 2023-2025 invoices marked paid; only 2026 unpaid invoices remain in scope. Live /api/invoice-gate replaces this when SUPABASE creds are set.",
+  "summary": { "total": 335, "ok": 0, "blocked": 335 },
+  "by_region": [
+    {"region":"KS","blocked":148,"ok":0,"expiry":"2025-12-31"},
+    {"region":"TX","blocked":137,"ok":0,"expiry":"2026-04-20"},
+    {"region":"CO","blocked":34,"ok":0,"expiry":"2025-08-31"},
+    {"region":"OTHER","blocked":16,"ok":0,"expiry":null}
+  ],
+  "blocked_sample": [
+    {"invoice":"2004900300-001","region":"TX","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2026-04-20"},
+    {"invoice":"2004939223-001","region":"CO","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2025-08-31"},
+    {"invoice":"2005379622-001","region":"KS","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2025-12-31"},
+    {"invoice":"2005455803-001","region":"TX","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2026-04-20"},
+    {"invoice":"2005459051-001","region":"KS","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2025-12-31"},
+    {"invoice":"2005467544-001","region":"KS","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2025-12-31"},
+    {"invoice":"2005523973-001","region":"TX","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2026-04-20"},
+    {"invoice":"2005553017-001","region":"KS","vendor":"ABC Supply Co.","payment_status":"unpaid","expiry":"2025-12-31"}
+  ]
+}

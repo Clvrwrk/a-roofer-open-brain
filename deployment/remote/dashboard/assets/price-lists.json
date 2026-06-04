@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-06-01T13:34:04Z",
+  "note": "Baked snapshot from Supabase (v_price_list_currency + price_refresh_request). Live /api/price-lists replaces this when SUPABASE creds are set.",
+  "currency": [
+    {"office":"Denver (Greenwood Village), CO","region":"CO","vendor":"ABC Supply Co.","version":"v1","account":"1156071","rep":"Justin Garza","effective":"2024-09-01","expiry":"2025-08-31","verified":true,"status":"expired"},
+    {"office":"Euless, TX","region":"TX","vendor":"ABC Supply Co.","version":"v1","account":"930014","rep":"Justin Garza","effective":"2025-04-21","expiry":"2026-04-20","verified":true,"status":"expired"},
+    {"office":"Kansas City, MO","region":"KC","vendor":"ABC Supply Co.","version":"v1","account":"2036874","rep":"Justin Garza","effective":"2026-03-16","expiry":"2026-03-31","verified":true,"status":"expired"},
+    {"office":"Richardson, TX","region":"TX","vendor":"ABC Supply Co.","version":"v1","account":"930014","rep":"Justin Garza","effective":"2025-04-21","expiry":"2026-04-20","verified":true,"status":"expired"},
+    {"office":"Wichita, KS","region":"KS","vendor":"ABC Supply Co.","version":"v2","account":"2036874","rep":"Justin Garza","effective":"2026-04-27","expiry":"2026-05-31","verified":true,"status":"expired"},
+    {"office":"Denver (Greenwood Village), CO","region":"CO","vendor":"QXO","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Euless, TX","region":"TX","vendor":"QXO","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Kansas City, MO","region":"KC","vendor":"QXO","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Richardson, TX","region":"TX","vendor":"QXO","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Wichita, KS","region":"KS","vendor":"QXO","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Denver (Greenwood Village), CO","region":"CO","vendor":"SRS Distribution","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Euless, TX","region":"TX","vendor":"SRS Distribution","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Kansas City, MO","region":"KC","vendor":"SRS Distribution","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Richardson, TX","region":"TX","vendor":"SRS Distribution","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"},
+    {"office":"Wichita, KS","region":"KS","vendor":"SRS Distribution","version":null,"account":null,"rep":null,"effective":null,"expiry":null,"verified":null,"status":"missing"}
+  ],
+  "requests": [
+    {"id":"8ebb5b7c-aa0f-45e6-8b68-08df968ac818","vendor":"ABC Supply Co.","to_name":"Justin Garza","to_email":"Justin.Garza@abcsupply.com","subject":"Pro Exteriors - request for updated ABC Supply price lists","body":"Justin,\n\nOur ABC Supply price agreements have lapsed and we need refreshed price lists to keep our quoting accurate and protect job margins. The following accounts are past their expiry date:\n\n  - CO  (account 1156071)  -  expired 2025-08-31\n  - KC  (account 2036874)  -  expired 2026-03-31\n  - KS  (account 2036874)  -  expired 2026-05-31\n  - TX  (account 930014)  -  expired 2026-04-20\n\nCould you send updated price sheets - or confirm renewals - for these accounts at your earliest convenience? As soon as we receive them we will load and verify them in our system.\n\nAppreciate your help.\n\nPro Exteriors - Purchasing\n844-336-PROS","reason":"expired","regions":["CO","KC","KS","TX"],"status":"ready_to_send","verified_by":null,"channel":"gmail","external_ref":"r390945406442507122"}
+  ]
+}

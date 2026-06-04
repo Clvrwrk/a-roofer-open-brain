@@ -1,0 +1,40 @@
+{
+  "name": "abc-supply-bridge",
+  "display_name": "ABC Supply",
+  "version": "0.1.0-planned",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["accounting", "ops", "sales", "capture", "conductor"],
+  "env_vars": {
+    "required": ["ABC_SUPPLY_CLIENT_ID", "ABC_SUPPLY_CLIENT_SECRET"],
+    "optional": ["ABC_SUPPLY_WEBHOOK_SECRET", "ABC_SUPPLY_REFRESH_TOKEN", "ABC_SUPPLY_ENV"]
+  },
+  "api_base_urls": {
+    "sandbox": "https://partners-sb.abcsupply.com",
+    "production": "https://partners.abcsupply.com"
+  },
+  "auth_urls": {
+    "sandbox": "https://sandbox.auth.partners.abcsupply.com/oauth2/aus1vp07knpuqf6Xz0h8",
+    "production": "https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357"
+  },
+  "api_docs": "https://apidocs.abcsupply.com/api-endpoints/",
+  "webhook_events": ["ORDER_UPDATE", "ORDER_INVOICED"],
+  "objects_ingested": [
+    "sold_to_accounts",
+    "bill_to_accounts",
+    "ship_to_accounts",
+    "ship_to_contacts",
+    "branches",
+    "products",
+    "item_availability",
+    "prices",
+    "orders",
+    "order_templates",
+    "order_updates",
+    "invoices",
+    "invoice_pdfs"
+  ],
+  "notes": "Planning metadata only. Public docs are sufficient for design, but implementation requires ABC Supply approval, credentials, and confirmation of integration track."
+}

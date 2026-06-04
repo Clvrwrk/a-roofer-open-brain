@@ -1,0 +1,904 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Pro Exteriors Open Brain Admin — theme
+   Derived from config/brand/DESIGN.md (the source of truth) and governed by
+   standards/design/v1.md. Every color/radius/font here is a DESIGN.md token —
+   no off-system values (DSN-010/014). Five-color role discipline (DSN-011):
+     • tertiary / flag red  → interaction only (the affirmative CTA), never decorative
+     • accent  / golden orange → eyebrows, badges, attention (never a button)
+     • secondary / hunter green → success/affirmative status only (brand-voice color)
+     • primary / deep navy   → authority surfaces, structure, text
+     • info / smart blue     → links + data meters
+   Mono is intentionally NOT used: this is not a Property Card surface (DSN-013).
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  /* Brand palette — config/brand/DESIGN.md › colors */
+  --color-primary: #11133f;
+  --color-primary-container: #0a0c27;
+  --color-primary-soft: #bbbeed;
+  --color-on-primary: #ffffff;
+  --color-secondary: #3b6b4c;
+  --color-secondary-container: #24412e;
+  --color-secondary-soft: #d3e7da;
+  --color-tertiary: #c22326;
+  --color-tertiary-container: #9b1c1f;
+  --color-on-tertiary: #ffffff;
+  --color-accent: #eaa221;
+  --color-accent-soft: #fbedd2;
+  --color-on-accent: #000000;
+  --color-on-accent-soft: #11133f;
+  --color-info: #0066cc;
+  --color-info-soft: #c2e0ff;
+  --color-on-info-soft: #11133f;
+
+  /* Surface system */
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-inset: #f9fafb;
+  --color-surface-alt: #f3f4f6;
+  --color-surface-dark: #111827;
+  --color-on-surface: #111827;
+  --color-on-surface-secondary: #374151;
+  --color-on-surface-muted: #4b5563;
+  --color-on-surface-dark: #ffffff;
+
+  /* Border + status */
+  --color-border: #e5e7eb;
+  --color-border-subtle: #f3f4f6;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-error-surface: #fef2f2;
+  --color-error-text: #7f1d1d;
+
+  /* Shape — DESIGN.md › rounded */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Type — Inter (Phase 1). Mono reserved for Property Cards, not used here. */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Depth — Contrast-Layer model: borders carry separation on light surfaces;
+     shadows are reserved for genuinely floating layers (DESIGN.md › Elevation). */
+  --shadow-float: 0 20px 60px rgba(17, 19, 63, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--color-surface-inset);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  background: var(--color-surface-inset);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* ── Side rail — deep navy authority surface ─────────────────────────────── */
+.side-rail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 24px 18px;
+  color: var(--color-on-primary);
+  background: linear-gradient(180deg, var(--color-primary-container), var(--color-primary));
+  border-right: 1px solid var(--color-primary-container);
+}
+
+.brand-block {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+/* The official logo is the light-background ("lgt") full-color mark, so it sits
+   on a white chip to read on the navy rail (config/brand/assets/README.md). */
+.brand-logo-chip {
+  display: grid;
+  place-items: center;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.brand-logo {
+  display: block;
+  width: 100%;
+  max-width: 212px;
+  height: auto;
+}
+
+/* "PE" fallback — shown only when the logo image is absent/failed to load.
+   When .brand-logo is present as the preceding sibling, this is hidden. */
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 40px;
+  color: var(--color-primary);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.brand-logo + .brand-mark {
+  display: none;
+}
+
+.brand-meta h1 {
+  color: var(--color-on-primary);
+}
+
+.brand-block h1,
+.topbar h2,
+.section-head h3 {
+  margin: 0;
+}
+
+.brand-block h1 {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* Eyebrow — label-caps. The brand eyebrow color is golden orange, but golden
+   orange on white fails WCAG AA, so on light surfaces we use the AA-safe
+   secondary ink (9.3:1) and reserve the accent for the dark rail where it
+   passes (~6.5:1 on navy). DSN-005 (AA) governs. */
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--color-on-surface-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.side-rail .eyebrow {
+  color: var(--color-accent);
+}
+
+.nav-list {
+  display: grid;
+  gap: 7px;
+}
+
+.nav-item {
+  min-height: 42px;
+  padding: 0 12px;
+  color: rgba(255, 255, 255, 0.78);
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.nav-item:hover,
+.nav-item:focus-visible {
+  color: var(--color-on-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+/* Active nav marked with the accent (attention/wayfinding) — not flag red */
+.nav-item.is-active {
+  color: var(--color-on-primary);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  border-left-color: var(--color-accent);
+}
+
+.rail-footer {
+  margin-top: auto;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md);
+}
+
+.rail-footer strong,
+.rail-footer span {
+  display: block;
+}
+
+.rail-footer strong {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.rail-footer span,
+.rail-label {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── Main stage ──────────────────────────────────────────────────────────── */
+.main-stage {
+  min-width: 0;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.topbar h2 {
+  font-size: clamp(30px, 3vw, 44px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ── Buttons — strict three-variant hierarchy (DESIGN.md components) ───────── */
+.primary-action,
+.secondary-action,
+.inline-action,
+.danger-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* button-primary — flag red, the sole affirmative CTA (one per visual field) */
+.primary-action {
+  color: var(--color-on-tertiary);
+  background: var(--color-tertiary);
+}
+
+.primary-action:hover {
+  background: var(--color-tertiary-container);
+}
+
+/* button-ghost — secondary + neutral inline actions on light surfaces */
+.secondary-action,
+.inline-action {
+  color: var(--color-primary);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.secondary-action:hover,
+.inline-action:hover {
+  background: var(--color-surface-alt);
+  border-color: var(--color-primary);
+}
+
+/* Topbar "Run Pilot Audit" is a navy secondary so the flag-red CTA stays the
+   single affirmative action in the viewport (DSN-012). */
+#run-audit {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+#run-audit:hover {
+  background: var(--color-primary-container);
+}
+
+/* Destructive — error family (semantic red, distinct from the flag-red CTA) */
+.danger-action {
+  color: var(--color-error-text);
+  background: var(--color-error-surface);
+  border-color: var(--color-error-surface);
+}
+
+.danger-action:hover {
+  border-color: var(--color-error);
+}
+
+/* ── Metrics ─────────────────────────────────────────────────────────────── */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric {
+  min-height: 112px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.metric span {
+  color: var(--color-on-surface-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.metric em {
+  display: block;
+  margin-top: 9px;
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.view {
+  display: none;
+}
+
+.view.is-visible {
+  display: block;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(430px, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.two-column.wide-left {
+  grid-template-columns: minmax(430px, 1fr) minmax(380px, 0.85fr);
+}
+
+/* ── Work surfaces — flat, border-separated (Contrast-Layer depth) ─────────── */
+.work-surface {
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Navy header bands label each workspace and break up the white field.
+   On navy: title is white, eyebrow uses the brand accent (golden orange,
+   which passes on navy where the light-surface gray eyebrow would not). */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 72px;
+  padding: 16px 18px;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-bottom: 1px solid var(--color-primary-container);
+}
+
+.section-head h3 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-on-primary);
+}
+
+.section-head .eyebrow {
+  color: var(--color-accent);
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.segment {
+  min-width: 72px;
+  min-height: 32px;
+  color: var(--color-on-surface-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.segment.is-active {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.queue-stack {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.queue-item {
+  display: grid;
+  gap: 10px;
+  min-height: 112px;
+  padding: 14px;
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+button.queue-item {
+  width: 100%;
+}
+
+.queue-item:hover,
+.queue-item.is-selected {
+  border-color: var(--color-primary);
+  border-left-color: var(--color-accent);
+  box-shadow: 0 12px 32px rgba(17, 19, 63, 0.1);
+}
+
+.queue-topline,
+.row-actions,
+.packet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-topline {
+  justify-content: space-between;
+}
+
+.queue-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.queue-meta,
+.small-note,
+.draft-meta {
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ── Status pills — semantic, on-palette ───────────────────────────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status-ready,
+.status-approved {
+  color: var(--color-secondary-container);
+  background: var(--color-secondary-soft);
+}
+
+.status-blocked,
+.status-rejected {
+  color: var(--color-error-text);
+  background: var(--color-error-surface);
+}
+
+.status-review,
+.status-sent {
+  color: var(--color-on-accent-soft);
+  background: var(--color-accent-soft);
+}
+
+.status-draft {
+  color: var(--color-on-info-soft);
+  background: var(--color-info-soft);
+}
+
+.packet-body,
+.match-body,
+.settings-grid,
+.empty-state {
+  padding: 18px;
+}
+
+.packet-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.packet-kpis div,
+.setting-tile {
+  min-height: 78px;
+  padding: 12px;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.packet-kpis span,
+.setting-tile span {
+  display: block;
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.packet-kpis strong,
+.setting-tile strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.line-list {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+}
+
+.line-item {
+  padding: 12px;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.line-item strong,
+.line-item span {
+  display: block;
+}
+
+.line-item span {
+  margin-top: 5px;
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+}
+
+.packet-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+th,
+td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+th {
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+td {
+  font-size: 14px;
+}
+
+.match-score {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0 18px;
+}
+
+/* Meter — data viz uses smart blue → navy (not the flag-red CTA color) */
+.meter {
+  height: 10px;
+  overflow: hidden;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-full);
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-info), var(--color-primary));
+}
+
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.evidence-tile {
+  min-height: 94px;
+  padding: 12px;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.evidence-tile span {
+  display: block;
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.evidence-tile strong {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.25;
+}
+
+.draft-box {
+  margin: 18px;
+  padding: 16px;
+  color: var(--color-on-surface);
+  white-space: pre-wrap;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.event-stream {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-stream li {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.event-time {
+  color: var(--color-on-surface-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.event-copy strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.event-copy span {
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.empty-state {
+  color: var(--color-on-surface-muted);
+}
+
+.setting-input,
+.setting-select {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.setting-input:focus,
+.setting-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* Copy-then-act reminder: the next-step button blinks orange↔flag-red until clicked. */
+@keyframes blink-cta {
+  0%, 49% { background: var(--color-accent); color: var(--color-on-accent); box-shadow: 0 0 0 3px rgba(234,162,33,0.35); }
+  50%, 100% { background: var(--color-tertiary); color: var(--color-on-tertiary); box-shadow: 0 0 0 3px rgba(194,35,38,0.45); }
+}
+.blink-cta {
+  animation: blink-cta 0.7s steps(1, end) infinite;
+  border-color: transparent !important;
+}
+
+/* ── Vendor Territories map ────────────────────────────────────────────────── */
+.terr-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 0;
+}
+
+.terr-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
+.terr-stat strong {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.terr-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  display: inline-block;
+}
+
+.terr-map {
+  width: 100%;
+  height: 560px;
+  margin: 14px 0 0;
+  background: var(--color-surface-inset);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Inline links — smart blue (DESIGN.md link-inline role) */
+a {
+  color: var(--color-info);
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .side-rail {
+    position: relative;
+    height: auto;
+  }
+
+  .nav-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .nav-item {
+    border-left-width: 1px;
+  }
+
+  .two-column,
+  .two-column.wide-left,
+  .metric-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .main-stage {
+    padding: 14px;
+  }
+
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar-actions,
+  .row-actions,
+  .packet-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .primary-action,
+  .secondary-action,
+  .inline-action,
+  .danger-action {
+    width: 100%;
+  }
+
+  .nav-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .packet-kpis,
+  .evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .event-stream li {
+    grid-template-columns: 1fr;
+  }
+}

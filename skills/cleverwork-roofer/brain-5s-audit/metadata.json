@@ -1,0 +1,8 @@
+{
+  "name": "brain-5s-audit",
+  "version": "1.0.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["maintenance"],
+  "a3_ref": "proposals/2026-06-03-hermes-go-live.md"
+}

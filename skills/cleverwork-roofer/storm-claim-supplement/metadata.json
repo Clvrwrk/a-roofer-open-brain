@@ -1,0 +1,8 @@
+{
+  "name": "storm-claim-supplement",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["ob-sales", "ob-accounting", "auditor"],
+  "a3_ref": null
+}

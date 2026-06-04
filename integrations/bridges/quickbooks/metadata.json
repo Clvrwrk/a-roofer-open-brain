@@ -1,0 +1,31 @@
+{
+  "name": "quickbooks-bridge",
+  "display_name": "QuickBooks Online",
+  "version": "1.0.0",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["capture", "conductor"],
+  "env_vars": {
+    "required": [
+      "QUICKBOOKS_CLIENT_ID",
+      "QUICKBOOKS_CLIENT_SECRET",
+      "QUICKBOOKS_REFRESH_TOKEN",
+      "QUICKBOOKS_REALM_ID"
+    ],
+    "optional": ["QUICKBOOKS_SANDBOX_MODE"]
+  },
+  "webhook_topics": ["Invoice", "Payment", "Bill", "VendorCredit"],
+  "objects_ingested": [
+    "invoices",
+    "payments",
+    "bills",
+    "vendor_credits",
+    "classes",
+    "items"
+  ],
+  "debrief_trigger_milestone": null,
+  "edition": "online",
+  "notes": "QBO only. QuickBooks Desktop is a separate Tier 3 adapter. Token refresh job required — refresh_token expires in 100 days. Set QUICKBOOKS_SANDBOX_MODE=true for non-production testing."
+}

@@ -1,0 +1,185 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Open Brain — Pre-Onboarding Intake Schema (single source of truth)
+#
+# This file defines the onboarding worksheet ONCE. It renders three ways:
+#   • PDF / markdown worksheet  (scripts/build-onboarding-pdf.py — used today)
+#   • the future "Open Brain as a Service" web signup wizard (same fields)
+#   • the generated config/roofer.config.yaml + .env inventory + consent record
+#
+# Every field carries `maps_to`: the config key (or special target) it fills.
+# Field types: text | longtext | tel | url | email | date | number |
+#              select | multiselect | boolean | table | credential | signature
+# `credential` fields NEVER collect the secret in the worksheet — they record
+# the system, the owner, and the secure handoff method only.
+# ──────────────────────────────────────────────────────────────────────────
+meta:
+  title: "Open Brain — Pre-Onboarding Worksheet"
+  subtitle: "Done-for-you setup • AM-guided • complete before brain provisioning"
+  version: "0.1.0"
+  audience: "AM-guided, client-fillable"
+  generates: ["config/roofer.config.yaml", ".env credential inventory", "consent record"]
+  est_time: "45–60 minutes, guided"
+
+sections:
+  - id: company
+    title: "1. Company profile"
+    intro: "The basics that identify your business across the brain and on your published EEAT content."
+    fields:
+      - { id: company_name, label: "Legal company name", type: text, required: true, maps_to: company.name, prefill: "Pro Exteriors" }
+      - { id: dba, label: "DBA / how customers know you", type: text, required: true, maps_to: company.dba, prefill: "Pro Exteriors" }
+      - { id: license_no, label: "Contractor license #", type: text, required: true, maps_to: company.license_no }
+      - { id: main_phone, label: "Main phone", type: tel, required: true, maps_to: company.phone }
+      - { id: website, label: "Website", type: url, required: false, maps_to: company.website }
+      - { id: primary_contact_name, label: "Primary contact (name)", type: text, required: true, maps_to: people.primary_contact.name }
+      - { id: primary_contact_email, label: "Primary contact (email)", type: email, required: true, maps_to: people.primary_contact.email }
+      - { id: primary_contact_phone, label: "Primary contact (phone)", type: tel, required: false, maps_to: people.primary_contact.phone }
+
+  - id: service_area
+    title: "2. Service area & jurisdictions"
+    intro: "Where you work. Each jurisdiction seeds a regulatory_snapshot (the code in effect) so atoms are era-stamped correctly."
+    fields:
+      - { id: service_area, label: "Cities / counties you serve", type: multiselect, free_entry: true, required: true, maps_to: company.service_area, help: "List every market you pull permits in." }
+      - id: jurisdictions
+        label: "Jurisdictions & code"
+        type: table
+        required: true
+        maps_to: jurisdictions
+        help: "One row per permitting authority. We seed the building code in effect."
+        columns:
+          - { id: name, label: "Jurisdiction (city/county)" }
+          - { id: ahj, label: "Building dept / AHJ" }
+          - { id: building_code, label: "Building code (e.g. IRC-2021 + amendments)" }
+          - { id: wind_zone, label: "Wind zone (e.g. Vult 115 mph)" }
+          - { id: notes, label: "Notes (ice/water shield, radiant barrier, etc.)" }
+
+  - id: manufacturers
+    title: "3. Manufacturers & certifications"
+    intro: "Your manufacturer certifications drive warranty registration and the EEAT cert badges on your site."
+    fields:
+      - id: manufacturers
+        label: "Manufacturer certifications"
+        type: table
+        required: true
+        maps_to: manufacturers
+        columns:
+          - { id: brand, label: "Manufacturer (GAF, Owens Corning, CertainTeed…)" }
+          - { id: certification, label: "Cert level (Master Elite, Platinum Preferred…)" }
+          - { id: cert_id, label: "Certification / contractor ID" }
+          - { id: warranty_portal, label: "Warranty portal URL" }
+
+  - id: systems
+    title: "4. Current systems inventory"
+    intro: "What you run today. This decides which bridges we wire and which the brain mirrors. GHL stays your front-of-funnel CRM; your production tool stays the during-job system, mirrored into the brain."
+    fields:
+      - { id: crm, label: "CRM / leadgen", type: select, required: true, maps_to: integrations.gohighlevel.enabled, options: ["Go High Level", "Other", "None yet"], prefill: "Go High Level" }
+      - { id: production_sw, label: "Production / PM software", type: select, required: true, maps_to: integrations.acculynx.enabled, options: ["AccuLynx", "JobTread", "Buildertrend", "Other", "None yet"], prefill: "AccuLynx" }
+      - { id: accounting, label: "Accounting", type: select, required: true, maps_to: integrations.quickbooks.enabled, options: ["QuickBooks Online", "QuickBooks Desktop", "Other", "None"] }
+      - { id: photos, label: "Field photos / documentation", type: select, required: false, maps_to: integrations.companycam.enabled, options: ["CompanyCam", "Other", "None"] }
+      - { id: measurement, label: "Aerial measurement / takeoff", type: select, required: false, maps_to: integrations.eagleview.enabled, options: ["EagleView", "Other", "None"] }
+      - { id: office_suite, label: "Email / docs", type: select, required: true, maps_to: integrations.office_suite, options: ["Google Workspace", "Microsoft 365", "Other"] }
+      - { id: team_chat, label: "Team chat (the brain talks here)", type: select, required: true, maps_to: integrations.slack.enabled, options: ["Slack", "Will set up Slack", "Other"] }
+      - { id: meeting_capture, label: "Meeting / call recording (for debriefs)", type: select, required: false, maps_to: integrations.meeting_capture.provider, options: ["Granola", "Fireflies", "None"] }
+
+  - id: access
+    title: "5. Access & credentials checklist"
+    intro: "We DO NOT collect passwords or API keys on this worksheet. Here we record which systems we need access to, who owns each account, and how the key will be handed over securely (OAuth in-app, or an encrypted vault link). Keys move through the secure channel only — never email, never this PDF."
+    fields:
+      - id: credentials
+        label: "Access we'll need (record owner + handoff method only)"
+        type: credential
+        required: true
+        maps_to: ".env (names only)"
+        columns:
+          - { id: system, label: "System" }
+          - { id: account_owner, label: "Account owner (name)" }
+          - { id: handoff_method, label: "Handoff: OAuth / secure vault / admin-invite" }
+          - { id: status, label: "Status (requested / received / verified)" }
+        seed_rows:
+          - { system: "Go High Level", handoff_method: "OAuth or Location API key (vault)" }
+          - { system: "AccuLynx", handoff_method: "API key + webhook secret (vault)" }
+          - { system: "Slack workspace", handoff_method: "Admin app-install (OAuth)" }
+          - { system: "Supabase (we create)", handoff_method: "Cleverwork-provisioned" }
+          - { system: "Google/MS", handoff_method: "Admin-invite / OAuth" }
+          - { system: "CompanyCam / QuickBooks / EagleView", handoff_method: "OAuth or API key (vault), if enabled" }
+
+  - id: agent_scope
+    title: "6. Agent scope (what goes live first)"
+    intro: "We start small (80/20): the agents that cover the biggest pain first, then add via the 10x ROI gate. For most roofers that's Operations + Sales. The infrastructure agents (Capture, Conductor, Historian, Auditor) are always on."
+    fields:
+      - { id: first_agents, label: "Vertical agents to launch first", type: multiselect, required: true, maps_to: agents.vertical, options: ["@ob-ops", "@ob-sales", "@ob-accounting", "@ob-marketing", "@ob-exec"], default: ["@ob-ops", "@ob-sales"] }
+      - { id: top_workflow, label: "The #1 workflow you want handled first", type: longtext, required: true, maps_to: agents.priority_workflow, help: "e.g. 'storm canvass → inspection → claim → supplement', or 'daily logs + scheduling'." }
+
+  - id: consent
+    title: "7. Consent decisions"
+    intro: "These set how your brain shares and publishes. All are opt-in; opting out never costs you your own brain."
+    fields:
+      - { id: cross_client_sharing, label: "Cross-client property history — share your NON-trade-competitive property facts with other Cleverwork clients in different trades (and gain access to theirs)?", type: boolean, required: true, maps_to: consent.cross_client_default, help: "A roofer never shares with another roofer. A remodeler on the same house later could see your warranty/inspector notes — and you see theirs." }
+      - { id: trade_restriction, label: "Trades to NEVER share with", type: multiselect, free_entry: true, required: false, maps_to: consent.trade_restriction, default: ["roofing"] }
+      - { id: debrief_recording, label: "Consent to record post-op debriefs (PM + Foreman + customer) for atomization?", type: boolean, required: true, maps_to: consent.debrief_recording }
+      - { id: eeat_publication, label: "Default: allow consented customer stories to be published to your website as EEAT content (each piece still gets one-click approval)?", type: boolean, required: true, maps_to: consent.publishable_external_default }
+
+  - id: people
+    title: "8. People & roles"
+    intro: "Who the brain works with. Each named teammate can get a Slack seat to mention the agents; the approver signs off on published content."
+    fields:
+      - { id: content_approver_name, label: "Content / publication approver (name)", type: text, required: true, maps_to: people.approver.name }
+      - { id: content_approver_email, label: "Approver (email)", type: email, required: true, maps_to: people.approver.email }
+      - id: team
+        label: "Team members who'll use the agents"
+        type: table
+        required: true
+        maps_to: people.team
+        columns:
+          - { id: name, label: "Name" }
+          - { id: email, label: "Email" }
+          - { id: role, label: "Role (owner, PM, estimator, foreman, office…)" }
+          - { id: slack_seat, label: "Slack seat? (Y/N)" }
+      - id: debrief_roster
+        label: "Who joins post-op debriefs"
+        type: table
+        required: false
+        maps_to: people.debrief_roster
+        columns:
+          - { id: role, label: "Role (PM / Foreman / Customer decision-maker)" }
+          - { id: name, label: "Default person (if standing)" }
+
+  - id: goals
+    title: "9. Goals & week-0 baseline"
+    intro: "What 'working' means for you, and the starting numbers we measure against. This is how we prove the brain earned its keep (see the validation doc)."
+    fields:
+      - { id: top_outcomes, label: "Your top 3 outcomes from this engagement", type: longtext, required: true, maps_to: baseline.goals }
+      - id: baseline_metrics
+        label: "Week-0 baseline (today's reality, your best estimate)"
+        type: table
+        required: true
+        maps_to: baseline.metrics
+        columns:
+          - { id: task, label: "Task / workflow" }
+          - { id: hours_per_week, label: "Human hours / week" }
+          - { id: error_rate, label: "Rough error/rework rate" }
+          - { id: cost_note, label: "Cost note (loaded rate, cost of an error)" }
+        seed_rows:
+          - { task: "Lead response & follow-up" }
+          - { task: "Estimating / proposals" }
+          - { task: "Insurance claim + supplement paperwork" }
+          - { task: "Scheduling & daily logs" }
+          - { task: "Invoicing / AR follow-up" }
+
+  - id: expectations
+    title: "10. Expectations & support"
+    intro: "How we work together. This is a done-for-you service: Cleverwork configures, runs, and supports the brain; you own your business-system licenses and provide access."
+    fields:
+      - { id: ack_support_tiers, label: "I understand the support model: Conductor (the agent front-desk) handles most requests in Slack; Sev-1 issues page a human immediately; Sev-2 same business day. (see Client Support doc)", type: boolean, required: true, maps_to: ack.support }
+      - { id: ack_responsibilities, label: "I understand Cleverwork owns what it runs (brain, agents, dashboard); we own our tool licenses (GHL, AccuLynx, etc.) and will provide/maintain access.", type: boolean, required: true, maps_to: ack.responsibilities }
+      - { id: business_hours, label: "Your business hours / timezone", type: text, required: false, maps_to: support.business_hours }
+      - { id: escalation_contact, label: "Who we call for an urgent business decision", type: text, required: true, maps_to: support.escalation_contact }
+
+  - id: signoff
+    title: "11. Sign-offs"
+    intro: "Authorizations that let us proceed. Digital signatures are captured in the app; on paper, sign and date."
+    fields:
+      - { id: data_processing_ack, label: "I authorize Cleverwork to provision and operate a dedicated, isolated brain for our company and to process our business data for the services described.", type: signature, required: true, maps_to: signoff.dpa }
+      - { id: recording_consent_sig, label: "I consent to debrief recording as configured in Section 7.", type: signature, required: true, maps_to: signoff.recording }
+      - { id: cross_client_sig, label: "My cross-client sharing choice in Section 7 is correct and authorized.", type: signature, required: true, maps_to: signoff.cross_client }
+      - { id: signed_name, label: "Signed (name & title)", type: text, required: true, maps_to: signoff.name }
+      - { id: signed_date, label: "Date", type: date, required: true, maps_to: signoff.date }

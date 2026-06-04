@@ -1,0 +1,31 @@
+{
+  "name": "qxo-bridge",
+  "display_name": "QXO",
+  "version": "0.1.0-gated",
+  "tier": 1,
+  "source_system_type": "saas-with-gated-api-docs",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["accounting", "ops", "sales", "capture", "conductor"],
+  "env_vars": {
+    "required": ["QXO_CLIENT_ID", "QXO_CLIENT_SECRET"],
+    "optional": ["QXO_WEBHOOK_SECRET", "QXO_REFRESH_TOKEN", "QXO_ENV"]
+  },
+  "api_docs": "https://www.qxo.com/customapi",
+  "partner_registration": "https://go.qxo.com/qxoapi",
+  "license_terms": "https://www.qxo.com/integrations/api-license-terms",
+  "objects_planned": [
+    "accounts",
+    "contacts",
+    "branches",
+    "products",
+    "availability",
+    "prices",
+    "orders",
+    "deliveries",
+    "delivery_photos",
+    "invoices",
+    "payments"
+  ],
+  "notes": "Endpoint-level documentation is gated. Do not implement until QXO provides partner API package, sandbox credentials, auth model, endpoint schemas, rate limits, and webhook details."
+}

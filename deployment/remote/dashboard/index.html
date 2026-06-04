@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pro Exteriors Open Brain Admin</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap"
+    />
+    <link rel="stylesheet" href="src/styles.css" />
+    <script src="config.js" defer></script>
+    <script src="src/app.js" defer></script>
+    <script src="assets/territories.js" defer></script>
+    <script src="assets/pricelists.js" defer></script>
+    <script src="assets/invoicegate.js" defer></script>
+    <script src="assets/agreementaudit.js" defer></script>
+    <script src="assets/fleet.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="side-rail" aria-label="Primary">
+        <div class="brand-block">
+          <div class="brand-logo-chip">
+            <img
+              class="brand-logo"
+              src="assets/pro-exteriors-logo.svg"
+              alt="Pro Exteriors"
+              onerror="this.remove();"
+            />
+            <span class="brand-mark" aria-hidden="true">PE</span>
+          </div>
+          <div class="brand-meta">
+            <p class="eyebrow">Open Brain</p>
+            <h1>Admin</h1>
+          </div>
+        </div>
+        <nav class="nav-list" aria-label="Admin sections">
+          <button class="nav-item is-active" data-view="command">Command Center</button>
+          <button class="nav-item" data-view="audits">Invoice Audits</button>
+          <button class="nav-item" data-view="matches">Product Matches</button>
+          <button class="nav-item" data-view="packets">Credit Memos</button>
+          <button class="nav-item" data-view="fleet">Fleet</button>
+          <button class="nav-item" data-view="territories">Vendor Territories</button>
+          <button class="nav-item" data-view="pricelists">Price Agreements</button>
+          <button class="nav-item" data-view="agreementaudit">Price Agreement Audit</button>
+          <button class="nav-item" data-view="auditlog">Audit Log</button>
+          <button class="nav-item" data-view="settings">Settings</button>
+        </nav>
+        <div class="rail-footer">
+          <p class="rail-label">Mode</p>
+          <strong>Pilot</strong>
+          <span>Real-shaped workflow, internal-only output</span>
+        </div>
+      </aside>
+
+      <main class="main-stage">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Vendor Pricing Command Center</p>
+            <h2 id="view-title">Command Center</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="secondary-action" id="reset-demo">Reset Demo State</button>
+            <button class="primary-action" id="run-audit">Run Pilot Audit</button>
+          </div>
+        </header>
+
+        <section class="metric-grid" aria-label="Workflow summary" id="metric-grid"></section>
+
+        <section class="view is-visible" id="view-command" aria-labelledby="view-title">
+          <div class="two-column">
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Queues</p>
+                  <h3>Work Ready For Review</h3>
+                </div>
+              </div>
+              <div class="queue-stack" id="command-queue"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Packet Preview</p>
+                  <h3>Selected Credit Memo</h3>
+                </div>
+              </div>
+              <div id="packet-preview"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-audits" aria-labelledby="view-title">
+          <section class="work-surface" style="margin-bottom:16px">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Pricing Gate (live)</p>
+                <h3>Invoice Payment Eligibility</h3>
+              </div>
+            </div>
+            <div id="invoice-gate-panel" class="packet-body"></div>
+          </section>
+          <section class="work-surface">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Invoice Audits</p>
+                <h3>Line Item Findings</h3>
+              </div>
+              <div class="segmented" role="group" aria-label="Audit status filter">
+                <button class="segment is-active" data-audit-filter="all">All</button>
+                <button class="segment" data-audit-filter="ready">Ready</button>
+                <button class="segment" data-audit-filter="blocked">Blocked</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Vendor</th>
+                    <th>Region</th>
+                    <th>Status</th>
+                    <th>Disputed</th>
+                    <th>Expected Credit</th>
+                    <th>Gate</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-matches" aria-labelledby="view-title">
+          <div class="two-column">
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Product Catalog</p>
+                  <h3>Equivalency Queue</h3>
+                </div>
+              </div>
+              <div class="queue-stack" id="match-list"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Review</p>
+                  <h3>Selected Match</h3>
+                </div>
+              </div>
+              <div id="match-detail"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-packets" aria-labelledby="view-title">
+          <div class="two-column wide-left">
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Credit Memos</p>
+                  <h3>Review Packets</h3>
+                </div>
+              </div>
+              <div class="queue-stack" id="packet-list"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Draft</p>
+                  <h3>Email Body</h3>
+                </div>
+              </div>
+              <div id="email-draft"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-fleet" aria-labelledby="view-title">
+          <section class="metric-grid" id="fleet-kpis" aria-label="Fleet summary"></section>
+          <div class="two-column wide-left">
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Fleet</p><h3>Vehicles</h3></div></div>
+              <div id="fleet-vehicles" class="table-wrap" style="padding:14px 18px"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Risk</p><h3>Variance Alerts</h3></div></div>
+              <div id="fleet-alerts" class="queue-stack"></div>
+            </section>
+          </div>
+          <div class="two-column" style="margin-top:16px">
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Maintenance</p><h3>Next Service Due</h3></div></div>
+              <div id="fleet-maintenance" class="table-wrap" style="padding:14px 18px"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Compliance</p><h3>Registration / Inspection / Insurance</h3></div></div>
+              <div id="fleet-compliance" class="table-wrap" style="padding:14px 18px"></div>
+            </section>
+          </div>
+          <div class="two-column" style="margin-top:16px">
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Drivers</p><h3>Scorecard</h3></div></div>
+              <div id="fleet-drivers" class="table-wrap" style="padding:14px 18px"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head"><div><p class="eyebrow">Fuel</p><h3>Monthly by Vehicle</h3></div></div>
+              <div id="fleet-fuel" class="table-wrap" style="padding:14px 18px"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-territories" aria-labelledby="view-title">
+          <div class="two-column wide-left">
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Vendor Pricing Territories</p>
+                  <h3>2-Hour Drive-Time Map</h3>
+                </div>
+              </div>
+              <div id="territory-counts" class="terr-counts"></div>
+              <div id="territory-map" class="terr-map"></div>
+            </section>
+            <section class="work-surface">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Decision</p>
+                  <h3>Selected Branch</h3>
+                </div>
+              </div>
+              <div id="territory-detail" class="packet-body">
+                <p class="empty-state">Click a branch pin to review its territory and pricing-gate status. Amber pins fall inside two offices and need a routing decision.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-pricelists" aria-labelledby="view-title">
+          <section class="work-surface">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Price Agreement Currency</p>
+                <h3>Territory × Vendor Status</h3>
+              </div>
+            </div>
+            <div id="pricelist-matrix" class="table-wrap" style="padding:14px 18px"></div>
+            <div id="agreement-add" style="padding:0 18px 18px"></div>
+          </section>
+          <section class="work-surface" style="margin-top:16px">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Refresh Queue</p>
+                <h3>Verify &amp; Send — Purchasing (Roberto)</h3>
+              </div>
+            </div>
+            <div id="pricelist-queue" class="queue-stack"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-agreementaudit" aria-labelledby="view-title">
+          <section class="work-surface" style="margin-bottom:16px">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Price Agreement Audit</p>
+                <h3>Agreements &amp; CEO Approval</h3>
+              </div>
+            </div>
+            <div id="agreement-audit-list" class="table-wrap" style="padding:14px 18px"></div>
+          </section>
+          <section class="work-surface" id="agreement-detail-surface" style="margin-bottom:16px;display:none">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Document &amp; Catalog</p>
+                <h3 id="agreement-detail-title">Agreement</h3>
+              </div>
+            </div>
+            <div id="agreement-detail" class="packet-body"></div>
+          </section>
+          <section class="work-surface">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Change History</p>
+                <h3>Detected Price Changes (line items)</h3>
+              </div>
+            </div>
+            <div id="agreement-audit-changes" class="table-wrap" style="padding:14px 18px"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-auditlog" aria-labelledby="view-title">
+          <section class="work-surface">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Governance</p>
+                <h3>Append-Only Event Stream</h3>
+              </div>
+            </div>
+            <ol class="event-stream" id="event-stream"></ol>
+          </section>
+        </section>
+
+        <section class="view" id="view-settings" aria-labelledby="view-title">
+          <section class="work-surface">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Pilot Controls</p>
+                <h3>Guardrails</h3>
+              </div>
+            </div>
+            <div class="settings-grid" id="settings-grid"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

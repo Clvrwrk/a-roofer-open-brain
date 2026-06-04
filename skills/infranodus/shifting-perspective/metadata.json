@@ -1,0 +1,8 @@
+{
+  "name": "shifting-perspective",
+  "version": "0.1.0",
+  "origin": "infranodus",
+  "license": "MIT",
+  "bound_agents": ["auditor", "quality-control", "innovator"],
+  "a3_ref": null
+}

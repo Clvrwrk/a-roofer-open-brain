@@ -1,0 +1,39 @@
+{
+  "name": "srs-roofhub-bridge",
+  "display_name": "SRS / RoofHub SIPS",
+  "version": "0.1.0-planned",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["accounting", "ops", "sales", "capture", "conductor"],
+  "env_vars": {
+    "required": ["SRS_ROOFHUB_CLIENT_ID", "SRS_ROOFHUB_CLIENT_SECRET"],
+    "optional": ["SRS_ROOFHUB_WEBHOOK_SECRET", "SRS_ROOFHUB_ENV"]
+  },
+  "api_base_urls": {
+    "staging": "https://services-qa.roofhub.pro",
+    "production": "https://services.roofhub.pro"
+  },
+  "api_docs": "https://apidocs.roofhub.pro/llms.txt",
+  "objects_ingested": [
+    "access_tokens",
+    "customer_validation",
+    "customer_details",
+    "order_templates",
+    "branch_locations",
+    "customer_branch_locations",
+    "active_branch_products",
+    "catalog_products",
+    "product_prices",
+    "uom_conversions",
+    "orders",
+    "order_details",
+    "deliveries",
+    "proof_of_delivery",
+    "delivery_coordinates",
+    "invoices",
+    "invoice_pdfs"
+  ],
+  "notes": "Planning metadata only. Confirm SIPS webhook events, rate limits, and production async order process during partner onboarding."
+}

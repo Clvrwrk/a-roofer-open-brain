@@ -1,0 +1,221 @@
+{
+  "main": {
+    "id": "f543a845cdd5dba3",
+    "type": "split",
+    "children": [
+      {
+        "id": "dd675571beae1d50",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "82a65ccc0849430e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/00-architecture-brief.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "00-architecture-brief"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "02b2c2559692b411",
+    "type": "split",
+    "children": [
+      {
+        "id": "ea845dba7ae59ad6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "cebec7e3c54a6b8c",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "3a7dd1d01cc71603",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "17dd981507195192",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "ba0882084e8db359",
+    "type": "split",
+    "children": [
+      {
+        "id": "06fe917f872afecc",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c2c387c2baab83d4",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "docs/00-architecture-brief.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 00-architecture-brief"
+            }
+          },
+          {
+            "id": "8f8398d9a1b80024",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "docs/00-architecture-brief.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 00-architecture-brief"
+            }
+          },
+          {
+            "id": "9665b91074ac14ce",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "d54d5cb55b44909a",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "081fc66aa5ac7753",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "docs/00-architecture-brief.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 00-architecture-brief"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "cebec7e3c54a6b8c",
+  "lastOpenFiles": [
+    "docs/14-vendor-pricing-catalog-and-line-approval.md",
+    "deployment/remote/dashboard/assets/agreementaudit.js",
+    "deployment/remote/dashboard/AUTH.md",
+    "schemas/cleverwork-roofer/76-app-settings-and-agreement-id.sql",
+    "deployment/remote/dashboard/assets/invoicegate.js",
+    "deployment/remote/dashboard/assets/invoice-gate.json",
+    "schemas/cleverwork-roofer/72-read-rpcs-invoice-gate.sql",
+    "deployment/remote/dashboard/assets/pricelists.js",
+    "deployment/remote/dashboard/assets/price-lists.json",
+    "schemas/cleverwork-roofer/71-price-list-refresh.sql",
+    "deployment/remote/dashboard/assets/territories.js",
+    "deployment/remote/dashboard/assets/territories.json",
+    "deployment/remote/dashboard/assets/pro-exteriors-mark-square.svg",
+    "config/brand/assets/pro-exteriors-mark-square.svg",
+    "config/brand/assets/fav_onnavy.png",
+    "config/brand/assets/fav_onwhite.png",
+    "config/brand/assets/logo_onnavy.png",
+    "config/brand/assets/logo_onwhite.png",
+    "config/brand/assets/logo_white.png",
+    "config/brand/assets/logo_color.png",
+    "deployment/remote/dashboard/assets/logo_white.png",
+    "deployment/remote/dashboard/assets/logo_color.png",
+    "config/brand/assets/README.md",
+    "config/brand/README.md",
+    "config/brand/DESIGN.md",
+    "standards/design/v1.md",
+    "standards/design/vendor/design.md/ATTRIBUTION.md",
+    "standards/design/vendor/design.md/spec.md",
+    "standards/design/vendor/design.md",
+    "docs/13-pro-exteriors-admin-interface.md",
+    "SECURITY.md",
+    "README.md"
+  ]
+}

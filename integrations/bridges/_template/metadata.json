@@ -1,0 +1,19 @@
+{
+  "name": "<adapter-slug>",
+  "display_name": "<Human-Readable Source System Name>",
+  "version": "1.0.0",
+  "tier": 1,
+  "source_system_type": "saas-with-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["capture", "conductor"],
+  "env_vars": {
+    "required": [],
+    "optional": []
+  },
+  "webhook_topics": [],
+  "objects_ingested": [],
+  "job_phase_map": {},
+  "debrief_trigger_milestone": null,
+  "notes": "Replace all placeholder values before enabling."
+}

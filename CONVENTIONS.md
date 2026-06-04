@@ -1,0 +1,112 @@
+# CONVENTIONS — the shared contract
+
+> This is the canonical reference every agent, skill, bridge, recipe, and doc in this repo must conform to. If a station's output disagrees with this file, this file wins. The Jidoka audit (`docs/06-...` + `scripts/verify-deployment.sh`) checks conformance.
+
+---
+
+## 1. Naming
+
+- **Folders:** `kebab-case`. One concept per folder.
+- **Per-folder files:** every leaf folder under `agents/`, `skills/`, `integrations/bridges/`, `recipes/` ships a `README.md`. Skills additionally ship `SKILL.md` + `metadata.json`. Agents ship `ROLE.md`.
+- **Vertical agent Slack handles:** `@ob-accounting`, `@ob-ops`, `@ob-sales`, `@ob-marketing`, `@ob-exec`.
+- **Horizontal agents:** internal names, not Slack-mentionable by clients — `capture`, `historian`, `researcher`, `conductor`, `auditor`, `quality-control`, `innovator`, `maintenance`.
+- **SQL:** snake_case tables/columns; new tables in `public`; every migration idempotent.
+- **Atoms** are the unit of memory. We say "atom" in prose; the durable row lives in `public.thoughts` (OB1's table).
+
+## 2. The atom model
+
+The OB1 spine keeps the durable content in **`public.thoughts`** (id UUID, content, embedding, metadata JSONB, created_at, updated_at, content_fingerprint) plus OB1's enhanced/provenance columns (`type`, `sensitivity_tier`, `importance`, `quality_score`, `source_type`, `derived_from`, `derivation_layer`, `supersedes`). **Do not redefine these.** We extend them.
+
+Cleverwork roofer extension columns on `public.thoughts` (see `schemas/cleverwork-roofer/`):
+
+| Column | Type | Meaning |
+| --- | --- | --- |
+| `property_id` | UUID FK → `property`, nullable | the place this atom is about |
+| `client_id` | UUID, not null (`'self'` in single-tenant) | owning client |
+| `job_id` | UUID FK → `job`, nullable | the engagement |
+| `trust_tier` | TEXT enum `instruction \| evidence \| inference` | see §3 |
+| `model_card` | JSONB | `{provider, model_name, model_version, captured_at}` |
+| `tool_spec_hash` | TEXT, nullable | detect tool-surface drift |
+| `revalidation_timestamp` | TIMESTAMPTZ, nullable | last currency re-check |
+| `era_of_practice` | TEXT, nullable | e.g. `IRC-2018`, `OSHA-pre-2024-silica` |
+| `original_capture_date` | DATE, nullable | when the fact was first known |
+| `original_practitioner` | JSONB, nullable | `{name, role, tenure_years, consent_to_attribute}` |
+| `regulatory_snapshot_id` | UUID FK, nullable | code in effect at capture |
+| `recontextualization_notes` | TEXT, nullable | "pre-current-code; verify vs latest" |
+| `eeat_signal` | JSONB, nullable | `{type, value, publishable_with_consent, consent_recorded_at}` |
+| `soft_or_hard` | TEXT enum `hard \| soft`, nullable | debrief atomization track |
+| `consent_flags` | JSONB | `{cross_client_shareable, trade_restriction[], publishable_external, expires_at}` |
+| `cold_archive_status` | TEXT enum `live \| archived \| deprecated` | retrieval tier |
+| `source_link_broken` | BOOL | Maintenance sets on 404 |
+
+New tables: `property`, `jurisdiction`, `regulatory_snapshot`, `job`, `insurance_claim`, `manufacturer_warranty`, `atom_access_log`. Defined in `schemas/cleverwork-roofer/`.
+
+## 3. Trust tiers (map to OB1's provenance model)
+
+| `trust_tier` | Meaning | OB1 mapping |
+| --- | --- | --- |
+| `instruction` | human-confirmed or trusted import; may steer behavior | `provenance_status IN (user_confirmed, imported)`, `can_use_as_instruction=true` |
+| `evidence` | observed fact with a source (default for captured + inferred) | `can_use_as_evidence=true` |
+| `inference` | model-generated conclusion; never auto-promoted to instruction | `provenance_status='generated'` |
+
+**Rule:** inferred/generated content is `evidence` by default. Promotion to `instruction` requires human confirmation. **Only Quality Control may change a `trust_tier` on an existing atom.**
+
+## 4. Security boundaries (non-negotiable)
+
+- **Historian** retrieves only from the client's brain. **Never touches the public internet.**
+- **Researcher** retrieves only from outside. **Never reads the client's brain.**
+- These run as separate processes with separate credentials. This split closes the prompt-injection exfiltration path. Any agent/skill/bridge that blurs it fails the audit.
+- **MCPs are MCP containers on Hetzner only.** No local stdio MCP servers, no `claude_desktop_config`-style local Node. (Inherited from OB1.)
+- **One brain per client. Total isolation.** Cross-client sharing happens *only* through the consent-gated property read path (§7).
+
+## 5. Skill format (merged OB1 + InfraNodus)
+
+Every skill folder contains:
+- `SKILL.md` — frontmatter (`name`, `description`, `when_to_use`, `inputs`, `outputs`, `trust_tier_of_output`, `bound_agents`, `provenance`) then the prompt/instructions.
+- `metadata.json` — `{ "name", "version", "origin": "cleverwork|ob1|infranodus", "license", "bound_agents": [], "a3_ref": null }`.
+- Originals go in `skills/cleverwork-roofer/`. Cited/adapted skills go in `skills/ob1/` or `skills/infranodus/` with an `ATTRIBUTION` note and a link — never copy proprietary text verbatim (§8).
+
+## 6. Roofer specialization (stay on-domain)
+
+This is a **roofer's** brain, not a generic construction template. Default assumptions:
+- **PM tool:** AccuLynx (primary bridge; `acculynx-api` skill is the reference).
+- **Photo/field doc:** CompanyCam (claim + EEAT evidence).
+- **Measurement:** EagleView / aerial takeoff.
+- **Accounting:** QuickBooks.
+- **Insurance/storm work is first-class:** claims, supplements, Xactimate line items, adjuster meetings, ACV vs RCV, depreciation recovery, scope disputes. The `storm-response` recipe and `@ob-sales`/`@ob-accounting` skill packs assume this.
+- **Manufacturers & certs:** GAF (Master Elite), CertainTeed (SELECT ShingleMaster), Owens Corning (Platinum Preferred) — warranty registration and cert-status tracking matter.
+- **Code/era:** IRC roofing provisions, local AHJ amendments, ice-and-water-shield requirements, wind/uplift ratings, re-roof vs. tear-off rules. Era-stamp accordingly.
+
+## 7. Consent & cross-client property sharing
+
+- Global opt-in at onboarding (`config.consent.cross_client_default`). Carrot, not stick.
+- Cross-client read path filters `consent_flags.cross_client_shareable=true`, drops atoms whose `trade_restriction` includes the requester's trade, anonymizes the source contractor by default, logs every read to `atom_access_log`.
+- Two roofers never share with each other (same trade). Roofer↔remodeler/HVAC can.
+- EEAT external publication requires `eeat_signal.publishable_with_consent=true` AND `consent_recorded_at` set AND an Auditor pass.
+
+## 8. Licensing rules for generated content
+
+- **Write Cleverwork-original prose/code** throughout. Do not paste source-repo text verbatim.
+- **OB1** (FSL-1.1-MIT): base schemas may be vendored under `schemas/ob1-base/` **with `ATTRIBUTION.md`**; carry Nate B. Jones provenance and links naturally.
+- **Dynamous** (proprietary-community): **reference and cite only — never copy files into this repo.** Point to concepts, re-express in our own words.
+- **InfraNodus:** cite as the origin of cognition skills; re-express prompts in our own words, attribute.
+- No secrets, API keys, tokens, or PII in any committed file. Use placeholders that match `config/.env.example`.
+- No profanity anywhere (docs, prompts, seed data, comments).
+
+## 9. Config-driven customization
+
+Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (company name, service area, license #, jurisdictions, manufacturers, enabled agents/skills, integration toggles, consent default, deployment profile, model tiers). Agents/recipes/bridges read config keys — they do **not** hard-code a specific company. Secrets live in `.env` (never committed), names mirrored in `config/.env.example`.
+
+## 10. Governance
+
+- No new skill ships without an A3 (`proposals/_a3-template.md`) showing a measured baseline, projected new state, and an explicit **≥10x ROI** calculation. *If the human is cheaper, the human remains.*
+- Exempt from the 10x gate: mission-grade infrastructure (debrief pipeline, era-stamping, property model, EEAT) and high-error-cost tasks where avoided-error cost carries the math.
+- **Auditor** enforces the current standard per work product. **Quality Control** sets/changes standards (DMAIC on 3+ repeats). They are separate roles; do not merge them.
+- **Maintenance** runs 5S on the brain and never deletes, never edits provenance, never changes `trust_tier`, never publishes.
+
+## 11. Design system (one source of truth for every visual asset)
+
+- Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
+- The **live brand tokens** live in `config/brand/DESIGN.md` (brand identity is per-client → customization surface, §9). It is the source of truth: tokens are normative, prose is rationale. When an asset disagrees with the brand file, the brand file wins.
+- The **contract** is `standards/design/v1.md` — QC owns it, Auditor enforces it. Brand file must lint with **zero errors** (`scripts/lint-design.sh`) before any change ships. Assets use **only** tokens from the brand file — no hard-coded hex, off-palette fonts, one-off radii, or bypass CSS custom properties. A value needed repeatedly is promoted to a token, not search-and-replaced.
+- **Role discipline is the brand.** Each brand color keeps its single role (CTA color on interactions only; never decorative). Monospace tokens appear on Property Card surfaces only. Typeface phase migrations happen only when the brand file's tokens change (the token update is the trigger).

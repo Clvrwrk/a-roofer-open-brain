@@ -1,0 +1,194 @@
+{
+  "theme": {
+    "extend": {
+      "colors": {
+        "primary": "#11133f",
+        "primary-container": "#0a0c27",
+        "primary-soft": "#bbbeed",
+        "on-primary": "#ffffff",
+        "on-primary-soft": "#11133f",
+        "secondary": "#3b6b4c",
+        "secondary-container": "#24412e",
+        "secondary-soft": "#d3e7da",
+        "on-secondary": "#ffffff",
+        "on-secondary-soft": "#11133f",
+        "tertiary": "#c22326",
+        "tertiary-container": "#9b1c1f",
+        "on-tertiary": "#ffffff",
+        "accent": "#eaa221",
+        "accent-soft": "#fbedd2",
+        "on-accent": "#000000",
+        "on-accent-soft": "#11133f",
+        "info": "#0066cc",
+        "info-soft": "#c2e0ff",
+        "on-info": "#ffffff",
+        "on-info-soft": "#11133f",
+        "surface": "#ffffff",
+        "surface-elevated": "#ffffff",
+        "surface-inset": "#f9fafb",
+        "surface-alt": "#f3f4f6",
+        "surface-dark": "#111827",
+        "on-surface": "#111827",
+        "on-surface-secondary": "#374151",
+        "on-surface-muted": "#4b5563",
+        "on-surface-dark": "#ffffff",
+        "border": "#e5e7eb",
+        "border-subtle": "#f3f4f6",
+        "success": "#059669",
+        "warning": "#d97706",
+        "error": "#dc2626",
+        "error-surface": "#fef2f2",
+        "error-text": "#7f1d1d"
+      },
+      "fontFamily": {
+        "display-1": [
+          "Inter"
+        ],
+        "display-2": [
+          "Inter"
+        ],
+        "h1": [
+          "Inter"
+        ],
+        "h2": [
+          "Inter"
+        ],
+        "h3": [
+          "Inter"
+        ],
+        "h4": [
+          "Inter"
+        ],
+        "body-lg": [
+          "Inter"
+        ],
+        "body-md": [
+          "Inter"
+        ],
+        "body-sm": [
+          "Inter"
+        ],
+        "label-md": [
+          "Inter"
+        ],
+        "label-caps": [
+          "Inter"
+        ],
+        "mono-md": [
+          "IBM Plex Mono"
+        ],
+        "mono-sm": [
+          "IBM Plex Mono"
+        ]
+      },
+      "fontSize": {
+        "display-1": [
+          "60px",
+          {
+            "letterSpacing": "-0.025em",
+            "fontWeight": "800"
+          }
+        ],
+        "display-2": [
+          "48px",
+          {
+            "letterSpacing": "-0.02em",
+            "fontWeight": "800"
+          }
+        ],
+        "h1": [
+          "36px",
+          {
+            "letterSpacing": "-0.02em",
+            "fontWeight": "700"
+          }
+        ],
+        "h2": [
+          "30px",
+          {
+            "letterSpacing": "-0.015em",
+            "fontWeight": "700"
+          }
+        ],
+        "h3": [
+          "24px",
+          {
+            "fontWeight": "600"
+          }
+        ],
+        "h4": [
+          "20px",
+          {
+            "fontWeight": "600"
+          }
+        ],
+        "body-lg": [
+          "18px",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "body-md": [
+          "16px",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "body-sm": [
+          "14px",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "label-md": [
+          "14px",
+          {
+            "letterSpacing": "0.01em",
+            "fontWeight": "600"
+          }
+        ],
+        "label-caps": [
+          "12px",
+          {
+            "letterSpacing": "0.1em",
+            "fontWeight": "700"
+          }
+        ],
+        "mono-md": [
+          "14px",
+          {
+            "fontWeight": "400"
+          }
+        ],
+        "mono-sm": [
+          "12px",
+          {
+            "fontWeight": "400"
+          }
+        ]
+      },
+      "borderRadius": {
+        "sm": "4px",
+        "md": "8px",
+        "lg": "12px",
+        "xl": "16px",
+        "full": "9999px"
+      },
+      "spacing": {
+        "xs": "4px",
+        "sm": "8px",
+        "md": "16px",
+        "lg": "24px",
+        "xl": "32px",
+        "xl-2": "48px",
+        "xl-3": "64px",
+        "xl-4": "96px",
+        "xl-5": "128px",
+        "gutter": "24px",
+        "section": "96px",
+        "section-mobile": "48px",
+        "container-max": "1280px"
+      }
+    }
+  }
+}
