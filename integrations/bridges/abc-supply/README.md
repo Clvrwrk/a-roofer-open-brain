@@ -4,6 +4,12 @@ Status: planned
 Tier: 1 - SaaS with API  
 Primary agents: Accounting, Operations, Sales, Capture, Conductor
 
+Sandbox access is now available for first-pass testing. Use the namespaced env vars from
+`metadata.json` and `SANDBOX-TEST-PLAN.md`; if the ABC portal labels the credentials as `ClientID`
+and `Client_Secret`, mirror those values into `ABC_SUPPLY_CLIENT_ID` and
+`ABC_SUPPLY_CLIENT_SECRET` in repo-root `.env`. Do not use generic credential names in committed
+code.
+
 ABC Supply's public API documentation is rich enough to plan a real bridge. The bridge's job is to
 turn supplier account, branch, product, pricing, order, notification, delivery, and invoice data into
 source-linked atoms without making the brain a pricing-comparison or product-data resale system.

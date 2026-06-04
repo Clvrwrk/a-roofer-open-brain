@@ -9,7 +9,14 @@
   "bound_agents": ["accounting", "ops", "sales", "capture", "conductor"],
   "env_vars": {
     "required": ["ABC_SUPPLY_CLIENT_ID", "ABC_SUPPLY_CLIENT_SECRET"],
-    "optional": ["ABC_SUPPLY_WEBHOOK_SECRET", "ABC_SUPPLY_REFRESH_TOKEN", "ABC_SUPPLY_ENV"]
+    "optional": [
+      "ABC_SUPPLY_WEBHOOK_SECRET",
+      "ABC_SUPPLY_REFRESH_TOKEN",
+      "ABC_SUPPLY_ENV",
+      "ABC_SUPPLY_API_BASE_URL",
+      "ABC_SUPPLY_AUTH_BASE_URL",
+      "ABC_SUPPLY_SCOPES"
+    ]
   },
   "api_base_urls": {
     "sandbox": "https://partners-sb.abcsupply.com",
