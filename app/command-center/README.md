@@ -24,6 +24,7 @@ Open `http://127.0.0.1:4321`.
 
 ## Runtime notes
 
+- The app loads environment variables from the repository root through Astro/Vite `envDir`, so `/Users/chussey/Documents/a-roofers-open-brain/.env` is the local source.
 - WorkOS is represented as a server-side placeholder. Set `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, and `COMMAND_CENTER_AUTH_MODE=workos` when the real auth layer lands.
 - The product surface uses server-only Supabase credentials. Set `SUPABASE_URL` or `PUBLIC_SUPABASE_URL`, plus `SUPABASE_SERVICE_ROLE_KEY`. Do not expose the service-role key with a `PUBLIC_` variable.
 - Agent auth discovery defaults to `https://cc.proexteriorsus.net`. Override with `COMMAND_CENTER_PUBLIC_URL` or `AGENT_AUTH_ISSUER` for another deployment origin.

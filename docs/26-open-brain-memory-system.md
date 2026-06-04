@@ -28,7 +28,7 @@ Current MemSearch Codex behavior:
 - The default vector backend is local Milvus Lite at `~/.memsearch/milvus.db`.
 - Milvus is a rebuildable shadow index; markdown files are the source of truth.
 
-The plugin installer was not run in this pass because it modifies user-level Codex state and may require network/model download.
+The plugin installer has now been run on this machine. It installed user-level hooks in `~/.codex/hooks.json`, enabled hooks in `~/.codex/config.toml`, and installed `memory-recall` plus `memory-config` under `~/.agents/skills/`.
 
 ## Layout
 
@@ -71,6 +71,13 @@ Manual index command:
 bash scripts/memsearch-index-open-brain.sh
 ```
 
+Initial local index status:
+
+- Backend: local Milvus Lite
+- Collection: `open_brain_memory`
+- Indexed chunks: 7
+- ONNX path warmed successfully
+
 The current MemSearch CLI indexes explicit paths. The older `memsearch config set paths ...` pattern from the pasted guide is not part of the observed current CLI.
 
 ## Write Discipline
@@ -98,9 +105,9 @@ archive/local-uncommitted-2026-06-04/
 
 Do not index that archive directly. It contains nested Git repositories, build artifacts, local env files, pricing/accounting material, spreadsheets, and private property data. Build a sanitizer/extractor before promoting any of it into `context/` or Supabase memory tables.
 
-## Enable MemSearch Codex Hooks
+## Enable MemSearch Codex Hooks On Another Machine
 
-When ready to activate user-level hooks:
+When activating user-level hooks on another machine:
 
 ```bash
 uv tool install "memsearch[onnx]"
