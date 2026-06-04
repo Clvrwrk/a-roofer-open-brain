@@ -1,7 +1,7 @@
 # Frontend App Spec — Command Center (Astro SSR)
 
 Status: draft v0.1 (for review)
-Related: [15-prd-agent-platform.md](15-prd-agent-platform.md), [16-platform-architecture-and-topology.md](16-platform-architecture-and-topology.md), [`deployment/remote/dashboard/AUTH.md`](../deployment/remote/dashboard/AUTH.md), `config/brand/DESIGN.md`
+Related: [15-prd-agent-platform.md](15-prd-agent-platform.md), [16-platform-architecture-and-topology.md](16-platform-architecture-and-topology.md), [22-gsd-app-transition-roadmap.md](22-gsd-app-transition-roadmap.md), [23-agent-task-cadence-and-cron.md](23-agent-task-cadence-and-cron.md), [`deployment/remote/dashboard/AUTH.md`](../deployment/remote/dashboard/AUTH.md), `config/brand/DESIGN.md`
 
 The production Command Center. **Astro in SSR mode** was chosen for the smallest client attack surface and the lowest-rewrite path from the current vanilla "islands" — see the PRD for the rationale.
 

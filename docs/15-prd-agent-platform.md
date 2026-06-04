@@ -2,7 +2,7 @@
 
 Status: draft v0.1 (for review)
 Owner: Chris / Cleverwork
-Related: [16-platform-architecture-and-topology.md](16-platform-architecture-and-topology.md), [17-frontend-command-center-spec.md](17-frontend-command-center-spec.md), [`agents/horizontal/maintenance/HERMES.md`](../agents/horizontal/maintenance/HERMES.md)
+Related: [16-platform-architecture-and-topology.md](16-platform-architecture-and-topology.md), [17-frontend-command-center-spec.md](17-frontend-command-center-spec.md), [22-gsd-app-transition-roadmap.md](22-gsd-app-transition-roadmap.md), [23-agent-task-cadence-and-cron.md](23-agent-task-cadence-and-cron.md), [`agents/horizontal/maintenance/HERMES.md`](../agents/horizontal/maintenance/HERMES.md)
 
 ---
 

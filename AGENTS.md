@@ -25,7 +25,7 @@ Two kinds of agents run per client brain: **vertical** (client-facing in Slack) 
 | Auditor | gates work | per-work-product QA vs. current standard | [`agents/horizontal/auditor/ROLE.md`](agents/horizontal/auditor/ROLE.md) |
 | Quality Control | convenes reviews | cross-job standard-setting (DMAIC); only role that edits `trust_tier` | [`agents/horizontal/quality-control/ROLE.md`](agents/horizontal/quality-control/ROLE.md) |
 | Innovator | A3 proposals | scouts tech + internal patterns; proposes, never builds | [`agents/horizontal/innovator/ROLE.md`](agents/horizontal/innovator/ROLE.md) |
-| Maintenance | weekly hygiene | 5S of the brain; never deletes/publishes | [`agents/horizontal/maintenance/ROLE.md`](agents/horizontal/maintenance/ROLE.md) |
+| Maintenance | weekly hygiene + workspace front desk | 5S of the brain, repo navigation, import triage; never deletes/publishes | [`agents/horizontal/maintenance/ROLE.md`](agents/horizontal/maintenance/ROLE.md) |
 
 The Historian/Researcher split is a **security boundary** (see `CONVENTIONS.md` §4). The Auditor/Quality-Control split is the **surgical M&M pattern** — the role that checks each operation is not the role that sets the standard.
 

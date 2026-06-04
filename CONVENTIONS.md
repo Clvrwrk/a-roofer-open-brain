@@ -8,6 +8,8 @@
 
 - **Folders:** `kebab-case`. One concept per folder.
 - **Per-folder files:** every leaf folder under `agents/`, `skills/`, `integrations/bridges/`, `recipes/` ships a `README.md`. Skills additionally ship `SKILL.md` + `metadata.json`. Agents ship `ROLE.md`.
+- **Raw imports:** copied projects, third-party repos, and client-private files do not live permanently at repo root. Use local ignored `imports/` for raw project intake and local ignored `private/` for sensitive client material. Curated outputs move into canonical folders only through a reviewed move manifest.
+- **App code:** the production Command Center will live under `app/command-center/` once the GSD app-transition phase starts. The current prototype remains under `deployment/remote/dashboard/` until migration verifies.
 - **Vertical agent Slack handles:** `@ob-accounting`, `@ob-ops`, `@ob-sales`, `@ob-marketing`, `@ob-exec`.
 - **Horizontal agents:** internal names, not Slack-mentionable by clients — `capture`, `historian`, `researcher`, `conductor`, `auditor`, `quality-control`, `innovator`, `maintenance`.
 - **SQL:** snake_case tables/columns; new tables in `public`; every migration idempotent.
@@ -110,3 +112,11 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 - The **live brand tokens** live in `config/brand/DESIGN.md` (brand identity is per-client → customization surface, §9). It is the source of truth: tokens are normative, prose is rationale. When an asset disagrees with the brand file, the brand file wins.
 - The **contract** is `standards/design/v1.md` — QC owns it, Auditor enforces it. Brand file must lint with **zero errors** (`scripts/lint-design.sh`) before any change ships. Assets use **only** tokens from the brand file — no hard-coded hex, off-palette fonts, one-off radii, or bypass CSS custom properties. A value needed repeatedly is promoted to a token, not search-and-replaced.
 - **Role discipline is the brand.** Each brand color keeps its single role (CTA color on interactions only; never decorative). Monospace tokens appear on Property Card surfaces only. Typeface phase migrations happen only when the brand file's tokens change (the token update is the trigger).
+
+## 12. Workspace front desk and GSD loop
+
+- **Maintenance/Hermes owns orientation.** Agents should read `agents/horizontal/maintenance/WORKSPACE-MAP.md` before broad repo search. If the map is stale, flag Maintenance.
+- **Moves are governed.** File relocation requires a move manifest with `from`, `to`, `lane`, `reason`, `owner`, and `status`. Raw imports, nested Git repos, and likely client-private files require human/QC review before moving.
+- **No cron job moves files by itself.** Workspace inventory and conformance checks are dry-run until a manifest row is approved.
+- **GSD Core is the app-build operating loop.** App/product work follows Discuss -> optional UI design -> Plan -> Execute -> Verify -> Ship. GSD artifacts may assist planning, but the 13-agent workforce and this repo's trust/security boundaries still govern behavior.
+- **One task, one worktree.** `.worktrees/` is local-only. Agents must keep their assigned absolute path as the boundary and stage only files belonging to the current task.

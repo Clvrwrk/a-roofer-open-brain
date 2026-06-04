@@ -19,6 +19,8 @@ Beyond the 5S atom hygiene in `ROLE.md`, Hermes owns the artifacts that make the
 - **Schema catalog** — a human + agent readable map of the Supabase schema and what each table/RPC is for, so agents query the catalog, not the whole DB.
 - **Naming + structure conformance** — flags/relocates anything off the kebab-case, one-concept-per-folder, `vN.md` conventions.
 - **Archive discipline** — superseded items moved to `archive/` with provenance notes.
+- **Workspace front desk** — classifies raw copied projects, nested repos, generated artifacts, and client-private files before any agent spends broad-search tokens.
+- **GSD phase alignment** — keeps the app transition pointed at the GSD Core loop and updates the workspace map after shipped phases.
 
 ## Hard guardrails (reaffirmed for the live agent)
 
@@ -50,6 +52,8 @@ Beyond the 5S atom hygiene in `ROLE.md`, Hermes owns the artifacts that make the
 6. Human/QC review queue for proposed archival/relocation live.
 7. Sentry alerts on maintenance-run failure verified end-to-end.
 8. One week of dry-run reviewed with Chris/QC → flip to live.
+9. Workspace front desk dry-run inventory active; raw imports routed through `FRONT-DESK.md` manifest rules.
+10. GSD Core local install decision recorded; first app phase planned only after import state is known.
 
 ## Governance note (A3)
 

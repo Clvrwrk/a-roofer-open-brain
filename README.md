@@ -21,6 +21,7 @@ Roofing is unusually property-bound: every job happens at a parcel, in a jurisdi
 - **Roofer-native bridges** — AccuLynx-first, plus CompanyCam, QuickBooks, EagleView, StartInfinity. See [`integrations/bridges/`](integrations/bridges/).
 - **The post-op debrief pipeline + EEAT flywheel + storm-response recipe.** See [`recipes/`](recipes/).
 - **Lean governance baked in** — Six Sigma A3 with a 10x ROI gate, Auditor vs. Quality Control separation, a 5S Maintenance playbook. See [`proposals/`](proposals/) and [`standards/`](standards/).
+- **A workspace front desk for agents** — Hermes/Maintenance keeps the repo map, import triage, naming conformance, and move manifests current so agents do not burn context on the wrong files. See [`agents/horizontal/maintenance/FRONT-DESK.md`](agents/horizontal/maintenance/FRONT-DESK.md).
 
 ## Quickstart
 
@@ -59,6 +60,8 @@ Full walkthrough: [`docs/01-onboard-a-roofer.md`](docs/01-onboard-a-roofer.md). 
 | [`deployment/`](deployment/) | `remote/` (default: Supabase + Coolify) + `local/` (held in reserve) |
 | [`scripts/`](scripts/) | `new-client.sh`, `verify-deployment.sh`, `kaizen-review.sh` |
 | [`config/`](config/) | `roofer.config.yaml` + `brand/DESIGN.md` — the customization surface |
+| `app/command-center/` | Planned production Astro SSR app home; see [`docs/22-gsd-app-transition-roadmap.md`](docs/22-gsd-app-transition-roadmap.md) |
+| `imports/`, `private/` | Local ignored intake/workbench folders for raw copied projects and client-private files |
 
 ## Built on the shoulders of
 
@@ -67,6 +70,7 @@ Full walkthrough: [`docs/01-onboard-a-roofer.md`](docs/01-onboard-a-roofer.md). 
 - **InfraNodus skills** — the cognition layer for the thinking agents (Auditor, QC, Innovator).
 - **Andrej Karpathy's LLM Wiki** — the philosophical pattern: build the wiki once, incrementally; don't re-derive on every query.
 - **DESIGN.md** (Google Labs) — the design-token format every visual asset follows. Spec vendored under `standards/design/vendor/` (Apache-2.0); linter run via `npx @google/design.md`. <https://github.com/google-labs-code/design.md>.
+- **GSD Core** (open-gsd) — the phase loop used for the app transition and future extended projects: Discuss, Plan, Execute, Verify, Ship. Referenced as a toolchain, not vendored by default. <https://github.com/open-gsd/gsd-core>.
 
 ## License
 

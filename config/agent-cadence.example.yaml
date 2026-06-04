@@ -1,0 +1,93 @@
+# Agent cadence example
+# Copy patterns from this file into client config or a scheduler table when the
+# Command Center cadence engine is implemented. Secrets never belong here.
+
+timezone: "America/Chicago"
+
+departments:
+  accounting:
+    agent: "@ob-accounting"
+    cadences:
+      daily:
+        - id: "invoice-gate-review"
+          cron: "0 7 * * 1-5"
+          approval_required: "before_external_action"
+          auditor_required: true
+      monthly:
+        - id: "month-close-job-costing"
+          cron: "0 3 1 * *"
+          approval_required: "before_write"
+          auditor_required: true
+  operations:
+    agent: "@ob-ops"
+    cadences:
+      daily:
+        - id: "crew-material-readiness"
+          cron: "30 6 * * 1-5"
+          approval_required: "none"
+          auditor_required: false
+        - id: "daily-log-completeness"
+          cron: "0 17 * * 1-5"
+          approval_required: "none"
+          auditor_required: false
+      weekly:
+        - id: "schedule-risk-review"
+          cron: "0 6 * * 1"
+          approval_required: "before_external_action"
+          auditor_required: true
+  sales:
+    agent: "@ob-sales"
+    cadences:
+      daily:
+        - id: "hot-lead-follow-up"
+          cron: "0 6 * * 1-5"
+          approval_required: "before_external_action"
+          auditor_required: true
+      weekly:
+        - id: "pipeline-stall-review"
+          cron: "30 6 * * 1"
+          approval_required: "none"
+          auditor_required: false
+  marketing:
+    agent: "@ob-marketing"
+    cadences:
+      weekly:
+        - id: "review-photo-eeat-harvest"
+          cron: "0 9 * * 2"
+          approval_required: "before_publish"
+          auditor_required: true
+      monthly:
+        - id: "content-schema-refresh"
+          cron: "0 4 1 * *"
+          approval_required: "before_publish"
+          auditor_required: true
+  executive:
+    agent: "@ob-exec"
+    cadences:
+      weekly:
+        - id: "kpi-capacity-digest"
+          cron: "0 7 * * 1"
+          approval_required: "none"
+          auditor_required: false
+      quarterly:
+        - id: "capacity-strategy-review"
+          cron: "0 8 1 1,4,7,10 *"
+          approval_required: "always"
+          auditor_required: true
+  system:
+    agent: "horizontal"
+    cadences:
+      daily:
+        - id: "maintenance-import-inventory"
+          cron: "30 0 * * *"
+          approval_required: "none"
+          auditor_required: false
+        - id: "maintenance-sort"
+          cron: "0 1 * * *"
+          approval_required: "none"
+          auditor_required: false
+      weekly:
+        - id: "maintenance-workspace-conformance"
+          cron: "30 2 * * 0"
+          approval_required: "before_move"
+          auditor_required: true

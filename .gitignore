@@ -9,6 +9,11 @@ config/roofer.config.yaml
 # OS / editor
 .DS_Store
 
+# Local agent workspaces and raw import staging
+.worktrees/
+imports/
+private/
+
 # Dashboard build output
 deployment/remote/dashboard/dist/
 
