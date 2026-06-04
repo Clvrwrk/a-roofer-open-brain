@@ -1,0 +1,12 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"/opt/homebrew/bin/node\" \"/Users/chussey/Documents/a-roofers-open-brain/.codex/hooks/gsd-check-update.js\""
+        }
+      ]
+    }
+  ]
+}
