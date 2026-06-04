@@ -9,13 +9,94 @@ import {
   getDepartment,
   workDefinitions,
 } from "@lib/cadence";
+import { loadProductSurface } from "@lib/product-data";
 
 const defaultWork = workDefinitions.find((work) => work.status === "needs_review") ?? workDefinitions[0];
 const departmentParam = Astro.url.searchParams.get("department");
 const initialDepartment = departments.some((department) => department.id === departmentParam) ? departmentParam : "all";
+const productSurface = await loadProductSurface();
+const productStatusLabel =
+  productSurface.status === "live"
+    ? "Supabase live"
+    : productSurface.status === "degraded"
+      ? "Supabase degraded"
+      : "Supabase pending";
+const productTone = productSurface.status === "live" ? "ready" : "watch";
+const productGeneratedAt = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+}).format(new Date(productSurface.generatedAt));
 ---
 
 <AppShell title="Human Approval Queue" eyebrow="Phase 1 Walking Skeleton" activePage="command">
+  <section class="product-surface" aria-label="Product and pricing data surface">
+    <div class="surface-heading">
+      <div>
+        <p class="eyebrow">Product File</p>
+        <h2>Pricing, invoice gates, and catalog readiness</h2>
+      </div>
+      <div class="surface-meta">
+        <span class="runtime-pill" data-tone={productTone}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {productStatusLabel}
+        </span>
+        <span>{productSurface.project.ref}</span>
+        <span>{productGeneratedAt}</span>
+      </div>
+    </div>
+
+    <div class="product-grid">
+      {
+        productSurface.sources.map((source) => (
+          <article class="product-card" data-source-status={source.status}>
+            <div class="product-card-heading">
+              <div>
+                <strong>{source.label}</strong>
+                <span>{source.department} · {source.rpc}</span>
+              </div>
+              <span class={`health-badge health-${source.status === "ok" ? "ready" : source.status === "error" ? "blocked" : "watch"}`}>
+                {source.status}
+              </span>
+            </div>
+
+            <div class="product-primary-metric">
+              <span>{source.primaryMetric.value}</span>
+              <small>{source.primaryMetric.label}</small>
+            </div>
+
+            <ul class="product-metric-list" aria-label={`${source.label} metrics`}>
+              {
+                source.metrics.length > 0 ? (
+                  source.metrics.map((metric) => (
+                    <li>
+                      <span>{metric.label}</span>
+                      <strong>{metric.value}</strong>
+                    </li>
+                  ))
+                ) : (
+                  <li>
+                    <span>Payload</span>
+                    <strong>{source.payloadKind}</strong>
+                  </li>
+                )
+              }
+            </ul>
+
+            <p class="field-coverage">
+              {
+                source.fieldCoverage.length > 0
+                  ? `Fields: ${source.fieldCoverage.join(", ")}`
+                  : source.errorMessage ?? "Field coverage pending live configuration."
+              }
+            </p>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+
   <section class="workbench" aria-label="Agent work queue">
     <div class="queue-panel">
       <div class="filter-bar" aria-label="Queue filters">

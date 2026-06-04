@@ -1,10 +1,18 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
+import { AGENT_AUTH_SOURCE, buildAuthorizationServerMetadata } from "@lib/agent-auth";
 import { agentRuntimeStatuses, cadences, workDefinitions } from "@lib/cadence";
 
 const cronBackedCount = workDefinitions.filter((work) => work.cron).length;
 const approvalCount = workDefinitions.filter((work) => work.approval !== "none").length;
 const totalQueueDepth = agentRuntimeStatuses.reduce((total, agent) => total + agent.queueDepth, 0);
+const agentAuthMetadata = buildAuthorizationServerMetadata();
+const agentAuthRows = [
+  { label: "Issuer", value: agentAuthMetadata.issuer },
+  { label: "Identity", value: agentAuthMetadata.agent_auth.identity_endpoint },
+  { label: "Token", value: agentAuthMetadata.token_endpoint },
+  { label: "Events", value: agentAuthMetadata.agent_auth.events_endpoint },
+];
 ---
 
 <AppShell title="Agent Monitor" eyebrow="Hermes + Runtime" activePage="agents">
@@ -87,6 +95,33 @@ const totalQueueDepth = agentRuntimeStatuses.reduce((total, agent) => total + ag
             </div>
           ))
         }
+      </div>
+    </aside>
+
+    <aside class="auth-panel" aria-label="Agent authentication posture">
+      <div class="panel-heading">
+        <h2>Agent Auth</h2>
+        <span class="runtime-pill" data-tone="watch">
+          <span class="signal-dot" aria-hidden="true"></span>
+          Discovery wired
+        </span>
+      </div>
+
+      <dl class="auth-list">
+        {
+          agentAuthRows.map((row) => (
+            <div>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))
+        }
+      </dl>
+
+      <div class="auth-foot">
+        <span>{AGENT_AUTH_SOURCE.version}</span>
+        <span>{AGENT_AUTH_SOURCE.dated}</span>
+        <span>WorkOS human gate retained</span>
       </div>
     </aside>
   </section>
