@@ -1,0 +1,93 @@
+---
+import AppShell from "../layouts/AppShell.astro";
+import { agentRuntimeStatuses, cadences, workDefinitions } from "@lib/cadence";
+
+const cronBackedCount = workDefinitions.filter((work) => work.cron).length;
+const approvalCount = workDefinitions.filter((work) => work.approval !== "none").length;
+const totalQueueDepth = agentRuntimeStatuses.reduce((total, agent) => total + agent.queueDepth, 0);
+---
+
+<AppShell title="Agent Monitor" eyebrow="Hermes + Runtime" activePage="agents">
+  <section class="monitor-grid" aria-label="Agent runtime monitor">
+    <div class="monitor-summary">
+      <div class="metric-panel">
+        <span>{agentRuntimeStatuses.length}</span>
+        <strong>tracked agents</strong>
+        <small>Vertical and horizontal runtime visibility starts here.</small>
+      </div>
+      <div class="metric-panel">
+        <span>{cronBackedCount}</span>
+        <strong>cron-backed definitions</strong>
+        <small>Schedules stay server-side in the future runtime.</small>
+      </div>
+      <div class="metric-panel">
+        <span>{approvalCount}</span>
+        <strong>approval-gated jobs</strong>
+        <small>External and irreversible actions remain human reviewed.</small>
+      </div>
+      <div class="metric-panel">
+        <span>{totalQueueDepth}</span>
+        <strong>seed queue depth</strong>
+        <small>Static value until live runtime integration lands.</small>
+      </div>
+    </div>
+
+    <div class="agent-table-panel">
+      <div class="panel-heading">
+        <h2>Runtime Status</h2>
+        <span class="runtime-pill" data-tone="ready">
+          <span class="signal-dot" aria-hidden="true"></span>
+          Local skeleton online
+        </span>
+      </div>
+
+      <div class="queue-table-wrap">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th scope="col">Agent</th>
+              <th scope="col">Visibility</th>
+              <th scope="col">Last run</th>
+              <th scope="col">Next run</th>
+              <th scope="col">Health</th>
+              <th scope="col">Queue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              agentRuntimeStatuses.map((agent) => (
+                <tr>
+                  <td>
+                    <strong>{agent.label}</strong>
+                    <span>{agent.note}</span>
+                  </td>
+                  <td>{agent.visibility}</td>
+                  <td>{agent.lastRun}</td>
+                  <td>{agent.nextRun}</td>
+                  <td><span class={`health-badge health-${agent.health}`}>{agent.health}</span></td>
+                  <td>{agent.queueDepth}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <aside class="cron-panel" aria-label="Cadence windows">
+      <div class="panel-heading">
+        <h2>Cadence Windows</h2>
+      </div>
+      <div class="cadence-list">
+        {
+          cadences.map((cadence) => (
+            <div class="cadence-item">
+              <strong>{cadence.label}</strong>
+              <span>{cadence.window}</span>
+            </div>
+          ))
+        }
+      </div>
+    </aside>
+  </section>
+</AppShell>

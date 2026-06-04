@@ -17,6 +17,10 @@ private/
 # Dashboard build output
 deployment/remote/dashboard/dist/
 
+# Command Center local build output
+app/command-center/.astro/
+app/command-center/dist/
+
 # Supabase local/link state
 supabase/.temp/
 supabase/.branches/

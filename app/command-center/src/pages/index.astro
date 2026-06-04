@@ -1,0 +1,137 @@
+---
+import AppShell from "../layouts/AppShell.astro";
+import {
+  cadences,
+  departments,
+  formatApproval,
+  formatStatus,
+  getCadence,
+  getDepartment,
+  workDefinitions,
+} from "@lib/cadence";
+
+const defaultWork = workDefinitions.find((work) => work.status === "needs_review") ?? workDefinitions[0];
+const departmentParam = Astro.url.searchParams.get("department");
+const initialDepartment = departments.some((department) => department.id === departmentParam) ? departmentParam : "all";
+---
+
+<AppShell title="Human Approval Queue" eyebrow="Phase 1 Walking Skeleton" activePage="command">
+  <section class="workbench" aria-label="Agent work queue">
+    <div class="queue-panel">
+      <div class="filter-bar" aria-label="Queue filters">
+        <div class="segmented-control" role="tablist" aria-label="Cadence filter">
+          <button class="segment is-active" type="button" data-cadence-filter="all">All</button>
+          {cadences.map((cadence) => <button class="segment" type="button" data-cadence-filter={cadence.id}>{cadence.label}</button>)}
+        </div>
+
+        <label class="select-label">
+          <span>Department</span>
+          <select data-department-filter>
+            <option value="all" selected={initialDepartment === "all"}>All departments</option>
+            {departments.map((department) => <option value={department.id} selected={initialDepartment === department.id}>{department.label}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div class="queue-table-wrap">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Owner</th>
+              <th scope="col">Cadence</th>
+              <th scope="col">Next run</th>
+              <th scope="col">Status</th>
+              <th scope="col">Approval</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              workDefinitions.map((work) => {
+                const department = getDepartment(work.department);
+                const cadence = getCadence(work.cadence);
+
+                return (
+                  <tr
+                    class:list={["work-row", work.id === defaultWork.id && "is-selected"]}
+                    data-work-row
+                    data-work-id={work.id}
+                    data-department={work.department}
+                    data-cadence={work.cadence}
+                    data-title={work.title}
+                    data-owner={work.owner}
+                    data-status={formatStatus(work.status)}
+                    data-approval={formatApproval(work.approval)}
+                    data-evidence={work.evidence}
+                    data-action={work.action}
+                    data-detail={work.detail}
+                    data-audit={work.auditTrail.join("|")}
+                    tabindex="0"
+                  >
+                    <td>
+                      <strong>{work.title}</strong>
+                      <span>{department?.label} · {work.evidence}</span>
+                    </td>
+                    <td>{work.owner}</td>
+                    <td>{cadence?.label}</td>
+                    <td>{work.nextRun}</td>
+                    <td><span class={`status-badge status-${work.status}`}>{formatStatus(work.status)}</span></td>
+                    <td>{formatApproval(work.approval)}</td>
+                    <td><button class="row-action" type="button" data-row-action>{work.action}</button></td>
+                  </tr>
+                );
+              })
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <aside class="detail-panel" aria-label="Selected work detail">
+      <div class="detail-heading">
+        <p class="eyebrow">Selected Run</p>
+        <h2 data-detail-title>{defaultWork.title}</h2>
+        <span class={`status-badge status-${defaultWork.status}`} data-detail-status>{formatStatus(defaultWork.status)}</span>
+      </div>
+
+      <dl class="detail-list">
+        <div>
+          <dt>Owner</dt>
+          <dd data-detail-owner>{defaultWork.owner}</dd>
+        </div>
+        <div>
+          <dt>Approval</dt>
+          <dd data-detail-approval>{formatApproval(defaultWork.approval)}</dd>
+        </div>
+        <div>
+          <dt>Evidence</dt>
+          <dd data-detail-evidence>{defaultWork.evidence}</dd>
+        </div>
+      </dl>
+
+      <div class="reasoning-block">
+        <h3>Agent Reasoning</h3>
+        <p data-detail-copy>{defaultWork.detail}</p>
+      </div>
+
+      <div class="audit-block">
+        <h3>Audit Trail</h3>
+        <ol data-detail-audit>
+          {defaultWork.auditTrail.map((item) => <li>{item}</li>)}
+        </ol>
+      </div>
+
+      <div class="approval-actions" aria-label="Approval actions">
+        <button class="button button-primary" type="button" data-approval-action="approve">Approve</button>
+        <button class="button button-secondary" type="button" data-approval-action="reject">Reject</button>
+      </div>
+
+      <p class="action-note" data-action-note>
+        Phase 1 records the operator intent in the browser only. Runtime writes arrive in the cadence engine phase.
+      </p>
+    </aside>
+  </section>
+
+  <script src="/src/scripts/command-center.ts"></script>
+</AppShell>

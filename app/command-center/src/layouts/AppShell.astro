@@ -1,0 +1,103 @@
+---
+import "../styles/global.css";
+import { departments, workDefinitions } from "@lib/cadence";
+import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
+
+interface Props {
+  title: string;
+  eyebrow?: string;
+  activePage?: "command" | "agents";
+}
+
+const { title, eyebrow = "Command Center", activePage = "command" } = Astro.props;
+const user = getCommandCenterUser();
+const workOsReady = isWorkOsConfigured();
+const needsReviewCount = workDefinitions.filter((work) => work.status === "needs_review").length;
+const blockedCount = workDefinitions.filter((work) => work.status === "blocked").length;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Open Brain Command Center" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} | Open Brain</title>
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="side-rail" aria-label="Department navigation">
+        <a class="brand-lockup" href="/">
+          <img src="/brand-mark.svg" alt="" width="40" height="40" />
+          <span>
+            <strong>Open Brain</strong>
+            <small>Command Center</small>
+          </span>
+        </a>
+
+        <nav class="primary-nav" aria-label="Primary">
+          <a class:list={["nav-link", activePage === "command" && "is-active"]} href="/">
+            <span class="nav-icon" aria-hidden="true">□</span>
+            Work Queue
+          </a>
+          <a class:list={["nav-link", activePage === "agents" && "is-active"]} href="/agents">
+            <span class="nav-icon" aria-hidden="true">◇</span>
+            Agent Monitor
+          </a>
+        </nav>
+
+        <div class="department-stack" aria-label="Departments">
+          <p class="rail-label">Departments</p>
+          {
+            departments.map((department) => (
+              <a class="department-link" href={`/?department=${department.id}`} data-department-shortcut={department.id}>
+                <span>{department.label}</span>
+                <small>{department.agent}</small>
+              </a>
+            ))
+          }
+        </div>
+      </aside>
+
+      <div class="app-main">
+        <header class="top-bar">
+          <div>
+            <p class="eyebrow">{eyebrow}</p>
+            <h1>{title}</h1>
+          </div>
+
+          <div class="operator-cluster" aria-label="Runtime summary">
+            <div class="runtime-pill" data-tone={workOsReady ? "ready" : "watch"}>
+              <span class="signal-dot" aria-hidden="true"></span>
+              {workOsReady ? "WorkOS ready" : "Local auth"}
+            </div>
+            <div class="operator-card">
+              <strong>{user.name}</strong>
+              <span>{user.role}</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="status-strip" aria-label="Queue status">
+          <div>
+            <span>{workDefinitions.length}</span>
+            <small>work definitions</small>
+          </div>
+          <div>
+            <span>{needsReviewCount}</span>
+            <small>need review</small>
+          </div>
+          <div>
+            <span>{blockedCount}</span>
+            <small>blocked</small>
+          </div>
+        </section>
+
+        <main>
+          <slot />
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

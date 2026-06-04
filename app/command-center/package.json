@@ -1,0 +1,16 @@
+{
+  "name": "@open-brain/command-center",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1",
+    "check": "astro build"
+  },
+  "dependencies": {
+    "@astrojs/node": "^10.1.3",
+    "astro": "^6.4.4"
+  }
+}
