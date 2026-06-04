@@ -48,3 +48,18 @@ The platform is built to **degrade safely, not require a night shift**: Coolify 
 ## 6. What "healthy" looks like
 
 `/healthz` 200 on command-center; `tools/list` 200 on both MCP containers; agent-runtime heartbeat fresh; Sentry error rate within baseline; last backup < 24 h; Hermes hygiene digest green; uptime ≥ the SLA target.
+
+## 7. Agent Access To Sentry
+
+Sentry has two access paths:
+
+- **Sentry CLI** for scripts, release/deploy automation, and human terminal triage.
+- **Sentry MCP** for agent debugging and issue analysis from Codex/OpenClaw-compatible clients.
+
+Prefer the project-constrained MCP URL once the org/project slugs are known:
+
+```bash
+https://mcp.sentry.dev/mcp/{org}/{project}?agent=1
+```
+
+The broad endpoint `https://mcp.sentry.dev/mcp` is acceptable for initial OAuth setup, but production agent access should be narrowed to the relevant organization/project.

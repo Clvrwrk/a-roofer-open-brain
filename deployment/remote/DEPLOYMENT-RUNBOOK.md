@@ -2,7 +2,7 @@
 
 Status: draft v0.1
 Host: `PE-open-brain` · CPX41 (8 vCPU / 16 GB / 240 GB) · Ubuntu · us-west (Hillsboro, OR) · `5.78.124.10`
-Related: [16-platform-architecture-and-topology.md](../../docs/16-platform-architecture-and-topology.md), [19-security-and-access.md](../../docs/19-security-and-access.md), [20-observability-and-incident-response.md](../../docs/20-observability-and-incident-response.md)
+Related: [16-platform-architecture-and-topology.md](../../docs/16-platform-architecture-and-topology.md), [19-security-and-access.md](../../docs/19-security-and-access.md), [20-observability-and-incident-response.md](../../docs/20-observability-and-incident-response.md), [27-hetzner-coolify-agent-host.md](../../docs/27-hetzner-coolify-agent-host.md)
 
 > This is the repeatable procedure to provision and operate the 24/7 production host. Run top-to-bottom for a fresh box; individual sections double as routine-ops references. **No private keys or secret values live in this file** — only names/placeholders mirrored in `config/.env.example`.
 
@@ -47,6 +47,8 @@ timedatectl set-timezone America/Chicago        # PE's operating TZ
 | `researcher-mcp` | **Researcher** — external web/enrichment | external APIs only, **never the brain** | tools/list | always |
 | `bridges` | GHL · AccuLynx · AgentMail · Google | respective APIs | per-bridge | always |
 | `agent-runtime` | Hermes + agent loops + cron | brain + AgentMail + Slack + Sentry | heartbeat | always |
+| `openclaw` | external agent shell/browser workflow runtime | external only by default | heartbeat | always |
+| `memsearch-indexer` | curated memory indexing into Milvus/Zilliz | Milvus/Zilliz only | `memsearch stats` | on demand / scheduled |
 
 Each resource: pin the image/repo + commit, set env (per §6), CPU/mem limits, health check, and `restart: always`. The two-process boundary in §3 of the architecture doc is enforced at the network layer — `brain-mcp` gets no route to the public internet.
 

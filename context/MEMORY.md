@@ -18,4 +18,5 @@
 
 - Choose MemSearch backend for shared agent memory: local Milvus Lite for single-user bootstrap, or Zilliz Cloud/Milvus Server for multi-agent shared memory.
 - Add WorkOS env vars before enabling real human auth: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, `WORKOS_REDIRECT_URI`, `COMMAND_CENTER_AUTH_MODE=workos`.
+- Add Sentry env names before MCP/CLI auth: `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`.
 - Define the sanitizer for archived website, pricing/accounting, and property-enrichment imports before indexing or committing extracted knowledge.
