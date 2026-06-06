@@ -4,12 +4,14 @@ import { isWorkOsConfigured } from "@lib/auth";
 import { agentRuntimeStatuses, workDefinitions } from "@lib/cadence";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { getSupabaseRuntimeConfig } from "@lib/supabase.server";
+import { AGENTMAIL_AGENT_ROSTER, getAgentMailRuntimeConfig } from "@lib/agentmail";
 
 export const prerender = false;
 
 export const GET: APIRoute = () => {
   const supabase = getSupabaseRuntimeConfig();
   const agentAuth = getAgentAuthRuntimeConfig();
+  const agentMail = getAgentMailRuntimeConfig();
   const env = getRuntimeEnv();
   const slackRuntimeConfigured = Boolean(
     env.SLACK_BOT_TOKEN && env.SLACK_APP_TOKEN && env.SLACK_SIGNING_SECRET,
@@ -27,8 +29,13 @@ export const GET: APIRoute = () => {
         workOsConfigured: isWorkOsConfigured(),
         supabaseConfigured: supabase.configured,
         supabaseProjectRef: supabase.projectRef,
-        runtimeConfigured: Boolean(env.AGENT_RUNTIME_URL || slackRuntimeConfigured),
+        runtimeConfigured: Boolean(env.AGENT_RUNTIME_URL || slackRuntimeConfigured || agentMail.configured),
         slackRuntimeConfigured,
+        agentMailConfigured: agentMail.configured,
+        agentMailApiConfigured: agentMail.apiConfigured,
+        agentMailWebhookConfigured: agentMail.webhookConfigured,
+        agentMailDomain: agentMail.domain,
+        agentMailAgentInboxes: AGENTMAIL_AGENT_ROSTER.length,
         agentAuthIssuer: agentAuth.issuer,
         agentAuthDiscovery: true,
       },
