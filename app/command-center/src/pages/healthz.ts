@@ -9,6 +9,7 @@ import {
   AGENTMAIL_OMITTED_AGENT_ROSTER,
   getAgentMailRuntimeConfig,
 } from "@lib/agentmail";
+import { getAgentAccessRuntimeConfig } from "@lib/access-control";
 
 export const prerender = false;
 
@@ -16,6 +17,7 @@ export const GET: APIRoute = () => {
   const supabase = getSupabaseRuntimeConfig();
   const agentAuth = getAgentAuthRuntimeConfig();
   const agentMail = getAgentMailRuntimeConfig();
+  const agentAccess = getAgentAccessRuntimeConfig();
   const env = getRuntimeEnv();
   const slackRuntimeConfigured = Boolean(
     env.SLACK_BOT_TOKEN && env.SLACK_APP_TOKEN && env.SLACK_SIGNING_SECRET,
@@ -41,6 +43,10 @@ export const GET: APIRoute = () => {
         agentMailDomain: agentMail.domain,
         agentMailAgentInboxes: AGENTMAIL_AGENT_ROSTER.length,
         agentMailOmittedAgents: AGENTMAIL_OMITTED_AGENT_ROSTER.length,
+        agentServiceAuthConfigured: agentAccess.serviceAuthConfigured,
+        agentServiceTokenCount: agentAccess.serviceTokenCount,
+        namedAgentWorkspaceAccounts: agentAccess.namedAgentCount,
+        desktopEnabledNamedAgents: agentAccess.desktopEnabledNamedAgents,
         agentAuthIssuer: agentAuth.issuer,
         agentAuthDiscovery: true,
       },

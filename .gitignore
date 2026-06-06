@@ -30,6 +30,9 @@ deployment/remote/dashboard/dist/
 app/command-center/.astro/
 app/command-center/dist/
 
+# Orgo local desktop registry output
+deployment/remote/orgo/pro-exteriors-orgo-desktops.json
+
 # Supabase local/link state
 supabase/.temp/
 supabase/.branches/

@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly COMMAND_CENTER_PUBLIC_URL?: string;
   readonly AGENT_AUTH_ISSUER?: string;
   readonly AGENT_RUNTIME_URL?: string;
+  readonly AGENT_SERVICE_TOKENS?: string;
+  readonly COMMAND_CENTER_HUMAN_ADMIN_EMAILS?: string;
   readonly AGENTMAIL_API_KEY?: string;
   readonly AGENTMAIL_DOMAIN?: string;
   readonly AGENTMAIL_WEBHOOK_URL?: string;

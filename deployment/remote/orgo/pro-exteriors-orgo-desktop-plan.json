@@ -1,0 +1,76 @@
+{
+  "workspaceName": "pro-exteriors-open-brain",
+  "workspaceIdEnv": "ORGO_WORKSPACE_ID",
+  "autoStopMinutes": 30,
+  "desktops": [
+    {
+      "personaId": "maya-chen",
+      "name": "pe-maya-chen",
+      "displayName": "Maya Chen",
+      "workspaceEmail": "maya.chen@cc.proexteriorsus.net",
+      "ram": 8,
+      "cpu": 2,
+      "diskSizeGb": 16,
+      "resolution": "1440x900x24",
+      "primaryUse": "Invoice/order/PDF intake, Drive, and approved vendor portal downloads"
+    },
+    {
+      "personaId": "alex-rivers",
+      "name": "pe-alex-rivers",
+      "displayName": "Alex Rivers",
+      "workspaceEmail": "alex.rivers@cc.proexteriorsus.net",
+      "ram": 8,
+      "cpu": 2,
+      "diskSizeGb": 16,
+      "resolution": "1440x900x24",
+      "primaryUse": "Price agreements, SKU/UOM evidence, and product catalog checks"
+    },
+    {
+      "personaId": "casey-morgan",
+      "name": "pe-casey-morgan",
+      "displayName": "Casey Morgan",
+      "workspaceEmail": "casey.morgan@cc.proexteriorsus.net",
+      "ram": 8,
+      "cpu": 2,
+      "diskSizeGb": 16,
+      "resolution": "1440x900x24",
+      "primaryUse": "Vendor challenge drafts and human-approved send packets"
+    },
+    {
+      "personaId": "rowan-vale",
+      "name": "pe-rowan-vale",
+      "displayName": "Rowan Vale",
+      "workspaceEmail": "rowan.vale@cc.proexteriorsus.net",
+      "ram": 8,
+      "cpu": 2,
+      "diskSizeGb": 16,
+      "resolution": "1440x900x24",
+      "primaryUse": "External-only newsletters, source monitoring, and public research signups"
+    },
+    {
+      "personaId": "lena-brooks",
+      "name": "pe-lena-brooks",
+      "displayName": "Lena Brooks",
+      "workspaceEmail": "lena.brooks@cc.proexteriorsus.net",
+      "ram": 8,
+      "cpu": 2,
+      "diskSizeGb": 16,
+      "resolution": "1440x900x24",
+      "primaryUse": "Reviews, Google Business Profile, YouTube/Drive media, and content workflows"
+    }
+  ],
+  "workspaceOnly": [
+    {
+      "personaId": "jordan-price",
+      "displayName": "Jordan Price",
+      "workspaceEmail": "jordan.price@cc.proexteriorsus.net",
+      "reason": "Finance/reporting packets can start through APIs, Sheets, and Command Center queues."
+    },
+    {
+      "personaId": "sam-torres",
+      "displayName": "Sam Torres",
+      "workspaceEmail": "sam.torres@cc.proexteriorsus.net",
+      "reason": "QA/compliance can start in dashboard review queues, Sheets, Slack, and digests."
+    }
+  ]
+}

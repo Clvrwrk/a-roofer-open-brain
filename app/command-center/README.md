@@ -16,6 +16,9 @@ Open `http://127.0.0.1:4321`.
 - `/` shows the Supabase-backed product/pricing surface plus the department-by-cadence work queue and local approval controls.
 - `/abc-price-agreement-gaps` shows the ABC fixed-agreement guardrail queue for human review by branch, invoice, SKU, agreement window, and price variance.
 - `/api/product-surface.json` returns the sanitized server-side product/pricing snapshot.
+- `/api/agent/session` returns the current human, named-agent, or service-agent actor and its permitted surfaces.
+- `/api/agent/work-queue` returns the actor-filtered queue for agents that operate without a browser session.
+- `/api/agent/work-queue/:workId/decision` accepts approval, rejection, evidence-request, and resume signals according to actor permissions.
 - `/agents` shows Hermes, Maintenance, GSD Core, runtime monitor placeholders, and the WorkOS/auth.md agent discovery posture.
 - `/auth.md` returns the LLM-readable agent-auth instructions for this service.
 - `/.well-known/oauth-protected-resource` returns the protected resource metadata.
@@ -30,6 +33,7 @@ Open `http://127.0.0.1:4321`.
 - WorkOS is represented as a server-side placeholder. Set `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, and `COMMAND_CENTER_AUTH_MODE=workos` when the real auth layer lands.
 - The product surface uses server-only Supabase credentials. Set `SUPABASE_URL` or `PUBLIC_SUPABASE_URL`, plus `SUPABASE_SERVICE_ROLE_KEY`. Do not expose the service-role key with a `PUBLIC_` variable.
 - Agent auth discovery defaults to `https://cc.proexteriorsus.net`. Override with `COMMAND_CENTER_PUBLIC_URL` or `AGENT_AUTH_ISSUER` for another deployment origin.
+- Agent service API access uses `AGENT_SERVICE_TOKENS` for phase-1 bearer-token auth. Format: `agent-id:token,other-agent:token`. Prefer vault-backed per-agent tokens in production and rotate any key that was visible in chat.
 - AgentMail uses `AGENTMAIL_API_KEY`, `AGENTMAIL_DOMAIN`, `AGENTMAIL_WEBHOOK_URL`, and `AGENTMAIL_WEBHOOK_SECRET` or `AGENTMAIL_WEBHOOK_SECRETS`. The production webhook URL is `https://cc.proexteriorsus.net/api/agentmail/webhook`.
 - Astro `security.checkOrigin` is disabled because OAuth token/revocation and agent SET endpoints must accept machine-to-machine POSTs without browser Origin headers. Those routes must enforce JWT, issuer, audience, replay, and token checks in the runtime phase.
 - Agent runtime calls should use server-only environment variables such as `AGENT_RUNTIME_URL`.
