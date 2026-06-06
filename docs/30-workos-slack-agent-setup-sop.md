@@ -44,7 +44,10 @@ Use this order when giving Codex access.
 | WorkOS | Best path. Install/authenticate the WorkOS CLI or allow Codex to install it, then Codex can run `WORKOS_MODE=agent workos doctor --json --skip-ai` and resource commands. | Useful later for securing Open Brain MCP endpoints through AuthKit/Connect. It is not the same as giving Codex WorkOS dashboard-admin access. | Put `WORKOS_API_KEY` and related env values in `.env` and Coolify env. Codex can script SDK/REST work, but this is more sensitive than a short-lived CLI session. |
 | Slack | Best path for app manifest work. Install/authenticate Slack CLI, or provide a temporary app configuration token so Codex can validate/create/update the manifest. | Useful after the app exists for reading/searching Slack, drafting/sending messages, and managing canvases through an MCP-compatible client. It does not replace app configuration/admin access. | Provide a short-lived Slack app configuration token for manifest APIs, then runtime tokens after app install: bot token, app-level token, signing secret. |
 
-Local check as of this SOP: `workos` and `slack` are not installed on this machine.
+Local setup note:
+
+- WorkOS CLI is supported for this setup.
+- Slack CLI installed, but Pro Exteriors Slack returned: "This workspace is not eligible for the next generation Slack platform." Use the classic Slack app manifest UI/API path unless Slack workspace eligibility changes.
 
 ## Required Environment Names
 
@@ -280,6 +283,8 @@ Before enabling real agent auth:
 ### B. CLI / Manifest API Setup Path
 
 Use this path when Codex or a developer can operate the Slack CLI or App Manifest APIs.
+
+If `slack login` returns a workspace eligibility error, skip Slack CLI and use the manual app-manifest UI or the App Manifest API with a temporary app configuration token.
 
 1. Install and authenticate the Slack CLI from Slack's official CLI docs, or generate a temporary Slack app configuration token.
 2. Verify the exact CLI flags before running manifest operations:

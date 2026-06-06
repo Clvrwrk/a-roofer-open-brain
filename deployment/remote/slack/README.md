@@ -13,6 +13,8 @@ Use one installed Slack app for v1:
 - Manifest: `deployment/remote/slack/pro-exteriors-open-brain.manifest.yaml`
 - Runtime: Socket Mode from the agent-app container on Coolify
 
+Slack CLI note: Pro Exteriors Slack currently reports that the workspace is not eligible for the next-generation Slack platform, so create/update this app through the classic Slack app manifest UI or App Manifest API instead of `slack login`.
+
 The repo still uses logical agent handles such as `@ob-accounting`, `@ob-ops`, and `@ob-sales` in plans and artifacts. In v1, those are routed roles inside the one Slack app, not separate installed bot users. If Pro Exteriors later wants distinct Slack mentions for every vertical agent, create one Slack app per bot user and point each app at the same agent-app backend with an explicit `agent_role`.
 
 ## Required channels

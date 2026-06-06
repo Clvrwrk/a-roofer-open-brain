@@ -1,5 +1,5 @@
 _metadata:
-  major_version: 2
+  major_version: 1
   minor_version: 1
 
 display_information:
@@ -58,4 +58,5 @@ settings:
     is_enabled: true
   org_deploy_enabled: false
   socket_mode_enabled: true
+  is_hosted: false
   token_rotation_enabled: false
