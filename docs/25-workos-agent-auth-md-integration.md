@@ -5,8 +5,8 @@
 This pass publishes the discovery skeleton for WorkOS `auth.md` agent registration while retaining WorkOS as the human access gate.
 
 - Reference repo: `https://github.com/workos/auth.md`
-- Reference version: `v0.3.0`
-- Reference date: `2026-06-03`
+- Reference docs: `https://workos.com/auth-md`
+- Reference date: `2026-06-06`
 - Deployment origin default: `https://cc.proexteriorsus.net`
 
 ## Published Routes
@@ -14,12 +14,12 @@ This pass publishes the discovery skeleton for WorkOS `auth.md` agent registrati
 - `/auth.md`
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-authorization-server`
-- `/agent/identity`
-- `/agent/identity/claim`
-- `/agent/identity/claim/complete`
+- `/agent/auth`
+- `/agent/auth/claim`
+- `/agent/auth/claim/complete`
+- `/agent/auth/revoke`
 - `/oauth2/token`
 - `/oauth2/revoke`
-- `/agent/event/notify`
 
 The two well-known routes and `/auth.md` return real discovery documents. The POST endpoints return explicit `not_implemented` JSON responses until the credential runtime is built.
 
@@ -34,11 +34,13 @@ The authorization server metadata includes:
 - `revocation_endpoint`
 - `grant_types_supported`
 - `agent_auth.skill`
-- `agent_auth.identity_endpoint`
-- `agent_auth.claim_endpoint`
-- `agent_auth.events_endpoint`
+- `agent_auth.register_uri`
+- `agent_auth.claim_uri`
+- `agent_auth.revocation_uri`
 - `agent_auth.identity_types_supported`
+- `agent_auth.anonymous.credential_types_supported`
 - `agent_auth.identity_assertion.assertion_types_supported`
+- `agent_auth.identity_assertion.credential_types_supported`
 - `agent_auth.events_supported`
 
 The current `events_supported` value is:
@@ -47,7 +49,7 @@ The current `events_supported` value is:
 https://schemas.workos.com/events/agent/auth/identity/assertion/revoked
 ```
 
-Provider-driven invalidation should use Security Event Token push delivery at `/agent/event/notify`. Do not implement the older `/agent/auth/revoke` or `agent_auth.revocation_uri` pattern.
+Provider-driven invalidation should use logout-token delivery at the advertised `/agent/auth/revoke` route.
 
 ## Required Runtime Build
 
@@ -60,7 +62,7 @@ Before accepting real agent registration:
 5. Add claim-token and OTP persistence with short TTLs.
 6. Bind claimed registrations to WorkOS-backed human ownership.
 7. Protect business-data endpoints with WorkOS session checks and agent scopes.
-8. Accept `application/secevent+jwt` at `/agent/event/notify` and validate issuer, audience, key, event schema, and replay state before invalidating registrations.
+8. Accept `application/logout+jwt` at `/agent/auth/revoke` and validate issuer, audience, key, event schema, and replay state before invalidating registrations.
 
 ## Environment
 

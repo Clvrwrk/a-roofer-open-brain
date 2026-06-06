@@ -239,7 +239,7 @@ Before enabling real agent auth:
 4. Add `jti` replay protection.
 5. Add claim-token and OTP persistence with short TTLs.
 6. Bind each claimed agent identity to a WorkOS-backed human owner.
-7. Validate Security Event Token pushes at `/agent/event/notify`.
+7. Validate logout-token revocation pushes at `/agent/auth/revoke`.
 8. Store agent registrations and revocations in Supabase.
 
 ## Slack SOP

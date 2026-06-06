@@ -5,8 +5,8 @@ export const AGENT_AUTH_REVOCATION_EVENT_SCHEMA =
 
 export const AGENT_AUTH_SOURCE = {
   repo: "https://github.com/workos/auth.md",
-  version: "v0.3.0",
-  dated: "2026-06-03",
+  docs: "https://workos.com/auth-md",
+  dated: "2026-06-06",
 };
 
 export const agentAuthScopes = [
@@ -54,16 +54,20 @@ export function buildAuthorizationServerMetadata(env: RuntimeEnv = getRuntimeEnv
     revocation_endpoint: `${config.origin}/oauth2/revoke`,
     grant_types_supported: ["urn:ietf:params:oauth:grant-type:jwt-bearer"],
     agent_auth: {
-      skill: `${config.origin}/auth.md`,
-      identity_endpoint: `${config.origin}/agent/identity`,
-      claim_endpoint: `${config.origin}/agent/identity/claim`,
-      events_endpoint: `${config.origin}/agent/event/notify`,
+      skill: "https://workos.com/auth-md",
+      register_uri: `${config.origin}/agent/auth`,
+      claim_uri: `${config.origin}/agent/auth/claim`,
+      revocation_uri: `${config.origin}/agent/auth/revoke`,
       identity_types_supported: ["anonymous", "identity_assertion"],
+      anonymous: {
+        credential_types_supported: ["api_key"],
+      },
       identity_assertion: {
         assertion_types_supported: [
           "urn:ietf:params:oauth:token-type:id-jag",
           "verified_email",
         ],
+        credential_types_supported: ["access_token", "api_key"],
       },
       events_supported: [AGENT_AUTH_REVOCATION_EVENT_SCHEMA],
     },
@@ -83,9 +87,10 @@ This Command Center publishes agent-auth discovery for Pro Exteriors' Open Brain
 - Authorization server metadata: ${config.origin}/.well-known/oauth-authorization-server
 - Token endpoint: ${config.origin}/oauth2/token
 - Token revocation endpoint: ${config.origin}/oauth2/revoke
-- Agent identity endpoint: ${config.origin}/agent/identity
-- Claim endpoint: ${config.origin}/agent/identity/claim
-- Event receiver: ${config.origin}/agent/event/notify
+- Agent registration endpoint: ${config.origin}/agent/auth
+- Claim endpoint: ${config.origin}/agent/auth/claim
+- Claim completion endpoint: ${config.origin}/agent/auth/claim/complete
+- Revocation endpoint: ${config.origin}/agent/auth/revoke
 
 ## Supported agent registration methods
 
@@ -99,13 +104,13 @@ ${agentAuthScopes.map((scope) => `- ${scope}`).join("\n")}
 
 ## Event receiver
 
-Provider-driven identity invalidation uses Security Event Token push delivery at /agent/event/notify. The current supported event schema is ${AGENT_AUTH_REVOCATION_EVENT_SCHEMA}.
+Provider-driven identity invalidation uses logout-token delivery at /agent/auth/revoke. The current supported event schema is ${AGENT_AUTH_REVOCATION_EVENT_SCHEMA}.
 
 ## Implementation state
 
 Discovery routes are wired. Registration, token minting, token revocation, and SET verification return explicit not_implemented responses until the signing key, token store, trusted issuer list, replay protection, and WorkOS human session bridge are installed.
 
-Reference process: WorkOS auth.md ${AGENT_AUTH_SOURCE.version}, dated ${AGENT_AUTH_SOURCE.dated}.
+Reference process: WorkOS auth.md, dated ${AGENT_AUTH_SOURCE.dated}: ${AGENT_AUTH_SOURCE.docs}.
 `;
 }
 

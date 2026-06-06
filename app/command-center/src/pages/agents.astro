@@ -9,9 +9,10 @@ const totalQueueDepth = agentRuntimeStatuses.reduce((total, agent) => total + ag
 const agentAuthMetadata = buildAuthorizationServerMetadata();
 const agentAuthRows = [
   { label: "Issuer", value: agentAuthMetadata.issuer },
-  { label: "Identity", value: agentAuthMetadata.agent_auth.identity_endpoint },
+  { label: "Register", value: agentAuthMetadata.agent_auth.register_uri },
+  { label: "Claim", value: agentAuthMetadata.agent_auth.claim_uri },
   { label: "Token", value: agentAuthMetadata.token_endpoint },
-  { label: "Events", value: agentAuthMetadata.agent_auth.events_endpoint },
+  { label: "Revoke", value: agentAuthMetadata.agent_auth.revocation_uri },
 ];
 ---
 
