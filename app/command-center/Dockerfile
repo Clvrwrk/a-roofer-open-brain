@@ -24,6 +24,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
+RUN chown -R node:node /app
 
 EXPOSE 8080
 
