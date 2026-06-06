@@ -128,12 +128,18 @@ async function createComputer(workspaceId, desktop, autoStopMinutes) {
 async function configureAutoStop(computerId, autoStopMinutes) {
   if (!computerId || typeof autoStopMinutes !== "number") return null;
 
-  return request(`/computers/${encodeURIComponent(computerId)}/auto-stop`, {
+  const response = await request(`/computers/${encodeURIComponent(computerId)}/auto-stop`, {
     method: "PATCH",
     body: JSON.stringify({
       auto_stop_minutes: autoStopMinutes,
     }),
   });
+
+  return {
+    requestedMinutes: autoStopMinutes,
+    confirmedMinutes: response?.auto_stop_minutes ?? null,
+    autoSuspendAfter: response?.auto_suspend_after ?? null,
+  };
 }
 
 async function getComputer(computerId) {
@@ -148,7 +154,7 @@ async function writeJson(path, value) {
   return absolutePath;
 }
 
-function sanitizeComputer(computer, desktop, status) {
+function sanitizeComputer(computer, desktop, status, autoStopRequest = null) {
   return {
     personaId: desktop.personaId,
     displayName: desktop.displayName,
@@ -163,6 +169,7 @@ function sanitizeComputer(computer, desktop, status) {
     diskSizeGb: computer.disk_size_gb ?? desktop.diskSizeGb,
     resolution: computer.resolution ?? desktop.resolution,
     autoStopMinutes: computer.auto_stop_minutes ?? null,
+    autoStopRequest,
     dashboardUrl: computer.url ?? null,
     connectionUrl: computer.connection_url ?? null,
     primaryUse: desktop.primaryUse,
@@ -186,18 +193,18 @@ async function main() {
     const existing = findDesktop(currentWorkspace, desktop.name) ?? existingRegistryComputer;
     if (existing) {
       const current = await getComputer(existing.id ?? existing.computerId);
-      const updated = await configureAutoStop(existing.id ?? existing.computerId, plan.autoStopMinutes).catch(() => null);
-      computers.push(sanitizeComputer(current ?? existing, desktop, "existing"));
-      if (updated?.auto_stop_minutes !== undefined) {
-        computers[computers.length - 1].autoStopMinutes = updated.auto_stop_minutes;
-      }
+      const autoStopRequest = await configureAutoStop(existing.id ?? existing.computerId, plan.autoStopMinutes).catch(
+        () => null,
+      );
+      const refreshed = await getComputer(existing.id ?? existing.computerId);
+      computers.push(sanitizeComputer(refreshed ?? current ?? existing, desktop, "existing", autoStopRequest));
       continue;
     }
 
     const created = await createComputer(workspace.id, desktop, plan.autoStopMinutes);
-    const updated = await configureAutoStop(created.id, plan.autoStopMinutes).catch(() => null);
-    if (updated?.auto_stop_minutes !== undefined) created.auto_stop_minutes = updated.auto_stop_minutes;
-    computers.push(sanitizeComputer(created, desktop, "created"));
+    const autoStopRequest = await configureAutoStop(created.id, plan.autoStopMinutes).catch(() => null);
+    const refreshed = await getComputer(created.id);
+    computers.push(sanitizeComputer(refreshed ?? created, desktop, "created", autoStopRequest));
   }
 
   const writtenPath = await writeJson(outputPath, {
