@@ -11,7 +11,7 @@ Use one installed Slack app for v1:
 - App name: `Pro Exteriors Open Brain`
 - Bot display name: `ob-conductor`
 - Manifest: `deployment/remote/slack/pro-exteriors-open-brain.manifest.yaml`
-- Runtime: Socket Mode from the agent-app container on Coolify
+- Runtime: Socket Mode from the Command Center container on Coolify for the first live pass. The container starts the Astro server and `runtime/slack-socket-runtime.mjs` together; split this into a separate `agent-runtime` resource once the queue workers are connected.
 
 Slack CLI note: Pro Exteriors Slack currently reports that the workspace is not eligible for the next-generation Slack platform, so create/update this app through the classic Slack app manifest UI or App Manifest API instead of `slack login`.
 
@@ -52,6 +52,8 @@ OB_ACCESS_KEY_HISTORIAN=...
 ```
 
 ## First workflow channel routing
+
+The first deployed runtime is deliberately read-only. It acknowledges `/pe-ob`, `/pe-credit`, `/pe-catalog`, `/pe-intake`, app mentions, DMs, and file-share events, but does not mutate Supabase or trigger write-side vendor workflows yet.
 
 1. `#accounting-vendor-intake`: Lucinda or Chris drops the vendor batch export or invokes `/pe-intake`.
 2. Agent app records a batch row in Supabase and posts extraction status back to intake.

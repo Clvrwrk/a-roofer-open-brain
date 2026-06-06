@@ -11,6 +11,9 @@ export const GET: APIRoute = () => {
   const supabase = getSupabaseRuntimeConfig();
   const agentAuth = getAgentAuthRuntimeConfig();
   const env = getRuntimeEnv();
+  const slackRuntimeConfigured = Boolean(
+    env.SLACK_BOT_TOKEN && env.SLACK_APP_TOKEN && env.SLACK_SIGNING_SECRET,
+  );
 
   return new Response(
     JSON.stringify(
@@ -24,7 +27,8 @@ export const GET: APIRoute = () => {
         workOsConfigured: isWorkOsConfigured(),
         supabaseConfigured: supabase.configured,
         supabaseProjectRef: supabase.projectRef,
-        runtimeConfigured: Boolean(env.AGENT_RUNTIME_URL),
+        runtimeConfigured: Boolean(env.AGENT_RUNTIME_URL || slackRuntimeConfigured),
+        slackRuntimeConfigured,
         agentAuthIssuer: agentAuth.issuer,
         agentAuthDiscovery: true,
       },
