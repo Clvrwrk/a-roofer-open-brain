@@ -14,6 +14,7 @@ Open `http://127.0.0.1:4321`.
 ## Routes
 
 - `/` shows the Supabase-backed product/pricing surface plus the department-by-cadence work queue and local approval controls.
+- `/abc-price-agreement-gaps` shows the ABC fixed-agreement guardrail queue for human review by branch, invoice, SKU, agreement window, and price variance.
 - `/api/product-surface.json` returns the sanitized server-side product/pricing snapshot.
 - `/agents` shows Hermes, Maintenance, GSD Core, runtime monitor placeholders, and the WorkOS/auth.md agent discovery posture.
 - `/auth.md` returns the LLM-readable agent-auth instructions for this service.

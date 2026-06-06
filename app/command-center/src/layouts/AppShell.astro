@@ -6,7 +6,7 @@ import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
 interface Props {
   title: string;
   eyebrow?: string;
-  activePage?: "command" | "agents";
+  activePage?: "command" | "agents" | "pricing";
 }
 
 const { title, eyebrow = "Command Center", activePage = "command" } = Astro.props;
@@ -44,6 +44,10 @@ const blockedCount = workDefinitions.filter((work) => work.status === "blocked")
           <a class:list={["nav-link", activePage === "agents" && "is-active"]} href="/agents">
             <span class="nav-icon" aria-hidden="true">◇</span>
             Agent Monitor
+          </a>
+          <a class:list={["nav-link", activePage === "pricing" && "is-active"]} href="/abc-price-agreement-gaps">
+            <span class="nav-icon" aria-hidden="true">△</span>
+            Price Gaps
           </a>
         </nav>
 

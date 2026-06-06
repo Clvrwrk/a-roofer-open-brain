@@ -1,0 +1,242 @@
+---
+import AppShell from "../layouts/AppShell.astro";
+import { formatCurrency, formatNumber, loadAgreementGapSurface } from "@lib/abc-price-gaps";
+
+const gapSurface = await loadAgreementGapSurface();
+const generatedAt = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+}).format(new Date(gapSurface.generatedAt));
+const runtimeTone = gapSurface.status === "live" ? "ready" : "watch";
+const runtimeLabel =
+  gapSurface.status === "live" ? "Supabase live" : gapSurface.status === "degraded" ? "Supabase degraded" : "Supabase pending";
+const firstRow = gapSurface.rows[0];
+const branchOptions = gapSurface.branches.slice().sort((a, b) => a.branchNumber.localeCompare(b.branchNumber));
+---
+
+<AppShell title="ABC Price Agreement Gaps" eyebrow="Accounting Guardrails" activePage="pricing">
+  <section class="gap-hero" aria-label="ABC price agreement gap summary">
+    <div class="surface-heading">
+      <div>
+        <p class="eyebrow">Human Review Queue</p>
+        <h2>Fixed agreement coverage, branch ownership, and invoice variance</h2>
+      </div>
+      <div class="surface-meta">
+        <span class="runtime-pill" data-tone={runtimeTone}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {runtimeLabel}
+        </span>
+        <span>{generatedAt}</span>
+      </div>
+    </div>
+
+    {
+      gapSurface.errors.length > 0 && (
+        <div class="gap-alert" role="status">
+          {gapSurface.errors.join(" ")}
+        </div>
+      )
+    }
+
+    <div class="gap-summary-grid">
+      <article class="gap-metric-card metric-critical">
+        <span>{formatNumber(gapSurface.totals.gapRows)}</span>
+        <strong>gap rows</strong>
+        <small>{formatNumber(gapSurface.totals.invoiceLines)} invoice lines checked</small>
+      </article>
+      <article class="gap-metric-card">
+        <span>{formatNumber(gapSurface.totals.missingPriceListItems)}</span>
+        <strong>missing SKU price lines</strong>
+        <small>{formatNumber(gapSurface.totals.missingBranchAgreements)} missing branch mappings</small>
+      </article>
+      <article class="gap-metric-card">
+        <span>{formatNumber(gapSurface.totals.unverifiedAgreements)}</span>
+        <strong>unverified agreements</strong>
+        <small>{formatNumber(gapSurface.totals.expiredAgreements)} expired agreement rows</small>
+      </article>
+      <article class="gap-metric-card">
+        <span>{formatCurrency(gapSurface.totals.absoluteVariance)}</span>
+        <strong>absolute variance</strong>
+        <small>{formatNumber(gapSurface.totals.varianceRows)} rows with price delta</small>
+      </article>
+    </div>
+  </section>
+
+  <section class="branch-gap-strip" aria-label="Branch gap workload">
+    {
+      gapSurface.branches.slice(0, 8).map((branch) => (
+        <article>
+          <strong>{branch.branchNumber}</strong>
+          <span>{branch.branchName}</span>
+          <small>
+            {formatNumber(branch.gapRows)} rows · {formatCurrency(branch.absoluteVariance)}
+          </small>
+        </article>
+      ))
+    }
+  </section>
+
+  <section class="gap-workbench" aria-label="Price agreement gap workbench">
+    <div class="gap-table-panel">
+      <div class="gap-filter-bar" aria-label="Gap filters">
+        <label class="search-label">
+          <span>Search</span>
+          <input type="search" placeholder="Invoice, SKU, PO, order, branch" data-gap-search />
+        </label>
+
+        <label class="select-label">
+          <span>Severity</span>
+          <select data-gap-severity>
+            <option value="all">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="blocked">Blocked</option>
+            <option value="review">Review</option>
+          </select>
+        </label>
+
+        <label class="select-label">
+          <span>Branch</span>
+          <select data-gap-branch>
+            <option value="all">All branches</option>
+            {branchOptions.map((branch) => <option value={branch.branchNumber}>{branch.branchNumber}</option>)}
+          </select>
+        </label>
+
+        <label class="select-label">
+          <span>Status</span>
+          <select data-gap-payment>
+            <option value="all">All invoices</option>
+            <option value="unpaid">Unpaid/open</option>
+            <option value="paid">Paid</option>
+            <option value="not linked">Not linked</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="gap-count-row">
+        <strong data-gap-visible-count>{formatNumber(gapSurface.rows.length)}</strong>
+        <span>visible rows in the escalation queue</span>
+      </div>
+
+      <div class="queue-table-wrap">
+        <table class="queue-table gap-table">
+          <thead>
+            <tr>
+              <th scope="col">Gap</th>
+              <th scope="col">Branch</th>
+              <th scope="col">Invoice Line</th>
+              <th scope="col">Past Price Agreement</th>
+              <th scope="col">Current Price Agreement</th>
+              <th scope="col">Invoiced Price</th>
+              <th scope="col">Delta</th>
+              <th scope="col">Order / PO</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              gapSurface.rows.map((row, index) => (
+                <tr
+                  class:list={["gap-row", index === 0 && "is-selected"]}
+                  data-gap-row
+                  data-severity={row.severity}
+                  data-branch={row.branchNumber}
+                  data-payment={row.paymentStatus}
+                  data-search={`${row.invoiceNumber} ${row.itemNumber} ${row.itemDescription} ${row.branchNumber} ${row.branchName} ${row.orderName} ${row.purchaseOrderNumber}`.toLowerCase()}
+                  data-title={`${row.invoiceNumber} / ${row.itemNumber}`}
+                  data-branch-label={row.branchName}
+                  data-gap-reasons={row.gapReasons.map((reason) => reason.label).join("|")}
+                  data-action={row.humanAction}
+                  data-escalation={row.escalationPayload}
+                  data-past={row.pastAgreement}
+                  data-current={row.currentAgreement}
+                  data-reference={row.referenceAgreement}
+                  data-price={formatCurrency(row.invoicePrice)}
+                  data-delta={formatCurrency(row.variance)}
+                  tabindex="0"
+                >
+                  <td>
+                    <span class={`status-badge gap-${row.severity}`}>{row.severity}</span>
+                    <span>{row.gapReasons.map((reason) => reason.label).join(", ")}</span>
+                  </td>
+                  <td>
+                    <strong>{row.branchNumber}</strong>
+                    <span>{row.branchName}</span>
+                  </td>
+                  <td>
+                    <strong>{row.invoiceNumber}</strong>
+                    <span>{row.itemNumber} · {row.itemDescription}</span>
+                  </td>
+                  <td><span>{row.pastAgreement}</span></td>
+                  <td><span>{row.currentAgreement}</span></td>
+                  <td>
+                    <strong>{formatCurrency(row.invoicePrice)}</strong>
+                    <span>{row.quantity === null ? "Qty missing" : `${row.quantity} ${row.invoiceUom}`}</span>
+                  </td>
+                  <td>
+                    <strong class:list={[row.variance !== null && Math.abs(row.variance) > 0.005 && "variance-hot"]}>
+                      {formatCurrency(row.variance)}
+                    </strong>
+                    <span>{row.variancePct === null ? "No reference" : `${(row.variancePct * 100).toFixed(1)}%`}</span>
+                  </td>
+                  <td>
+                    <strong>{row.orderName}</strong>
+                    <span>{row.purchaseOrderNumber}</span>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <aside class="gap-detail-panel" aria-label="Selected price agreement gap">
+      <div class="detail-heading">
+        <p class="eyebrow">Escalation Packet</p>
+        <h2 data-gap-detail-title>{firstRow?.invoiceNumber ?? "No gap selected"}</h2>
+        <span class={`status-badge gap-${firstRow?.severity ?? "review"}`} data-gap-detail-severity>{firstRow?.severity ?? "review"}</span>
+      </div>
+
+      <dl class="detail-list">
+        <div>
+          <dt>Branch</dt>
+          <dd data-gap-detail-branch>{firstRow?.branchName ?? "None"}</dd>
+        </div>
+        <div>
+          <dt>Invoiced Price</dt>
+          <dd data-gap-detail-price>{formatCurrency(firstRow?.invoicePrice)}</dd>
+        </div>
+        <div>
+          <dt>Delta / Variance</dt>
+          <dd data-gap-detail-delta>{formatCurrency(firstRow?.variance)}</dd>
+        </div>
+      </dl>
+
+      <div class="reasoning-block">
+        <h3>Missing Guardrails</h3>
+        <ul class="gap-reason-list" data-gap-detail-reasons>
+          {firstRow?.gapReasons.map((reason) => <li>{reason.label}</li>)}
+        </ul>
+      </div>
+
+      <div class="reasoning-block">
+        <h3>Past Agreement</h3>
+        <p data-gap-detail-past>{firstRow?.pastAgreement ?? "None found"}</p>
+      </div>
+
+      <div class="reasoning-block">
+        <h3>Current Agreement</h3>
+        <p data-gap-detail-current>{firstRow?.currentAgreement ?? "None found"}</p>
+      </div>
+
+      <div class="action-note">
+        <strong data-gap-detail-action>{firstRow?.humanAction ?? "Review guardrail."}</strong>
+        <span data-gap-detail-escalation>{firstRow?.escalationPayload ?? "No escalation payload."}</span>
+      </div>
+    </aside>
+  </section>
+
+  <script src="/src/scripts/abc-price-gaps.ts"></script>
+</AppShell>
