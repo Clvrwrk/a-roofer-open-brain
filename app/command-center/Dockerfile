@@ -1,0 +1,31 @@
+FROM node:22-bookworm-slim AS deps
+
+WORKDIR /app
+ENV npm_config_audit=false \
+    npm_config_fund=false
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM deps AS build
+
+COPY . .
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runner
+
+WORKDIR /app
+ENV HOST=0.0.0.0 \
+    NODE_ENV=production \
+    PORT=8080
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
+
+EXPOSE 8080
+
+USER node
+CMD ["node", "dist/server/entry.mjs"]
