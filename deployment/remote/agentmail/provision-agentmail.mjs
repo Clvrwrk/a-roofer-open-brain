@@ -7,6 +7,7 @@ const DEFAULT_DOMAIN = "agentmail.proexteriorsus.net";
 const DEFAULT_WEBHOOK_URL = "https://cc.proexteriorsus.net/api/agentmail/webhook";
 const DEFAULT_OUTPUT = "deployment/remote/agentmail/pro-exteriors-agentmail-roster.json";
 const DEFAULT_SECRET_OUTPUT = "/private/tmp/pro-exteriors-agentmail-webhooks.env";
+const WEBHOOK_INBOX_CHUNK_SIZE = 5;
 const WEBHOOK_EVENTS = [
   "message.received",
   "message.sent",
@@ -90,18 +91,6 @@ const ROSTER = [
     clientId: "pro-exteriors-open-brain-capture-v1",
   },
   {
-    id: "historian",
-    agentName: "Historian",
-    agentType: "horizontal",
-    username: "ob-historian",
-    displayName: "Open Brain Historian",
-    slackHandle: "@ob-historian",
-    charterPath: "agents/horizontal/historian/ROLE.md",
-    visibility: "via Conductor",
-    owns: "internal-only retrieval with provenance",
-    clientId: "pro-exteriors-open-brain-historian-v1",
-  },
-  {
     id: "researcher",
     agentName: "Researcher",
     agentType: "horizontal",
@@ -124,30 +113,6 @@ const ROSTER = [
     visibility: "digests and routing",
     owns: "routing, escalation, daily/weekly digests, PM-tool sync",
     clientId: "pro-exteriors-open-brain-conductor-v1",
-  },
-  {
-    id: "auditor",
-    agentName: "Auditor",
-    agentType: "horizontal",
-    username: "ob-auditor",
-    displayName: "Open Brain Auditor",
-    slackHandle: "@ob-auditor",
-    charterPath: "agents/horizontal/auditor/ROLE.md",
-    visibility: "gates work",
-    owns: "per-work-product QA against the current standard",
-    clientId: "pro-exteriors-open-brain-auditor-v1",
-  },
-  {
-    id: "quality-control",
-    agentName: "Quality Control",
-    agentType: "horizontal",
-    username: "ob-quality-control",
-    displayName: "Open Brain Quality Control",
-    slackHandle: "@ob-quality-control",
-    charterPath: "agents/horizontal/quality-control/ROLE.md",
-    visibility: "convenes reviews",
-    owns: "cross-job standard-setting and trust-tier edits",
-    clientId: "pro-exteriors-open-brain-quality-control-v1",
   },
   {
     id: "innovator",
@@ -175,6 +140,24 @@ const ROSTER = [
   },
 ];
 
+const OMITTED_AGENTS = [
+  {
+    id: "historian",
+    agentName: "Historian",
+    reason: "Internal-only retrieval boundary; should not receive external email directly.",
+  },
+  {
+    id: "auditor",
+    agentName: "Auditor",
+    reason: "Gates work products through dashboard and Slack review queues; no direct inbox needed yet.",
+  },
+  {
+    id: "quality-control",
+    agentName: "Quality Control",
+    reason: "Convenes standards reviews internally; email can route through Conductor until volume proves a need.",
+  },
+];
+
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -197,6 +180,13 @@ function extractList(payload, key) {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.items)) return payload.items;
   return [];
+}
+
+function splitCsv(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function request(path, options = {}) {
@@ -366,7 +356,7 @@ async function main() {
   const existingWebhooks = await listWebhooks();
   const webhooks = [];
   const liveInboxes = inboxes.filter((inbox) => inbox.inboxId);
-  for (const [index, inboxGroup] of chunk(liveInboxes, 10).entries()) {
+  for (const [index, inboxGroup] of chunk(liveInboxes, WEBHOOK_INBOX_CHUNK_SIZE).entries()) {
     const webhook = await createWebhook(
       index,
       inboxGroup.map((inbox) => inbox.inboxId),
@@ -392,12 +382,19 @@ async function main() {
     webhookUrl,
     eventTypes: WEBHOOK_EVENTS,
     inboxes,
+    omittedAgents: OMITTED_AGENTS,
     webhooks,
   });
 
-  const secrets = webhooks
-    .map((webhook) => existingWebhooks.find((item) => item.webhook_id === webhook.webhookId)?.secret)
-    .filter(Boolean);
+  const secrets = Array.from(
+    new Set([
+      ...splitCsv(process.env.AGENTMAIL_WEBHOOK_SECRETS),
+      ...splitCsv(process.env.AGENTMAIL_WEBHOOK_SECRET),
+      ...webhooks
+        .map((webhook) => existingWebhooks.find((item) => item.webhook_id === webhook.webhookId)?.secret)
+        .filter(Boolean),
+    ]),
+  );
 
   const secretPath = secrets.length > 0 ? await writeSecretEnv(secretOutput, secrets) : null;
   const createdInboxes = inboxes.filter((item) => item.status === "created").length;

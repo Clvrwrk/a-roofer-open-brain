@@ -13,6 +13,17 @@ This folder records the AgentMail inbox and webhook setup for the Pro Exteriors 
 
 Vertical agents use the same `ob-*` names as their Slack handles. Horizontal agents also use `ob-*`, except Maintenance, whose production persona is Hermes and whose go-live spec calls for `hermes@<domain>`.
 
+The AgentMail account is currently capped at ten inboxes. The enabled set is:
+
+- Five vertical client-facing agents: Accounting, Operations, Sales, Marketing, Executive.
+- Five email-useful horizontal agents: Capture, Researcher, Conductor, Innovator, Hermes/Maintenance.
+
+The omitted agents are intentional until volume proves otherwise:
+
+- Historian: internal-only retrieval boundary.
+- Auditor: gates work through dashboard and Slack review queues.
+- Quality Control: standards review can route through Conductor.
+
 ## Secret env
 
 Set these in Coolify or a vault, never in committed files.

@@ -4,7 +4,11 @@ import { isWorkOsConfigured } from "@lib/auth";
 import { agentRuntimeStatuses, workDefinitions } from "@lib/cadence";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { getSupabaseRuntimeConfig } from "@lib/supabase.server";
-import { AGENTMAIL_AGENT_ROSTER, getAgentMailRuntimeConfig } from "@lib/agentmail";
+import {
+  AGENTMAIL_AGENT_ROSTER,
+  AGENTMAIL_OMITTED_AGENT_ROSTER,
+  getAgentMailRuntimeConfig,
+} from "@lib/agentmail";
 
 export const prerender = false;
 
@@ -36,6 +40,7 @@ export const GET: APIRoute = () => {
         agentMailWebhookConfigured: agentMail.webhookConfigured,
         agentMailDomain: agentMail.domain,
         agentMailAgentInboxes: AGENTMAIL_AGENT_ROSTER.length,
+        agentMailOmittedAgents: AGENTMAIL_OMITTED_AGENT_ROSTER.length,
         agentAuthIssuer: agentAuth.issuer,
         agentAuthDiscovery: true,
       },

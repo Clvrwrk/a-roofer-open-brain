@@ -27,6 +27,12 @@ export interface AgentMailAgentInbox {
   clientId: string;
 }
 
+export interface AgentMailOmittedAgent {
+  id: string;
+  agentName: string;
+  reason: string;
+}
+
 export interface AgentMailRuntimeConfig {
   configured: boolean;
   apiConfigured: boolean;
@@ -111,18 +117,6 @@ export const AGENTMAIL_AGENT_ROSTER: AgentMailAgentInbox[] = [
     clientId: "pro-exteriors-open-brain-capture-v1",
   },
   {
-    id: "historian",
-    agentName: "Historian",
-    agentType: "horizontal",
-    username: "ob-historian",
-    displayName: "Open Brain Historian",
-    slackHandle: "@ob-historian",
-    charterPath: "agents/horizontal/historian/ROLE.md",
-    visibility: "via Conductor",
-    owns: "internal-only retrieval with provenance",
-    clientId: "pro-exteriors-open-brain-historian-v1",
-  },
-  {
     id: "researcher",
     agentName: "Researcher",
     agentType: "horizontal",
@@ -147,30 +141,6 @@ export const AGENTMAIL_AGENT_ROSTER: AgentMailAgentInbox[] = [
     clientId: "pro-exteriors-open-brain-conductor-v1",
   },
   {
-    id: "auditor",
-    agentName: "Auditor",
-    agentType: "horizontal",
-    username: "ob-auditor",
-    displayName: "Open Brain Auditor",
-    slackHandle: "@ob-auditor",
-    charterPath: "agents/horizontal/auditor/ROLE.md",
-    visibility: "gates work",
-    owns: "per-work-product QA against the current standard",
-    clientId: "pro-exteriors-open-brain-auditor-v1",
-  },
-  {
-    id: "quality-control",
-    agentName: "Quality Control",
-    agentType: "horizontal",
-    username: "ob-quality-control",
-    displayName: "Open Brain Quality Control",
-    slackHandle: "@ob-quality-control",
-    charterPath: "agents/horizontal/quality-control/ROLE.md",
-    visibility: "convenes reviews",
-    owns: "cross-job standard-setting and trust-tier edits",
-    clientId: "pro-exteriors-open-brain-quality-control-v1",
-  },
-  {
     id: "innovator",
     agentName: "Innovator",
     agentType: "horizontal",
@@ -193,6 +163,24 @@ export const AGENTMAIL_AGENT_ROSTER: AgentMailAgentInbox[] = [
     visibility: "weekly hygiene and workspace front desk",
     owns: "brain hygiene, workspace navigation, import triage, and structural drift review",
     clientId: "pro-exteriors-open-brain-hermes-v1",
+  },
+];
+
+export const AGENTMAIL_OMITTED_AGENT_ROSTER: AgentMailOmittedAgent[] = [
+  {
+    id: "historian",
+    agentName: "Historian",
+    reason: "Internal-only retrieval boundary; should not receive external email directly.",
+  },
+  {
+    id: "auditor",
+    agentName: "Auditor",
+    reason: "Gates work products through dashboard and Slack review queues; no direct inbox needed yet.",
+  },
+  {
+    id: "quality-control",
+    agentName: "Quality Control",
+    reason: "Convenes standards reviews internally; email can route through Conductor until volume proves a need.",
   },
 ];
 
