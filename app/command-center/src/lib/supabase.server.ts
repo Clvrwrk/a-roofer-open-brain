@@ -13,6 +13,8 @@ export interface ServerSupabaseClient {
   config: SupabaseRuntimeConfig;
 }
 
+type RuntimeEnv = Partial<Record<string, string | undefined>>;
+
 function cleanUrl(value?: string) {
   const normalized = value?.trim().replace(/\/+$/, "");
   return normalized ? normalized : null;
@@ -30,7 +32,11 @@ function parseProjectRef(url: string | null) {
   }
 }
 
-export function getSupabaseRuntimeConfig(env: ImportMetaEnv = import.meta.env): SupabaseRuntimeConfig {
+function getRuntimeEnv(): RuntimeEnv {
+  return globalThis.process?.env ?? {};
+}
+
+export function getSupabaseRuntimeConfig(env: RuntimeEnv = getRuntimeEnv()): SupabaseRuntimeConfig {
   const url = cleanUrl(env.SUPABASE_URL ?? env.PUBLIC_SUPABASE_URL);
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const missing: string[] = [];
@@ -47,7 +53,7 @@ export function getSupabaseRuntimeConfig(env: ImportMetaEnv = import.meta.env): 
   };
 }
 
-export function createServerSupabaseClient(env: ImportMetaEnv = import.meta.env): ServerSupabaseClient {
+export function createServerSupabaseClient(env: RuntimeEnv = getRuntimeEnv()): ServerSupabaseClient {
   const config = getSupabaseRuntimeConfig(env);
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
