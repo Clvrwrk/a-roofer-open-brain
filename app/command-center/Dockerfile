@@ -19,6 +19,10 @@ ENV HOST=0.0.0.0 \
     NODE_ENV=production \
     PORT=8080
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
