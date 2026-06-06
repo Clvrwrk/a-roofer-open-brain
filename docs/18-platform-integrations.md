@@ -22,6 +22,7 @@ One row of truth per external service: what it's for, which agent/role owns it, 
 ### Google Workspace — org email/docs/calendar
 - **Purpose:** human-facing email, document storage, calendar; some agent document reads.
 - **Owner:** humans + select agents. **Secret:** Google OAuth client/refresh. **Connect:** bridge with least-scope OAuth.
+- **Named agent roster:** see [`reference/pro-exteriors-google-workspace-agent-personas.md`](reference/pro-exteriors-google-workspace-agent-personas.md). Workspace-enabled personas are Maya Chen, Alex Rivers, Casey Morgan, Jordan Price, Sam Torres, Rowan Vale, and Lena Brooks.
 
 ## CRM & comms
 
@@ -39,6 +40,7 @@ One row of truth per external service: what it's for, which agent/role owns it, 
 - **Purpose:** virtual desktops/browsers for agents that need an OS (e.g. Researcher driving a vendor portal).
 - **Owner:** Researcher-side / orchestrator. **Secret:** `ORGO_API_KEY`. **Boundary:** external — **shared pool of 5 allocated on demand**, not 1:1; Hermes needs none.
 - **Connect:** Orgo API from the agent-runtime. Docs: https://docs.orgo.ai/api-reference/introduction · https://docs.orgo.ai/llms-full.txt
+- **Coolify alternative:** persistent browser desktops may be deployed as named persona resources when a task needs a stable Google Workspace profile rather than an on-demand Orgo session.
 
 ## Research stack (Researcher-only — external boundary)
 

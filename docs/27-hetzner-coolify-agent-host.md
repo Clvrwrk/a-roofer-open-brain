@@ -55,6 +55,23 @@ Recommendation: start with local Milvus Lite for one operator, or Zilliz Cloud f
 
 In Coolify, keep each boundary as its own resource/container even if the repo is monolithic. This makes logs, health, env, restarts, and future scaling much easier.
 
+## Agent Desktop Resources
+
+Named Google Workspace desktop personas are defined in
+[`reference/pro-exteriors-google-workspace-agent-personas.md`](reference/pro-exteriors-google-workspace-agent-personas.md).
+
+Start with persistent desktop resources only for personas that need stable browser state:
+
+- `maya-chen-desktop`
+- `alex-rivers-desktop`
+- `casey-morgan-desktop`
+- `jordan-price-desktop`
+- `sam-torres-desktop`
+- `rowan-vale-desktop`
+- `lena-brooks-desktop`
+
+Each desktop needs its own persistent profile volume and onboarding checklist. Rowan Vale must stay on the external-only side of the security boundary and must not receive Supabase service-role access or direct brain access.
+
 ## Domains
 
 Initial DNS map:
