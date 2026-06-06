@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
 export type ProductSurfaceStatus = "live" | "degraded" | "unconfigured";
 export type ProductSourceStatus = "ok" | "error" | "unconfigured";
@@ -209,7 +210,7 @@ function summarizeError(source: ProductRpcSource, error: { message?: string; cod
   };
 }
 
-export async function loadProductSurface(env: ImportMetaEnv = import.meta.env): Promise<ProductSurface> {
+export async function loadProductSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<ProductSurface> {
   const { client, config } = createServerSupabaseClient(env);
 
   if (!client) {

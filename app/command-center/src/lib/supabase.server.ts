@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
 export interface SupabaseRuntimeConfig {
   configured: boolean;
@@ -12,8 +13,6 @@ export interface ServerSupabaseClient {
   client: SupabaseClient | null;
   config: SupabaseRuntimeConfig;
 }
-
-type RuntimeEnv = Partial<Record<string, string | undefined>>;
 
 function cleanUrl(value?: string) {
   const normalized = value?.trim().replace(/\/+$/, "");
@@ -30,10 +29,6 @@ function parseProjectRef(url: string | null) {
   } catch {
     return null;
   }
-}
-
-function getRuntimeEnv(): RuntimeEnv {
-  return globalThis.process?.env ?? {};
 }
 
 export function getSupabaseRuntimeConfig(env: RuntimeEnv = getRuntimeEnv()): SupabaseRuntimeConfig {

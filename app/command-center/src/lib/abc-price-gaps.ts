@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
 export type GapSurfaceStatus = "live" | "degraded" | "unconfigured";
 export type GapSeverity = "critical" | "blocked" | "review";
@@ -342,7 +343,7 @@ export function formatNumber(value: number) {
   return NUMBER_FORMATTER.format(value);
 }
 
-export async function loadAgreementGapSurface(env: ImportMetaEnv = import.meta.env): Promise<AgreementGapSurface> {
+export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<AgreementGapSurface> {
   const { client, config } = createServerSupabaseClient(env);
 
   if (!client) {

@@ -1,3 +1,5 @@
+import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
+
 export const AGENT_AUTH_REVOCATION_EVENT_SCHEMA =
   "https://schemas.workos.com/events/agent/auth/identity/assertion/revoked";
 
@@ -19,7 +21,7 @@ function normalizeOrigin(value?: string) {
   return origin || "https://cc.proexteriorsus.net";
 }
 
-export function getAgentAuthRuntimeConfig(env: ImportMetaEnv = import.meta.env) {
+export function getAgentAuthRuntimeConfig(env: RuntimeEnv = getRuntimeEnv()) {
   const origin = normalizeOrigin(env.AGENT_AUTH_ISSUER ?? env.COMMAND_CENTER_PUBLIC_URL);
 
   return {
@@ -29,7 +31,7 @@ export function getAgentAuthRuntimeConfig(env: ImportMetaEnv = import.meta.env) 
   };
 }
 
-export function buildProtectedResourceMetadata(env: ImportMetaEnv = import.meta.env) {
+export function buildProtectedResourceMetadata(env: RuntimeEnv = getRuntimeEnv()) {
   const config = getAgentAuthRuntimeConfig(env);
 
   return {
@@ -42,7 +44,7 @@ export function buildProtectedResourceMetadata(env: ImportMetaEnv = import.meta.
   };
 }
 
-export function buildAuthorizationServerMetadata(env: ImportMetaEnv = import.meta.env) {
+export function buildAuthorizationServerMetadata(env: RuntimeEnv = getRuntimeEnv()) {
   const config = getAgentAuthRuntimeConfig(env);
 
   return {
@@ -68,7 +70,7 @@ export function buildAuthorizationServerMetadata(env: ImportMetaEnv = import.met
   };
 }
 
-export function buildAuthMdDocument(env: ImportMetaEnv = import.meta.env) {
+export function buildAuthMdDocument(env: RuntimeEnv = getRuntimeEnv()) {
   const config = getAgentAuthRuntimeConfig(env);
 
   return `# Open Brain agent auth
@@ -118,7 +120,7 @@ export function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   });
 }
 
-export function notImplementedAgentAuthResponse(operation: string, env: ImportMetaEnv = import.meta.env) {
+export function notImplementedAgentAuthResponse(operation: string, env: RuntimeEnv = getRuntimeEnv()) {
   const metadata = buildAuthorizationServerMetadata(env);
 
   return jsonResponse(

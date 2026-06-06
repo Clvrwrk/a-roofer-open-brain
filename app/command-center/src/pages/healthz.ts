@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getAgentAuthRuntimeConfig } from "@lib/agent-auth";
 import { isWorkOsConfigured } from "@lib/auth";
 import { agentRuntimeStatuses, workDefinitions } from "@lib/cadence";
+import { getRuntimeEnv } from "@lib/runtime-env";
 import { getSupabaseRuntimeConfig } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -9,6 +10,7 @@ export const prerender = false;
 export const GET: APIRoute = () => {
   const supabase = getSupabaseRuntimeConfig();
   const agentAuth = getAgentAuthRuntimeConfig();
+  const env = getRuntimeEnv();
 
   return new Response(
     JSON.stringify(
@@ -22,7 +24,7 @@ export const GET: APIRoute = () => {
         workOsConfigured: isWorkOsConfigured(),
         supabaseConfigured: supabase.configured,
         supabaseProjectRef: supabase.projectRef,
-        runtimeConfigured: Boolean(import.meta.env.AGENT_RUNTIME_URL),
+        runtimeConfigured: Boolean(env.AGENT_RUNTIME_URL),
         agentAuthIssuer: agentAuth.issuer,
         agentAuthDiscovery: true,
       },
