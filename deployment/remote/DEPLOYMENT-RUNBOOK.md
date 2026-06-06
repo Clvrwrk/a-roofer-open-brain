@@ -2,6 +2,7 @@
 
 Status: draft v0.1
 Host: `PE-open-brain` · CPX41 (8 vCPU / 16 GB / 240 GB) · Ubuntu · us-west (Hillsboro, OR) · `5.78.124.10`
+Public Command Center: `https://cc.proexteriorsus.net`
 Related: [16-platform-architecture-and-topology.md](../../docs/16-platform-architecture-and-topology.md), [19-security-and-access.md](../../docs/19-security-and-access.md), [20-observability-and-incident-response.md](../../docs/20-observability-and-incident-response.md), [27-hetzner-coolify-agent-host.md](../../docs/27-hetzner-coolify-agent-host.md)
 
 > This is the repeatable procedure to provision and operate the 24/7 production host. Run top-to-bottom for a fresh box; individual sections double as routine-ops references. **No private keys or secret values live in this file** — only names/placeholders mirrored in `config/.env.example`.
@@ -11,7 +12,7 @@ Related: [16-platform-architecture-and-topology.md](../../docs/16-platform-archi
 ## 0. Prerequisites
 
 - Hetzner CPX41 reachable at `5.78.124.10`, Ubuntu LTS.
-- A DNS zone (e.g. `*.pe.brain.cleverwork.io`) you can point at the host.
+- DNS access for `proexteriorsus.net`, with `cc.proexteriorsus.net` pointed at the host.
 - Accounts/keys ready (values go in Coolify env, never here): Supabase, WorkOS, AgentMail, Orgo, Sentry, GoHighLevel, Google Workspace, Serper, SerpAPI, Firecrawl, Tavily, Exa, Google Maps.
 - Each operator has their **own** SSH keypair; only **public** keys are placed on the server.
 
@@ -54,7 +55,7 @@ Each resource: pin the image/repo + commit, set env (per §6), CPU/mem limits, h
 
 ## 5. TLS, domains, reverse proxy
 
-Coolify provisions Let's Encrypt certs per resource. Map: `app.pe.brain.cleverwork.io` → command-center; internal MCPs stay on the private Docker network (not publicly routable). Auto-renew handled by Coolify.
+Coolify provisions Let's Encrypt certs per resource. Map: `cc.proexteriorsus.net` → command-center; internal MCPs stay on the private Docker network (not publicly routable). Auto-renew handled by Coolify.
 
 ## 6. Secrets & env
 

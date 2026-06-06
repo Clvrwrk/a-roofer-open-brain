@@ -11,7 +11,7 @@
 
 - Command Center local URL: `http://127.0.0.1:4326/`.
 - Supabase project: `rnhmvcpsvtqjlffpsayu` (`https://rnhmvcpsvtqjlffpsayu.supabase.co`).
-- Planned public UI origin: `https://cc.proexteriorsus.net`.
+- Public Command Center origin: `https://cc.proexteriorsus.net` (Coolify configured; DNS cutover pending).
 - `memsearch` is available on PATH at `/Users/chussey/.local/bin/memsearch`; observed version: `0.4.6`; `open_brain_memory` indexed 7 chunks.
 - `.env` holds real local secrets; `config/.env.example` is names-only. Never copy `.env` into the template.
 - ABC Supply sandbox credentials are present locally under generic portal labels; add/use namespaced aliases `ABC_SUPPLY_CLIENT_ID`, `ABC_SUPPLY_CLIENT_SECRET`, and `ABC_SUPPLY_ENV=sandbox`.

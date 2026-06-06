@@ -1,7 +1,7 @@
 # Project Handoff - A Roofer's Open Brain
 **Project:** A Roofer's Open Brain / Pro Exteriors Open Brain Command Center
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain.git
-**Production URL:** not yet deployed; planned Command Center origin is `https://cc.proexteriorsus.net`
+**Production URL:** `https://cc.proexteriorsus.net` (Coolify configured; DNS cutover pending)
 **Date:** 2026-06-04 14:51 PDT
 **Agent:** Codex Lead Orchestrator / Maintenance + App Transition
 **Reason:** User-requested
@@ -127,7 +127,7 @@ None - session ended at a clean boundary after recording the project handoff and
 
 1. **ABC Supply sandbox details** - Add or confirm `ABC_SUPPLY_*` aliases in `.env`, confirm integration track/scopes, and provide safe sandbox identifiers if account or pricing tests need them.
 2. **Hetzner access** - Provide server IP/hostname, SSH user, SSH port, and install/confirm Codex's public key for the CPX41.
-3. **DNS/Coolify access** - Confirm DNS control for `cc.proexteriorsus.net` and whether Coolify is already installed or should be installed fresh.
+3. **DNS cutover** - Create/update the `cc.proexteriorsus.net` DNS record to point at the Hetzner host, then remove the temporary IP fallback and enable HTTPS enforcement in Coolify.
 4. **WorkOS credentials** - Add `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`, and `WORKOS_COOKIE_PASSWORD` before real human auth is enabled.
 5. **Sentry naming confirmation** - Add/confirm `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` in `.env` using these exact names.
 6. **Memory backend decision** - Choose local Milvus Lite for bootstrap, Zilliz Cloud for shared memory, or self-hosted Milvus later.
@@ -196,7 +196,7 @@ None - session ended at a clean boundary after recording the project handoff and
 | Repository | `https://github.com/Clvrwrk/a-roofer-open-brain.git` |
 | Local workspace | `/Users/chussey/Documents/a-roofers-open-brain` |
 | Command Center app | `app/command-center` |
-| Planned Command Center URL | `https://cc.proexteriorsus.net` |
+| Command Center URL | `https://cc.proexteriorsus.net` |
 | Supabase project | `https://rnhmvcpsvtqjlffpsayu.supabase.co` |
 | Supabase product surface | `/api/product-surface.json` in Command Center |
 | Current local dev URL observed | `http://127.0.0.1:4326/` during prior verification |

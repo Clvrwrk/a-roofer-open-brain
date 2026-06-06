@@ -37,7 +37,7 @@ Observability                     Sentry (errors + health) → Hermes → Slack
 
 ## 2. Host: Hetzner CPX41
 
-`PE-open-brain` — CPX41 (8 vCPU / 16 GB / 240 GB), Ubuntu, region us-west (Hillsboro, OR), `5.78.124.10`. Runs **Coolify**, which manages all containers (build, deploy, Let's Encrypt TLS, env/secrets, health checks, auto-restart). Per `CONVENTIONS.md`, MCPs run only as **containers on this host** — no local stdio MCPs.
+`PE-open-brain` — CPX41 (8 vCPU / 16 GB / 240 GB), Ubuntu, region us-west (Hillsboro, OR), `5.78.124.10`. Public Command Center origin: `https://cc.proexteriorsus.net`. Runs **Coolify**, which manages all containers (build, deploy, Let's Encrypt TLS, env/secrets, health checks, auto-restart). Per `CONVENTIONS.md`, MCPs run only as **containers on this host** — no local stdio MCPs.
 
 **24/7 reliability:** Coolify restart policies + per-container health checks; an **external uptime pinger** (independent of the host) alerts on total outage; **off-box encrypted backups** (Supabase PITR + nightly brain dump to object storage). The single CPX41 is a single point of failure — the deployment runbook (Phase: deployment doc) must include a **one-command rebuild** with documented RPO/RTO.
 
