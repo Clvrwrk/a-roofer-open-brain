@@ -2,6 +2,8 @@
 
 This folder holds the first Slack app manifest and channel plan for the Pro Exteriors Open Brain.
 
+Beginner setup procedure: [`docs/30-workos-slack-agent-setup-sop.md`](../../../docs/30-workos-slack-agent-setup-sop.md).
+
 ## v1 app strategy
 
 Use one installed Slack app for v1:

@@ -12,7 +12,7 @@ One row of truth per external service: what it's for, which agent/role owns it, 
 ### WorkOS — human auth + RBAC
 - **Purpose:** login for the Command Center + role-based access (admin/ceo, purchasing, accounting, viewer).
 - **Owner:** platform (front end). **Secrets:** `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`, `WORKOS_COOKIE_PASSWORD`.
-- **Connect:** AuthKit hosted login → sealed session cookie; server middleware + data-layer role checks. See `deployment/remote/dashboard/AUTH.md`.
+- **Connect:** AuthKit hosted login → sealed session cookie; server middleware + data-layer role checks. See `deployment/remote/dashboard/AUTH.md` and [`30-workos-slack-agent-setup-sop.md`](30-workos-slack-agent-setup-sop.md).
 
 ### AgentMail — per-agent inboxes
 - **Purpose:** each agent gets a real, addressable inbox (e.g. `hermes@…`); inbound mail is an event stream into **Capture**; outbound is agent-originated correspondence.
@@ -32,7 +32,8 @@ One row of truth per external service: what it's for, which agent/role owns it, 
 
 ### Slack — agent team workspace (secondary HITL)
 - **Purpose:** alerts, quick approvals, agent digests (Conductor/Hermes). Secondary to the web app.
-- **Secrets:** `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`. **Handles:** `@ob-hermes`, `@ob-sales`, etc.
+- **Secrets:** `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`. **Visible bot:** `ob-conductor`; vertical handles remain logical routing labels in v1.
+- **Setup:** v1 uses one `ob-conductor` Slack app with logical agent routing. See [`30-workos-slack-agent-setup-sop.md`](30-workos-slack-agent-setup-sop.md) and [`../deployment/remote/slack/pro-exteriors-open-brain.manifest.yaml`](../deployment/remote/slack/pro-exteriors-open-brain.manifest.yaml).
 
 ## Agent compute
 

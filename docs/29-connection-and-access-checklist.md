@@ -135,6 +135,8 @@ Then load `/api/healthz.json` and `/api/product-surface.json`.
 
 Keep human auth through WorkOS once the UI is ready.
 
+Step-by-step setup lives in [`30-workos-slack-agent-setup-sop.md`](30-workos-slack-agent-setup-sop.md).
+
 Need from Chris:
 
 - WorkOS API key.
@@ -153,6 +155,19 @@ WORKOS_COOKIE_PASSWORD=...
 ```
 
 Do not enable `COMMAND_CENTER_AUTH_MODE=workos` in production until callback routing and session sealing are verified.
+
+## Slack Agent App
+
+The v1 Slack setup uses one `ob-conductor` app with logical routing for the vertical agents. The manifest is tracked at `deployment/remote/slack/pro-exteriors-open-brain.manifest.yaml`.
+
+Need from Chris:
+
+- Slack workspace admin access or a temporary app configuration token.
+- Confirmation of the Pro Exteriors workspace/team ID.
+- Runtime app tokens after install: bot token, app-level token, and signing secret.
+- Channel IDs for the private human-in-the-loop channels.
+
+Step-by-step setup lives in [`30-workos-slack-agent-setup-sop.md`](30-workos-slack-agent-setup-sop.md).
 
 ## Sentry
 
