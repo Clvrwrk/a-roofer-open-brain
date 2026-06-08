@@ -1,0 +1,33 @@
+---
+import type { LiveMetric } from "@lib/live-work";
+
+interface Props {
+  metrics: LiveMetric[];
+}
+
+const { metrics } = Astro.props;
+---
+
+<div class="live-metric-grid">
+  {
+    metrics.map((metric) => {
+      const content = (
+        <>
+          <span>{metric.label}</span>
+          <strong>{metric.value}</strong>
+          <small>{metric.detail}</small>
+        </>
+      );
+
+      return metric.href ? (
+        <a class="live-metric-card" data-tone={metric.tone} href={metric.href}>
+          {content}
+        </a>
+      ) : (
+        <div class="live-metric-card" data-tone={metric.tone}>
+          {content}
+        </div>
+      );
+    })
+  }
+</div>

@@ -1,0 +1,8 @@
+---
+import DepartmentHome from "../../components/live/DepartmentHome.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const surface = await loadDepartmentSurface("operations");
+---
+
+<DepartmentHome surface={surface} />

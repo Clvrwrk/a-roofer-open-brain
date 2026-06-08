@@ -1,0 +1,15 @@
+---
+import DepartmentDetail from "../../components/live/DepartmentDetail.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const slug = Astro.params.slug ?? "sync-health";
+const surface = await loadDepartmentSurface("system");
+const title = slug === "sync-health" ? "Sync Health" : slug === "actions" ? "Dashboard Actions" : "System Detail";
+---
+
+<DepartmentDetail
+  surface={surface}
+  routePath={`/system/${slug}`}
+  routeTitle={title}
+  routeDescription="System work filtered to runtime, action-log, and mirror health tasks."
+/>

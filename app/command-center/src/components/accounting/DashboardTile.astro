@@ -1,0 +1,40 @@
+---
+import type { AccountingDashboardDefinition } from "@lib/accounting-dashboard";
+
+interface Props {
+  dashboard: AccountingDashboardDefinition;
+}
+
+const { dashboard } = Astro.props;
+const readinessLabel = dashboard.readiness.replace("-", " ");
+---
+
+<article class="accounting-dashboard-tile" data-readiness={dashboard.readiness}>
+  <div class="accounting-tile-head">
+    <div>
+      <h3>{dashboard.title}</h3>
+      <p>{dashboard.description}</p>
+    </div>
+    <span class="status-badge">{readinessLabel}</span>
+  </div>
+
+  <dl class="accounting-mini-ledger">
+    <div>
+      <dt>Human</dt>
+      <dd>{dashboard.owner}</dd>
+    </div>
+    <div>
+      <dt>Decision</dt>
+      <dd>{dashboard.decision}</dd>
+    </div>
+    <div>
+      <dt>Action</dt>
+      <dd>{dashboard.action}</dd>
+    </div>
+  </dl>
+
+  <div class="accounting-tile-foot">
+    <span>{dashboard.source}</span>
+    <a class="row-action" href={dashboard.route}>Open</a>
+  </div>
+</article>

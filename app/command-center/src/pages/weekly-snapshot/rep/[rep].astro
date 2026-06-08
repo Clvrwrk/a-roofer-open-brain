@@ -1,0 +1,58 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadWeeklySnapshot } from "@lib/weekly-snapshot";
+import { getWeeklySnapshotRep } from "@lib/weekly-snapshot-routes";
+
+const rep = Astro.params.rep;
+const snapshot = await loadWeeklySnapshot();
+const view = getWeeklySnapshotRep(snapshot, rep);
+
+if (!view) {
+  Astro.response.status = 404;
+}
+---
+
+<AppShell title={view?.title ?? "Rep Not Found"} eyebrow="Sales Drilldown" activePage="snapshot">
+  {
+    view ? (
+      <section class="snapshot-detail-page" aria-label={`${view.title} detail`}>
+        <div class="surface-heading">
+          <div>
+            <p class="eyebrow">{snapshot.window.label}</p>
+            <h2>{view.description}</h2>
+          </div>
+          <a class="row-action" href="/weekly-snapshot/sales">Sales leaderboard</a>
+        </div>
+
+        <div class="snapshot-detail-table-panel">
+          <div class="queue-table-wrap">
+            <table class="queue-table snapshot-detail-table">
+              <thead>
+                <tr>
+                  <th scope="col">Record</th>
+                  <th scope="col">Value</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.records.map((record) => (
+                  <tr>
+                    <td><strong>{record.label}</strong><span>{record.sublabel}</span></td>
+                    <td>{record.value}</td>
+                    <td>{record.status}</td>
+                    <td><a class="row-action" href={record.href}>Open</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    ) : (
+      <section class="snapshot-detail-page">
+        <div class="snapshot-alert">No sales rep detail exists for "{rep}".</div>
+      </section>
+    )
+  }
+</AppShell>

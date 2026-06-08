@@ -1,0 +1,15 @@
+---
+import DepartmentDetail from "../../components/live/DepartmentDetail.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const slug = Astro.params.slug ?? "jobs";
+const surface = await loadDepartmentSurface("operations");
+const title = slug === "fleet" ? "Fleet Exceptions" : slug === "jobs" ? "Job Readiness" : "Operations Detail";
+---
+
+<DepartmentDetail
+  surface={surface}
+  routePath={`/operations/${slug}`}
+  routeTitle={title}
+  routeDescription="Live operations work filtered to the job, fleet, or readiness path the human opened."
+/>

@@ -1,52 +1,46 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
+import LiveMetricGrid from "../components/live/LiveMetricGrid.astro";
 import { AGENT_AUTH_SOURCE, buildAuthorizationServerMetadata } from "@lib/agent-auth";
-import { agentRuntimeStatuses, cadences, workDefinitions } from "@lib/cadence";
+import { SERVICE_AGENT_IDENTITIES, getAgentAccessRuntimeConfig } from "@lib/access-control";
+import { loadDepartmentSurface } from "@lib/live-work";
 
-const cronBackedCount = workDefinitions.filter((work) => work.cron).length;
-const approvalCount = workDefinitions.filter((work) => work.approval !== "none").length;
-const totalQueueDepth = agentRuntimeStatuses.reduce((total, agent) => total + agent.queueDepth, 0);
-const agentAuthMetadata = buildAuthorizationServerMetadata();
-const agentAuthRows = [
-  { label: "Issuer", value: agentAuthMetadata.issuer },
-  { label: "Register", value: agentAuthMetadata.agent_auth.register_uri },
-  { label: "Claim", value: agentAuthMetadata.agent_auth.claim_uri },
-  { label: "Token", value: agentAuthMetadata.token_endpoint },
-  { label: "Revoke", value: agentAuthMetadata.agent_auth.revocation_uri },
+const surface = await loadDepartmentSurface("system");
+const authConfig = getAgentAccessRuntimeConfig();
+const metadata = buildAuthorizationServerMetadata();
+const authRows = [
+  { label: "Issuer", value: metadata.issuer },
+  { label: "Register", value: metadata.agent_auth.register_uri },
+  { label: "Claim", value: metadata.agent_auth.claim_uri },
+  { label: "Token", value: metadata.token_endpoint },
+  { label: "Revoke", value: metadata.agent_auth.revocation_uri },
 ];
 ---
 
-<AppShell title="Agent Monitor" eyebrow="Hermes + Runtime" activePage="agents">
-  <section class="monitor-grid" aria-label="Agent runtime monitor">
-    <div class="monitor-summary">
-      <div class="metric-panel">
-        <span>{agentRuntimeStatuses.length}</span>
-        <strong>tracked agents</strong>
-        <small>Vertical and horizontal runtime visibility starts here.</small>
+<AppShell title="Agent Monitor" eyebrow="Live Runtime" activePage="agents" surface={surface}>
+  <section class="live-department-hero" aria-label="Agent runtime summary">
+    <div class="surface-heading">
+      <div>
+        <p class="eyebrow">Conductor / Auditor</p>
+        <h2>Agent visibility from live workflow, sync, and auth state.</h2>
       </div>
-      <div class="metric-panel">
-        <span>{cronBackedCount}</span>
-        <strong>cron-backed definitions</strong>
-        <small>Schedules stay server-side in the future runtime.</small>
-      </div>
-      <div class="metric-panel">
-        <span>{approvalCount}</span>
-        <strong>approval-gated jobs</strong>
-        <small>External and irreversible actions remain human reviewed.</small>
-      </div>
-      <div class="metric-panel">
-        <span>{totalQueueDepth}</span>
-        <strong>seed queue depth</strong>
-        <small>Static value until live runtime integration lands.</small>
+      <div class="surface-meta">
+        <span class="runtime-pill" data-tone={surface.status === "live" ? "ready" : "watch"}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {surface.status}
+        </span>
       </div>
     </div>
+    <LiveMetricGrid metrics={surface.metrics} />
+  </section>
 
+  <section class="monitor-grid" aria-label="Agent runtime monitor">
     <div class="agent-table-panel">
       <div class="panel-heading">
-        <h2>Runtime Status</h2>
-        <span class="runtime-pill" data-tone="ready">
+        <h2>Agent Access</h2>
+        <span class="runtime-pill" data-tone={authConfig.serviceAuthConfigured ? "ready" : "blocked"}>
           <span class="signal-dot" aria-hidden="true"></span>
-          Local skeleton online
+          {authConfig.serviceTokenCount} service tokens
         </span>
       </div>
 
@@ -55,62 +49,49 @@ const agentAuthRows = [
           <thead>
             <tr>
               <th scope="col">Agent</th>
-              <th scope="col">Visibility</th>
-              <th scope="col">Last run</th>
-              <th scope="col">Next run</th>
-              <th scope="col">Health</th>
-              <th scope="col">Queue</th>
+              <th scope="col">Role</th>
+              <th scope="col">Department Access</th>
+              <th scope="col">Open Items</th>
             </tr>
           </thead>
           <tbody>
             {
-              agentRuntimeStatuses.map((agent) => (
-                <tr>
-                  <td>
-                    <strong>{agent.label}</strong>
-                    <span>{agent.note}</span>
-                  </td>
-                  <td>{agent.visibility}</td>
-                  <td>{agent.lastRun}</td>
-                  <td>{agent.nextRun}</td>
-                  <td><span class={`health-badge health-${agent.health}`}>{agent.health}</span></td>
-                  <td>{agent.queueDepth}</td>
-                </tr>
-              ))
+              SERVICE_AGENT_IDENTITIES.map((agent) => {
+                const access = agent.departmentAccess === "all" ? "all" : agent.departmentAccess.join(", ");
+                const openItems =
+                  agent.departmentAccess === "all"
+                    ? surface.items.length
+                    : surface.items.filter((item) => agent.departmentAccess.includes(item.department)).length;
+                return (
+                  <tr>
+                    <td>
+                      <strong>{agent.displayName}</strong>
+                      <span>{agent.handle}</span>
+                    </td>
+                    <td>{agent.roles.join(", ")}</td>
+                    <td>{access}</td>
+                    <td>{openItems}</td>
+                  </tr>
+                );
+              })
             }
           </tbody>
         </table>
       </div>
     </div>
 
-    <aside class="cron-panel" aria-label="Cadence windows">
-      <div class="panel-heading">
-        <h2>Cadence Windows</h2>
-      </div>
-      <div class="cadence-list">
-        {
-          cadences.map((cadence) => (
-            <div class="cadence-item">
-              <strong>{cadence.label}</strong>
-              <span>{cadence.window}</span>
-            </div>
-          ))
-        }
-      </div>
-    </aside>
-
     <aside class="auth-panel" aria-label="Agent authentication posture">
       <div class="panel-heading">
         <h2>Agent Auth</h2>
         <span class="runtime-pill" data-tone="watch">
           <span class="signal-dot" aria-hidden="true"></span>
-          Discovery wired
+          Discovery
         </span>
       </div>
 
       <dl class="auth-list">
         {
-          agentAuthRows.map((row) => (
+          authRows.map((row) => (
             <div>
               <dt>{row.label}</dt>
               <dd>{row.value}</dd>
@@ -122,7 +103,7 @@ const agentAuthRows = [
       <div class="auth-foot">
         <span>{AGENT_AUTH_SOURCE.version}</span>
         <span>{AGENT_AUTH_SOURCE.dated}</span>
-        <span>WorkOS human gate retained</span>
+        <span>{authConfig.namedAgentCount} named agents</span>
       </div>
     </aside>
   </section>

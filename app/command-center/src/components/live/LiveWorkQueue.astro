@@ -1,0 +1,151 @@
+---
+import { formatApproval, formatMoney, formatStatus, type LiveWorkItem } from "@lib/live-work";
+
+interface Props {
+  items: LiveWorkItem[];
+  emptyLabel?: string;
+}
+
+const { items, emptyLabel = "No live work items match this dashboard right now." } = Astro.props;
+const defaultItem = items[0];
+---
+
+<section class="live-workbench" aria-label="Live work queue">
+  <div class="live-queue-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Human Queue</p>
+        <h2>Source-backed work needing a decision</h2>
+      </div>
+      <span class="runtime-pill" data-tone={items.length ? "watch" : "ready"}>
+        <span class="signal-dot" aria-hidden="true"></span>
+        {items.length ? `${items.length} live rows` : "Clear"}
+      </span>
+    </div>
+
+    <div class="queue-table-wrap">
+      <table class="queue-table live-work-table">
+        <thead>
+          <tr>
+            <th scope="col">Work</th>
+            <th scope="col">Human</th>
+            <th scope="col">Priority</th>
+            <th scope="col">Evidence</th>
+            <th scope="col">Value</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            items.length > 0 ? (
+              items.map((item, index) => (
+                <tr
+                  class:list={["work-row", index === 0 && "is-selected"]}
+                  data-work-row
+                  data-work-key={item.workKey}
+                  data-title={item.title}
+                  data-owner={item.owner}
+                  data-human={item.primaryHuman}
+                  data-status={formatStatus(item.status)}
+                  data-priority={item.priority}
+                  data-approval={formatApproval(item.approval)}
+                  data-evidence={item.evidence}
+                  data-action={item.action}
+                  data-detail={item.detail}
+                  data-audit={item.auditTrail.join("|")}
+                  data-department={item.department}
+                  data-cadence={item.cadence}
+                  data-source={item.sourceLabel}
+                  data-href={item.href}
+                  tabindex="0"
+                >
+                  <td>
+                    <strong>{item.title}</strong>
+                    <span>{item.sourceLabel} · {item.workflow}</span>
+                  </td>
+                  <td>{item.primaryHuman}</td>
+                  <td><span class={`status-badge priority-${item.priority}`}>{item.priority}</span></td>
+                  <td>{item.evidence}</td>
+                  <td>{item.valueAtRisk ? formatMoney(item.valueAtRisk) : "n/a"}</td>
+                  <td><a class="row-action" href={item.href}>{item.action}</a></td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colspan="6">{emptyLabel}</td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside class="live-decision-panel" aria-label="Selected work detail">
+    {
+      defaultItem ? (
+        <>
+          <div class="detail-heading">
+            <p class="eyebrow">Decision Packet</p>
+            <h2 data-detail-title>{defaultItem.title}</h2>
+            <span class={`status-badge priority-${defaultItem.priority}`} data-detail-status>{defaultItem.priority}</span>
+          </div>
+
+          <dl class="detail-list">
+            <div>
+              <dt>Human</dt>
+              <dd data-detail-human>{defaultItem.primaryHuman}</dd>
+            </div>
+            <div>
+              <dt>Approval</dt>
+              <dd data-detail-approval>{formatApproval(defaultItem.approval)}</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd data-detail-source>{defaultItem.sourceLabel}</dd>
+            </div>
+            <div>
+              <dt>Evidence</dt>
+              <dd data-detail-evidence>{defaultItem.evidence}</dd>
+            </div>
+          </dl>
+
+          <div class="reasoning-block">
+            <h3>Why This Is Here</h3>
+            <p data-detail-copy>{defaultItem.detail}</p>
+          </div>
+
+          <div class="audit-block">
+            <h3>Audit Trail</h3>
+            <ol data-detail-audit>
+              {defaultItem.auditTrail.map((entry) => <li>{entry}</li>)}
+            </ol>
+          </div>
+
+          <label class="decision-note-label">
+            <span>Decision note</span>
+            <textarea data-decision-note rows="4" placeholder="Add context for the human/auditor record"></textarea>
+          </label>
+
+          <div class="approval-actions" aria-label="Approval actions">
+            <button class="button button-primary" type="button" data-live-decision="approve">Approve</button>
+            <button class="button button-secondary" type="button" data-live-decision="needs_more_evidence">Need evidence</button>
+            <button class="button button-ghost" type="button" data-live-decision="reject">Reject</button>
+          </div>
+
+          <a class="button button-secondary button-full" href={defaultItem.href} data-detail-link>Open detail page</a>
+
+          <p class="action-note" data-action-note>
+            Decisions write to Supabase dashboard_action_log and receive a durable action id.
+          </p>
+        </>
+      ) : (
+        <div class="accounting-empty-workspace">
+          <p class="eyebrow">Clear</p>
+          <h2>No source-backed work is open.</h2>
+          <p>{emptyLabel}</p>
+        </div>
+      )
+    }
+  </aside>
+</section>

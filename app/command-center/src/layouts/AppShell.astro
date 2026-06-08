@@ -1,19 +1,23 @@
 ---
 import "../styles/global.css";
-import { departments, workDefinitions } from "@lib/cadence";
 import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
+import { departments, loadCommandCenterSurface, type LiveDepartmentSurface } from "@lib/live-work";
 
 interface Props {
   title: string;
   eyebrow?: string;
-  activePage?: "command" | "agents" | "pricing";
+  activePage?: "command" | "agents" | "pricing" | "snapshot" | "accounting" | "operations" | "sales" | "marketing" | "executive" | "system";
+  surface?: Pick<LiveDepartmentSurface, "items" | "status">;
 }
 
-const { title, eyebrow = "Command Center", activePage = "command" } = Astro.props;
+const { title, eyebrow = "Command Center", activePage = "command", surface } = Astro.props;
 const user = getCommandCenterUser();
 const workOsReady = isWorkOsConfigured();
-const needsReviewCount = workDefinitions.filter((work) => work.status === "needs_review").length;
-const blockedCount = workDefinitions.filter((work) => work.status === "blocked").length;
+const commandSurface = surface ? null : await loadCommandCenterSurface();
+const shellItems = surface?.items ?? commandSurface?.items ?? [];
+const needsReviewCount = shellItems.filter((work) => work.status === "needs_review").length;
+const blockedCount = shellItems.filter((work) => work.status === "blocked").length;
+const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
 ---
 
 <!doctype html>
@@ -45,9 +49,17 @@ const blockedCount = workDefinitions.filter((work) => work.status === "blocked")
             <span class="nav-icon" aria-hidden="true">◇</span>
             Agent Monitor
           </a>
+          <a class:list={["nav-link", activePage === "accounting" && "is-active"]} href="/accounting">
+            <span class="nav-icon" aria-hidden="true">$</span>
+            Accounting
+          </a>
           <a class:list={["nav-link", activePage === "pricing" && "is-active"]} href="/abc-price-agreement-gaps">
             <span class="nav-icon" aria-hidden="true">△</span>
             Price Gaps
+          </a>
+          <a class:list={["nav-link", activePage === "snapshot" && "is-active"]} href="/weekly-snapshot">
+            <span class="nav-icon" aria-hidden="true">↗</span>
+            Weekly Snapshot
           </a>
         </nav>
 
@@ -55,7 +67,12 @@ const blockedCount = workDefinitions.filter((work) => work.status === "blocked")
           <p class="rail-label">Departments</p>
           {
             departments.map((department) => (
-              <a class="department-link" href={`/?department=${department.id}`} data-department-shortcut={department.id}>
+              <a
+                class="department-link"
+                href={`/${department.id === "system" ? "system" : department.id}`}
+                aria-current={activePage === department.id ? "page" : undefined}
+                data-department-shortcut={department.id}
+              >
                 <span>{department.label}</span>
                 <small>{department.agent}</small>
               </a>
@@ -85,8 +102,8 @@ const blockedCount = workDefinitions.filter((work) => work.status === "blocked")
 
         <section class="status-strip" aria-label="Queue status">
           <div>
-            <span>{workDefinitions.length}</span>
-            <small>work definitions</small>
+            <span>{shellItems.length}</span>
+            <small>{liveStatus === "live" ? "live work items" : "work items"}</small>
           </div>
           <div>
             <span>{needsReviewCount}</span>

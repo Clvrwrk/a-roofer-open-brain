@@ -1,0 +1,15 @@
+---
+import DepartmentDetail from "../../components/live/DepartmentDetail.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const slug = Astro.params.slug ?? "hail-zones";
+const surface = await loadDepartmentSurface("marketing");
+const title = slug === "hail-zones" ? "Hail Zone Activation" : slug === "markets" ? "Market Proof" : "Marketing Detail";
+---
+
+<DepartmentDetail
+  surface={surface}
+  routePath={`/marketing/${slug}`}
+  routeTitle={title}
+  routeDescription="Live market and activation work filtered to the marketing path the human opened."
+/>

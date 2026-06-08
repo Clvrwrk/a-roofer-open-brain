@@ -1,0 +1,56 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadWeeklySnapshot } from "@lib/weekly-snapshot";
+import { findWeeklySnapshotRecord } from "@lib/weekly-snapshot-routes";
+
+const recordKey = Astro.params.record;
+const snapshot = await loadWeeklySnapshot();
+const record = findWeeklySnapshotRecord(snapshot, recordKey);
+
+if (!record) {
+  Astro.response.status = 404;
+}
+---
+
+<AppShell title={record?.label ?? "Snapshot Record Not Found"} eyebrow="Snapshot Record" activePage="snapshot">
+  {
+    record ? (
+      <section class="snapshot-record-detail" aria-label={`${record.label} detail`}>
+        <div class="surface-heading">
+          <div>
+            <p class="eyebrow">{record.type}</p>
+            <h2>{record.label}</h2>
+          </div>
+          <a class="row-action" href="/weekly-snapshot">Snapshot</a>
+        </div>
+
+        <dl class="accounting-evidence-stack snapshot-record-ledger">
+          <div>
+            <dt>Record ID</dt>
+            <dd>{record.id}</dd>
+          </div>
+          <div>
+            <dt>Context</dt>
+            <dd>{record.sublabel}</dd>
+          </div>
+          <div>
+            <dt>Value</dt>
+            <dd>{record.value}</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd>{record.status}</dd>
+          </div>
+          <div>
+            <dt>Snapshot window</dt>
+            <dd>{snapshot.window.label}</dd>
+          </div>
+        </dl>
+      </section>
+    ) : (
+      <section class="snapshot-record-detail">
+        <div class="snapshot-alert">No weekly snapshot record exists for "{recordKey}".</div>
+      </section>
+    )
+  }
+</AppShell>

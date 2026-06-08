@@ -1,4 +1,5 @@
 import { App, LogLevel } from "@slack/bolt";
+import { createClient } from "@supabase/supabase-js";
 import { pathToFileURL } from "node:url";
 
 const COMMAND_ROUTES = new Map([
@@ -33,6 +34,7 @@ const COMMAND_ROUTES = new Map([
 ]);
 
 const REQUIRED_ENV = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"];
+const MIRROR_POLL_MS = 15000;
 
 function redactId(value) {
   if (!value || value.length < 8) return value ? "[redacted]" : null;
@@ -66,6 +68,118 @@ function logRuntime(event, details = {}) {
       timestamp: new Date().toISOString(),
     }),
   );
+}
+
+function createSupabaseClient(env) {
+  const url = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        "x-open-brain-client": "command-center-slack-runtime",
+      },
+    },
+  });
+}
+
+function mirrorText(row) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  return String(
+    payload.text ??
+      `${payload.actor ?? "Open Brain"} recorded ${payload.decision ?? "an action"} for ${payload.title ?? row.work_key}.`,
+  );
+}
+
+async function drainSlackMirrorQueue({ client, slack, env }) {
+  const fallbackChannel = env.SLACK_OB_CONDUCTOR_DIGEST_CHANNEL_ID || env.SLACK_OB_AGENT_AUDIT_LOG_CHANNEL_ID;
+  const { data, error } = await client
+    .from("slack_mirror_events")
+    .select("id,work_key,channel_id,thread_ts,payload")
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(10);
+
+  if (error) {
+    logRuntime("mirror_query_failed", { message: error.message });
+    return;
+  }
+
+  for (const row of data ?? []) {
+    const channel = row.channel_id || fallbackChannel;
+    if (!channel) {
+      await client
+        .from("slack_mirror_events")
+        .update({
+          error_message: "No Slack channel configured for queued mirror event.",
+          status: "skipped",
+        })
+        .eq("id", row.id);
+      continue;
+    }
+
+    try {
+      const posted = await slack.chat.postMessage({
+        channel,
+        text: mirrorText(row),
+        thread_ts: row.thread_ts || undefined,
+      });
+
+      await client
+        .from("slack_mirror_events")
+        .update({
+          message_ts: posted.ts ?? null,
+          sent_at: new Date().toISOString(),
+          status: "sent",
+        })
+        .eq("id", row.id);
+
+      logRuntime("mirror_sent", {
+        eventId: redactId(row.id),
+        workKey: row.work_key,
+      });
+    } catch (error) {
+      await client
+        .from("slack_mirror_events")
+        .update({
+          error_message: error?.message ?? "Slack mirror post failed.",
+          status: "failed",
+        })
+        .eq("id", row.id);
+
+      logRuntime("mirror_failed", {
+        eventId: redactId(row.id),
+        message: error?.message ?? "Slack mirror post failed.",
+      });
+    }
+  }
+}
+
+function startSlackMirrorDrain(app, env) {
+  const client = createSupabaseClient(env);
+  if (!client) {
+    logRuntime("mirror_skipped_missing_supabase_env");
+    return null;
+  }
+
+  const drain = () => {
+    drainSlackMirrorQueue({ client, env, slack: app.client }).catch((error) => {
+      logRuntime("mirror_drain_fatal", {
+        message: error?.message ?? "Slack mirror drain failed.",
+      });
+    });
+  };
+
+  drain();
+  const timer = setInterval(drain, Number(env.SLACK_MIRROR_POLL_MS || MIRROR_POLL_MS));
+  timer.unref?.();
+  logRuntime("mirror_drain_started");
+  return timer;
 }
 
 function buildCommandReply(commandName) {
@@ -229,6 +343,7 @@ export async function startSlackSocketRuntime(env = process.env) {
 
   const app = createSlackSocketRuntime(env);
   await app.start();
+  startSlackMirrorDrain(app, env);
 
   logRuntime("started", {
     socketMode: true,

@@ -1,0 +1,15 @@
+---
+import DepartmentDetail from "../../components/live/DepartmentDetail.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const slug = Astro.params.slug ?? "pipeline";
+const surface = await loadDepartmentSurface("sales");
+const title = slug === "pipeline" ? "Sales Pipeline" : slug === "call-priority" ? "Call Priority" : "Sales Detail";
+---
+
+<DepartmentDetail
+  surface={surface}
+  routePath={`/sales/${slug}`}
+  routeTitle={title}
+  routeDescription="Live CRM work filtered to the sales action path the human opened."
+/>

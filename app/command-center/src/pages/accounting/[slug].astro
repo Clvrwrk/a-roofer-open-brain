@@ -1,0 +1,353 @@
+---
+import BoundaryNotice from "../../components/accounting/BoundaryNotice.astro";
+import EvidenceStack from "../../components/accounting/EvidenceStack.astro";
+import MetricLinkCard from "../../components/accounting/MetricLinkCard.astro";
+import AppShell from "../../layouts/AppShell.astro";
+import {
+  formatCurrency,
+  formatNumber,
+  getAccountingDashboard,
+  loadAccountingSurface,
+  type CreditMemoCandidate,
+  type InvoiceGateCandidate,
+} from "@lib/accounting-dashboard";
+import type { AgreementGapRow } from "@lib/abc-price-gaps";
+import { loadDepartmentSurface } from "@lib/live-work";
+
+const slug = Astro.params.slug;
+const dashboard = getAccountingDashboard(slug);
+
+if (!dashboard) {
+  Astro.response.status = 404;
+}
+
+const surface = await loadAccountingSurface();
+const liveSurface = await loadDepartmentSurface("accounting");
+const reviewQueueItems = liveSurface.items.filter((item) => item.workflow === "abc-review");
+const generatedAt = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  month: "short",
+}).format(new Date(surface.generatedAt));
+const pageTitle = dashboard?.title ?? "Accounting dashboard not found";
+
+function hasReason(row: AgreementGapRow, code: string) {
+  return row.gapReasons.some((reason) => reason.code === code);
+}
+
+const productRows = surface.gapRows.filter((row) => hasReason(row, "no_price_list_item") || hasReason(row, "uom_mismatch"));
+const branchRows = surface.gapRows.filter((row) => hasReason(row, "no_branch_agreement") || hasReason(row, "no_fixed_agreement"));
+const visibleGapRows = surface.gapRows.slice(0, 100);
+const selectedInvoice = Astro.url.searchParams.get("invoice");
+const selectedInvoiceRows = selectedInvoice ? surface.gapRows.filter((row) => row.invoiceNumber === selectedInvoice) : [];
+const branchGroups = Array.from(
+  branchRows.reduce((groups, row) => {
+    const key = row.branchNumber || "Unknown";
+    const current = groups.get(key) ?? {
+      branchNumber: key,
+      branchName: row.branchName,
+      rows: 0,
+      invoices: new Set<string>(),
+      reasons: new Set<string>(),
+    };
+    current.rows += 1;
+    current.invoices.add(row.invoiceNumber);
+    for (const reason of row.gapReasons) current.reasons.add(reason.label);
+    groups.set(key, current);
+    return groups;
+  }, new Map<string, { branchNumber: string; branchName: string; rows: number; invoices: Set<string>; reasons: Set<string> }>()),
+).map(([, value]) => value).sort((a, b) => b.rows - a.rows);
+
+const boundaryTitle = "Live source boundary";
+const boundaryDetail =
+  "This route uses current Supabase mirrors and dashboard workflow tables. QuickBooks facts remain Lucinda-controlled and are recorded only after Lucinda confirms them.";
+---
+
+<AppShell title={pageTitle} eyebrow="Accounting Dashboard" activePage="accounting">
+  {
+    dashboard ? (
+      <>
+        <section class="accounting-hero" aria-label={`${dashboard.title} summary`}>
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">{dashboard.owner}</p>
+              <h2>{dashboard.description}</h2>
+            </div>
+            <div class="surface-meta">
+              <span class="runtime-pill" data-tone={dashboard.readiness === "live" ? "ready" : "watch"}>
+                <span class="signal-dot" aria-hidden="true"></span>
+                {dashboard.readiness.replace("-", " ")}
+              </span>
+              <span>{generatedAt}</span>
+            </div>
+          </div>
+
+          <div class="accounting-metric-grid">
+            <MetricLinkCard
+              label="Gap rows"
+              value={formatNumber(surface.metrics.gapRows)}
+              caption={`${formatNumber(surface.metrics.criticalRows)} critical`}
+              href="/accounting/price-agreement-gaps"
+              tone={surface.metrics.criticalRows > 0 ? "critical" : "info"}
+            />
+            <MetricLinkCard
+              label="Expected credit"
+              value={formatCurrency(surface.metrics.expectedCredit)}
+              caption={`${formatNumber(surface.creditMemoCandidates.length)} candidate packets`}
+              href="/accounting/credit-memos"
+              tone="review"
+            />
+            <MetricLinkCard
+              label="Invoice gate"
+              value={formatNumber(surface.invoiceGateCandidates.length)}
+              caption={`${formatNumber(surface.metrics.openInvoices)} unpaid/open`}
+              href="/accounting/invoices"
+              tone="critical"
+            />
+            <MetricLinkCard
+              label="Workflow state"
+              value={dashboard.readiness.replace("-", " ")}
+              caption={dashboard.source}
+              href={dashboard.route}
+              tone={dashboard.readiness === "live" ? "ready" : "info"}
+            />
+          </div>
+        </section>
+
+        <section class="accounting-workbench" aria-label="Accounting dashboard workbench">
+          <div class="accounting-priority-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Decision Surface</p>
+                <h2>{dashboard.decision}</h2>
+              </div>
+              <a class="row-action" href="/accounting">Accounting home</a>
+            </div>
+
+            {dashboard.slug === "review-queue" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Review item</th>
+                      <th scope="col">Human</th>
+                      <th scope="col">Priority</th>
+                      <th scope="col">Evidence</th>
+                      <th scope="col">Value</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewQueueItems.map((item) => (
+                      <tr>
+                        <td><strong>{item.title}</strong><span>{item.detail}</span></td>
+                        <td>{item.primaryHuman}</td>
+                        <td><span class={`status-badge priority-${item.priority}`}>{item.priority}</span></td>
+                        <td>{item.evidence}</td>
+                        <td><strong>{formatCurrency(item.valueAtRisk)}</strong></td>
+                        <td><a class="row-action" href={item.href}>Open source</a></td>
+                      </tr>
+                    ))}
+                    {reviewQueueItems.length === 0 && (
+                      <tr>
+                        <td colspan="6">No open ABC review rows are present in the live queue.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {dashboard.slug === "invoices" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invoice</th>
+                      <th scope="col">Payment</th>
+                      <th scope="col">Rows</th>
+                      <th scope="col">Severity</th>
+                      <th scope="col">Expected credit</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {surface.invoiceGateCandidates.map((invoice: InvoiceGateCandidate) => (
+                      <tr class:list={[selectedInvoice === invoice.invoiceNumber && "is-selected"]}>
+                        <td><strong>{invoice.invoiceNumber}</strong><span>{invoice.primaryAction}</span></td>
+                        <td>{invoice.paymentStatus}</td>
+                        <td>{formatNumber(invoice.lineCount)}</td>
+                        <td>
+                          <span>{formatNumber(invoice.criticalRows)} critical</span>
+                          <span>{formatNumber(invoice.blockedRows)} blocked</span>
+                        </td>
+                        <td><strong>{formatCurrency(invoice.expectedCredit)}</strong></td>
+                        <td><a class="row-action" href={`/accounting/invoices?invoice=${encodeURIComponent(invoice.invoiceNumber)}`}>Inspect</a></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {dashboard.slug === "price-agreement-gaps" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table accounting-gap-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invoice / SKU</th>
+                      <th scope="col">Branch</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Invoiced</th>
+                      <th scope="col">Reference</th>
+                      <th scope="col">Human action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleGapRows.map((row) => (
+                      <tr>
+                        <td><strong>{row.invoiceNumber}</strong><span>{row.itemNumber} / {row.itemDescription}</span></td>
+                        <td><strong>{row.branchNumber}</strong><span>{row.branchName}</span></td>
+                        <td><span class={`status-badge gap-${row.severity}`}>{row.severity}</span><span>{row.gapReasons.map((reason) => reason.label).join(", ")}</span></td>
+                        <td><strong>{formatCurrency(row.invoicePrice)}</strong><span>{row.quantity ?? "Qty missing"} {row.invoiceUom}</span></td>
+                        <td><span>{row.referenceAgreement}</span></td>
+                        <td>{row.humanAction}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {dashboard.slug === "credit-memos" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Packet</th>
+                      <th scope="col">Expected credit</th>
+                      <th scope="col">Lines</th>
+                      <th scope="col">Blockers</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {surface.creditMemoCandidates.map((packet: CreditMemoCandidate) => (
+                      <tr>
+                        <td><strong>{packet.invoiceNumber}</strong><span>{packet.branchLabels.slice(0, 2).join(", ") || "No branch"}</span></td>
+                        <td><strong>{formatCurrency(packet.expectedCredit)}</strong><span>{formatCurrency(packet.absoluteVariance)} absolute variance</span></td>
+                        <td>{formatNumber(packet.lineCount)}</td>
+                        <td><span>{packet.gapReasonLabels.slice(0, 3).join(", ") || "None"}</span></td>
+                        <td><span class={`status-badge gap-${packet.severity}`}>{packet.severity}</span></td>
+                        <td><a class="row-action" href={packet.href}>Open packet</a></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {dashboard.slug === "product-matches" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invoice / SKU</th>
+                      <th scope="col">Description</th>
+                      <th scope="col">UOM</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productRows.map((row) => (
+                      <tr>
+                        <td><strong>{row.invoiceNumber}</strong><span>{row.itemNumber}</span></td>
+                        <td>{row.itemDescription}</td>
+                        <td>{row.invoiceUom}</td>
+                        <td>{row.gapReasons.map((reason) => reason.label).join(", ")}</td>
+                        <td>{row.humanAction}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {dashboard.slug === "vendor-regions" && (
+              <div class="queue-table-wrap">
+                <table class="queue-table accounting-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Branch</th>
+                      <th scope="col">Rows</th>
+                      <th scope="col">Invoices</th>
+                      <th scope="col">Reasons</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchGroups.map((branch) => (
+                      <tr>
+                        <td><strong>{branch.branchNumber}</strong><span>{branch.branchName}</span></td>
+                        <td>{formatNumber(branch.rows)}</td>
+                        <td>{formatNumber(branch.invoices.size)}</td>
+                        <td>{Array.from(branch.reasons).slice(0, 3).join(", ")}</td>
+                        <td>Approve mapping, flag exception, or escalate.</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!["review-queue", "invoices", "price-agreement-gaps", "credit-memos", "product-matches", "vendor-regions"].includes(dashboard.slug) && (
+              <div class="accounting-empty-workspace">
+                <BoundaryNotice title={boundaryTitle} detail={boundaryDetail} action={dashboard.action} />
+                <EvidenceStack
+                  items={[
+                    { label: "Human", value: dashboard.owner },
+                    { label: "Decision", value: dashboard.decision },
+                    { label: "Source boundary", value: dashboard.source },
+                    { label: "Hidden by default", value: dashboard.hidden },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+
+          <aside class="accounting-decision-panel">
+            <p class="eyebrow">Human Loop</p>
+            <h2>{dashboard.action}</h2>
+            <EvidenceStack
+              items={[
+                { label: "Owner", value: dashboard.owner },
+                { label: "Readiness", value: dashboard.readiness.replace("-", " ") },
+                { label: "Source", value: dashboard.source },
+                { label: "Noise removed", value: dashboard.hidden },
+              ]}
+            />
+
+            {selectedInvoiceRows.length > 0 && (
+              <div class="reasoning-block">
+                <h3>Selected invoice blockers</h3>
+                <ul class="gap-reason-list">
+                  {selectedInvoiceRows.slice(0, 8).map((row) => <li>{row.itemNumber}: {row.humanAction}</li>)}
+                </ul>
+              </div>
+            )}
+
+            <BoundaryNotice
+              title="Dashboard is source, Slack is mirror"
+              detail="Workflow actions should write to Supabase first. Slack uses the same packet/action IDs for fast review once the browser path is trusted."
+            />
+          </aside>
+        </section>
+      </>
+    ) : (
+      <BoundaryNotice title="Dashboard not found" detail={`No Accounting dashboard exists for "${slug}".`} action="Return to /accounting." />
+    )
+  }
+</AppShell>

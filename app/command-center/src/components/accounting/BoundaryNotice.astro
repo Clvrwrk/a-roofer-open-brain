@@ -1,0 +1,15 @@
+---
+interface Props {
+  title: string;
+  detail: string;
+  action?: string;
+}
+
+const { title, detail, action } = Astro.props;
+---
+
+<div class="accounting-boundary-notice" role="status">
+  <strong>{title}</strong>
+  <span>{detail}</span>
+  {action && <small>{action}</small>}
+</div>

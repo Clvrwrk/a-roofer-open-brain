@@ -1,0 +1,131 @@
+---
+import BoundaryNotice from "../../../components/accounting/BoundaryNotice.astro";
+import EvidenceStack from "../../../components/accounting/EvidenceStack.astro";
+import AppShell from "../../../layouts/AppShell.astro";
+import { formatCurrency, formatNumber, loadAccountingSurface } from "@lib/accounting-dashboard";
+
+const invoiceParam = Astro.params.invoice ?? "";
+const invoiceNumber = decodeURIComponent(invoiceParam);
+const surface = await loadAccountingSurface();
+const packet = surface.creditMemoCandidates.find((candidate) => candidate.invoiceNumber === invoiceNumber);
+
+if (!packet) {
+  Astro.response.status = 404;
+}
+
+function expectedCreditForLine(variance: number | null, quantity: number | null) {
+  const unitVariance = variance ?? 0;
+  const qty = quantity ?? 1;
+  return unitVariance > 0 ? unitVariance * qty : 0;
+}
+---
+
+<AppShell title={packet ? `Credit Memo ${packet.invoiceNumber}` : "Credit Memo Not Found"} eyebrow="Accounting Packet" activePage="accounting">
+  {
+    packet ? (
+      <>
+        <section class="accounting-hero" aria-label="Credit memo packet summary">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">Lucinda Review Packet</p>
+              <h2>One vendor invoice, line-level evidence, no external send by agent</h2>
+            </div>
+            <div class="surface-meta">
+              <span class={`status-badge gap-${packet.severity}`}>{packet.severity}</span>
+              <span>{formatNumber(packet.lineCount)} disputed lines</span>
+            </div>
+          </div>
+
+          <div class="accounting-metric-grid">
+            <div class="accounting-metric-card" data-tone="review">
+              <span>Expected credit</span>
+              <strong>{formatCurrency(packet.expectedCredit)}</strong>
+              <small>Calculated from positive unit variance x quantity</small>
+            </div>
+            <div class="accounting-metric-card" data-tone="info">
+              <span>Absolute variance</span>
+              <strong>{formatCurrency(packet.absoluteVariance)}</strong>
+              <small>All price deltas, regardless of direction</small>
+            </div>
+            <div class="accounting-metric-card" data-tone="critical">
+              <span>Payment status</span>
+              <strong>{packet.paymentStatus}</strong>
+              <small>From linked invoice document where available</small>
+            </div>
+            <div class="accounting-metric-card" data-tone="ready">
+              <span>Packet rule</span>
+              <strong>One invoice</strong>
+              <small>ACCT-035 enforced by route shape</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="accounting-workbench" aria-label="Credit memo packet detail">
+          <div class="accounting-priority-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Disputed Lines</p>
+                <h2>{packet.invoiceNumber}</h2>
+              </div>
+              <a class="row-action" href="/accounting/credit-memos">All packets</a>
+            </div>
+
+            <div class="queue-table-wrap">
+              <table class="queue-table accounting-table accounting-gap-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Line / SKU</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Invoice Price</th>
+                    <th scope="col">Reference</th>
+                    <th scope="col">Expected Credit</th>
+                    <th scope="col">Human Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packet.lines.map((line) => (
+                    <tr>
+                      <td>
+                        <strong>{line.lineNumber}</strong>
+                        <span>{line.itemNumber}</span>
+                      </td>
+                      <td>{line.itemDescription}</td>
+                      <td>
+                        <strong>{formatCurrency(line.invoicePrice)}</strong>
+                        <span>{line.quantity ?? "Qty missing"} {line.invoiceUom}</span>
+                      </td>
+                      <td><span>{line.referenceAgreement}</span></td>
+                      <td><strong>{formatCurrency(expectedCreditForLine(line.variance, line.quantity))}</strong></td>
+                      <td>{line.humanAction}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <aside class="accounting-decision-panel">
+            <p class="eyebrow">Approval State</p>
+            <h2>Draft only until workflow tables exist</h2>
+            <EvidenceStack
+              items={[
+                { label: "Primary reviewer", value: "Lucinda" },
+                { label: "Escalates to Chris", value: packet.expectedCredit > 1000 ? "Yes, expected credit is over $1,000" : "No, below current threshold" },
+                { label: "Branches", value: packet.branchLabels.join(", ") || "Unknown" },
+                { label: "Blockers", value: packet.gapReasonLabels.join(", ") || "None" },
+              ]}
+            />
+
+            <BoundaryNotice
+              title="Actions intentionally disabled"
+              detail="Approve, request changes, reject, mark sent, and mark received require credit_memo_requests, credit_memo_request_lines, and credit_memo_followups."
+              action="The route is ready for those write states once the workflow tables are added."
+            />
+          </aside>
+        </section>
+      </>
+    ) : (
+      <BoundaryNotice title="Credit memo packet not found" detail={`No live gap packet exists for invoice ${invoiceNumber}.`} action="Return to /accounting/credit-memos." />
+    )
+  }
+</AppShell>

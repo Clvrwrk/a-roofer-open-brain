@@ -6,8 +6,10 @@ description: >
   commercial and residential exterior contractor headquartered in Dallas-Fort
   Worth. Five-color brand palette anchored by deep navy authority and flag red
   interaction, paired with Inter as the deployed primary typeface and IBM Plex
-  Mono for Property Card surfaces. This file is the source of truth for design
-  tokens; all components, CSS variables, and Tailwind extensions derive from it.
+  Mono for Property Card surfaces. This file is the source of truth for brand
+  tokens and follows the command-center layout discipline in
+  deployment/remote/dashboard/Design.md: one shared content rail, tokenized
+  spacing, flat contrast-layer surfaces, and a single flag-red affirmative CTA.
 
 colors:
   # ── Brand palette ──────────────────────────────────────────────────────
@@ -131,19 +133,22 @@ typography:
     lineHeight: 1.5
 
 spacing:
-  xs: 4px
-  sm: 8px
-  md: 16px
-  lg: 24px
-  xl: 32px
-  xl-2: 48px
-  xl-3: 64px
-  xl-4: 96px
-  xl-5: 128px
-  gutter: 24px
-  section: 96px
+  # 4px base scale. Match deployment/remote/dashboard/Design.md and
+  # design-system.html#layout. New component spacing must use these tokens.
+  space-1: 4px
+  space-2: 8px
+  space-3: 12px
+  space-4: 16px
+  space-5: 20px
+  space-6: 24px
+  space-8: 32px
+  space-10: 40px
+  space-12: 48px
+  space-16: 64px
+  gutter: clamp(1rem, 4vw, 3rem)
+  container: 72rem
+  section: 64px
   section-mobile: 48px
-  container-max: 1280px
 
 rounded:
   none: 0
@@ -159,7 +164,7 @@ components:
     textColor: "{colors.on-tertiary}"
     typography: "{typography.label-md}"
     rounded: "{rounded.md}"
-    padding: 12px
+    padding: "{spacing.space-3}"
     height: 48px
   button-primary-hover:
     backgroundColor: "{colors.tertiary-container}"
@@ -169,7 +174,7 @@ components:
     textColor: "{colors.on-primary}"
     typography: "{typography.label-md}"
     rounded: "{rounded.md}"
-    padding: 12px
+    padding: "{spacing.space-3}"
     height: 48px
   button-secondary-hover:
     backgroundColor: "{colors.primary-container}"
@@ -179,7 +184,7 @@ components:
     textColor: "{colors.primary}"
     typography: "{typography.label-md}"
     rounded: "{rounded.md}"
-    padding: 12px
+    padding: "{spacing.space-3}"
     height: 48px
   button-ghost-hover:
     backgroundColor: "{colors.surface-alt}"
@@ -187,17 +192,17 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   card-alt:
     backgroundColor: "{colors.surface-inset}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   card-dark:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
     rounded: "{rounded.md}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   hero-overlay-commercial:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
@@ -210,13 +215,13 @@ components:
     backgroundColor: "{colors.accent-soft}"
     textColor: "{colors.on-accent-soft}"
     rounded: "{rounded.md}"
-    padding: 16px
+    padding: "{spacing.space-4}"
   testimonial-quote:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     typography: "{typography.body-lg}"
     rounded: "{rounded.xl}"
-    padding: 56px
+    padding: "{spacing.space-12}"
   nav-link:
     textColor: "{colors.on-surface-secondary}"
     typography: "{typography.label-md}"
@@ -226,12 +231,12 @@ components:
     backgroundColor: "{colors.surface-elevated}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 16px
+    padding: "{spacing.space-4}"
   service-tile:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   partner-logo-strip:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface-muted}"
@@ -240,18 +245,18 @@ components:
     textColor: "{colors.on-surface}"
     typography: "{typography.body-md}"
     rounded: "{rounded.sm}"
-    padding: 16px
+    padding: "{spacing.space-4}"
   certification-badge:
     backgroundColor: "{colors.surface-inset}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 12px
+    padding: "{spacing.space-3}"
   property-card-callout:
     backgroundColor: "{colors.accent-soft}"
     textColor: "{colors.primary}"
     typography: "{typography.mono-md}"
     rounded: "{rounded.xl}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   footer:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
@@ -263,13 +268,13 @@ components:
     backgroundColor: "{colors.info-soft}"
     textColor: "{colors.on-info-soft}"
     rounded: "{rounded.md}"
-    padding: 16px
+    padding: "{spacing.space-4}"
   input-field:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     typography: "{typography.body-md}"
     rounded: "{rounded.md}"
-    padding: 12px
+    padding: "{spacing.space-3}"
     height: 48px
   input-field-focus:
     backgroundColor: "{colors.surface}"
@@ -278,7 +283,7 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.xl}"
-    padding: 20px
+    padding: "{spacing.space-5}"
   section-dark:
     backgroundColor: "{colors.surface-dark}"
     textColor: "{colors.on-surface-dark}"
@@ -299,27 +304,27 @@ components:
     textColor: "{colors.on-accent}"
     typography: "{typography.label-caps}"
     rounded: "{rounded.full}"
-    padding: 8px
+    padding: "{spacing.space-2}"
   card-bordered:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.md}"
-    padding: 24px
+    padding: "{spacing.space-6}"
   alert-success:
     backgroundColor: "{colors.success}"
     textColor: "{colors.on-surface}"
     rounded: "{rounded.sm}"
-    padding: 12px
+    padding: "{spacing.space-3}"
   alert-warning:
     backgroundColor: "{colors.warning}"
     textColor: "{colors.on-accent}"
     rounded: "{rounded.sm}"
-    padding: 12px
+    padding: "{spacing.space-3}"
   alert-error:
     backgroundColor: "{colors.error-surface}"
     textColor: "{colors.error-text}"
     rounded: "{rounded.sm}"
-    padding: 12px
+    padding: "{spacing.space-3}"
   divider:
     backgroundColor: "{colors.border}"
   divider-subtle:
@@ -373,17 +378,17 @@ Two typefaces. One rule about when each is used.
 
 **IBM Plex Mono** is the secondary typeface, reserved exclusively for Property Card surfaces. The monospace type is the visual signal of the "place-memory artifact" — the Selectric II / Rolodex aesthetic that makes the Property Card feel like a record rather than a marketing card. If any other surface starts using mono, the Property Card loses its unique identity. The mono usage is non-negotiable.
 
-**Typography scale decisions:** display sizes use tight letter-spacing (-0.025em / -0.02em) for editorial gravity; `label-caps` uses wide letter-spacing (0.1em) for eyebrow tags. Line heights favor readability (1.6 for body) over density. The display-to-body ratio is deliberate — a 60px hero H1 against 16px body creates authority hierarchy on landing.
+**Typography scale decisions:** display sizes get their authority from weight, size, and line height, not from negative tracking. `label-caps` keeps the documented uppercase treatment where the implementation supports it, but command-center surfaces keep letter spacing at 0 for predictable fit in dense controls. Line heights favor readability (1.6 for body) over density. The display-to-body ratio is deliberate — a 60px hero H1 against 16px body creates authority hierarchy on landing.
 
 ## Layout & Spacing
 
-**Grid:** 12 columns desktop, 6 tablet, 4 mobile. All section content containers use 90% viewport width (`w-[90%] mx-auto`) with auto-centering — this gives 5% margin left/right at any viewport width. No hard pixel maximum on content width at this stage.
+**One content rail:** every page uses a single shared `.container` rail: `max-width: {spacing.container}`, `margin-inline: auto`, and `padding-inline: {spacing.gutter}`. Full-bleed bands put the background on the outer band and the content inside that same rail. Do not define second columns, one-off max widths, negative margins, or a separate percent-width container.
 
-**Spacing scale:** 4px base unit, standard 8-point grid progression. Tokens: `xs` (4px) for micro-adjustments, `sm` (8px) for inline gaps, `md` (16px) for component padding, `lg` (24px) for card internal padding, `xl` (32px) for hero/testimonial padding, `xl-2`–`xl-5` (48–128px) for section rhythm.
+**Fluid within bounds:** content is not pure percentage width and not fixed width. The measure is capped by `container` and the side space is fluid through the `clamp()` gutter. Structural app rails such as side navigation can remain fixed by intent, but reading/content surfaces share the rail.
 
-**Section vertical rhythm:** `section` (96px) desktop, `section-mobile` (48px) mobile. Applied as `py-24` / `py-16` in Tailwind. Sections alternate between light and dark backgrounds rather than relying on spacing alone to create visual separation — the contrast break is the divider.
+**Spacing scale:** the 4px base scale is `space-1` through `space-16`, matching `deployment/remote/dashboard/Design.md` and `design-system.html#layout`. Every margin, padding, and gap uses one of these tokens. If a value is missing, add a token deliberately rather than inlining a new number.
 
-**Content width:** the 90% / 5% pattern applies to all sections. Full-bleed sections (hero backgrounds, CTA bands, dark section fills) use `w-full` on the outer element, with the 90% inner container controlling readable content width.
+**Section rhythm:** use `section` and `section-mobile` for large vertical rhythm, with smaller component gaps pulled from `space-*`. Sections may alternate light/dark surfaces for contrast, but alignment is owned by the shared rail.
 
 ## Elevation & Depth
 
@@ -394,11 +399,11 @@ Depth hierarchy:
 - **Level 1 — Page foundation:** `surface` (#FFFFFF) or `surface-inset` (#F9FAFB) — the base for most sections.
 - **Level 2 — Brand dark surfaces:** `primary` (#11133F) or `surface-dark` (#111827) — dark sections that "drop" the content visually by reversing the light/dark relationship. Used for hero overlays, CTA bands, footer, and emphasis sections.
 - **Level 3 — Interactive surfaces:** cards on dark backgrounds use `surface` (#FFFFFF) or `surface-elevated` (#FFFFFF) with a `ring-1 ring-border` 1px border to float them above the dark section floor.
-- **Level 4 — Modals / dropdowns:** same as Level 3 but with `shadow-xl` for genuine spatial separation from the page.
+- **Level 4 — Modals / dropdowns:** same as Level 3 but with the float shadow token for genuine spatial separation from the page.
 
-**Shadows** are used only for modals, dropdown panels, and the office-contact card in the map component. Card-level shadows are avoided on light sections — the border ring (`ring-1 ring-border`) provides the necessary separation without shadow weight that competes with the brand's flat, direct character.
+**Shadows** are used only for genuinely floating layers, modal/dropdown panels, and selected-item lift. Card-level shadows are avoided on light sections — the border ring (`ring-1 ring-border`) provides the necessary separation without shadow weight that competes with the brand's flat, direct character.
 
-The map component (`OfficeLocationsMap.tsx`) is the one glassmorphism-adjacent surface: dark card wrapper (`rounded-3xl shadow-xl ring-1`) on desktop. On mobile, the card is removed — the map renders flush with 5% side margins for maximum data density on small screens.
+The map component (`OfficeLocationsMap.tsx`) remains a data-first surface. Desktop may use a dark wrapper only when it behaves like a framed tool, but the wrapper must use the radius scale and the shared content rail. On mobile, the map renders without decorative framing for maximum data density.
 
 ## Shapes
 
@@ -416,17 +421,17 @@ No component mixes `xl` and `sm` radii in the same visual group. When multiple c
 
 **Buttons** follow a strict three-variant hierarchy. `button-primary` (flag red) is the only CTA that earns clicks — used once per viewport. `button-secondary` (deep navy) is the institutional B2B secondary action. `button-ghost` (white surface, navy text) is used on dark section backgrounds where the primary is already present. Button heights are fixed at 48px for consistent tap targets (≥ 44px WCAG requirement).
 
-**Cards** use `card` (white, 24px padding, 8px radius) for light sections and `card-dark` (navy, 24px padding) for dark section content. The `card-alt` variant uses `surface-inset` for subtle differentiation on white-background sections. All card borders use the `ring-1 ring-border` pattern (1px #E5E7EB), never a box-shadow on light sections.
+**Cards** use `card` (white, `space-6` padding, 8px radius) for light sections and `card-dark` (navy, `space-6` padding) for dark section content. The `card-alt` variant uses `surface-inset` for subtle differentiation on white-background sections. All card borders use the `ring-1 ring-border` pattern (1px #E5E7EB), never a box-shadow on light sections.
 
 **Hero overlays** have two variants: `hero-overlay-commercial` (deep navy — procurement officer gravitas) and `hero-overlay-residential` (hunter green — homeowner warmth). The homepage hero uses `surface-dark` (#111827) with a 75% opacity overlay on the video/image background. Commercial and residential section heroes use the appropriate variant.
 
-**The testimonial card** (`testimonial-quote`) breaks from the standard card: `rounded-xl` (16px), 56px padding, a left `border-l-4 border-tertiary` red accent to signal "real human voice." On the `section-brand-red` background, the card renders white.
+**The testimonial card** (`testimonial-quote`) breaks from the standard card: `rounded-xl` (16px), `space-12` padding, and restrained emphasis to signal "real human voice." Avoid using flag red as decoration; when a left rule is necessary, treat it as an interaction/story marker and verify it does not compete with the page's single CTA.
 
 **Leadership cards** (`leadership-card`) are the only components where the image sits above the text (`aspect-square object-cover` with `object-top`) and the radius is `xl`. The human photo requires warmer container treatment than a data card.
 
 **The Property Card callout** (`property-card-callout`) uses mono typography and `accent-soft` background. These choices are identity-locked — the Selectric II aesthetic is a deliberate product differentiator.
 
-**The map** (`OfficeLocationsMap`) is a React island with its own inline style system. Desktop renders inside a `rounded-3xl shadow-xl` card wrapper. Mobile renders without the card, legend hidden. The `showLegend` and `title` props control this split. State color encoding: flag red for active office states, deep navy for licensed states.
+**The map** (`OfficeLocationsMap`) is a React island with its own inline style system. Desktop renders as a framed tool only when the surrounding layout needs the frame; otherwise it follows the page rail without decorative nesting. Mobile renders without the card, legend hidden. The `showLegend` and `title` props control this split. State color encoding: flag red for active office states, deep navy for licensed states.
 
 ## Do's and Don'ts
 

@@ -1,0 +1,54 @@
+---
+import AppShell from "../../layouts/AppShell.astro";
+import LiveMetricGrid from "./LiveMetricGrid.astro";
+import LiveWorkQueue from "./LiveWorkQueue.astro";
+import type { LiveDepartmentSurface } from "@lib/live-work";
+
+interface Props {
+  surface: LiveDepartmentSurface;
+}
+
+const { surface } = Astro.props;
+const generatedAt = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  month: "short",
+}).format(new Date(surface.generatedAt));
+const tone = surface.status === "live" ? "ready" : surface.status === "degraded" ? "watch" : "blocked";
+---
+
+<AppShell title={surface.title} eyebrow="Department Home" activePage={surface.department} surface={surface}>
+  <section class="live-department-hero" aria-label={`${surface.title} summary`}>
+    <div class="surface-heading">
+      <div>
+        <p class="eyebrow">{surface.primaryHuman} Workspace</p>
+        <h2>{surface.subtitle}</h2>
+      </div>
+      <div class="surface-meta">
+        <span class="runtime-pill" data-tone={tone}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {surface.status}
+        </span>
+        <span>{generatedAt}</span>
+      </div>
+    </div>
+
+    <p class="live-source-summary">{surface.sourceSummary}</p>
+
+    {
+      surface.errors.length > 0 && (
+        <div class="accounting-boundary-notice">
+          <strong>Live data issue</strong>
+          <span>{surface.errors.join(" ")}</span>
+        </div>
+      )
+    }
+
+    <LiveMetricGrid metrics={surface.metrics} />
+  </section>
+
+  <LiveWorkQueue items={surface.items} />
+
+  <script src="/src/scripts/command-center.ts"></script>
+</AppShell>

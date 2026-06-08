@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DASH_DIR="${DASHBOARD_DIR:-$ROOT/deployment/remote/dashboard}"   # Astro build
+DASH_DIR="${DASHBOARD_DIR:-$ROOT/app/command-center}"   # Astro SSR Command Center build
 
 if [[ -f "$ROOT/.env" ]]; then
   set -a
@@ -19,8 +19,7 @@ fi
 
 [[ -d "$DASH_DIR" ]] || {
   echo "✗ no dashboard at $DASH_DIR"
-  echo "  Add the Astro dashboard template here, or set deployment.dashboard.enabled=false until it exists."
-  echo "  Starting point: OB1 open-brain-dashboard-pro, ported to Astro (see docs/08-stack-and-topology.md)."
+  echo "  Expected the production Astro Command Center under app/command-center."
   exit 1
 }
 
@@ -42,6 +41,6 @@ if [[ -n "${COOLIFY_DASHBOARD_DEPLOY_HOOK:-}" && "${COOLIFY_DASHBOARD_DEPLOY_HOO
 else
   echo "✗ COOLIFY_DASHBOARD_DEPLOY_HOOK not set."
   echo "  Either push to the Coolify-connected branch manually, or add the dashboard deploy hook to .env."
-  echo "  In Coolify, set the dashboard app env: PUBLIC_SUPABASE_URL + PUBLIC_SUPABASE_ANON_KEY (never the service-role key)."
+  echo "  In Coolify, set the command-center env server-side: SUPABASE_URL/PUBLIC_SUPABASE_URL plus SUPABASE_SERVICE_ROLE_KEY."
   exit 1
 fi

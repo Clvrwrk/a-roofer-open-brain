@@ -1,14 +1,14 @@
 import type { APIRoute } from "astro";
 import {
+  actorCanAccessDepartment,
   buildUnauthorizedResponse,
-  canSubmitDecision,
-  getAllowedDecisions,
+  hasPermission,
   resolveCommandCenterActor,
   serializeActor,
   type WorkQueueDecision,
 } from "@lib/access-control";
-import { buildDecisionAuditEvent, jsonApiResponse, serializeWorkQueueItem } from "@lib/agent-api";
-import { workDefinitions } from "@lib/cadence";
+import { jsonApiResponse } from "@lib/agent-api";
+import { loadCommandCenterSurface, recordLiveWorkDecision, serializeLiveWorkQueueItem } from "@lib/live-work";
 import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
@@ -26,7 +26,9 @@ export const POST: APIRoute = async ({ request, params }) => {
   const actor = resolveCommandCenterActor(request, getRuntimeEnv());
   if (!actor) return buildUnauthorizedResponse();
 
-  const work = workDefinitions.find((candidate) => candidate.id === params.workId);
+  const surface = await loadCommandCenterSurface();
+  const decodedWorkId = params.workId ? decodeURIComponent(params.workId) : "";
+  const work = surface.items.find((candidate) => candidate.workKey === decodedWorkId || candidate.id === decodedWorkId);
   if (!work) {
     return jsonApiResponse(
       {
@@ -52,25 +54,31 @@ export const POST: APIRoute = async ({ request, params }) => {
     );
   }
 
-  if (!canSubmitDecision(actor, work, decision)) {
+  const allowedDecisions: WorkQueueDecision[] = [];
+  if (work.approval !== "none" && hasPermission(actor, "approval.decide")) allowedDecisions.push("approve", "reject");
+  if (hasPermission(actor, "approval.request_more_evidence")) allowedDecisions.push("needs_more_evidence");
+  if (hasPermission(actor, "agent.resume")) allowedDecisions.push("resume_agent");
+
+  if (!actorCanAccessDepartment(actor, work.department) || !allowedDecisions.includes(decision)) {
     return jsonApiResponse(
       {
         error: "forbidden",
         error_description: "This actor cannot submit that decision for this queue item.",
         actor: serializeActor(actor),
-        allowedDecisions: getAllowedDecisions(actor, work),
+        allowedDecisions,
       },
       { status: 403 },
     );
   }
 
-  const auditEvent = buildDecisionAuditEvent(work, actor, decision, note);
+  const result = await recordLiveWorkDecision(work, actor, decision, note);
 
   return jsonApiResponse({
     status: "accepted",
-    persistence: "phase_1_ephemeral",
-    auditEvent,
-    item: serializeWorkQueueItem(work, actor),
+    persistence: "supabase",
+    action: result.action,
+    workItem: result.workItem,
+    item: serializeLiveWorkQueueItem(work, actor),
     next: {
       approve: "Human approval accepted; the owning agent may resume the run.",
       reject: "Human rejection accepted; the owning agent should close or rework the packet.",

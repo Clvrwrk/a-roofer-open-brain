@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pro Exteriors Open Brain — Design System</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap"
+    />
+    <style>
+      /* ════════════════════════════════════════════════════════════════════
+         DESIGN SYSTEM TOKENS — mirror of src/styles.css :root
+         These are the single source of truth for the dashboard. Every value
+         below appears verbatim in the production stylesheet. Do not introduce
+         off-system colors, radii, or fonts (DSN-010 / DSN-014).
+         ════════════════════════════════════════════════════════════════════ */
+      :root {
+        color-scheme: light;
+
+        /* Brand palette */
+        --color-primary: #11133f;
+        --color-primary-container: #0a0c27;
+        --color-primary-soft: #bbbeed;
+        --color-on-primary: #ffffff;
+        --color-secondary: #3b6b4c;
+        --color-secondary-container: #24412e;
+        --color-secondary-soft: #d3e7da;
+        --color-tertiary: #c22326;
+        --color-tertiary-container: #9b1c1f;
+        --color-on-tertiary: #ffffff;
+        --color-accent: #eaa221;
+        --color-accent-soft: #fbedd2;
+        --color-on-accent: #000000;
+        --color-on-accent-soft: #11133f;
+        --color-info: #0066cc;
+        --color-info-soft: #c2e0ff;
+        --color-on-info-soft: #11133f;
+
+        /* Surface system */
+        --color-surface: #ffffff;
+        --color-surface-elevated: #ffffff;
+        --color-surface-inset: #f9fafb;
+        --color-surface-alt: #f3f4f6;
+        --color-surface-dark: #111827;
+        --color-on-surface: #111827;
+        --color-on-surface-secondary: #374151;
+        --color-on-surface-muted: #4b5563;
+        --color-on-surface-dark: #ffffff;
+
+        /* Border + status */
+        --color-border: #e5e7eb;
+        --color-border-subtle: #f3f4f6;
+        --color-success: #059669;
+        --color-warning: #d97706;
+        --color-error: #dc2626;
+        --color-error-surface: #fef2f2;
+        --color-error-text: #7f1d1d;
+
+        /* Shape */
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --radius-full: 9999px;
+
+        /* Type */
+        --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+        /* Depth */
+        --shadow-float: 0 20px 60px rgba(17, 19, 63, 0.14);
+
+        /* Layout — one content rail for every band */
+        --container: 72rem;                /* ~1152px measure cap */
+        --gutter: clamp(1rem, 4vw, 3rem);  /* fluid side space, 16px → 48px */
+
+        /* Spacing scale — 4px base. Named by multiple of 4. No magic numbers. */
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-10: 40px;
+        --space-12: 48px;
+        --space-16: 64px;
+      }
+
+      /* ── Page chrome ──────────────────────────────────────────────────── */
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--font-sans);
+        color: var(--color-on-surface);
+        background: var(--color-surface-inset);
+        line-height: 1.5;
+      }
+      /* The single content rail. Every band — full-bleed or not — aligns to this.
+         Cap the measure, centre it, and make only the gutter fluid (clamp). */
+      .container {
+        width: 100%;
+        max-width: var(--container);
+        margin-inline: auto;
+        padding-inline: var(--gutter);
+      }
+      /* The body column IS the container, plus a bottom run-off. */
+      .ds-shell { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); padding-bottom: var(--space-16); }
+
+      /* Masthead — navy authority surface. Full-bleed background (100vw); its
+         CONTENT sits in .container so it shares the body's left rail. No negative
+         margins, no inline padding on the band itself. */
+      .ds-masthead {
+        margin: 0 0 var(--space-10);
+        padding-block: var(--space-16) var(--space-12);
+        color: var(--color-on-primary);
+        background: linear-gradient(180deg, var(--color-primary-container), var(--color-primary));
+      }
+      .ds-masthead .eyebrow { color: var(--color-accent); }
+      .ds-masthead h1 {
+        margin: 6px 0 12px;
+        font-size: clamp(34px, 5vw, 54px);
+        font-weight: 800;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+      }
+      .ds-masthead p { max-width: 64ch; margin: 0; color: rgba(255,255,255,0.82); font-size: 16px; }
+      .ds-masthead .meta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+      .ds-chip {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 7px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16);
+        border-radius: var(--radius-full);
+      }
+
+      .eyebrow {
+        margin: 0 0 5px; color: var(--color-on-surface-secondary);
+        font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      }
+
+      section.ds-section { margin: 0 0 var(--space-16); scroll-margin-top: var(--space-6); }
+      .ds-section > h2 {
+        margin: 0 0 6px; font-size: 30px; font-weight: 800; letter-spacing: -0.02em;
+      }
+      .ds-section > .lead { margin: 0 0 var(--space-6); max-width: 70ch; color: var(--color-on-surface-secondary); }
+
+      .ds-card {
+        padding: var(--space-6); background: var(--color-surface);
+        border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+      }
+      .ds-card + .ds-card { margin-top: var(--space-4); }
+      .ds-card h3 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+      .ds-card .sub { margin: 0 0 18px; color: var(--color-on-surface-muted); font-size: 14px; }
+
+      code, .mono {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+      code {
+        padding: 1px 6px; color: var(--color-on-surface); background: var(--color-surface-alt);
+        border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+      }
+      /* On the navy masthead the chip fill stays light, so pin the ink to navy
+         (≈13:1 on #f3f4f6) instead of inheriting the white body text — DSN-005. */
+      .ds-masthead code {
+        color: var(--color-primary);
+        border-color: var(--color-primary-soft);
+      }
+      /* Multi-line code specimens — explicit fg + bg, never inherited (the rule
+         this very section documents). */
+      .ds-code {
+        margin: 0 0 16px; padding: 16px; overflow-x: auto;
+        color: var(--color-on-surface); background: var(--color-surface-inset);
+        border: 1px solid var(--color-border); border-radius: var(--radius-md);
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12.5px; line-height: 1.6; white-space: pre;
+      }
+      .ds-code .cmt { color: var(--color-on-surface-muted); }
+      .ds-code .tok { color: var(--color-info); }
+
+      /* In-page nav — full-bleed sticky bar; links ride the shared .container
+         rail so they line up with the body content beneath them. */
+      .ds-toc {
+        position: sticky; top: 0; z-index: 5;
+        margin: 0 0 var(--space-10);
+        background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--color-border);
+      }
+      .ds-toc-inner {
+        display: flex; flex-wrap: wrap; gap: var(--space-1);
+        padding-block: var(--space-3);
+      }
+      .ds-toc a {
+        padding: 6px 11px; font-size: 13px; font-weight: 600; text-decoration: none;
+        color: var(--color-on-surface-secondary); border-radius: var(--radius-md);
+      }
+      .ds-toc a:hover { background: var(--color-surface-alt); color: var(--color-primary); }
+
+      /* Color swatches */
+      .swatch-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 14px;
+      }
+      .swatch { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+      .swatch .chip { height: 76px; }
+      .swatch .info { padding: 10px 12px; background: var(--color-surface); }
+      .swatch .name { font-size: 13px; font-weight: 700; }
+      .swatch .val { margin-top: 3px; color: var(--color-on-surface-muted); }
+      .swatch .role { margin-top: 6px; font-size: 11.5px; color: var(--color-on-surface-secondary); line-height: 1.35; }
+
+      /* Role discipline table */
+      table.ds-table { width: 100%; border-collapse: collapse; }
+      table.ds-table th, table.ds-table td {
+        padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--color-border);
+        vertical-align: top; font-size: 14px;
+      }
+      table.ds-table th {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+        color: var(--color-on-surface-muted);
+      }
+      .dot { display: inline-block; width: 12px; height: 12px; border-radius: var(--radius-full); vertical-align: middle; margin-right: 8px; }
+
+      /* Type specimens */
+      .type-row { display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--color-border); align-items: baseline; }
+      .type-row:last-child { border-bottom: 0; }
+      .type-row .spec { color: var(--color-on-surface-muted); font-size: 13px; }
+      .type-row .spec b { display: block; color: var(--color-on-surface); font-size: 13px; }
+      .t-display { font-size: clamp(30px, 3vw, 44px); font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+      .t-h1 { font-size: 24px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+      .t-h3 { font-size: 20px; font-weight: 600; line-height: 1.25; }
+      .t-stat { font-size: 30px; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+      .t-body { font-size: 14px; line-height: 1.5; }
+      .t-meta { font-size: 13px; color: var(--color-on-surface-secondary); }
+
+      /* Radius + shadow specimens */
+      .spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+      .radius-demo { height: 84px; background: var(--color-primary-soft); border: 1px solid var(--color-primary); display: grid; place-items: end center; padding-bottom: 8px; color: var(--color-primary); font-size: 12px; font-weight: 700; }
+      .shadow-demo { height: 96px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--color-on-surface-muted); }
+
+      /* Spacing scale specimen */
+      .scale-row { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; padding: 7px 0; }
+      .scale-key { font-size: 12.5px; color: var(--color-on-surface-secondary); }
+      .scale-key b { display: inline-block; min-width: 78px; color: var(--color-on-surface); font-weight: 700; }
+      .scale-bar { height: 16px; background: var(--color-primary-soft); border: 1px solid var(--color-primary); border-radius: var(--radius-sm); }
+
+      /* Container model diagram — full-bleed band vs shared content rail */
+      .layout-demo { display: grid; gap: 12px; }
+      .band-demo { position: relative; padding: 14px; border-radius: var(--radius-md); }
+      .band-demo.bleed { background: var(--color-primary); color: var(--color-on-primary); }
+      .band-demo.plain { background: var(--color-surface-alt); border: 1px solid var(--color-border); }
+      .band-demo .rail {
+        max-width: 380px; margin-inline: auto; padding: 10px 14px;
+        background: rgba(255,255,255,0.14); border: 1px dashed currentColor; border-radius: var(--radius-sm);
+        font-size: 12.5px; font-weight: 700;
+      }
+      .band-demo.plain .rail { background: var(--color-surface); color: var(--color-primary); border-color: var(--color-primary-soft); }
+      .layout-note { font-size: 12.5px; color: var(--color-on-surface-muted); text-align: center; }
+
+      /* ════════════════════════════════════════════════════════════════════
+         LIVE COMPONENT STYLES — copied verbatim from src/styles.css so the
+         specimens render exactly as they do in the app.
+         ════════════════════════════════════════════════════════════════════ */
+      .primary-action, .secondary-action, .inline-action, .danger-action {
+        display: inline-flex; align-items: center; justify-content: center; min-height: 40px;
+        padding: 0 16px; border-radius: var(--radius-md); border: 1px solid transparent;
+        font-size: 14px; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap;
+        font-family: inherit; cursor: pointer;
+      }
+      .primary-action { color: var(--color-on-tertiary); background: var(--color-tertiary); }
+      .primary-action:hover { background: var(--color-tertiary-container); }
+      .secondary-action, .inline-action { color: var(--color-primary); background: var(--color-surface); border-color: var(--color-border); }
+      .secondary-action:hover, .inline-action:hover { background: var(--color-surface-alt); border-color: var(--color-primary); }
+      .navy-action { color: var(--color-on-primary); background: var(--color-primary); border-color: var(--color-primary); }
+      .navy-action:hover { background: var(--color-primary-container); }
+      .danger-action { color: var(--color-error-text); background: var(--color-error-surface); border-color: var(--color-error-surface); }
+      .danger-action:hover { border-color: var(--color-error); }
+
+      .status-pill {
+        display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px;
+        border-radius: var(--radius-full); font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap;
+      }
+      .status-ready, .status-approved { color: var(--color-secondary-container); background: var(--color-secondary-soft); }
+      .status-blocked, .status-rejected { color: var(--color-error-text); background: var(--color-error-surface); }
+      .status-review, .status-sent { color: var(--color-on-accent-soft); background: var(--color-accent-soft); }
+      .status-draft { color: var(--color-on-info-soft); background: var(--color-info-soft); }
+
+      .demo-work-surface { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+      .section-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 72px;
+        padding: 16px 18px; color: var(--color-on-primary); background: var(--color-primary);
+        border-bottom: 1px solid var(--color-primary-container);
+      }
+      .section-head h3 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--color-on-primary); }
+      .section-head .eyebrow { color: var(--color-accent); }
+
+      .segmented { display: inline-flex; padding: 3px; background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+      .segment { min-width: 72px; min-height: 32px; color: var(--color-on-surface-secondary); background: transparent; border: 0; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; }
+      .segment.is-active { color: var(--color-on-primary); background: var(--color-primary); }
+
+      .metric { min-height: 112px; padding: 16px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+      .metric span { color: var(--color-on-surface-muted); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      .metric strong { display: block; margin-top: 12px; font-size: 30px; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+      .metric em { display: block; margin-top: 9px; color: var(--color-on-surface-secondary); font-size: 13px; font-style: normal; }
+      .metric-grid-demo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+
+      .queue-item { display: grid; gap: 10px; min-height: 112px; padding: 14px; text-align: left; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 4px solid var(--color-primary); border-radius: var(--radius-md); }
+      .queue-item.is-selected { border-color: var(--color-primary); border-left-color: var(--color-accent); box-shadow: 0 12px 32px rgba(17, 19, 63, 0.1); }
+      .queue-topline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: space-between; }
+      .queue-title { margin: 0; font-size: 16px; font-weight: 700; }
+      .queue-meta { color: var(--color-on-surface-secondary); font-size: 13px; line-height: 1.45; }
+
+      .meter { height: 10px; overflow: hidden; background: var(--color-surface-alt); border-radius: var(--radius-full); }
+      .meter span { display: block; height: 100%; background: linear-gradient(90deg, var(--color-info), var(--color-primary)); }
+      .match-score { display: grid; grid-template-columns: 1fr 72px; gap: 10px; align-items: center; }
+
+      .demo-nav { display: grid; gap: 7px; max-width: 260px; padding: 18px; background: linear-gradient(180deg, var(--color-primary-container), var(--color-primary)); border-radius: var(--radius-md); }
+      .nav-item { min-height: 42px; padding: 0 12px; color: rgba(255, 255, 255, 0.78); text-align: left; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; background: transparent; border: 1px solid transparent; border-left: 3px solid transparent; border-radius: var(--radius-md); font-family: inherit; cursor: pointer; }
+      .nav-item:hover { color: var(--color-on-primary); border-color: rgba(255, 255, 255, 0.2); }
+      .nav-item.is-active { color: var(--color-on-primary); background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.18); border-left-color: var(--color-accent); }
+
+      table.app-table { width: 100%; border-collapse: collapse; background: var(--color-surface); }
+      table.app-table th, table.app-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+      table.app-table th { color: var(--color-on-surface-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      table.app-table td { font-size: 14px; }
+
+      .setting-input { width: 100%; max-width: 280px; margin-top: 8px; min-height: 38px; padding: 0 10px; font-size: 15px; font-weight: 700; color: var(--color-on-surface); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; }
+      .setting-input:focus { outline: none; border-color: var(--color-primary); }
+
+      @keyframes blink-cta {
+        0%, 49% { background: var(--color-accent); color: var(--color-on-accent); box-shadow: 0 0 0 3px rgba(234,162,33,0.35); }
+        50%, 100% { background: var(--color-tertiary); color: var(--color-on-tertiary); box-shadow: 0 0 0 3px rgba(194,35,38,0.45); }
+      }
+      .blink-cta { animation: blink-cta 0.7s steps(1, end) infinite; border-color: transparent !important; }
+
+      .do-dont { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .do-dont .col { padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+      .do-dont .do { background: var(--color-secondary-soft); border-color: var(--color-secondary); }
+      .do-dont .dont { background: var(--color-error-surface); border-color: var(--color-error); }
+      .do-dont h4 { margin: 0 0 8px; font-size: 14px; }
+      .do-dont ul { margin: 0; padding-left: 18px; font-size: 13.5px; }
+      .do-dont li { margin-bottom: 6px; }
+
+      .component-demo { padding: 20px; background: var(--color-surface-inset); border: 1px dashed var(--color-border); border-radius: var(--radius-md); margin-bottom: 14px; }
+      .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+      @media (max-width: 720px) {
+        .type-row { grid-template-columns: 1fr; gap: 8px; }
+        .do-dont { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="ds-masthead">
+      <div class="container">
+        <p class="eyebrow">Pro Exteriors · Open Brain</p>
+        <h1>Admin Design System</h1>
+        <p>
+          The token library and component reference for the Vendor Pricing Command Center.
+          One disciplined palette, one type family, flat contrast-layer depth. This page renders
+          the live system; <code>Design.md</code> is its written specification, and
+          <code>src/styles.css</code> is the authoritative implementation.
+        </p>
+        <div class="meta">
+          <span class="ds-chip">Version 1.0</span>
+          <span class="ds-chip">Light scheme</span>
+          <span class="ds-chip">Inter · system fallback</span>
+          <span class="ds-chip">WCAG AA — DSN-005</span>
+        </div>
+      </div>
+    </header>
+
+    <nav class="ds-toc" aria-label="Sections">
+      <div class="container ds-toc-inner">
+        <a href="#principles">Principles</a>
+        <a href="#color">Color</a>
+        <a href="#roles">Role discipline</a>
+        <a href="#type">Typography</a>
+        <a href="#shape">Shape</a>
+        <a href="#layout">Layout</a>
+        <a href="#elevation">Elevation</a>
+        <a href="#components">Components</a>
+        <a href="#patterns">Patterns</a>
+        <a href="#a11y">Accessibility</a>
+        <a href="#resilience">Defensive styling</a>
+        <a href="#astro">Astro notes</a>
+      </div>
+    </nav>
+
+    <div class="ds-shell">
+      <!-- ── PRINCIPLES ────────────────────────────────────────────────── -->
+      <section class="ds-section" id="principles">
+        <h2>Principles</h2>
+        <p class="lead">Four ideas govern every decision in this system. When a new screen is designed, it is measured against these before it ships.</p>
+        <div class="ds-card">
+          <h3>1 · Five-color role discipline <span class="sub" style="display:inline">(DSN-011)</span></h3>
+          <p class="t-body" style="margin:0 0 18px">Each brand color owns exactly one job. A color is never borrowed for decoration. The affirmative CTA is the only flag-red on screen; the accent never becomes a button; hunter green means success and nothing else.</p>
+          <h3>2 · Contrast-Layer depth</h3>
+          <p class="t-body" style="margin:0 0 18px">Separation comes from borders and surface tints, not drop shadows. Shadows (<code>--shadow-float</code>) are reserved for genuinely floating layers and selection emphasis — the work surface itself stays flat.</p>
+          <h3>3 · One affirmative action per field (DSN-012)</h3>
+          <p class="t-body" style="margin:0 0 18px">In any viewport there is a single flag-red primary action. Everything else is a navy or ghost secondary. The eye should never have to choose between two "yes" buttons.</p>
+          <h3>4 · On-system or off (DSN-010 / DSN-014)</h3>
+          <p class="t-body" style="margin:0">Every color, radius, and font is a named token. There are no one-off hex values, no ad-hoc pixel radii, no second typeface. If a value is needed and absent, it is added to the token set deliberately — not inlined.</p>
+        </div>
+      </section>
+
+      <!-- ── COLOR ─────────────────────────────────────────────────────── -->
+      <section class="ds-section" id="color">
+        <h2>Color tokens</h2>
+        <p class="lead">The complete palette as defined in <code>:root</code>. Names are the contract; hex values are the implementation. Reference colors by token, never by literal.</p>
+
+        <div class="ds-card">
+          <h3>Brand palette</h3>
+          <p class="sub">Five roles: primary authority, secondary success, tertiary action, accent attention, info data.</p>
+          <div class="swatch-grid">
+            <div class="swatch"><div class="chip" style="background:#11133f"></div><div class="info"><div class="name">primary</div><div class="val mono">#11133f</div><div class="role">Deep navy. Authority surfaces, structure, primary text.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#0a0c27"></div><div class="info"><div class="name">primary-container</div><div class="val mono">#0a0c27</div><div class="role">Darkest navy. Rail gradient base, hover depth.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#bbbeed"></div><div class="info"><div class="name">primary-soft</div><div class="val mono">#bbbeed</div><div class="role">Tint for soft navy fills on light surfaces.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#3b6b4c"></div><div class="info"><div class="name">secondary</div><div class="val mono">#3b6b4c</div><div class="role">Hunter green. Success / affirmative status only.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#24412e"></div><div class="info"><div class="name">secondary-container</div><div class="val mono">#24412e</div><div class="role">Deep green. Text on green-soft pills.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#d3e7da"></div><div class="info"><div class="name">secondary-soft</div><div class="val mono">#d3e7da</div><div class="role">Green tint. "Ready" / "Approved" pill fill.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#c22326"></div><div class="info"><div class="name">tertiary</div><div class="val mono">#c22326</div><div class="role">Flag red. The single affirmative CTA. Interaction only.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#9b1c1f"></div><div class="info"><div class="name">tertiary-container</div><div class="val mono">#9b1c1f</div><div class="role">Deep flag red. Primary-action hover.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#eaa221"></div><div class="info"><div class="name">accent</div><div class="val mono">#eaa221</div><div class="role">Golden orange. Eyebrows on navy, badges, attention. Never a button.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#fbedd2"></div><div class="info"><div class="name">accent-soft</div><div class="val mono">#fbedd2</div><div class="role">Amber tint. "Review" / "Sent" pill fill.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#0066cc"></div><div class="info"><div class="name">info</div><div class="val mono">#0066cc</div><div class="role">Smart blue. Inline links and data meters.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#c2e0ff"></div><div class="info"><div class="name">info-soft</div><div class="val mono">#c2e0ff</div><div class="role">Blue tint. "Draft" pill fill.</div></div></div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Surface &amp; ink</h3>
+          <p class="sub">The white-to-navy field hierarchy and the text colors that sit on it.</p>
+          <div class="swatch-grid">
+            <div class="swatch"><div class="chip" style="background:#ffffff;border-bottom:1px solid #e5e7eb"></div><div class="info"><div class="name">surface</div><div class="val mono">#ffffff</div><div class="role">Card and work-surface base.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#f9fafb;border-bottom:1px solid #e5e7eb"></div><div class="info"><div class="name">surface-inset</div><div class="val mono">#f9fafb</div><div class="role">Page background, inset tiles, draft boxes.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#f3f4f6;border-bottom:1px solid #e5e7eb"></div><div class="info"><div class="name">surface-alt</div><div class="val mono">#f3f4f6</div><div class="role">Segmented control track, meter track, hover fill.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#111827"></div><div class="info"><div class="name">surface-dark / on-surface</div><div class="val mono">#111827</div><div class="role">Primary text ink and dark surface.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#374151"></div><div class="info"><div class="name">on-surface-secondary</div><div class="val mono">#374151</div><div class="role">Secondary text, light-surface eyebrows (AA-safe).</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#4b5563"></div><div class="info"><div class="name">on-surface-muted</div><div class="val mono">#4b5563</div><div class="role">Muted labels, table headers, timestamps.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#e5e7eb"></div><div class="info"><div class="name">border</div><div class="val mono">#e5e7eb</div><div class="role">The workhorse — carries all contrast-layer separation.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#f3f4f6;border-bottom:1px solid #e5e7eb"></div><div class="info"><div class="name">border-subtle</div><div class="val mono">#f3f4f6</div><div class="role">Faint dividers where a full border is too heavy.</div></div></div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Semantic status</h3>
+          <p class="sub">Success / warning / error. The error family is distinct from flag-red tertiary — red that means "stop", not red that means "go".</p>
+          <div class="swatch-grid">
+            <div class="swatch"><div class="chip" style="background:#059669"></div><div class="info"><div class="name">success</div><div class="val mono">#059669</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#d97706"></div><div class="info"><div class="name">warning</div><div class="val mono">#d97706</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#dc2626"></div><div class="info"><div class="name">error</div><div class="val mono">#dc2626</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#fef2f2;border-bottom:1px solid #e5e7eb"></div><div class="info"><div class="name">error-surface</div><div class="val mono">#fef2f2</div><div class="role">Blocked pill / danger button fill.</div></div></div>
+            <div class="swatch"><div class="chip" style="background:#7f1d1d"></div><div class="info"><div class="name">error-text</div><div class="val mono">#7f1d1d</div><div class="role">Text on error surfaces.</div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── ROLE DISCIPLINE ───────────────────────────────────────────── -->
+      <section class="ds-section" id="roles">
+        <h2>The five-color role discipline</h2>
+        <p class="lead">DSN-011 in one table. Each row is a contract: this color, this job, nowhere else. Mono type is intentionally excluded here — this is not a Property Card surface (DSN-013).</p>
+        <div class="ds-card" style="padding:0;overflow:hidden">
+          <table class="ds-table">
+            <thead>
+              <tr><th style="width:150px">Color</th><th>Owns</th><th>Never used for</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="dot" style="background:#11133f"></span><b>Primary</b><br><span class="mono" style="color:var(--color-on-surface-muted)">navy</span></td><td>Authority surfaces (rail, section heads), structure, primary text.</td><td>Affirmative CTAs — that is tertiary's job.</td></tr>
+              <tr><td><span class="dot" style="background:#3b6b4c"></span><b>Secondary</b><br><span class="mono" style="color:var(--color-on-surface-muted)">hunter green</span></td><td>Success / affirmative <em>status</em> (Ready, Approved).</td><td>Buttons, decoration, generic "positive" accents.</td></tr>
+              <tr><td><span class="dot" style="background:#c22326"></span><b>Tertiary</b><br><span class="mono" style="color:var(--color-on-surface-muted)">flag red</span></td><td>The one affirmative CTA per viewport (Run Audit, Approve).</td><td>Decoration, status, error states.</td></tr>
+              <tr><td><span class="dot" style="background:#eaa221"></span><b>Accent</b><br><span class="mono" style="color:var(--color-on-surface-muted)">golden orange</span></td><td>Eyebrows on navy, badges, wayfinding, attention.</td><td>Buttons of any kind.</td></tr>
+              <tr><td><span class="dot" style="background:#0066cc"></span><b>Info</b><br><span class="mono" style="color:var(--color-on-surface-muted)">smart blue</span></td><td>Inline links and data meters.</td><td>Primary actions or status pills.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="do-dont" style="margin-top:16px">
+          <div class="col do">
+            <h4>Do</h4>
+            <ul>
+              <li>Keep one flag-red affirmative action in view.</li>
+              <li>Use accent (orange) for the active nav marker and eyebrows on navy.</li>
+              <li>Reach for borders before shadows to separate surfaces.</li>
+            </ul>
+          </div>
+          <div class="col dont">
+            <h4>Don't</h4>
+            <ul>
+              <li>Make the accent orange a button or the CTA green.</li>
+              <li>Put golden-orange eyebrows on white — it fails AA. Use secondary ink instead.</li>
+              <li>Introduce a hex value that isn't a token.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── TYPOGRAPHY ────────────────────────────────────────────────── -->
+      <section class="ds-section" id="type">
+        <h2>Typography</h2>
+        <p class="lead">One family — <code>Inter</code>, with a system fallback stack — across four weights (400, 600, 700, 800). Mono is reserved for Property Card surfaces and is not loaded here.</p>
+        <div class="ds-card">
+          <div class="type-row"><div class="spec"><b>Display / view title</b>800 · clamp(30–44px)<br>line 1.05 · tracking −0.02em</div><div class="t-display">Command Center</div></div>
+          <div class="type-row"><div class="spec"><b>Stat / metric value</b>800 · 30px<br>line 1.05 · tracking −0.02em</div><div class="t-stat">$48,210</div></div>
+          <div class="type-row"><div class="spec"><b>Heading 1 (rail)</b>700 · 24px<br>line 1.15 · tracking −0.02em</div><div class="t-h1">Admin</div></div>
+          <div class="type-row"><div class="spec"><b>Heading 3 (section)</b>600 · 20px<br>line 1.25</div><div class="t-h3">Work Ready For Review</div></div>
+          <div class="type-row"><div class="spec"><b>Body</b>400 · 14px<br>line 1.5</div><div class="t-body" style="max-width:52ch">Real-shaped workflow, internal-only output. The pilot validates the human review loop before writing to production tables.</div></div>
+          <div class="type-row"><div class="spec"><b>Meta / queue note</b>400 · 13px<br>secondary ink</div><div class="t-meta">Vendor: ABC Supply · Region: North Metro · Updated 2h ago</div></div>
+          <div class="type-row"><div class="spec"><b>Eyebrow / label-caps</b>700 · 12px<br>tracking 0.1em · uppercase</div><div class="eyebrow" style="margin:0">Vendor Pricing Command Center</div></div>
+        </div>
+      </section>
+
+      <!-- ── SHAPE ─────────────────────────────────────────────────────── -->
+      <section class="ds-section" id="shape">
+        <h2>Shape</h2>
+        <p class="lead">A five-step radius scale. <code>md (8px)</code> is the default for nearly everything — buttons, cards, inputs, tiles. <code>full</code> is reserved for pills and dots.</p>
+        <div class="ds-card">
+          <div class="spec-grid">
+            <div><div class="radius-demo" style="border-radius:4px">sm · 4px</div></div>
+            <div><div class="radius-demo" style="border-radius:8px">md · 8px</div></div>
+            <div><div class="radius-demo" style="border-radius:12px">lg · 12px</div></div>
+            <div><div class="radius-demo" style="border-radius:16px">xl · 16px</div></div>
+            <div><div class="radius-demo" style="border-radius:9999px">full</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── LAYOUT & SPACING ──────────────────────────────────────────── -->
+      <section class="ds-section" id="layout">
+        <h2>Layout &amp; spacing</h2>
+        <p class="lead">Alignment is structural, not eyeballed. Every band on a page — full-bleed or not — hangs off <strong>one content rail</strong>, and every gap comes from a <strong>4px spacing scale</strong>. Magic numbers are how rhythm drifts; tokens are how it holds (DSN-010 / DSN-014, now extended to space).</p>
+
+        <div class="ds-card">
+          <h3>The container — one rail for every band</h3>
+          <p class="sub">Cap the measure, centre it, and make only the <em>gutter</em> fluid. Full-bleed backgrounds live on the band element; their content sits in <code>.container</code> so it lines up with everything else. The masthead, the sticky nav, and the body all share this — there is no second definition of "the column."</p>
+          <div class="layout-demo">
+            <div class="band-demo bleed">full-bleed background — 100vw<div class="rail">.container · content rail</div></div>
+            <div class="band-demo plain"><div class="rail">.container · same rail</div></div>
+            <p class="layout-note">↑ Backgrounds span the viewport; content shares one centred, capped rail. Edges line up by construction.</p>
+          </div>
+          <pre class="ds-code"><span class="tok">.container</span> {
+  width: 100%;
+  max-width: <span class="tok">var(--container)</span>;   <span class="cmt">/* 72rem cap — protects line length */</span>
+  margin-inline: auto;             <span class="cmt">/* centre */</span>
+  padding-inline: <span class="tok">var(--gutter)</span>;  <span class="cmt">/* clamp(1rem, 4vw, 3rem) — fluid gutter */</span>
+}</pre>
+        </div>
+
+        <div class="ds-card">
+          <h3>Layout tokens</h3>
+          <p class="sub">Two tokens carry the whole rail.</p>
+          <table class="ds-table">
+            <thead><tr><th style="width:160px">Token</th><th style="width:230px">Value</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td><code>--container</code></td><td class="mono">72rem (~1152px)</td><td>Caps the measure so line length stays readable on wide monitors. A reference page with wide tables — not a 1080px squeeze, not unbounded.</td></tr>
+              <tr><td><code>--gutter</code></td><td class="mono">clamp(1rem, 4vw, 3rem)</td><td>Side space scales with the viewport (16px on a phone → 48px on a desktop) without ever letting content kiss the edge.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="ds-card">
+          <h3>Fluid within bounds — why not pure % or pure fixed</h3>
+          <div class="do-dont">
+            <div class="col do">
+              <h4>The model</h4>
+              <ul>
+                <li><b>max-width</b> caps the measure (readability).</li>
+                <li><b>margin-inline:auto</b> centres it.</li>
+                <li><b>clamp() gutter</b> gives the "%-feel" — fluid space that grows with the screen.</li>
+              </ul>
+            </div>
+            <div class="col dont">
+              <h4>Why not the extremes</h4>
+              <ul>
+                <li><b>Pure %</b> → 2000px+ lines on a wide monitor; unreadable.</li>
+                <li><b>Pure fixed</b> → cramped on small screens, dead space on large; never scales.</li>
+                <li><b>App chrome is the exception</b> — fixed sidebars (e.g. the 280px rail) should stay fixed, not rubber-band.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Spacing scale — 4px base</h3>
+          <p class="sub">Every margin, padding, and gap is one of these. Named by its multiple of 4. If a value isn't on the scale, it doesn't ship.</p>
+          <div class="scale-set">
+            <div class="scale-row"><div class="scale-key"><b>--space-1</b> 4px</div><div class="scale-bar" style="width:4px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-2</b> 8px</div><div class="scale-bar" style="width:8px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-3</b> 12px</div><div class="scale-bar" style="width:12px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-4</b> 16px</div><div class="scale-bar" style="width:16px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-5</b> 20px</div><div class="scale-bar" style="width:20px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-6</b> 24px</div><div class="scale-bar" style="width:24px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-8</b> 32px</div><div class="scale-bar" style="width:32px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-10</b> 40px</div><div class="scale-bar" style="width:40px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-12</b> 48px</div><div class="scale-bar" style="width:48px"></div></div>
+            <div class="scale-row"><div class="scale-key"><b>--space-16</b> 64px</div><div class="scale-bar" style="width:64px"></div></div>
+          </div>
+          <p class="t-meta" style="margin:14px 0 0">Common usage: <code>--space-4</code> in-card gaps · <code>--space-6</code> card padding · <code>--space-10</code> band separation · <code>--space-16</code> section rhythm.</p>
+        </div>
+      </section>
+
+      <!-- ── ELEVATION ─────────────────────────────────────────────────── -->
+      <section class="ds-section" id="elevation">
+        <h2>Elevation</h2>
+        <p class="lead">Depth is mostly carried by borders (the Contrast-Layer model). Shadow is an exception, not a default — used for selected queue items and genuinely floating layers.</p>
+        <div class="ds-card">
+          <div class="spec-grid">
+            <div><div class="shadow-demo" style="box-shadow:none">flat (border only)<br>default surfaces</div></div>
+            <div><div class="shadow-demo" style="box-shadow:0 12px 32px rgba(17,19,63,0.1)">selection lift<br>queue · is-selected</div></div>
+            <div><div class="shadow-demo" style="box-shadow:var(--shadow-float)">shadow-float<br>floating layers</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── COMPONENTS ────────────────────────────────────────────────── -->
+      <section class="ds-section" id="components">
+        <h2>Components</h2>
+        <p class="lead">Live specimens rendered with the production CSS. Markup mirrors <code>index.html</code>.</p>
+
+        <div class="ds-card">
+          <h3>Buttons</h3>
+          <p class="sub">Strict hierarchy: one flag-red primary, navy for high-emphasis secondary, ghost for neutral, error-family for destructive.</p>
+          <div class="component-demo">
+            <div class="row">
+              <button class="primary-action">Approve Credit Memo</button>
+              <button class="navy-action">Run Pilot Audit</button>
+              <button class="secondary-action">Reset Demo State</button>
+              <button class="inline-action">Edit</button>
+              <button class="danger-action">Reject</button>
+            </div>
+          </div>
+          <p class="t-meta" style="margin:0"><code>.primary-action</code> · <code>#run-audit</code> (navy) · <code>.secondary-action</code> · <code>.inline-action</code> · <code>.danger-action</code></p>
+        </div>
+
+        <div class="ds-card">
+          <h3>Status pills</h3>
+          <p class="sub">Semantic, on-palette. Green = ready/approved, amber = review/sent, blue = draft, error = blocked/rejected.</p>
+          <div class="component-demo">
+            <div class="row">
+              <span class="status-pill status-ready">Ready</span>
+              <span class="status-pill status-approved">Approved</span>
+              <span class="status-pill status-review">In Review</span>
+              <span class="status-pill status-sent">Sent</span>
+              <span class="status-pill status-draft">Draft</span>
+              <span class="status-pill status-blocked">Blocked</span>
+              <span class="status-pill status-rejected">Rejected</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Metric card</h3>
+          <p class="sub">KPI summary tiles. Uppercase label, oversized stat, optional delta note.</p>
+          <div class="component-demo">
+            <div class="metric-grid-demo">
+              <div class="metric"><span>Open Audits</span><strong>14</strong><em>3 blocked on pricing</em></div>
+              <div class="metric"><span>Expected Credit</span><strong>$48,210</strong><em>across 9 invoices</em></div>
+              <div class="metric"><span>Matches Pending</span><strong>27</strong><em>review queue</em></div>
+              <div class="metric"><span>Memos Sent</span><strong>6</strong><em>this week</em></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Work surface &amp; section head</h3>
+          <p class="sub">The core container. Navy header band labels the workspace; flat white body holds content.</p>
+          <div class="component-demo" style="padding:0;background:transparent;border:0">
+            <div class="demo-work-surface">
+              <div class="section-head">
+                <div><p class="eyebrow">Queues</p><h3>Work Ready For Review</h3></div>
+                <div class="segmented" role="group">
+                  <button class="segment is-active">All</button>
+                  <button class="segment">Ready</button>
+                  <button class="segment">Blocked</button>
+                </div>
+              </div>
+              <div style="padding:14px;display:grid;gap:10px">
+                <button class="queue-item is-selected">
+                  <div class="queue-topline"><p class="queue-title">Invoice #INV-4821</p><span class="status-pill status-ready">Ready</span></div>
+                  <p class="queue-meta">ABC Supply · North Metro · expected credit $5,140</p>
+                </button>
+                <button class="queue-item">
+                  <div class="queue-topline"><p class="queue-title">Invoice #INV-4822</p><span class="status-pill status-blocked">Blocked</span></div>
+                  <p class="queue-meta">BuildPro · West · awaiting price agreement refresh</p>
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="t-meta" style="margin:0"><code>.work-surface</code> › <code>.section-head</code> + <code>.queue-stack</code> › <code>.queue-item</code> (selected uses accent left-border + lift)</p>
+        </div>
+
+        <div class="ds-card">
+          <h3>Side rail navigation</h3>
+          <p class="sub">Navy authority surface. Active item is marked by the accent left-border — wayfinding, not action.</p>
+          <div class="component-demo">
+            <div class="demo-nav">
+              <button class="nav-item is-active">Command Center</button>
+              <button class="nav-item">Invoice Audits</button>
+              <button class="nav-item">Product Matches</button>
+              <button class="nav-item">Credit Memos</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Data table</h3>
+          <p class="sub">Uppercase muted headers, 14px rows, border-separated. Status carried by pills inside cells.</p>
+          <div class="component-demo" style="overflow-x:auto">
+            <table class="app-table" style="min-width:640px">
+              <thead><tr><th>Invoice</th><th>Vendor</th><th>Region</th><th>Status</th><th>Expected Credit</th></tr></thead>
+              <tbody>
+                <tr><td>INV-4821</td><td>ABC Supply</td><td>North Metro</td><td><span class="status-pill status-ready">Ready</span></td><td>$5,140</td></tr>
+                <tr><td>INV-4822</td><td>BuildPro</td><td>West</td><td><span class="status-pill status-blocked">Blocked</span></td><td>$2,980</td></tr>
+                <tr><td>INV-4823</td><td>Metro Roofing</td><td>South</td><td><span class="status-pill status-review">In Review</span></td><td>$7,420</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Match meter</h3>
+          <p class="sub">Data viz uses smart-blue → navy gradient — never the flag-red CTA color.</p>
+          <div class="component-demo">
+            <div class="match-score" style="max-width:360px">
+              <div class="meter"><span style="width:86%"></span></div>
+              <strong style="font-size:20px;font-weight:800">86%</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Input field</h3>
+          <p class="sub">Focus moves the border to navy — no glow, no off-system focus ring color.</p>
+          <div class="component-demo">
+            <label class="eyebrow" for="ds-demo-input">Variance Threshold</label>
+            <input id="ds-demo-input" class="setting-input" value="$250" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ── PATTERNS ──────────────────────────────────────────────────── -->
+      <section class="ds-section" id="patterns">
+        <h2>Patterns</h2>
+        <p class="lead">Recurring behaviors that combine the primitives above.</p>
+        <div class="ds-card">
+          <h3>Copy-then-act reminder</h3>
+          <p class="sub">When a workflow requires copying content before the next step, the next-step button blinks accent ↔ flag-red until clicked, then settles. It is the one sanctioned use of motion.</p>
+          <div class="component-demo">
+            <button class="primary-action blink-cta">Mark Memo Sent</button>
+          </div>
+          <p class="t-meta" style="margin:0"><code>.blink-cta</code> — <code>@keyframes blink-cta</code>, 0.7s stepped loop.</p>
+        </div>
+        <div class="ds-card">
+          <h3>Two-column work layout</h3>
+          <p class="sub">List-plus-detail is the dominant page shape: a queue on the left, the selected record's detail on the right. <code>.wide-left</code> flips the emphasis when the list is the primary object.</p>
+        </div>
+      </section>
+
+      <!-- ── ACCESSIBILITY ─────────────────────────────────────────────── -->
+      <section class="ds-section" id="a11y">
+        <h2>Accessibility</h2>
+        <p class="lead">DSN-005: every text/background pairing meets WCAG AA. The notable consequences:</p>
+        <div class="ds-card">
+          <ul style="margin:0;padding-left:20px;font-size:14.5px;line-height:1.7">
+            <li><b>Eyebrows shift by surface.</b> Golden-orange eyebrows pass on navy (~6.5:1) but fail on white, so light-surface eyebrows use <code>on-surface-secondary</code> (#374151, 9.3:1).</li>
+            <li><b>Status pills carry text + fill,</b> never color alone — "Ready" reads as a word, not just a green shape.</li>
+            <li><b>Focus is visible.</b> Inputs move their border to navy; nav and segmented items expose a <code>:focus-visible</code> state.</li>
+            <li><b>Interactive targets</b> hold a ≥40px min-height (buttons) / 42px (nav) / 32px (segments) for comfortable hit areas.</li>
+            <li><b>Motion is minimal and purposeful</b> — the single blink pattern signals a required action, not decoration.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ── DEFENSIVE STYLING ─────────────────────────────────────────── -->
+      <section class="ds-section" id="resilience">
+        <h2>Defensive styling</h2>
+        <p class="lead">The masthead once shipped unreadable <code>code</code> chips — a light fill with no declared text color, inheriting white from the navy band. The lesson is structural, not a matter of being more careful next time: make the bug impossible to express, then let tooling catch what still slips through.</p>
+
+        <div class="ds-card">
+          <h3>The rule</h3>
+          <p class="sub">Anything that sets a <code>background</code> must also declare its own <code>color</code>. An element that fills its background but inherits its ink is making a bet about its surroundings — and that bet breaks the moment it moves to a different surface.</p>
+          <div class="do-dont">
+            <div class="col do">
+              <h4>Do</h4>
+              <ul>
+                <li>Declare <code>color</code> on every filled or bordered element.</li>
+                <li>Let surfaces <em>provide</em> ink; let primitives <em>consume</em> it.</li>
+                <li>Extend the existing <code>--color-on-*</code> pairs to every primitive.</li>
+              </ul>
+            </div>
+            <div class="col dont">
+              <h4>Don't</h4>
+              <ul>
+                <li>Rely on inherited <code>color</code> for anything with a background.</li>
+                <li>Hard-code a per-instance override for one placement (e.g. "fix it on the hero").</li>
+                <li>Assume a component only ever lands on a light surface.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <h3>Contextual tokens — surfaces provide, primitives consume</h3>
+          <p class="sub">Define foreground/background pairs on each surface context. Primitives reference the contextual variable, so they render correctly anywhere with zero per-instance overrides. This generalizes the <code>--color-on-primary</code> / <code>--color-on-accent</code> convention the palette already uses.</p>
+          <pre class="ds-code"><span class="cmt">/* Surfaces PROVIDE the ink */</span>
+<span class="tok">:root</span>,
+<span class="tok">.surface-light</span> { --fg: #111827; --chip-bg: #f3f4f6; --chip-fg: #11133f; }
+<span class="tok">.surface-dark</span>  { --fg: #ffffff; --chip-bg: rgba(255,255,255,.14); --chip-fg: #ffffff; }
+
+<span class="cmt">/* Primitives CONSUME it — placement-agnostic */</span>
+<span class="tok">code</span> { color: var(--chip-fg); background: var(--chip-bg); }</pre>
+          <p class="t-meta" style="margin:0">A <code>&lt;code&gt;</code> styled this way is correct on light or dark with no overrides. The masthead bug could not have occurred.</p>
+        </div>
+
+        <div class="ds-card">
+          <h3>Catch it automatically</h3>
+          <p class="sub">Prevention by construction removes most occurrences; these guards remove the rest, so correctness doesn't depend on review-by-eye.</p>
+          <table class="ds-table">
+            <thead><tr><th style="width:180px">Guard</th><th>Catches</th><th>When</th></tr></thead>
+            <tbody>
+              <tr><td><b>Stylelint</b><br><span class="mono" style="color:var(--color-on-surface-muted)">background ⇒ color rule</span></td><td>Any <code>background</code> declared without a paired <code>color</code>.</td><td>As you type / pre-commit</td></tr>
+              <tr><td><b>axe-core</b><br><span class="mono" style="color:var(--color-on-surface-muted)">Playwright or pa11y-ci</span></td><td>Rendered contrast failures — incl. white-on-light-gray — on built pages.</td><td>CI, fails the build</td></tr>
+              <tr><td><b>Lighthouse CI</b></td><td>Contrast + broader a11y regressions as a lighter backstop.</td><td>CI / preview deploys</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── ASTRO NOTES ───────────────────────────────────────────────── -->
+      <section class="ds-section" id="astro">
+        <h2>Astro notes</h2>
+        <p class="lead">How this system is meant to live in an Astro codebase — where the contrast bug recurs most, because components are authored in isolation and composed somewhere else entirely.</p>
+
+        <div class="ds-card">
+          <h3>Where tokens live</h3>
+          <p class="sub">Keep the token layer global; scope only component-specific rules.</p>
+          <ul style="margin:0;padding-left:20px;font-size:14.5px;line-height:1.7">
+            <li>Put the <code>:root</code> tokens and contextual <code>.surface-*</code> pairs in one global stylesheet imported once in the root layout — <em>not</em> in a scoped <code>&lt;style&gt;</code> block, or the custom properties won't reliably reach every component.</li>
+            <li>Astro scopes each component's <code>&lt;style&gt;</code> by default, but inheritance (<code>color</code>, <code>font</code>) and custom properties still cascade through. Scoping does not protect you from the inherited-ink bug.</li>
+            <li>Reach for <code>&lt;style is:global&gt;</code> only for the token layer; keep everything else scoped.</li>
+          </ul>
+        </div>
+
+        <div class="ds-card">
+          <h3>A Surface component sets the context</h3>
+          <p class="sub">Wrap any dark (or otherwise non-default) region in a component that switches the contextual variables. Primitives dropped inside it adapt automatically.</p>
+          <pre class="ds-code"><span class="cmt">--- Surface.astro ---</span>
+const { variant = <span class="tok">"light"</span> } = Astro.props;
+<span class="cmt">// &lt;div class={`surface-${variant}`}&gt;&lt;slot /&gt;&lt;/div&gt;</span>
+
+<span class="cmt">--- usage ---</span>
+&lt;Surface variant=<span class="tok">"dark"</span>&gt;
+  &lt;Masthead /&gt;   <span class="cmt">/* Code, Pill, Card inside all read --chip-fg */</span>
+&lt;/Surface&gt;</pre>
+          <p class="t-meta" style="margin:0">The primitive never knows its surface; the surface declares the ink. That inversion is what makes correctness independent of the prompt.</p>
+        </div>
+
+        <div class="ds-card">
+          <h3>Enforce on the build output</h3>
+          <p class="sub">Astro compiles to static HTML, which is ideal for automated auditing.</p>
+          <ul style="margin:0;padding-left:20px;font-size:14.5px;line-height:1.7">
+            <li>Run <code>stylelint</code> over <code>.astro</code> and <code>.css</code> files (pre-commit + CI).</li>
+            <li>After <code>astro build</code>, run <code>@axe-core/playwright</code> or <code>pa11y-ci</code> against <code>dist/</code> and fail the pipeline on any contrast violation.</li>
+            <li>This is the guard that makes the bug impossible to ship, regardless of how any single component was generated.</li>
+          </ul>
+        </div>
+      </section>
+
+      <p class="t-meta" style="text-align:center;margin-top:40px">
+        Source of truth: <code>src/styles.css</code> · Specification: <code>Design.md</code> · Rendered: <code>design-system.html</code>
+      </p>
+    </div>
+  </body>
+</html>

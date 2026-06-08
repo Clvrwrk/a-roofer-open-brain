@@ -1,218 +1,64 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
-import {
-  cadences,
-  departments,
-  formatApproval,
-  formatStatus,
-  getCadence,
-  getDepartment,
-  workDefinitions,
-} from "@lib/cadence";
-import { loadProductSurface } from "@lib/product-data";
+import LiveMetricGrid from "../components/live/LiveMetricGrid.astro";
+import LiveWorkQueue from "../components/live/LiveWorkQueue.astro";
+import { departments, loadCommandCenterSurface } from "@lib/live-work";
 
-const defaultWork = workDefinitions.find((work) => work.status === "needs_review") ?? workDefinitions[0];
-const departmentParam = Astro.url.searchParams.get("department");
-const initialDepartment = departments.some((department) => department.id === departmentParam) ? departmentParam : "all";
-const productSurface = await loadProductSurface();
-const productStatusLabel =
-  productSurface.status === "live"
-    ? "Supabase live"
-    : productSurface.status === "degraded"
-      ? "Supabase degraded"
-      : "Supabase pending";
-const productTone = productSurface.status === "live" ? "ready" : "watch";
-const productGeneratedAt = new Intl.DateTimeFormat("en-US", {
-  month: "short",
+const surface = await loadCommandCenterSurface();
+const generatedAt = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-}).format(new Date(productSurface.generatedAt));
+  month: "short",
+}).format(new Date(surface.generatedAt));
+const tone = surface.status === "live" ? "ready" : surface.status === "degraded" ? "watch" : "blocked";
 ---
 
-<AppShell title="Human Approval Queue" eyebrow="Phase 1 Walking Skeleton" activePage="command">
-  <section class="product-surface" aria-label="Product and pricing data surface">
+<AppShell title="Human Approval Queue" eyebrow="Live Command Center" activePage="command" surface={surface}>
+  <section class="live-department-hero" aria-label="Live command center summary">
     <div class="surface-heading">
       <div>
-        <p class="eyebrow">Product File</p>
-        <h2>Pricing, invoice gates, and catalog readiness</h2>
+        <p class="eyebrow">Dashboard Source Of Truth</p>
+        <h2>All human decisions routed from live operational source rows.</h2>
       </div>
       <div class="surface-meta">
-        <span class="runtime-pill" data-tone={productTone}>
+        <span class="runtime-pill" data-tone={tone}>
           <span class="signal-dot" aria-hidden="true"></span>
-          {productStatusLabel}
+          {surface.status}
         </span>
-        <span>{productSurface.project.ref}</span>
-        <span>{productGeneratedAt}</span>
+        <span>{generatedAt}</span>
       </div>
     </div>
 
-    <div class="product-grid">
-      {
-        productSurface.sources.map((source) => (
-          <article class="product-card" data-source-status={source.status}>
-            <div class="product-card-heading">
-              <div>
-                <strong>{source.label}</strong>
-                <span>{source.department} · {source.rpc}</span>
-              </div>
-              <span class={`health-badge health-${source.status === "ok" ? "ready" : source.status === "error" ? "blocked" : "watch"}`}>
-                {source.status}
-              </span>
-            </div>
+    {
+      surface.errors.length > 0 && (
+        <div class="accounting-boundary-notice">
+          <strong>Live data issue</strong>
+          <span>{surface.errors.join(" ")}</span>
+        </div>
+      )
+    }
 
-            <div class="product-primary-metric">
-              <span>{source.primaryMetric.value}</span>
-              <small>{source.primaryMetric.label}</small>
-            </div>
-
-            <ul class="product-metric-list" aria-label={`${source.label} metrics`}>
-              {
-                source.metrics.length > 0 ? (
-                  source.metrics.map((metric) => (
-                    <li>
-                      <span>{metric.label}</span>
-                      <strong>{metric.value}</strong>
-                    </li>
-                  ))
-                ) : (
-                  <li>
-                    <span>Payload</span>
-                    <strong>{source.payloadKind}</strong>
-                  </li>
-                )
-              }
-            </ul>
-
-            <p class="field-coverage">
-              {
-                source.fieldCoverage.length > 0
-                  ? `Fields: ${source.fieldCoverage.join(", ")}`
-                  : source.errorMessage ?? "Field coverage pending live configuration."
-              }
-            </p>
-          </article>
-        ))
-      }
-    </div>
+    <LiveMetricGrid metrics={surface.metrics} />
   </section>
 
-  <section class="workbench" aria-label="Agent work queue">
-    <div class="queue-panel">
-      <div class="filter-bar" aria-label="Queue filters">
-        <div class="segmented-control" role="tablist" aria-label="Cadence filter">
-          <button class="segment is-active" type="button" data-cadence-filter="all">All</button>
-          {cadences.map((cadence) => <button class="segment" type="button" data-cadence-filter={cadence.id}>{cadence.label}</button>)}
-        </div>
-
-        <label class="select-label">
-          <span>Department</span>
-          <select data-department-filter>
-            <option value="all" selected={initialDepartment === "all"}>All departments</option>
-            {departments.map((department) => <option value={department.id} selected={initialDepartment === department.id}>{department.label}</option>)}
-          </select>
-        </label>
-      </div>
-
-      <div class="queue-table-wrap">
-        <table class="queue-table">
-          <thead>
-            <tr>
-              <th scope="col">Task</th>
-              <th scope="col">Owner</th>
-              <th scope="col">Cadence</th>
-              <th scope="col">Next run</th>
-              <th scope="col">Status</th>
-              <th scope="col">Approval</th>
-              <th scope="col">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {
-              workDefinitions.map((work) => {
-                const department = getDepartment(work.department);
-                const cadence = getCadence(work.cadence);
-
-                return (
-                  <tr
-                    class:list={["work-row", work.id === defaultWork.id && "is-selected"]}
-                    data-work-row
-                    data-work-id={work.id}
-                    data-department={work.department}
-                    data-cadence={work.cadence}
-                    data-title={work.title}
-                    data-owner={work.owner}
-                    data-status={formatStatus(work.status)}
-                    data-approval={formatApproval(work.approval)}
-                    data-evidence={work.evidence}
-                    data-action={work.action}
-                    data-detail={work.detail}
-                    data-audit={work.auditTrail.join("|")}
-                    tabindex="0"
-                  >
-                    <td>
-                      <strong>{work.title}</strong>
-                      <span>{department?.label} · {work.evidence}</span>
-                    </td>
-                    <td>{work.owner}</td>
-                    <td>{cadence?.label}</td>
-                    <td>{work.nextRun}</td>
-                    <td><span class={`status-badge status-${work.status}`}>{formatStatus(work.status)}</span></td>
-                    <td>{formatApproval(work.approval)}</td>
-                    <td><button class="row-action" type="button" data-row-action>{work.action}</button></td>
-                  </tr>
-                );
-              })
-            }
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <aside class="detail-panel" aria-label="Selected work detail">
-      <div class="detail-heading">
-        <p class="eyebrow">Selected Run</p>
-        <h2 data-detail-title>{defaultWork.title}</h2>
-        <span class={`status-badge status-${defaultWork.status}`} data-detail-status>{formatStatus(defaultWork.status)}</span>
-      </div>
-
-      <dl class="detail-list">
-        <div>
-          <dt>Owner</dt>
-          <dd data-detail-owner>{defaultWork.owner}</dd>
-        </div>
-        <div>
-          <dt>Approval</dt>
-          <dd data-detail-approval>{formatApproval(defaultWork.approval)}</dd>
-        </div>
-        <div>
-          <dt>Evidence</dt>
-          <dd data-detail-evidence>{defaultWork.evidence}</dd>
-        </div>
-      </dl>
-
-      <div class="reasoning-block">
-        <h3>Agent Reasoning</h3>
-        <p data-detail-copy>{defaultWork.detail}</p>
-      </div>
-
-      <div class="audit-block">
-        <h3>Audit Trail</h3>
-        <ol data-detail-audit>
-          {defaultWork.auditTrail.map((item) => <li>{item}</li>)}
-        </ol>
-      </div>
-
-      <div class="approval-actions" aria-label="Approval actions">
-        <button class="button button-primary" type="button" data-approval-action="approve">Approve</button>
-        <button class="button button-secondary" type="button" data-approval-action="reject">Reject</button>
-      </div>
-
-      <p class="action-note" data-action-note>
-        Phase 1 records the operator intent in the browser only. Runtime writes arrive in the cadence engine phase.
-      </p>
-    </aside>
+  <section class="department-route-grid" aria-label="Department dashboards">
+    {
+      departments.map((department) => {
+        const count = surface.items.filter((item) => item.department === department.id).length;
+        const blocked = surface.items.filter((item) => item.department === department.id && item.status === "blocked").length;
+        return (
+          <a class="department-route-card" href={`/${department.id}`}>
+            <span>{department.agent}</span>
+            <strong>{department.label}</strong>
+            <small>{count} live items · {blocked} blocked</small>
+          </a>
+        );
+      })
+    }
   </section>
+
+  <LiveWorkQueue items={surface.items} emptyLabel="No live source-backed work items are open across departments." />
 
   <script src="/src/scripts/command-center.ts"></script>
 </AppShell>

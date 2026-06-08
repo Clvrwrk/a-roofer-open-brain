@@ -6,10 +6,10 @@ The v1 default for Cleverwork. The **brain database** is a dedicated managed Sup
 
 ## What lives here
 
-- `deploy-dashboard.sh` — trigger a Coolify deploy of the Astro dashboard (via `COOLIFY_DEPLOY_HOOK`).
-- `dashboard/` — current local-first admin viewport for Pro Exteriors workflow review.
+- `deploy-dashboard.sh` — trigger a Coolify deploy of the Astro SSR Command Center in `app/command-center`.
+- `dashboard/` — archived/local-first admin viewport for Pro Exteriors workflow review; production lives in `app/command-center`.
 - `slack/` — per-client Slack app manifests and channel plans.
-- Per-client dashboard env is set **in Coolify**, not in the repo: `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`. Never the service-role key.
+- Per-client Command Center env is set **in Coolify**, not in the repo. The Astro server uses `SUPABASE_URL`/`PUBLIC_SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY` server-side only; browser code never receives the service-role key.
 
 ## Topology
 
@@ -24,7 +24,7 @@ Slack workspace ──▶ Open Brain Slack app (@ob-conductor v1)
         ▼                         │
    AccuLynx (during-job) ──mirror──▶ Supabase Postgres + pgvector  (the brain; RLS service_role only)
                                         ▲
-   Hostinger KVM · Coolify · Astro dashboard (read path via anon key)
+   Hostinger KVM · Coolify · Astro SSR Command Center (server-side brain reads)
 ```
 
 GHL owns lead → appointment → nurture (pre/post-contract). AccuLynx owns the job during production and is **mirrored into Supabase** with back-links (`job.external_ref` + `job.source_system`). The v1 Slack app uses `@ob-conductor` as the installed bot and routes to logical agent roles inside review packets. Computer-use (Orgo.ai) is the fallback rung only where a tool has no CLI/MCP/API.
