@@ -1,7 +1,7 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
 import LiveMetricGrid from "../components/live/LiveMetricGrid.astro";
-import LiveWorkQueue from "../components/live/LiveWorkQueue.astro";
+import HumanUnblockerDashboard from "../components/unblocker/HumanUnblockerDashboard.astro";
 import { departments, loadCommandCenterSurface } from "@lib/live-work";
 
 const surface = await loadCommandCenterSurface();
@@ -58,7 +58,7 @@ const tone = surface.status === "live" ? "ready" : surface.status === "degraded"
     }
   </section>
 
-  <LiveWorkQueue items={surface.items} emptyLabel="No live source-backed work items are open across departments." />
+  <HumanUnblockerDashboard items={surface.items} emptyLabel="No live source-backed human blockers are open across departments." />
 
   <script src="/src/scripts/command-center.ts"></script>
 </AppShell>

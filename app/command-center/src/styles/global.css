@@ -922,6 +922,180 @@ main {
   background: var(--primary-dark);
 }
 
+.button-ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.button-ghost:hover {
+  background: var(--surface-alt);
+}
+
+.button-danger {
+  background: var(--error-surface);
+  color: var(--error-text);
+}
+
+.button-danger:hover {
+  background: var(--color-error);
+  color: var(--color-on-surface-dark);
+}
+
+.human-loop-system,
+.human-queue-panel,
+.human-decision-panel,
+.human-sop-panel,
+.accounting-full-source-detail {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.human-loop-system,
+.human-sop-panel,
+.accounting-full-source-detail {
+  margin-bottom: var(--space-6);
+}
+
+.human-loop-system {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.human-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.human-contract-grid div,
+.human-transparency-list div,
+.human-transparency-row dl div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.human-contract-grid dt,
+.human-transparency-list dt,
+.human-transparency-row dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.human-contract-grid dd,
+.human-transparency-list dd,
+.human-transparency-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.human-lane-table {
+  min-width: 1100px;
+}
+
+.human-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: var(--space-5);
+  align-items: start;
+  margin-bottom: var(--space-6);
+}
+
+.human-decision-panel {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.human-unblocker-table {
+  min-width: 1360px;
+}
+
+.human-window-note {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.human-unblocker-table td {
+  vertical-align: top;
+}
+
+.human-transparency-row {
+  max-width: 320px;
+}
+
+.human-transparency-row summary,
+.human-evidence-expander summary,
+.accounting-full-source-detail > summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.human-transparency-row dl,
+.human-transparency-list,
+.human-evidence-expander ol {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.human-evidence-expander {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.human-evidence-expander ol {
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+}
+
+.human-action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.human-sop-table {
+  min-width: 920px;
+}
+
+.accounting-full-source-detail {
+  padding: var(--space-4);
+}
+
+.accounting-full-source-detail > summary {
+  list-style-position: inside;
+}
+
+.accounting-full-source-detail .accounting-workbench {
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+}
+
 .action-note {
   display: grid;
   gap: 6px;
@@ -1921,6 +2095,7 @@ main {
   .branch-gap-strip,
   .accounting-metric-grid,
   .accounting-dashboard-grid,
+  .human-contract-grid,
   .live-metric-grid,
   .department-route-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1931,6 +2106,7 @@ main {
   .monitor-grid,
   .snapshot-layout,
   .accounting-workbench,
+  .human-workbench,
   .live-workbench {
     grid-template-columns: 1fr;
   }
@@ -1943,6 +2119,7 @@ main {
   .gap-detail-panel,
   .snapshot-dashboard,
   .accounting-decision-panel,
+  .human-decision-panel,
   .live-decision-panel {
     position: static;
   }
@@ -2058,6 +2235,8 @@ main {
   .snapshot-activity-list,
   .accounting-metric-grid,
   .accounting-dashboard-grid,
+  .human-contract-grid,
+  .human-action-grid,
   .live-metric-grid,
   .department-route-grid {
     grid-template-columns: 1fr;

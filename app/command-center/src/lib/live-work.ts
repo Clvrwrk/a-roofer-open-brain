@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildDecisionAuditEvent } from "@lib/agent-api";
 import {
@@ -87,6 +88,31 @@ interface AbcReviewRow {
   created_at: string | null;
 }
 
+interface InvoiceDocumentRow {
+  id: string;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  original_filename: string | null;
+  payment_status: string | null;
+  payment_blocked_reason: string | null;
+  gate_override: boolean | null;
+  uploaded_at: string | null;
+  extraction_status: string | null;
+}
+
+interface AbcInvoiceRow {
+  invoice_number: string;
+  invoice_id: string | null;
+  order_number: string | null;
+  order_name: string | null;
+  invoice_date: string | null;
+  purchase_order_number: string | null;
+  is_credit_memo: boolean | null;
+  original_invoice_reference: string | null;
+  total_amount: number | string | null;
+  abc_fetched_at: string | null;
+}
+
 interface CrmPipelineRow {
   id: number | string;
   acculynx_job_id: string | null;
@@ -103,7 +129,27 @@ interface CrmPipelineRow {
   parent_lead_source: string | null;
   sub_lead_source: string | null;
   insurance_company: string | null;
+  insurance_claim_filed?: boolean | null;
+  insurance_claim_number?: string | null;
   initial_appointment_start: string | null;
+  client_job_number?: string | null;
+  client_name?: string | null;
+}
+
+interface AccountingJobRow {
+  id: number | string;
+  acculynx_job_id: string | null;
+  job_name: string | null;
+  current_milestone: string | null;
+  primary_salesperson: string | null;
+  contract_amount: number | string | null;
+  primary_estimate_amount: number | string | null;
+  balance_due: number | string | null;
+  approved_date: string | null;
+  milestone_date: string | null;
+  updated_at: string | null;
+  client_name: string | null;
+  client_job_number: string | null;
 }
 
 interface AccuLynxJobRow {
@@ -189,6 +235,20 @@ interface DashboardActionInsert {
   source_pk: string;
 }
 
+export interface LiveDecisionContext {
+  actionIntent?: string | null;
+  actionLabel?: string | null;
+  nextStep?: string | null;
+}
+
+interface DecisionMemoryWrite {
+  status: "written" | "skipped" | "failed";
+  memoryId?: string;
+  thoughtId?: string;
+  auditEventId?: string;
+  error?: string;
+}
+
 const MONEY_FORMATTER = new Intl.NumberFormat("en-US", { currency: "USD", maximumFractionDigits: 0, style: "currency" });
 const NUMBER_FORMATTER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
@@ -208,19 +268,19 @@ const DEPARTMENT_META: Record<DepartmentId, Pick<LiveDepartmentSurface, "primary
     title: "Executive",
   },
   marketing: {
-    primaryHuman: "Marketing owner",
+    primaryHuman: "Chris",
     sourceSummary: "Marketing dashboard, hail heat-zone coverage, call priority, property enrichment, and proof assets.",
     subtitle: "Where to activate demand, what proof is safe to publish, and which markets need better data.",
     title: "Marketing",
   },
   operations: {
-    primaryHuman: "Operations lead",
+    primaryHuman: "Roberto",
     sourceSummary: "AccuLynx job mirror, fleet compliance, variance alerts, maintenance, and job readiness records.",
     subtitle: "Job readiness, crew/fleet blockers, material confidence, and daily execution risk.",
     title: "Operations",
   },
   sales: {
-    primaryHuman: "Sales manager",
+    primaryHuman: "Roberto",
     sourceSummary: "CRM pipeline, call priority, AccuLynx leads/prospects, hail demand signals, and insurance context.",
     subtitle: "Hot leads, stale opportunities, claim follow-up, and high-value call priorities.",
     title: "Sales",
@@ -323,6 +383,14 @@ async function safeCount(client: SupabaseClient, table: string, query?: (builder
   return count ?? 0;
 }
 
+async function optionalCount(client: SupabaseClient, table: string, query?: (builder: any) => any) {
+  try {
+    return { count: await safeCount(client, table, query), error: null as string | null };
+  } catch (error) {
+    return { count: null as number | null, error: error instanceof Error ? error.message : `${table}: count failed` };
+  }
+}
+
 async function safeRows<T>(
   client: SupabaseClient,
   table: string,
@@ -371,17 +439,158 @@ function buildAccountingItems(reviewRows: AbcReviewRow[]) {
   });
 }
 
+function buildInvoiceGateItems(invoiceRows: InvoiceDocumentRow[]) {
+  return invoiceRows.map((row) => {
+    const invoice = compact(row.invoice_number, row.id);
+    const blocked = Boolean(row.payment_blocked_reason);
+    const priority: LiveWorkPriority = blocked ? "critical" : row.extraction_status === "not_attempted" ? "high" : "normal";
+    return item({
+      action: blocked ? "Clear payment block" : "Verify invoice gate",
+      approval: "before_write",
+      auditTrail: [
+        "Source row is live in invoice_documents.",
+        "Invoice cannot be released for payment until pricing and evidence gates are clear.",
+        "QuickBooks remains isolated; Lucinda confirms any QB-facing fact before it enters the workflow.",
+      ],
+      auditorRequired: blocked,
+      cadence: "daily",
+      department: "accounting",
+      detail: blocked
+        ? compact(row.payment_blocked_reason, "Payment is blocked by an invoice gate.")
+        : `${compact(row.payment_status, "payment status pending")} invoice document is waiting for pricing/evidence verification.`,
+      evidence: `${invoice} / ${compact(row.original_filename, "file pending")} / ${compact(row.extraction_status, "extraction pending")}`,
+      href: `/accounting/invoices?invoice=${encodeURIComponent(invoice)}`,
+      nextRun: formatShortDate(row.uploaded_at, "Ready now"),
+      owner: "@ob-accounting",
+      primaryHuman: "Lucinda",
+      priority,
+      sourceLabel: "Invoice document",
+      sourcePk: row.id,
+      sourceTable: "invoice_documents",
+      status: statusFromPriority(priority),
+      title: `Invoice gate / ${invoice}`,
+      valueAtRisk: 0,
+      workflow: "invoice-payment-gate",
+      workKey: `accounting:invoice-gate:${row.id}`,
+    });
+  });
+}
+
+function buildCreditMemoIssuedItems(creditMemoRows: AbcInvoiceRow[]) {
+  return creditMemoRows.map((row) => {
+    const value = Math.abs(toNumber(row.total_amount));
+    const invoice = compact(row.invoice_number, compact(row.invoice_id, "credit-memo"));
+    const priority = priorityFromValue(value, 500, 5_000);
+    return item({
+      action: "Match credit memo",
+      approval: "before_write",
+      auditTrail: [
+        "Source row is live in abc_invoices and marked is_credit_memo.",
+        "Lucinda verifies the credit memo against the request/original invoice before releasing payment gates.",
+        "Agent should attach the original PDF invoice, original order, and matching price agreement when routing the packet.",
+      ],
+      auditorRequired: value >= 5_000,
+      cadence: "daily",
+      department: "accounting",
+      detail: `${invoice} is an ABC credit memo for ${formatMoney(value)}. Match it to the open invoice/request and release the next gate only after Lucinda verifies it.`,
+      evidence: `${compact(row.order_name, "order name pending")} / ${compact(row.purchase_order_number, "PO pending")} / ${formatMoney(value)}`,
+      href: `/accounting/credit-memos/${encodeURIComponent(invoice)}`,
+      nextRun: formatShortDate(row.invoice_date, "Ready now"),
+      owner: "@ob-accounting",
+      primaryHuman: "Lucinda",
+      priority,
+      sourceLabel: "ABC credit memo invoice",
+      sourcePk: invoice,
+      sourceTable: "abc_invoices",
+      status: statusFromPriority(priority),
+      title: `Credit memo received / ${invoice}`,
+      valueAtRisk: value,
+      workflow: "credit-memo-issued",
+      workKey: `accounting:credit-memo-issued:${invoice}`,
+    });
+  });
+}
+
+function buildJobCostingItems(jobRows: AccountingJobRow[]) {
+  return jobRows.map((row) => {
+    const value = Math.max(toNumber(row.contract_amount), toNumber(row.primary_estimate_amount), toNumber(row.balance_due));
+    const priority = row.current_milestone === "completed" || row.current_milestone === "invoiced" ? "high" : "normal";
+    const jobId = String(row.acculynx_job_id ?? row.id);
+    return item({
+      action: "Assemble job packet",
+      approval: "before_write",
+      auditTrail: [
+        "Source row is live in crm_pipeline.",
+        "Roberto is the job-costing gatekeeper before agents archive the connected job packet.",
+        "Profit guardrails are not guessed; the dashboard preserves facts for the two-year review.",
+      ],
+      auditorRequired: row.current_milestone === "completed" || row.current_milestone === "invoiced",
+      cadence: "daily",
+      department: "accounting",
+      detail: `${compact(row.current_milestone, "milestone pending")} job is ready for connected paperwork, material-cost confidence, and post-job review evidence.`,
+      evidence: `${compact(row.client_job_number, "job number pending")} / ${compact(row.client_name, compact(row.job_name, "client pending"))} / ${formatMoney(value)}`,
+      href: `/accounting/job-costing?job=${encodeURIComponent(jobId)}`,
+      nextRun: formatShortDate(row.updated_at ?? row.milestone_date ?? row.approved_date, "Ready now"),
+      owner: "@ob-accounting",
+      primaryHuman: "Roberto",
+      priority,
+      sourceLabel: "CRM pipeline",
+      sourcePk: String(row.id),
+      sourceTable: "crm_pipeline",
+      status: statusFromPriority(priority),
+      title: `Job costing / ${compact(row.job_name, jobId)}`,
+      valueAtRisk: value,
+      workflow: "job-costing-review",
+      workKey: `accounting:job-costing:${row.id}`,
+    });
+  });
+}
+
 async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepartmentSurface> {
-  const [reviewCount, openReviewCount, actionCount, creditMemoCount, reviewRows, gapSurface] = await Promise.all([
+  const [
+    reviewCount,
+    openReviewCount,
+    actionCount,
+    creditMemoPacketCount,
+    invoiceGateCount,
+    creditMemoIssuedCount,
+    jobCostingCount,
+    reviewRows,
+    invoiceRows,
+    creditMemoRows,
+    jobCostingRows,
+    gapSurface,
+  ] = await Promise.all([
     safeCount(client, "abc_review_queue"),
     safeCount(client, "abc_review_queue", (query) => query.eq("resolved", false)),
     safeCount(client, "dashboard_action_log", (query) => query.eq("department", "accounting")),
     safeCount(client, "credit_memo_requests"),
+    safeCount(client, "invoice_documents", (query) => query.or("payment_status.neq.paid,payment_blocked_reason.not.is.null")),
+    safeCount(client, "abc_invoices", (query) => query.eq("is_credit_memo", true)),
+    safeCount(client, "crm_pipeline", (query) => query.in("current_milestone", ["approved", "completed", "invoiced"])),
     safeRows<AbcReviewRow>(
       client,
       "abc_review_queue",
       "id,queue_type,invoice_number,invoice_date,customer_po,job_name,ext_price,issue_description,shipping_city,shipping_state,resolved,created_at",
       (query) => query.eq("resolved", false).order("ext_price", { ascending: false, nullsFirst: false }).limit(50),
+    ),
+    safeRows<InvoiceDocumentRow>(
+      client,
+      "invoice_documents",
+      "id,invoice_number,invoice_date,original_filename,payment_status,payment_blocked_reason,gate_override,uploaded_at,extraction_status",
+      (query) => query.or("payment_status.neq.paid,payment_blocked_reason.not.is.null").order("uploaded_at", { ascending: false, nullsFirst: false }).limit(50),
+    ),
+    safeRows<AbcInvoiceRow>(
+      client,
+      "abc_invoices",
+      "invoice_number,invoice_id,order_number,order_name,invoice_date,purchase_order_number,is_credit_memo,original_invoice_reference,total_amount,abc_fetched_at",
+      (query) => query.eq("is_credit_memo", true).order("invoice_date", { ascending: false, nullsFirst: false }).limit(50),
+    ),
+    safeRows<AccountingJobRow>(
+      client,
+      "crm_pipeline",
+      "id,acculynx_job_id,job_name,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,approved_date,milestone_date,updated_at,client_name,client_job_number",
+      (query) => query.in("current_milestone", ["approved", "completed", "invoiced"]).order("updated_at", { ascending: false, nullsFirst: false }).limit(50),
     ),
     loadAgreementGapSurface(),
   ]);
@@ -389,6 +598,9 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
   const gapValue = gapSurface.totals.absoluteVariance;
   const items = [
     ...buildAccountingItems(reviewRows),
+    ...buildInvoiceGateItems(invoiceRows),
+    ...buildCreditMemoIssuedItems(creditMemoRows),
+    ...buildJobCostingItems(jobCostingRows),
     ...gapSurface.rows.slice(0, 25).map((row) => {
       const value = Math.abs(row.variance ?? 0) * Math.max(row.quantity ?? 1, 1);
       const priority = row.severity === "critical" ? "critical" : row.severity === "blocked" ? "high" : "normal";
@@ -432,7 +644,10 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
       metric("Open ABC review rows", formatNumber(openReviewCount), `${formatNumber(reviewCount)} total rows`, openReviewCount ? "review" : "ready", "/accounting/review-queue"),
       metric("Review value in first 50", formatMoney(reviewValue), "Open rows sorted by value at risk", reviewValue ? "critical" : "ready"),
       metric("Price gap rows", formatNumber(gapSurface.totals.gapRows), `${formatMoney(gapValue)} absolute variance`, gapSurface.totals.gapRows ? "review" : "ready", "/accounting/price-agreement-gaps"),
-      metric("Accounting actions logged", formatNumber(actionCount), `${formatNumber(creditMemoCount)} credit memo packets`, "info", "/accounting/audit-log"),
+      metric("Invoice gates", formatNumber(invoiceGateCount), "Unpaid or blocked invoice documents", invoiceGateCount ? "critical" : "ready", "/accounting/invoices"),
+      metric("ABC credit memos", formatNumber(creditMemoIssuedCount), `${formatNumber(creditMemoPacketCount)} tracked request packets`, creditMemoIssuedCount ? "review" : "ready", "/accounting/credit-memos"),
+      metric("Job packets", formatNumber(jobCostingCount), "Approved, completed, or invoiced jobs", jobCostingCount ? "review" : "ready", "/accounting/job-costing"),
+      metric("Accounting actions logged", formatNumber(actionCount), "Durable dashboard decisions", "info", "/accounting/audit-log"),
     ],
     status: gapSurface.status === "degraded" ? "degraded" : "live",
   };
@@ -442,33 +657,41 @@ function buildSalesItems(pipelineRows: CrmPipelineRow[], callRows: CallPriorityR
   const pipelineItems = pipelineRows.map((row) => {
     const value = Math.max(toNumber(row.contract_amount), toNumber(row.primary_estimate_amount));
     const staleDays = toNumber(row.last_touched_days);
-    const priority: LiveWorkPriority = staleDays >= 14 || value >= 50_000 ? "high" : "normal";
+    const milestone = compact(row.current_milestone, "pipeline");
+    const isApproved = milestone === "approved";
+    const isClaim = Boolean(row.insurance_company || row.insurance_claim_number || row.insurance_claim_filed);
+    const priority: LiveWorkPriority = isApproved || staleDays >= 14 || value >= 50_000 ? "high" : "normal";
+    const workflow = isApproved ? "contract-deposit-gate" : isClaim ? "claim-intake" : "sales-follow-up";
     return item({
-      action: "Open follow-up",
+      action: isApproved ? "Verify contract/deposit" : isClaim ? "Validate claim intake" : "Open follow-up",
       approval: "before_external",
       auditTrail: [
         "Source row is live in crm_pipeline.",
         "Customer outreach must be human approved before external send.",
-        "Conductor mirrors approved follow-up packets to Slack.",
+        "Conductor mirrors approved follow-up, contract, and field-info packets to Slack.",
       ],
-      auditorRequired: Boolean(row.insurance_company),
+      auditorRequired: Boolean(isClaim || isApproved),
       cadence: "daily",
       department: "sales",
-      detail: `${compact(row.current_milestone, "pipeline")} lead last touched ${formatNumber(staleDays)} days ago.`,
-      evidence: `${compact(row.primary_salesperson, "Unassigned")} / ${compact(row.parent_lead_source, "source pending")} / ${formatMoney(value)}`,
+      detail: isApproved
+        ? `${milestone} CRM row needs contract/deposit/prerequisite validation before production handoff.`
+        : isClaim
+          ? `${milestone} claim row needs claim number, carrier, DOL, deductible, photos, measurements, and scope validation.`
+          : `${milestone} lead last touched ${formatNumber(staleDays)} days ago.`,
+      evidence: `${compact(row.primary_salesperson, "Unassigned")} / ${compact(row.parent_lead_source, "source pending")} / ${compact(row.insurance_company, "no carrier")} / ${formatMoney(value)}`,
       href: `/sales/pipeline?job=${encodeURIComponent(String(row.acculynx_job_id ?? row.id))}`,
       nextRun: staleDays >= 7 ? "Today" : formatShortDate(row.initial_appointment_start, "Next follow-up"),
       owner: "@ob-sales",
-      primaryHuman: "Sales manager",
+      primaryHuman: "Roberto",
       priority,
       sourceLabel: "CRM pipeline",
       sourcePk: String(row.id),
       sourceTable: "crm_pipeline",
       status: statusFromPriority(priority),
-      title: compact(row.job_name, `Pipeline ${row.id}`),
+      title: compact(row.job_name, compact(row.client_name, `Pipeline ${row.id}`)),
       valueAtRisk: value,
-      workflow: "sales-follow-up",
-      workKey: `sales:pipeline:${row.id}`,
+      workflow,
+      workKey: `sales:${workflow}:${row.id}`,
     });
   });
 
@@ -492,7 +715,7 @@ function buildSalesItems(pipelineRows: CrmPipelineRow[], callRows: CallPriorityR
       href: `/sales/call-priority?geoid=${encodeURIComponent(compact(row.geoid, ""))}`,
       nextRun: "Today",
       owner: "@ob-sales",
-      primaryHuman: "Sales manager",
+      primaryHuman: "Roberto",
       priority,
       sourceLabel: "Call priority",
       sourcePk: compact(row.geoid, compact(row.address, "unknown")),
@@ -510,12 +733,12 @@ function buildSalesItems(pipelineRows: CrmPipelineRow[], callRows: CallPriorityR
 
 async function loadSalesSurface(client: SupabaseClient): Promise<LiveDepartmentSurface> {
   const [pipelineOpenCount, pipelineRows, actionCount] = await Promise.all([
-    safeCount(client, "crm_pipeline", (query) => query.in("current_milestone", ["unassigned_lead", "assigned_lead", "prospect"])),
+    safeCount(client, "crm_pipeline", (query) => query.in("current_milestone", ["unassigned_lead", "assigned_lead", "prospect", "approved"])),
     safeRows<CrmPipelineRow>(
       client,
       "crm_pipeline",
-      "id,acculynx_job_id,job_name,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,lead_date,assigned_date,last_touched_days,location_city,location_state,parent_lead_source,sub_lead_source,insurance_company,initial_appointment_start",
-      (query) => query.in("current_milestone", ["unassigned_lead", "assigned_lead", "prospect"]).order("last_touched_days", { ascending: false, nullsFirst: false }).limit(50),
+      "id,acculynx_job_id,job_name,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,lead_date,assigned_date,last_touched_days,location_city,location_state,parent_lead_source,sub_lead_source,insurance_company,insurance_claim_number,insurance_claim_filed,initial_appointment_start,client_name,client_job_number",
+      (query) => query.in("current_milestone", ["unassigned_lead", "assigned_lead", "prospect", "approved"]).order("last_touched_days", { ascending: false, nullsFirst: false }).limit(50),
     ),
     safeCount(client, "dashboard_action_log", (query) => query.eq("department", "sales")),
   ]);
@@ -530,7 +753,7 @@ async function loadSalesSurface(client: SupabaseClient): Promise<LiveDepartmentS
     generatedAt: new Date().toISOString(),
     items,
     metrics: [
-      metric("Open CRM opportunities", formatNumber(pipelineOpenCount), "Unassigned, assigned, and prospect milestones", "review", "/sales/pipeline"),
+      metric("Open CRM opportunities", formatNumber(pipelineOpenCount), "Unassigned, assigned, prospect, and approved milestones", "review", "/sales/pipeline"),
       metric("Value in visible queue", formatMoney(valueAtRisk), `${formatNumber(items.length)} live work items`, valueAtRisk ? "critical" : "ready"),
       metric("High-priority touches", formatNumber(highPriority), "Stale or high-value items", highPriority ? "review" : "ready"),
       metric("Sales actions logged", formatNumber(actionCount), "Durable dashboard decisions", "info"),
@@ -542,24 +765,28 @@ async function loadSalesSurface(client: SupabaseClient): Promise<LiveDepartmentS
 function buildOperationsItems(jobRows: AccuLynxJobRow[], dataGaps: FleetDataGapRow[], varianceRows: FleetVarianceRow[]) {
   const jobItems = jobRows.map((row) => {
     const milestone = compact(row.current_milestone, "milestone");
-    const priority: LiveWorkPriority = /approved|completed/i.test(milestone) ? "high" : "normal";
+    const isProductionGate = /approved|completed/i.test(milestone);
+    const priority: LiveWorkPriority = isProductionGate ? "high" : "normal";
+    const workflow = isProductionGate ? "production-readiness" : "pre-prospect-readiness";
     return item({
-      action: "Check readiness",
+      action: isProductionGate ? "Approve production ready" : "Clear pre-prospect gap",
       approval: "before_write",
       auditTrail: [
         "Source row is live in acculynx_jobs.",
-        "Operations writes only after crew/material/job readiness is human confirmed.",
+        "Operations writes only after crew/material/job readiness and prerequisites are human confirmed.",
         "Conductor escalates blocked readiness items.",
       ],
       auditorRequired: false,
       cadence: "daily",
       department: "operations",
-      detail: `${milestone} job modified ${formatShortDate(row.modified_date, "recently")}. Confirm schedule, materials, and field blocker status.`,
+      detail: isProductionGate
+        ? `${milestone} job modified ${formatShortDate(row.modified_date, "recently")}. Confirm schedule, materials, crew, permits, customer confirmation, and field blocker status.`
+        : `${milestone} job modified ${formatShortDate(row.modified_date, "recently")}. Confirm estimate, contract, field documentation, and prerequisite gaps before production handoff.`,
       evidence: `${compact(row.location_city, "city pending")}, ${compact(row.location_state_abbrev, "state")} / ${compact(row.lead_source_name, "source pending")}`,
       href: `/operations/jobs?job=${encodeURIComponent(row.id)}`,
       nextRun: formatShortDate(row.initial_appointment_start, "Today"),
       owner: "@ob-ops",
-      primaryHuman: "Operations lead",
+      primaryHuman: "Roberto",
       priority,
       sourceLabel: "AccuLynx jobs",
       sourcePk: row.id,
@@ -567,8 +794,8 @@ function buildOperationsItems(jobRows: AccuLynxJobRow[], dataGaps: FleetDataGapR
       status: statusFromPriority(priority),
       title: compact(row.job_name, compact(row.job_number, row.id)),
       valueAtRisk: 0,
-      workflow: "job-readiness",
-      workKey: `operations:job:${row.id}`,
+      workflow,
+      workKey: `operations:${workflow}:${row.id}`,
     });
   });
 
@@ -588,7 +815,7 @@ function buildOperationsItems(jobRows: AccuLynxJobRow[], dataGaps: FleetDataGapR
     href: `/operations/fleet?gap=${encodeURIComponent(compact(row.entity, ""))}`,
     nextRun: "This week",
     owner: "@ob-ops",
-    primaryHuman: "Operations lead",
+    primaryHuman: "Roberto",
     priority: "high" as const,
     sourceLabel: "Fleet data gaps",
     sourcePk: compact(row.entity, compact(row.gap_type, "gap")),
@@ -618,7 +845,7 @@ function buildOperationsItems(jobRows: AccuLynxJobRow[], dataGaps: FleetDataGapR
       href: `/operations/fleet?alert=${encodeURIComponent(String(row.id))}`,
       nextRun: formatShortDate(row.created_at, "Today"),
       owner: "@ob-ops",
-      primaryHuman: "Operations lead",
+      primaryHuman: "Roberto",
       priority,
       sourceLabel: "Fleet variance alerts",
       sourcePk: String(row.id),
@@ -692,7 +919,7 @@ function buildMarketingItems(heatRows: HeatZoneRow[]) {
       href: `/marketing/hail-zones?zip=${encodeURIComponent(compact(row.zcta_geoid, ""))}`,
       nextRun: formatShortDate(row.last_event_date, "This week"),
       owner: "@ob-marketing",
-      primaryHuman: "Marketing owner",
+      primaryHuman: "Chris",
       priority,
       sourceLabel: "Hail heat-zone coverage",
       sourcePk: compact(row.zcta_geoid, "unknown"),
@@ -840,11 +1067,12 @@ async function loadExecutiveSurface(client: SupabaseClient): Promise<LiveDepartm
 }
 
 async function loadSystemSurface(client: SupabaseClient): Promise<LiveDepartmentSurface> {
-  const [actionCount, workStateCount, mirrorQueuedCount, abcSyncCount, acculynxWatermarks, cronRows] = await Promise.all([
+  const [actionCount, workStateCount, mirrorQueuedCount, abcSyncCount, memoryCountResult, acculynxWatermarks, cronRows] = await Promise.all([
     safeCount(client, "dashboard_action_log"),
     safeCount(client, "dashboard_work_items"),
     safeCount(client, "slack_mirror_events", (query) => query.eq("status", "queued")),
     safeCount(client, "abc_api_sync_runs"),
+    optionalCount(client, "agent_memories"),
     safeRows<Record<string, unknown>>(client, "acculynx_sync_watermark", "*", (query) => query.limit(20)),
     safeRows<CronOutcomeRow>(
       client,
@@ -885,6 +1113,36 @@ async function loadSystemSurface(client: SupabaseClient): Promise<LiveDepartment
     });
   });
 
+  if (memoryCountResult.error) {
+    items.unshift(item({
+      action: "Install memory sidecar",
+      approval: "always",
+      auditTrail: [
+        "Supabase schema check could not read agent_memories.",
+        "Dashboard decisions still write a full memoryRecord into dashboard_action_log.payload.",
+        "OB1 sidecar tables are required before governed memory recall/write-back is fully live.",
+      ],
+      auditorRequired: true,
+      cadence: "daily",
+      department: "system",
+      detail: memoryCountResult.error,
+      evidence: "agent_memories schema health",
+      href: "/system/sync-health?source=agent_memories",
+      nextRun: "Now",
+      owner: "Maintenance",
+      primaryHuman: "Conductor / Auditor",
+      priority: "critical",
+      sourceLabel: "Supabase schema",
+      sourcePk: "agent_memories",
+      sourceTable: "agent_memories",
+      status: "blocked",
+      title: "Memory sidecar is not installed",
+      valueAtRisk: 0,
+      workflow: "memory-record-health",
+      workKey: "system:memory:agent-memories",
+    }));
+  }
+
   return {
     ...DEPARTMENT_META.system,
     department: "system",
@@ -895,6 +1153,7 @@ async function loadSystemSurface(client: SupabaseClient): Promise<LiveDepartment
       metric("Dashboard actions", formatNumber(actionCount), "Human and agent decisions logged", "info", "/system/actions"),
       metric("Workflow state rows", formatNumber(workStateCount), "Durable per-work-item state", "info"),
       metric("Queued Slack mirrors", formatNumber(mirrorQueuedCount), "Dashboard remains source of truth", mirrorQueuedCount ? "review" : "ready"),
+      metric("Memory sidecar", memoryCountResult.error ? "missing" : formatNumber(memoryCountResult.count ?? 0), memoryCountResult.error ?? "Governed memory records available", memoryCountResult.error ? "critical" : "ready"),
       metric("Sync monitors", formatNumber(abcSyncCount + acculynxWatermarks.length), "ABC runs plus AccuLynx watermarks", "info", "/system/sync-health"),
     ],
     status: "live",
@@ -1021,11 +1280,214 @@ export function serializeLiveWorkQueueItem(work: LiveWorkItem, actor: CommandCen
   };
 }
 
+function dashboardStatusForDecision(decision: WorkQueueDecision) {
+  const statusByDecision: Record<WorkQueueDecision, string> = {
+    approve: "approved",
+    assign: "in_review",
+    external_received: "done",
+    external_sent: "in_review",
+    mark_done: "done",
+    needs_more_evidence: "needs_more_evidence",
+    reject: "rejected",
+    resume_agent: "in_review",
+    snooze: "snoozed",
+  };
+  return statusByDecision[decision];
+}
+
+function isResolvedDecision(decision: WorkQueueDecision) {
+  return decision === "approve" || decision === "reject" || decision === "mark_done" || decision === "external_received";
+}
+
+function memoryActorKind(actor: CommandCenterActor) {
+  if (actor.type === "human" || actor.type === "local_operator") return "user";
+  if (actor.type === "named_agent" || actor.type === "service_agent") return "agent";
+  return "system";
+}
+
+function hashText(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function buildDecisionMemoryRecord(
+  work: LiveWorkItem,
+  actor: CommandCenterActor,
+  decision: WorkQueueDecision,
+  note: string | null,
+  context: LiveDecisionContext,
+  actionId?: string,
+) {
+  const actionLabel = context.actionLabel ?? decision;
+  const summary = `${actor.displayName} recorded ${actionLabel} for ${work.title}`;
+  const content = [
+    summary,
+    `Department: ${work.department}`,
+    `Workflow: ${work.workflow}`,
+    `Human role: ${work.primaryHuman}`,
+    `Source: ${work.sourceTable} ${work.sourcePk}`,
+    `Evidence: ${work.evidence}`,
+    `Decision: ${decision}`,
+    actionId ? `Dashboard action id: ${actionId}` : null,
+    context.actionIntent ? `Intent: ${context.actionIntent}` : null,
+    context.nextStep ? `Next agent step: ${context.nextStep}` : null,
+    note ? `Human note: ${note}` : null,
+  ].filter(Boolean).join("\n");
+
+  return {
+    actionId: actionId ?? null,
+    actionIntent: context.actionIntent ?? null,
+    actionLabel,
+    actor: {
+      displayName: actor.displayName,
+      id: actor.id,
+      type: actor.type,
+    },
+    auditTrail: work.auditTrail,
+    content,
+    decision,
+    department: work.department,
+    evidence: work.evidence,
+    href: work.href,
+    memoryType: "decision",
+    nextStep: context.nextStep ?? null,
+    note,
+    primaryHuman: work.primaryHuman,
+    source: {
+      label: work.sourceLabel,
+      pk: work.sourcePk,
+      table: work.sourceTable,
+    },
+    summary,
+    valueAtRisk: work.valueAtRisk,
+    workflow: work.workflow,
+    workKey: work.workKey,
+  };
+}
+
+async function writeDecisionMemoryRecord(
+  client: SupabaseClient,
+  work: LiveWorkItem,
+  actor: CommandCenterActor,
+  decision: WorkQueueDecision,
+  note: string | null,
+  context: LiveDecisionContext,
+  actionId: string,
+  createdAt: string | null | undefined,
+): Promise<DecisionMemoryWrite> {
+  const memoryRecord = buildDecisionMemoryRecord(work, actor, decision, note, context, actionId);
+  const contentHash = hashText(memoryRecord.content);
+  const metadata = {
+    actionId,
+    actionIntent: memoryRecord.actionIntent,
+    actionLabel: memoryRecord.actionLabel,
+    decision,
+    department: work.department,
+    sourcePk: work.sourcePk,
+    sourceTable: work.sourceTable,
+    type: "human_unblocker_decision",
+    valueAtRisk: work.valueAtRisk,
+    workflow: work.workflow,
+    workKey: work.workKey,
+  };
+
+  const { data: thought, error: thoughtError } = await client
+    .from("thoughts")
+    .insert({
+      content: memoryRecord.content,
+      content_fingerprint: contentHash,
+      metadata,
+    })
+    .select("id")
+    .single();
+
+  if (thoughtError) throw new Error(`thoughts: ${thoughtError.message}`);
+
+  const actorKind = memoryActorKind(actor);
+  const { data: memory, error: memoryError } = await client
+    .from("agent_memories")
+    .upsert(
+      {
+        can_use_as_evidence: true,
+        can_use_as_instruction: false,
+        confidence: 1,
+        content: memoryRecord.content,
+        content_hash: contentHash,
+        created_by: actorKind,
+        flow_id: work.workflow,
+        idempotency_key: `dashboard-action:${actionId}`,
+        memory_type: "decision",
+        metadata,
+        project_id: "command-center",
+        provenance_status: actorKind === "user" ? "user_confirmed" : "generated",
+        requires_user_confirmation: actorKind !== "user",
+        review_status: actorKind === "user" ? "confirmed" : "pending",
+        runtime_name: "open-brain-command-center",
+        summary: memoryRecord.summary,
+        task_id: work.workKey,
+        thought_id: thought?.id ?? null,
+        visibility: "project",
+        workspace_id: "pro-exteriors-open-brain",
+      },
+      { onConflict: "idempotency_key" },
+    )
+    .select("id")
+    .single();
+
+  if (memoryError) throw new Error(`agent_memories: ${memoryError.message}`);
+
+  if (memory?.id) {
+    const { error: sourceRefError } = await client.from("agent_memory_source_refs").insert({
+      memory_id: memory.id,
+      metadata: {
+        actionId,
+        sourceLabel: work.sourceLabel,
+        sourcePk: work.sourcePk,
+        sourceTable: work.sourceTable,
+        valueAtRisk: work.valueAtRisk,
+      },
+      source_kind: work.sourceTable,
+      source_timestamp: createdAt ?? new Date().toISOString(),
+      title: work.title,
+      uri: work.href,
+    });
+
+    if (sourceRefError) throw new Error(`agent_memory_source_refs: ${sourceRefError.message}`);
+
+    const { data: auditEvent, error: auditEventError } = await client
+      .from("agent_memory_audit_events")
+      .insert({
+        actor_kind: actorKind,
+        actor_label: actor.displayName,
+        event_type: "memory_written",
+        memory_id: memory.id,
+        payload: metadata,
+        project_id: "command-center",
+        runtime_name: "open-brain-command-center",
+        task_id: work.workKey,
+        workspace_id: "pro-exteriors-open-brain",
+      })
+      .select("id")
+      .single();
+
+    if (auditEventError) throw new Error(`agent_memory_audit_events: ${auditEventError.message}`);
+
+    return {
+      auditEventId: typeof auditEvent?.id === "string" ? auditEvent.id : undefined,
+      memoryId: memory.id,
+      status: "written",
+      thoughtId: typeof thought?.id === "string" ? thought.id : undefined,
+    };
+  }
+
+  return { status: "skipped" };
+}
+
 export async function recordLiveWorkDecision(
   work: LiveWorkItem,
   actor: CommandCenterActor,
   decision: WorkQueueDecision,
   note: string | null,
+  context: LiveDecisionContext = {},
   env: RuntimeEnv = getRuntimeEnv(),
 ) {
   const { client, config } = createServerSupabaseClient(env);
@@ -1042,14 +1504,17 @@ export async function recordLiveWorkDecision(
         primary_human: work.primaryHuman,
         priority: work.priority,
         source_data: {
+          actionIntent: context.actionIntent ?? null,
+          actionLabel: context.actionLabel ?? null,
           evidence: work.evidence,
           href: work.href,
+          nextStep: context.nextStep ?? null,
           sourceLabel: work.sourceLabel,
         },
         source_pk: work.sourcePk,
         source_system: work.sourceLabel,
         source_table: work.sourceTable,
-        status: decision === "approve" ? "approved" : decision === "reject" ? "rejected" : decision,
+        status: dashboardStatusForDecision(decision),
         summary: work.detail,
         title: work.title,
         value_at_risk: work.valueAtRisk,
@@ -1083,7 +1548,11 @@ export async function recordLiveWorkDecision(
         decision,
         note,
       ),
+      actionIntent: context.actionIntent ?? null,
+      actionLabel: context.actionLabel ?? null,
       href: work.href,
+      memoryRecord: buildDecisionMemoryRecord(work, actor, decision, note, context),
+      nextStep: context.nextStep ?? null,
       priority: work.priority,
       valueAtRisk: work.valueAtRisk,
     },
@@ -1102,13 +1571,25 @@ export async function recordLiveWorkDecision(
 
   if (actionError) throw new Error(`dashboard_action_log: ${actionError.message}`);
 
+  let memoryWrite: DecisionMemoryWrite = { status: "skipped" };
+  if (action?.id) {
+    try {
+      memoryWrite = await writeDecisionMemoryRecord(client, work, actor, decision, note, context, action.id, action.created_at);
+    } catch (error) {
+      memoryWrite = {
+        error: error instanceof Error ? error.message : "Memory write failed",
+        status: "failed",
+      };
+    }
+  }
+
   if (workItem?.id && action?.id) {
     await client
       .from("dashboard_work_items")
       .update({
         last_action_id: action.id,
-        resolved_at: decision === "approve" || decision === "reject" ? new Date().toISOString() : null,
-        resolved_by: decision === "approve" || decision === "reject" ? actor.id : null,
+        resolved_at: isResolvedDecision(decision) ? new Date().toISOString() : null,
+        resolved_by: isResolvedDecision(decision) ? actor.id : null,
       })
       .eq("id", workItem.id);
   }
@@ -1126,10 +1607,12 @@ export async function recordLiveWorkDecision(
           decision,
           department: work.department,
           href: work.href,
+          memory: memoryWrite,
           note,
+          nextStep: context.nextStep ?? null,
           priority: work.priority,
           source: work.sourceLabel,
-          text: `${actor.displayName} recorded ${decision} for ${work.title}. ${note ? `Note: ${note}` : ""}`.trim(),
+          text: `${actor.displayName} recorded ${context.actionLabel ?? decision} for ${work.title}. ${note ? `Note: ${note}` : ""}`.trim(),
           title: work.title,
           valueAtRisk: work.valueAtRisk,
           workflow: work.workflow,
@@ -1141,7 +1624,7 @@ export async function recordLiveWorkDecision(
 
   invalidateCommandCenterSurfaceCache();
 
-  return { action, workItem };
+  return { action, memory: memoryWrite, workItem };
 }
 
 export { cadences, departments, formatApproval, formatMoney, formatNumber, formatStatus };

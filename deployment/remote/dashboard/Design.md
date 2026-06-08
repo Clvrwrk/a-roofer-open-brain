@@ -2,13 +2,13 @@
 
 Version 1.0 · Light scheme · WCAG AA
 
-This document is the written specification for the Vendor Pricing Command Center admin. It defines the tokens, color roles, type, shape, elevation, and components that every screen draws from. The relationship between the three artifacts is fixed:
+This document is the approved written specification for the Pro Exteriors Open Brain command center. It is the only active design source of truth for dashboard, admin, and human-in-the-loop UI work. It defines the tokens, color roles, type, shape, elevation, and components that every screen draws from. The relationship between the active artifacts is fixed:
 
 - **`Design.md`** (this file) — the specification. What the system is and why.
 - **`design-system.html`** — the living styleguide. The system rendered, for visual reference.
-- **`src/styles.css`** — the authoritative implementation. The tokens and component rules in code.
+- **`app/command-center/src/styles/global.css`** — the production implementation. The tokens and component rules in code.
 
-When the three ever disagree, `src/styles.css` is correct and the other two are updated to match. No screen introduces a color, radius, or font that is not a named token here (DSN-010 / DSN-014).
+When the written spec, rendered styleguide, and production CSS disagree, update them back into alignment with this approved `Design.md` first, then mirror the result into the styleguide and CSS. No active `DESIGN.md`/`Design.md` file should carry separate rules. No screen introduces a color, radius, or font that is not a named token here (DSN-010 / DSN-014).
 
 ---
 
@@ -32,7 +32,7 @@ When the three ever disagree, `src/styles.css` is correct and the other two are 
 
 ## Color tokens
 
-All colors live in `:root` in `src/styles.css`. Reference them by token name, never by literal hex.
+All colors live in `:root` in `app/command-center/src/styles/global.css`. Reference them by token name, never by literal hex.
 
 ### Brand palette
 

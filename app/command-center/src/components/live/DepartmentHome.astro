@@ -1,7 +1,7 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
 import LiveMetricGrid from "./LiveMetricGrid.astro";
-import LiveWorkQueue from "./LiveWorkQueue.astro";
+import HumanUnblockerDashboard from "../unblocker/HumanUnblockerDashboard.astro";
 import type { LiveDepartmentSurface } from "@lib/live-work";
 
 interface Props {
@@ -48,7 +48,7 @@ const tone = surface.status === "live" ? "ready" : surface.status === "degraded"
     <LiveMetricGrid metrics={surface.metrics} />
   </section>
 
-  <LiveWorkQueue items={surface.items} />
+  <HumanUnblockerDashboard items={surface.items} department={surface.department} />
 
   <script src="/src/scripts/command-center.ts"></script>
 </AppShell>

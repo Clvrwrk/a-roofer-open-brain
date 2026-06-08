@@ -16,7 +16,26 @@ type WorkRow = HTMLTableRowElement & {
     cadence: string;
     source?: string;
     href?: string;
+    stuck?: string;
+    recommendation?: string;
+    requiredResponse?: string;
+    nextStep?: string;
+    actions?: string;
+    transparency?: string;
   };
+};
+
+type ActionPayload = {
+  label: string;
+  decision: string;
+  intent: string;
+  outcome?: string;
+  tone?: "primary" | "secondary" | "ghost" | "danger";
+};
+
+type TransparencyPayload = {
+  label: string;
+  value: string;
 };
 
 const rows = Array.from(document.querySelectorAll<WorkRow>("[data-work-row]"));
@@ -34,8 +53,70 @@ const audit = document.querySelector<HTMLOListElement>("[data-detail-audit]");
 const note = document.querySelector<HTMLElement>("[data-action-note]");
 const decisionNote = document.querySelector<HTMLTextAreaElement>("[data-decision-note]");
 const detailLink = document.querySelector<HTMLAnchorElement>("[data-detail-link]");
+const stuck = document.querySelector<HTMLElement>("[data-detail-stuck]");
+const recommendation = document.querySelector<HTMLElement>("[data-detail-recommendation]");
+const requiredResponse = document.querySelector<HTMLElement>("[data-detail-required-response]");
+const nextStep = document.querySelector<HTMLElement>("[data-detail-next-step]");
+const actionsContainer = document.querySelector<HTMLElement>("[data-unblocker-actions]");
+const transparency = document.querySelector<HTMLElement>("[data-detail-transparency]");
 
 let activeCadence = "all";
+
+function parseJsonArray<T>(value: string | undefined): T[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function buttonClassForTone(tone: ActionPayload["tone"]) {
+  if (tone === "primary") return "button button-primary";
+  if (tone === "danger") return "button button-danger";
+  if (tone === "ghost") return "button button-ghost";
+  return "button button-secondary";
+}
+
+function renderActions(row: WorkRow) {
+  if (!actionsContainer) return;
+  const actions = parseJsonArray<ActionPayload>(row.dataset.actions);
+  if (!actions.length) return;
+
+  actionsContainer.replaceChildren(
+    ...actions.map((action) => {
+      const button = document.createElement("button");
+      button.className = buttonClassForTone(action.tone);
+      button.type = "button";
+      button.dataset.liveDecision = action.decision;
+      button.dataset.actionIntent = action.intent;
+      button.dataset.actionLabel = action.label;
+      button.dataset.actionNextStep = row.dataset.nextStep ?? "";
+      button.title = action.outcome ?? "";
+      button.textContent = action.label;
+      return button;
+    }),
+  );
+}
+
+function renderTransparency(row: WorkRow) {
+  if (!transparency) return;
+  const facts = parseJsonArray<TransparencyPayload>(row.dataset.transparency);
+  if (!facts.length) return;
+
+  transparency.replaceChildren(
+    ...facts.map((fact) => {
+      const wrapper = document.createElement("div");
+      const term = document.createElement("dt");
+      const value = document.createElement("dd");
+      term.textContent = fact.label;
+      value.textContent = fact.value;
+      wrapper.append(term, value);
+      return wrapper;
+    }),
+  );
+}
 
 function selectRow(row: WorkRow) {
   rows.forEach((candidate) => candidate.classList.toggle("is-selected", candidate === row));
@@ -53,8 +134,14 @@ function selectRow(row: WorkRow) {
   if (source) source.textContent = row.dataset.source ?? "Live source";
   if (evidence) evidence.textContent = row.dataset.evidence;
   if (copy) copy.textContent = row.dataset.detail;
+  if (stuck) stuck.textContent = row.dataset.stuck ?? row.dataset.detail;
+  if (recommendation) recommendation.textContent = row.dataset.recommendation ?? row.dataset.action;
+  if (requiredResponse) requiredResponse.textContent = row.dataset.requiredResponse ?? `Human response required from ${row.dataset.human ?? row.dataset.owner}.`;
+  if (nextStep) nextStep.textContent = row.dataset.nextStep ?? "Owning agent continues after the dashboard action is recorded.";
   if (detailLink && row.dataset.href) detailLink.href = row.dataset.href;
   if (decisionNote) decisionNote.value = "";
+  renderActions(row);
+  renderTransparency(row);
   if (audit) {
     audit.replaceChildren(
       ...row.dataset.audit.split("|").map((item) => {
@@ -115,42 +202,51 @@ document.querySelectorAll<HTMLButtonElement>("[data-approval-action]").forEach((
 });
 
 document.querySelectorAll<HTMLButtonElement>("[data-live-decision]").forEach((button) => {
-  button.addEventListener("click", async () => {
-    const selected = rows.find((row) => row.classList.contains("is-selected"));
-    if (!selected || !note) return;
+  button.dataset.commandCenterBound = "legacy";
+});
 
-    const workKey = selected.dataset.workKey ?? selected.dataset.workId;
-    if (!workKey) {
-      note.textContent = "No work key is attached to this row.";
+document.addEventListener("click", async (event) => {
+  const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-live-decision]") : null;
+  if (!target || !note) return;
+
+  const selected = rows.find((row) => row.classList.contains("is-selected"));
+  if (!selected) return;
+
+  const workKey = selected.dataset.workKey ?? selected.dataset.workId;
+  if (!workKey) {
+    note.textContent = "No work key is attached to this row.";
+    return;
+  }
+
+  target.disabled = true;
+  note.textContent = "Writing decision to Supabase...";
+
+  try {
+    const response = await fetch(`/api/agent/work-queue/${encodeURIComponent(workKey)}/decision`, {
+      body: JSON.stringify({
+        decision: target.dataset.liveDecision,
+        intent: target.dataset.actionIntent ?? null,
+        label: target.dataset.actionLabel ?? target.textContent?.trim() ?? null,
+        nextStep: target.dataset.actionNextStep ?? selected.dataset.nextStep ?? null,
+        note: decisionNote?.value.trim() || null,
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      note.textContent = payload.error_description ?? payload.error ?? "Decision write failed.";
       return;
     }
-
-    button.disabled = true;
-    note.textContent = "Writing decision to Supabase...";
-
-    try {
-      const response = await fetch(`/api/agent/work-queue/${encodeURIComponent(workKey)}/decision`, {
-        body: JSON.stringify({
-          decision: button.dataset.liveDecision,
-          note: decisionNote?.value.trim() || null,
-        }),
-        headers: {
-          "content-type": "application/json",
-        },
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        note.textContent = payload.error_description ?? payload.error ?? "Decision write failed.";
-        return;
-      }
-      note.textContent = `Decision saved. Action id: ${payload.auditEvent?.id ?? payload.action?.id ?? "recorded"}.`;
-    } catch (error) {
-      note.textContent = error instanceof Error ? error.message : "Decision write failed.";
-    } finally {
-      button.disabled = false;
-    }
-  });
+    const memory = payload.memory?.status ? ` Memory: ${payload.memory.status}.` : "";
+    note.textContent = `Decision saved. Action id: ${payload.auditEvent?.id ?? payload.action?.id ?? "recorded"}.${memory}`;
+  } catch (error) {
+    note.textContent = error instanceof Error ? error.message : "Decision write failed.";
+  } finally {
+    target.disabled = false;
+  }
 });
 
 applyFilters();

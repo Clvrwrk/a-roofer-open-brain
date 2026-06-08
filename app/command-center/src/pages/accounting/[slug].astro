@@ -3,6 +3,7 @@ import BoundaryNotice from "../../components/accounting/BoundaryNotice.astro";
 import EvidenceStack from "../../components/accounting/EvidenceStack.astro";
 import MetricLinkCard from "../../components/accounting/MetricLinkCard.astro";
 import AppShell from "../../layouts/AppShell.astro";
+import HumanUnblockerDashboard from "../../components/unblocker/HumanUnblockerDashboard.astro";
 import {
   formatCurrency,
   formatNumber,
@@ -24,6 +25,12 @@ if (!dashboard) {
 const surface = await loadAccountingSurface();
 const liveSurface = await loadDepartmentSurface("accounting");
 const reviewQueueItems = liveSurface.items.filter((item) => item.workflow === "abc-review");
+const routeLiveItems = dashboard
+  ? liveSurface.items.filter((item) => {
+      const itemRoute = item.href.split("?")[0];
+      return itemRoute === dashboard.route || item.href.startsWith(`${dashboard.route}?`);
+    })
+  : [];
 const selectedReviewItemId = Astro.url.searchParams.get("item");
 const selectedReviewItem = selectedReviewItemId
   ? reviewQueueItems.find((item) => item.sourcePk === selectedReviewItemId)
@@ -123,7 +130,15 @@ const boundaryDetail =
           </div>
         </section>
 
-        <section class="accounting-workbench" aria-label="Accounting dashboard workbench">
+        <HumanUnblockerDashboard
+          items={routeLiveItems.length > 0 ? routeLiveItems : liveSurface.items}
+          department="accounting"
+          emptyLabel="No live accounting blocker is open for this source path."
+        />
+
+        <details class="accounting-full-source-detail" open={Boolean(selectedReviewItemId || selectedInvoice)}>
+          <summary>Full accounting source detail</summary>
+          <section class="accounting-workbench" aria-label="Accounting dashboard workbench">
           <div class="accounting-priority-panel">
             <div class="panel-heading">
               <div>
@@ -388,7 +403,8 @@ const boundaryDetail =
               detail="Workflow actions should write to Supabase first. Slack uses the same packet/action IDs for fast review once the browser path is trusted."
             />
           </aside>
-        </section>
+          </section>
+        </details>
       </>
     ) : (
       <BoundaryNotice title="Dashboard not found" detail={`No Accounting dashboard exists for "${slug}".`} action="Return to /accounting." />

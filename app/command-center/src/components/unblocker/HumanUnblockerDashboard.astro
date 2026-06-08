@@ -1,0 +1,327 @@
+---
+import {
+  buildAutomationCandidates,
+  getHumanDashboardPlan,
+  toHumanUnblockerItem,
+  type HumanActionTone,
+} from "@lib/human-unblocker";
+import type { DepartmentId } from "@lib/cadence";
+import type { LiveWorkItem } from "@lib/live-work";
+
+interface Props {
+  items: LiveWorkItem[];
+  department?: DepartmentId;
+  emptyLabel?: string;
+  maxItems?: number;
+}
+
+const {
+  items,
+  department,
+  emptyLabel = "No live source-backed human blockers are open right now.",
+  maxItems = 50,
+} = Astro.props;
+const plan = getHumanDashboardPlan(department);
+const allPackets = items.map(toHumanUnblockerItem);
+const packets = allPackets.slice(0, maxItems);
+const defaultPacket = packets[0];
+const automationCandidates = buildAutomationCandidates(allPackets);
+const hiddenPacketCount = Math.max(allPackets.length - packets.length, 0);
+
+function actionButtonClass(tone: HumanActionTone) {
+  return [
+    "button",
+    tone === "primary" && "button-primary",
+    tone === "secondary" && "button-secondary",
+    tone === "ghost" && "button-ghost",
+    tone === "danger" && "button-danger",
+  ].filter(Boolean).join(" ");
+}
+---
+
+<section class="human-loop-system" aria-label={`${plan.label} task contract`}>
+  <div class="surface-heading">
+    <div>
+      <p class="eyebrow">{plan.primaryHuman}</p>
+      <h2>{plan.coreTask}</h2>
+    </div>
+    <span class="runtime-pill" data-tone={packets.length ? "watch" : "ready"}>
+      <span class="signal-dot" aria-hidden="true"></span>
+      {allPackets.length ? `${packets.length}/${allPackets.length} blockers` : "clear"}
+    </span>
+  </div>
+
+  <dl class="human-contract-grid">
+    <div>
+      <dt>Agent boundary</dt>
+      <dd>{plan.agentBoundary}</dd>
+    </div>
+    <div>
+      <dt>Done signal</dt>
+      <dd>{plan.doneSignal}</dd>
+    </div>
+    <div>
+      <dt>Slack rule</dt>
+      <dd>{plan.slackRule}</dd>
+    </div>
+  </dl>
+
+  <div class="queue-table-wrap">
+    <table class="queue-table human-lane-table">
+      <thead>
+        <tr>
+          <th scope="col">Lane</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Human task</th>
+          <th scope="col">Agent stops when</th>
+          <th scope="col">Done when</th>
+        </tr>
+      </thead>
+      <tbody>
+        {plan.lanes.map((lane) => (
+          <tr>
+            <td><strong>{lane.label}</strong></td>
+            <td>{lane.owner}</td>
+            <td>{lane.task}</td>
+            <td>{lane.stopCondition}</td>
+            <td>{lane.doneCondition}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="human-workbench" aria-label="Human blocker queue">
+  <div class="human-queue-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Human Queue</p>
+        <h2>Agent blockers awaiting a decision</h2>
+      </div>
+      <span class="runtime-pill" data-tone={packets.length ? "watch" : "ready"}>
+        <span class="signal-dot" aria-hidden="true"></span>
+        {allPackets.length ? `${packets.length}/${allPackets.length} live rows` : "clear"}
+      </span>
+    </div>
+
+    {hiddenPacketCount > 0 && (
+      <p class="human-window-note">
+        Showing the highest-priority {packets.length} of {allPackets.length} live blockers on this surface.
+      </p>
+    )}
+
+    <div class="queue-table-wrap">
+      <table class="queue-table human-unblocker-table">
+        <thead>
+          <tr>
+            <th scope="col">Blocker</th>
+            <th scope="col">Human response</th>
+            <th scope="col">Agent recommendation</th>
+            <th scope="col">Value</th>
+            <th scope="col">Source</th>
+            <th scope="col">Full transparency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            packets.length > 0 ? (
+              packets.map((packet, index) => (
+                <tr
+                  class:list={["work-row", index === 0 && "is-selected"]}
+                  data-work-row
+                  data-work-key={packet.workKey}
+                  data-title={packet.title}
+                  data-owner={packet.raw.owner}
+                  data-human={packet.primaryHuman}
+                  data-status={packet.status}
+                  data-priority={packet.priority}
+                  data-approval={packet.transparency.find((fact) => fact.label === "Approval")?.value ?? ""}
+                  data-evidence={packet.evidencePacket[0]}
+                  data-action={packet.actions[0]?.label ?? "Review"}
+                  data-detail={packet.stuckBecause}
+                  data-audit={packet.evidencePacket.join("|")}
+                  data-department={packet.department}
+                  data-cadence={packet.raw.cadence}
+                  data-source={packet.sourceLabel}
+                  data-href={packet.sourceHref}
+                  data-stuck={packet.stuckBecause}
+                  data-recommendation={packet.recommendation}
+                  data-required-response={packet.requiredResponse}
+                  data-next-step={packet.agentNextStep}
+                  data-actions={JSON.stringify(packet.actions)}
+                  data-transparency={JSON.stringify(packet.transparency)}
+                  tabindex="0"
+                >
+                  <td>
+                    <strong>{packet.title}</strong>
+                    <span>{packet.stuckBecause}</span>
+                  </td>
+                  <td>
+                    <strong>{packet.primaryHuman}</strong>
+                    <span>{packet.requiredResponse}</span>
+                  </td>
+                  <td>{packet.recommendation}</td>
+                  <td><strong>{packet.valueLabel}</strong><span>{packet.priority}</span></td>
+                  <td>
+                    <a class="row-action" href={packet.sourceHref}>Open source</a>
+                    <span>{packet.sourceLabel}</span>
+                  </td>
+                  <td>
+                    <details class="human-transparency-row">
+                      <summary>Evidence</summary>
+                      <dl>
+                        {packet.transparency.map((fact) => (
+                          <div>
+                            <dt>{fact.label}</dt>
+                            <dd>{fact.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </details>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colspan="6">{emptyLabel}</td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside class="human-decision-panel" aria-label="Selected human decision packet">
+    {
+      defaultPacket ? (
+        <>
+          <div class="detail-heading">
+            <p class="eyebrow">Decision Packet</p>
+            <h2 data-detail-title>{defaultPacket.title}</h2>
+            <span class={`status-badge priority-${defaultPacket.priority}`} data-detail-status>{defaultPacket.priority}</span>
+          </div>
+
+          <dl class="detail-list">
+            <div>
+              <dt>Human</dt>
+              <dd data-detail-human>{defaultPacket.primaryHuman}</dd>
+            </div>
+            <div>
+              <dt>Stuck because</dt>
+              <dd data-detail-stuck>{defaultPacket.stuckBecause}</dd>
+            </div>
+            <div>
+              <dt>Recommendation</dt>
+              <dd data-detail-recommendation>{defaultPacket.recommendation}</dd>
+            </div>
+            <div>
+              <dt>Required response</dt>
+              <dd data-detail-required-response>{defaultPacket.requiredResponse}</dd>
+            </div>
+            <div>
+              <dt>Next agent step</dt>
+              <dd data-detail-next-step>{defaultPacket.agentNextStep}</dd>
+            </div>
+          </dl>
+
+          <details class="human-evidence-expander" open>
+            <summary>Evidence packet</summary>
+            <ol data-detail-audit>
+              {defaultPacket.evidencePacket.map((entry) => <li>{entry}</li>)}
+            </ol>
+          </details>
+
+          <details class="human-evidence-expander">
+            <summary>Full transparency</summary>
+            <dl class="human-transparency-list" data-detail-transparency>
+              {defaultPacket.transparency.map((fact) => (
+                <div>
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+
+          <label class="decision-note-label">
+            <span>Decision note</span>
+            <textarea data-decision-note rows="4" placeholder="Add the human answer, missing fact, or approval constraint"></textarea>
+          </label>
+
+          <div class="approval-actions human-action-grid" aria-label="Approval actions" data-unblocker-actions>
+            {defaultPacket.actions.map((item) => (
+              <button
+                class={actionButtonClass(item.tone)}
+                type="button"
+                data-live-decision={item.decision}
+                data-action-intent={item.intent}
+                data-action-label={item.label}
+                data-action-next-step={defaultPacket.agentNextStep}
+                title={item.outcome}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <a class="button button-secondary button-full" href={defaultPacket.sourceHref} data-detail-link>Open source</a>
+
+          <p class="action-note" data-action-note>
+            Dashboard writes first, Slack mirrors second, memory records the decision for future SOP reduction.
+          </p>
+        </>
+      ) : (
+        <div class="accounting-empty-workspace">
+          <p class="eyebrow">Clear</p>
+          <h2>No source-backed human blockers are open.</h2>
+          <p>{emptyLabel}</p>
+        </div>
+      )
+    }
+  </aside>
+</section>
+
+<section class="human-sop-panel" aria-label="SOP reduction candidates">
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">SOP Reduction</p>
+      <h2>Repeated blockers agents may be able to absorb</h2>
+    </div>
+    <span class="runtime-pill" data-tone={automationCandidates.length ? "watch" : "ready"}>
+      <span class="signal-dot" aria-hidden="true"></span>
+      {automationCandidates.length ? `${automationCandidates.length} candidates` : "no repeats"}
+    </span>
+  </div>
+  <div class="queue-table-wrap">
+    <table class="queue-table human-sop-table">
+      <thead>
+        <tr>
+          <th scope="col">Workflow</th>
+          <th scope="col">Department</th>
+          <th scope="col">Visible count</th>
+          <th scope="col">Human owner</th>
+          <th scope="col">Next review</th>
+        </tr>
+      </thead>
+      <tbody>
+        {automationCandidates.length > 0 ? (
+          automationCandidates.map((candidate) => (
+            <tr>
+              <td><strong>{candidate.workflow}</strong></td>
+              <td>{candidate.department}</td>
+              <td>{candidate.count}</td>
+              <td>{candidate.owner}</td>
+              <td>Create or reject SOP/process-change candidate after the human pattern is confirmed.</td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colspan="5">No live workflow has reached the three-item SOP review threshold.</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</section>

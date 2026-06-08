@@ -13,7 +13,16 @@ export type CommandCenterPermission =
   | "agent.resume"
   | "desktop.command_center_ui";
 
-export type WorkQueueDecision = "approve" | "reject" | "needs_more_evidence" | "resume_agent";
+export type WorkQueueDecision =
+  | "approve"
+  | "reject"
+  | "needs_more_evidence"
+  | "resume_agent"
+  | "assign"
+  | "snooze"
+  | "mark_done"
+  | "external_sent"
+  | "external_received";
 
 export interface CommandCenterActor {
   id: string;
@@ -452,6 +461,10 @@ export function getAllowedDecisions(actor: CommandCenterActor, work: WorkDefinit
 
   if (work.approval !== "none" && hasPermission(actor, "approval.decide")) {
     decisions.push("approve", "reject");
+  }
+
+  if (hasPermission(actor, "approval.decide")) {
+    decisions.push("assign", "snooze", "mark_done", "external_sent", "external_received");
   }
 
   if (hasPermission(actor, "approval.request_more_evidence")) {

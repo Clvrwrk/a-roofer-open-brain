@@ -1,7 +1,7 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
 import LiveMetricGrid from "./LiveMetricGrid.astro";
-import LiveWorkQueue from "./LiveWorkQueue.astro";
+import HumanUnblockerDashboard from "../unblocker/HumanUnblockerDashboard.astro";
 import type { LiveDepartmentSurface } from "@lib/live-work";
 
 interface Props {
@@ -60,7 +60,11 @@ const tone = surface.status === "live" ? "ready" : surface.status === "degraded"
     <LiveMetricGrid metrics={surface.metrics} />
   </section>
 
-  <LiveWorkQueue items={visibleItems} emptyLabel="No source-backed work is open for this filtered route." />
+  <HumanUnblockerDashboard
+    items={visibleItems}
+    department={surface.department}
+    emptyLabel="No source-backed human blockers are open for this filtered route."
+  />
 
   <script src="/src/scripts/command-center.ts"></script>
 </AppShell>
