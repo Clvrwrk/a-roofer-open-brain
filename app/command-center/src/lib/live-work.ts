@@ -422,7 +422,7 @@ function buildAccountingItems(reviewRows: AbcReviewRow[]) {
       department: "accounting",
       detail: compact(row.issue_description, "ABC review queue item requires a human pricing or assignment decision."),
       evidence: `${compact(row.queue_type)} / ${invoice} / ${formatMoney(value)}`,
-      href: `/accounting/review-queue?item=${encodeURIComponent(String(row.id))}`,
+      href: `/accounting/review-queue?item=${encodeURIComponent(String(row.id))}#source-row-detail`,
       nextRun: formatShortDate(row.created_at, "Ready now"),
       owner: "@ob-accounting",
       primaryHuman: "Lucinda",
