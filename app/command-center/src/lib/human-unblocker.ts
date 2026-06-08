@@ -343,6 +343,17 @@ function accountingActions(work: LiveWorkItem): HumanAction[] {
     ];
   }
 
+  if (work.workflow === "abc-review") {
+    return [
+      action("Confirm Branch / Agreement", "approve", "confirm_abc_branch_agreement", "Agent applies the confirmed branch, region, and price-agreement path.", "primary"),
+      action("Need Source Evidence", "needs_more_evidence", "needs_abc_source_evidence", "Agent adds the missing invoice, order, branch, region, or agreement evidence."),
+      action("Draft ABC Request", "resume_agent", "draft_abc_request_for_lucinda", "Agent drafts the vendor/rep request for Lucinda to verify and send."),
+      action("Mark Email Sent", "external_sent", "external_email_sent", "Agent tracks the outside-party response after Lucinda sends it."),
+      action("Mark Response Received", "external_received", "abc_response_received", "Agent uses the received answer to continue pricing review."),
+      action("Reject Mapping", "reject", "reject_abc_mapping", "Agent keeps the item blocked and rebuilds the source match.", "danger"),
+    ];
+  }
+
   return [
     action("Approve Packet", "approve", "approve_accounting_packet", "Agent may advance the invoice, credit memo, or review queue path.", "primary"),
     action("Needs Fix", "needs_more_evidence", "needs_accounting_fix", "Agent adds invoice, order, agreement, or PDF evidence."),
@@ -413,10 +424,10 @@ function systemActions() {
 const WORKFLOW_PROFILES: Record<string, WorkflowProfile> = {
   "abc-review": {
     actions: accountingActions,
-    nextStep: (work) => `Accounting agent updates the ABC review path, mirrors Slack, and keeps invoice ${work.evidence} blocked or released based on the decision.`,
-    recommendation: (work) => `Start with the highest-value unresolved ABC source row and decide whether Lucinda has enough invoice/order/agreement evidence to move it.`,
-    requiredResponse: () => "Approve the packet, request the missing evidence, route to Lucinda, mark an outside send/receipt, or reject the packet.",
-    stuckBecause: (work) => `The ABC review queue row is unresolved: ${work.detail}`,
+    nextStep: (work) => `Agent will use the confirmed branch/region/agreement to price-check ${work.evidence}, draft a credit-memo request if a variance exists, or keep it blocked and prepare the missing-agreement request for Lucinda.`,
+    recommendation: () => "Confirm the correct ABC branch/region/price agreement first. If that cannot be confirmed from the invoice/order, ask the agent to draft a missing-agreement or branch-confirmation request for Lucinda to send.",
+    requiredResponse: () => "Answer this: which branch/region/price agreement should the agent use for this invoice, or what exact evidence is missing?",
+    stuckBecause: (work) => `The agent cannot choose a trusted ABC price agreement automatically. ${work.detail}`,
   },
   "price-agreement-gap": {
     actions: accountingActions,

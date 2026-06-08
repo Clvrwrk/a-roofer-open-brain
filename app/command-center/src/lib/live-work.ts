@@ -82,8 +82,10 @@ interface AbcReviewRow {
   job_name: string | null;
   ext_price: number | string | null;
   issue_description: string | null;
+  shipping_address: string | null;
   shipping_city: string | null;
   shipping_state: string | null;
+  assigned_region_code: string | null;
   resolved: boolean | null;
   created_at: string | null;
 }
@@ -252,6 +254,7 @@ interface DecisionMemoryWrite {
 const MONEY_FORMATTER = new Intl.NumberFormat("en-US", { currency: "USD", maximumFractionDigits: 0, style: "currency" });
 const NUMBER_FORMATTER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
+const SOURCE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", timeZone: "UTC", year: "numeric" });
 const LIVE_SURFACE_CACHE_TTL_MS = 30_000;
 const DEGRADED_SURFACE_CACHE_TTL_MS = 5_000;
 const DEPARTMENT_META: Record<DepartmentId, Pick<LiveDepartmentSurface, "primaryHuman" | "sourceSummary" | "subtitle" | "title">> = {
@@ -343,6 +346,14 @@ function formatShortDate(value: string | null | undefined, fallback = "Event dri
   return date ? DATE_FORMATTER.format(date) : fallback;
 }
 
+function formatSourceDate(value: string | null | undefined, fallback = "date missing") {
+  const text = compact(value, "");
+  if (!text) return fallback;
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = dateOnly ? new Date(`${text}T00:00:00.000Z`) : maybeDate(text);
+  return date && !Number.isNaN(date.getTime()) ? SOURCE_DATE_FORMATTER.format(date) : text;
+}
+
 function priorityFromValue(value: number, high = 25_000, critical = 100_000): LiveWorkPriority {
   if (value >= critical) return "critical";
   if (value >= high) return "high";
@@ -409,18 +420,27 @@ function buildAccountingItems(reviewRows: AbcReviewRow[]) {
     const value = toNumber(row.ext_price);
     const priority = priorityFromValue(value, 5_000, 25_000);
     const invoice = compact(row.invoice_number, `review-${row.id}`);
+    const po = compact(row.customer_po, "PO missing");
+    const job = compact(row.job_name, "job name missing");
+    const shipTo = [row.shipping_city, row.shipping_state].filter(Boolean).join(", ") || compact(row.shipping_address, "ship-to missing");
+    const assignedRegion = compact(row.assigned_region_code, "not assigned");
     return item({
-      action: "Resolve review",
+      action: "Confirm branch/agreement",
       approval: "before_write",
       auditTrail: [
-        "Source row is live in abc_review_queue.",
-        "Human resolution writes to dashboard_action_log and the review queue resolution path.",
-        "Slack mirror uses the dashboard action id after write succeeds.",
+        `Invoice: ${invoice}`,
+        `Invoice date: ${formatSourceDate(row.invoice_date)}`,
+        `Customer PO: ${po}`,
+        `Job name: ${job}`,
+        `Ship-to: ${shipTo}`,
+        `Mirror assigned region: ${assignedRegion}`,
+        `Issue: ${compact(row.issue_description, "review reason missing")}`,
+        "Human answer needed: confirm the correct ABC branch/region/price agreement, or tell the agent which invoice/order/agreement evidence is missing.",
       ],
       auditorRequired: priority !== "normal",
       cadence: "daily",
       department: "accounting",
-      detail: compact(row.issue_description, "ABC review queue item requires a human pricing or assignment decision."),
+      detail: `${compact(row.issue_description, "ABC review queue item requires a human pricing or assignment decision.")}. PO ${po}, job ${job}, ship-to ${shipTo}; mirror assigned region ${assignedRegion}.`,
       evidence: `${compact(row.queue_type)} / ${invoice} / ${formatMoney(value)}`,
       href: `/accounting/review-queue?item=${encodeURIComponent(String(row.id))}#source-row-detail`,
       nextRun: formatShortDate(row.created_at, "Ready now"),
@@ -571,7 +591,7 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
     safeRows<AbcReviewRow>(
       client,
       "abc_review_queue",
-      "id,queue_type,invoice_number,invoice_date,customer_po,job_name,ext_price,issue_description,shipping_city,shipping_state,resolved,created_at",
+      "id,queue_type,invoice_number,invoice_date,customer_po,job_name,ext_price,issue_description,shipping_address,shipping_city,shipping_state,assigned_region_code,resolved,created_at",
       (query) => query.eq("resolved", false).order("ext_price", { ascending: false, nullsFirst: false }).limit(50),
     ),
     safeRows<InvoiceDocumentRow>(

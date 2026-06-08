@@ -48,7 +48,7 @@ function hasReason(row: AgreementGapRow, code: string) {
 }
 
 function sourceRowHref(href: string) {
-  return `${href}#source-row-detail`;
+  return `${href.split("#")[0]}#source-row-detail`;
 }
 
 const productRows = surface.gapRows.filter((row) => hasReason(row, "no_price_list_item") || hasReason(row, "uom_mismatch"));
@@ -169,7 +169,7 @@ const boundaryDetail =
                         <td><span class={`status-badge priority-${item.priority}`}>{item.priority}</span></td>
                         <td>{item.evidence}</td>
                         <td><strong>{formatCurrency(item.valueAtRisk)}</strong></td>
-                        <td><a class="row-action" href={sourceRowHref(item.href)}>Open source</a></td>
+                        <td><a class="row-action" href={sourceRowHref(item.href)}>Source detail</a></td>
                       </tr>
                     ))}
                     {reviewQueueItems.length === 0 && (
@@ -342,7 +342,7 @@ const boundaryDetail =
           </div>
 
           <aside class="accounting-decision-panel">
-            <p class="eyebrow">Human Loop</p>
+            <p class="eyebrow">Source Detail</p>
             <h2>{dashboard.action}</h2>
             <EvidenceStack
               items={[
@@ -366,20 +366,21 @@ const boundaryDetail =
               <div class="reasoning-block source-row-detail" id="source-row-detail" tabindex="-1">
                 <p class="eyebrow">Selected Source Row</p>
                 <h3>{selectedReviewItem.title}</h3>
+                <div class="source-answer-needed">
+                  <strong>Answer needed</strong>
+                  <span>Confirm the correct ABC branch/region/price agreement for this invoice, or identify the exact invoice/order/agreement evidence the agent must get before pricing can continue.</span>
+                </div>
                 <EvidenceStack
                   items={[
-                    { label: "Source table", value: selectedReviewItem.sourceTable },
-                    { label: "Source row ID", value: selectedReviewItem.sourcePk },
-                    { label: "Workflow", value: selectedReviewItem.workflow },
                     { label: "Evidence", value: selectedReviewItem.evidence },
                     { label: "Value at risk", value: formatCurrency(selectedReviewItem.valueAtRisk) },
-                    { label: "Priority", value: selectedReviewItem.priority },
-                    { label: "Required action", value: selectedReviewItem.action },
-                    { label: "Detail", value: selectedReviewItem.detail },
+                    { label: "Issue", value: selectedReviewItem.detail },
+                    { label: "Action after answer", value: "Agent checks the confirmed price agreement, drafts a credit memo request if needed, or keeps the invoice blocked while Lucinda requests the missing agreement." },
+                    { label: "Source row", value: `${selectedReviewItem.sourceTable} / ${selectedReviewItem.sourcePk}` },
                   ]}
                 />
                 <div class="audit-block">
-                  <h3>Why this is in Lucinda's queue</h3>
+                  <h3>Source facts</h3>
                   <ol>
                     {selectedReviewItem.auditTrail.map((entry) => <li>{entry}</li>)}
                   </ol>
