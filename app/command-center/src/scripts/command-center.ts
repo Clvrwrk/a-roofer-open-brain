@@ -79,6 +79,35 @@ function buttonClassForTone(tone: ActionPayload["tone"]) {
   return "button button-secondary";
 }
 
+function collectDecisionContext(target: HTMLElement) {
+  const container = target.closest<HTMLElement>("[data-decision-context]");
+  if (!container) return null;
+
+  const facts = Array.from(container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-decision-field]"))
+    .map((field) => {
+      const label = field.dataset.decisionField ?? field.name;
+      const value = field.value.trim();
+      return value ? `${label}: ${value}` : null;
+    })
+    .filter(Boolean);
+
+  return facts.length ? `Decision fields: ${facts.join("; ")}` : null;
+}
+
+function missingOfficialPriceFields(target: HTMLElement) {
+  if (target.dataset.actionIntent !== "create_official_price_agreement_line") return [];
+  const container = target.closest<HTMLElement>("[data-decision-context]");
+  if (!container) return ["approved price", "approved UOM", "active start", "active end"];
+
+  const required = ["approved price", "approved UOM", "active start", "active end"];
+  return required.filter((label) => {
+    const field = container.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      `[data-decision-field="${label}"]`,
+    );
+    return !field?.value.trim();
+  });
+}
+
 function renderActions(row: WorkRow) {
   if (!actionsContainer) return;
   const actions = parseJsonArray<ActionPayload>(row.dataset.actions);
@@ -217,17 +246,27 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const missingFields = missingOfficialPriceFields(target);
+  if (missingFields.length) {
+    note.textContent = `Enter ${missingFields.join(", ")} before creating an official price line.`;
+    return;
+  }
+
   target.disabled = true;
   note.textContent = "Writing decision to Supabase...";
 
   try {
+    const localContext = collectDecisionContext(target);
+    const humanNote = decisionNote?.value.trim() || null;
+    const notePayload = [humanNote, localContext].filter(Boolean).join("\n") || null;
+
     const response = await fetch(`/api/agent/work-queue/${encodeURIComponent(workKey)}/decision`, {
       body: JSON.stringify({
         decision: target.dataset.liveDecision,
         intent: target.dataset.actionIntent ?? null,
         label: target.dataset.actionLabel ?? target.textContent?.trim() ?? null,
         nextStep: target.dataset.actionNextStep ?? selected?.dataset.nextStep ?? null,
-        note: decisionNote?.value.trim() || null,
+        note: notePayload,
       }),
       headers: {
         "content-type": "application/json",

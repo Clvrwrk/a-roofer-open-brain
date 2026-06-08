@@ -66,6 +66,54 @@ function sourceRowHref(href: string) {
   return `${href.split("#")[0]}#source-row-detail`;
 }
 
+function priceAuthorityLabel(row: AgreementGapRow) {
+  if (row.evidenceStatus === "pdf_mapped") return "PDF agreement authority";
+  if (row.evidenceStatus === "no_pdf_api_match") return "API pricing matches invoice; Lucinda can approve a temporary rule.";
+  if (row.evidenceStatus === "no_pdf_api_mismatch") return "API pricing conflicts with invoice; keep blocked.";
+  if (row.evidenceStatus === "no_pdf_api_missing") return "API did not return a usable branch/SKU price.";
+  if (row.evidenceStatus === "no_price_line") return "Product identity or branch/SKU price line is missing.";
+  return "No trusted branch/region pricing authority.";
+}
+
+function primaryLineDecision(row: AgreementGapRow) {
+  if (row.evidenceStatus === "no_pdf_api_match") {
+    return {
+      decision: "approve",
+      intent: "approve_api_temporary_price_rule",
+      label: "Approve API temp rule",
+      nextStep:
+        "Record the API match as a temporary observation-backed price rule, send Roberto the FYI acknowledgement task, roll the approved branch price into products, and suppress this SKU/branch until source changes or agreement expiry.",
+      tone: "secondary",
+    };
+  }
+
+  if (row.evidenceStatus === "no_pdf_api_mismatch") {
+    return {
+      decision: "needs_more_evidence",
+      intent: "request_credit_memo_or_vendor_price_evidence",
+      label: "Request evidence",
+      nextStep:
+        "Keep the invoice blocked. Agent drafts Lucinda's vendor evidence or credit-memo request with invoice PDF, original order, API price, and last known agreement attached.",
+      tone: "primary",
+    };
+  }
+
+  return {
+    decision: "needs_more_evidence",
+    intent: "request_price_agreement_source_file",
+    label: "Request agreement",
+    nextStep:
+      "Keep the invoice blocked. Agent drafts Lucinda's price-agreement request to the rep and includes the invoice PDF, original order, SKU, branch, and current evidence packet.",
+    tone: "primary",
+  };
+}
+
+function lineActionClass(tone: string) {
+  if (tone === "primary") return "button button-primary";
+  if (tone === "ghost") return "button button-ghost";
+  return "button button-secondary";
+}
+
 const productRows = surface.gapRows.filter((row) => hasReason(row, "no_price_list_item") || hasReason(row, "uom_mismatch"));
 const branchRows = surface.gapRows.filter((row) => hasReason(row, "no_branch_agreement") || hasReason(row, "no_fixed_agreement"));
 const apiEvidenceRows = surface.gapRows.filter((row) =>
@@ -73,8 +121,18 @@ const apiEvidenceRows = surface.gapRows.filter((row) =>
 );
 const apiEvidenceRowIds = new Set(apiEvidenceRows.map((row) => row.id));
 const visibleGapRows = [...apiEvidenceRows, ...surface.gapRows.filter((row) => !apiEvidenceRowIds.has(row.id))].slice(0, 100);
-const selectedInvoice = Astro.url.searchParams.get("invoice");
-const selectedInvoiceRows = selectedInvoice ? surface.gapRows.filter((row) => row.invoiceNumber === selectedInvoice) : [];
+const requestedInvoice = Astro.url.searchParams.get("invoice");
+const selectedInvoiceCandidate = dashboard?.slug === "invoices"
+  ? requestedInvoice
+    ? surface.invoiceGateCandidates.find((invoice) => invoice.invoiceNumber === requestedInvoice) ?? null
+    : surface.invoiceGateCandidates[0] ?? null
+  : null;
+const selectedInvoice = selectedInvoiceCandidate?.invoiceNumber ?? requestedInvoice;
+const selectedInvoiceRows = selectedInvoiceCandidate?.lines ?? (selectedInvoice ? surface.gapRows.filter((row) => row.invoiceNumber === selectedInvoice) : []);
+const selectedInvoiceExceptionRows = selectedInvoiceRows.filter(needsAgreementEvidence);
+const invoiceQueueCandidates = selectedInvoiceCandidate
+  ? [selectedInvoiceCandidate, ...surface.invoiceGateCandidates.filter((invoice) => invoice.invoiceNumber !== selectedInvoiceCandidate.invoiceNumber)]
+  : surface.invoiceGateCandidates;
 const branchGroups = Array.from(
   branchRows.reduce((groups, row) => {
     const key = row.branchNumber || "Unknown";
@@ -102,58 +160,320 @@ const boundaryDetail =
   {
     dashboard ? (
       <>
-        <section class="accounting-hero" aria-label={`${dashboard.title} summary`}>
-          <div class="surface-heading">
-            <div>
-              <p class="eyebrow">{dashboard.owner}</p>
-              <h2>{dashboard.description}</h2>
+        {dashboard.slug !== "invoices" && (
+          <section class="accounting-hero" aria-label={`${dashboard.title} summary`}>
+            <div class="surface-heading">
+              <div>
+                <p class="eyebrow">{dashboard.owner}</p>
+                <h2>{dashboard.description}</h2>
+              </div>
+              <div class="surface-meta">
+                <span class="runtime-pill" data-tone={dashboard.readiness === "live" ? "ready" : "watch"}>
+                  <span class="signal-dot" aria-hidden="true"></span>
+                  {dashboard.readiness.replace("-", " ")}
+                </span>
+                <span>{generatedAt}</span>
+              </div>
             </div>
-            <div class="surface-meta">
-              <span class="runtime-pill" data-tone={dashboard.readiness === "live" ? "ready" : "watch"}>
-                <span class="signal-dot" aria-hidden="true"></span>
-                {dashboard.readiness.replace("-", " ")}
-              </span>
-              <span>{generatedAt}</span>
+
+            <div class="accounting-metric-grid">
+              <MetricLinkCard
+                label="Gap rows"
+                value={formatNumber(surface.metrics.gapRows)}
+                caption={`${formatNumber(surface.metrics.criticalRows)} critical`}
+                href="/accounting/price-agreement-gaps"
+                tone={surface.metrics.criticalRows > 0 ? "critical" : "info"}
+              />
+              <MetricLinkCard
+                label="Expected credit"
+                value={formatCurrency(surface.metrics.expectedCredit)}
+                caption={`${formatNumber(surface.creditMemoCandidates.length)} candidate packets`}
+                href="/accounting/credit-memos"
+                tone="review"
+              />
+              <MetricLinkCard
+                label="Invoice gate"
+                value={formatNumber(surface.invoiceGateCandidates.length)}
+                caption={`${formatNumber(surface.metrics.openInvoices)} unpaid/open`}
+                href="/accounting/invoices"
+                tone="critical"
+              />
+              <MetricLinkCard
+                label="Workflow state"
+                value={dashboard.readiness.replace("-", " ")}
+                caption={dashboard.source}
+                href={dashboard.route}
+                tone={dashboard.readiness === "live" ? "ready" : "info"}
+              />
             </div>
-          </div>
+          </section>
+        )}
 
-          <div class="accounting-metric-grid">
-            <MetricLinkCard
-              label="Gap rows"
-              value={formatNumber(surface.metrics.gapRows)}
-              caption={`${formatNumber(surface.metrics.criticalRows)} critical`}
-              href="/accounting/price-agreement-gaps"
-              tone={surface.metrics.criticalRows > 0 ? "critical" : "info"}
-            />
-            <MetricLinkCard
-              label="Expected credit"
-              value={formatCurrency(surface.metrics.expectedCredit)}
-              caption={`${formatNumber(surface.creditMemoCandidates.length)} candidate packets`}
-              href="/accounting/credit-memos"
-              tone="review"
-            />
-            <MetricLinkCard
-              label="Invoice gate"
-              value={formatNumber(surface.invoiceGateCandidates.length)}
-              caption={`${formatNumber(surface.metrics.openInvoices)} unpaid/open`}
-              href="/accounting/invoices"
-              tone="critical"
-            />
-            <MetricLinkCard
-              label="Workflow state"
-              value={dashboard.readiness.replace("-", " ")}
-              caption={dashboard.source}
-              href={dashboard.route}
-              tone={dashboard.readiness === "live" ? "ready" : "info"}
-            />
-          </div>
-        </section>
+        {dashboard.slug === "invoices" && (
+          <section class="invoice-gate-workbench" aria-label="Invoice payment gate workbench">
+            <div class="invoice-workbench-heading">
+              <div>
+                <p class="eyebrow">Lucinda Invoice Gate</p>
+                <h2>Fix the selected unpaid invoice exception first.</h2>
+                <p>
+                  Paid invoices are excluded. This surface only shows the line items that are out of tolerance, missing a trusted
+                  price authority, or need Lucinda to approve the next agent move.
+                </p>
+              </div>
+              <div class="invoice-workbench-count">
+                <strong>{formatNumber(surface.invoiceGateCandidates.length)}</strong>
+                <span>unpaid invoices with blockers</span>
+              </div>
+            </div>
 
-        <HumanUnblockerDashboard
-          items={routeLiveItems.length > 0 ? routeLiveItems : liveSurface.items}
-          department="accounting"
-          emptyLabel="No live accounting blocker is open for this source path."
-        />
+            {surface.invoiceGateCandidates.length > 0 ? (
+              <div class="invoice-gate-layout">
+                <aside class="invoice-queue-rail" aria-label="Unpaid invoice queue">
+                  <div class="invoice-queue-rail-heading">
+                    <p class="eyebrow">Queue</p>
+                    <h3>Review only exceptions</h3>
+                  </div>
+                  <div class="invoice-queue-list">
+                    {invoiceQueueCandidates.map((invoice: InvoiceGateCandidate) => (
+                      <a
+                        class:list={["invoice-queue-item", selectedInvoice === invoice.invoiceNumber && "is-selected"]}
+                        href={invoice.href}
+                        aria-current={selectedInvoice === invoice.invoiceNumber ? "page" : undefined}
+                      >
+                        <span class="invoice-queue-main">
+                          <strong>{invoice.invoiceNumber}</strong>
+                          <span>{invoice.vendor}</span>
+                        </span>
+                        <span class="invoice-queue-meta">
+                          <span>{invoice.acculynxJobNumber}</span>
+                          <span>{formatNumber(invoice.missingAgreementLineCount)} blocked lines</span>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </aside>
+
+                <section class="invoice-repair-surface" aria-label="Selected invoice repair task">
+                  {selectedInvoiceCandidate ? (
+                    <>
+                      <div class="invoice-repair-heading">
+                        <div>
+                          <p class="eyebrow">Human Answer Needed</p>
+                          <h2>{selectedInvoiceCandidate.vendor} / {selectedInvoiceCandidate.invoiceNumber}</h2>
+                          <p>
+                            Decide whether each exception can be released by API pricing, needs an official price line, or must stay
+                            blocked while Lucinda requests source evidence.
+                          </p>
+                        </div>
+                        <span class={`status-badge priority-${selectedInvoiceCandidate.criticalRows > 0 ? "critical" : selectedInvoiceCandidate.blockedRows > 0 ? "high" : "normal"}`}>
+                          {selectedInvoiceCandidate.primaryAction}
+                        </span>
+                      </div>
+
+                      <div class="invoice-fact-grid" aria-label="Invoice facts">
+                        <div>
+                          <span>AccuLynx Job #</span>
+                          <strong>{selectedInvoiceCandidate.acculynxJobNumber}</strong>
+                        </div>
+                        <div>
+                          <span>Payment state</span>
+                          <strong>{selectedInvoiceCandidate.paymentStatus}</strong>
+                        </div>
+                        <div>
+                          <span>Lines needing review</span>
+                          <strong>{formatNumber(selectedInvoiceExceptionRows.length)} of {formatNumber(selectedInvoiceCandidate.lineCount)}</strong>
+                        </div>
+                        <div>
+                          <span>Expected credit exposure</span>
+                          <strong>{formatCurrency(selectedInvoiceCandidate.expectedCredit || selectedInvoiceCandidate.absoluteVariance)}</strong>
+                        </div>
+                      </div>
+
+                      <div class="invoice-evidence-board" aria-label="Current evidence">
+                        <div>
+                          <span>Invoice PDF</span>
+                          <strong>{selectedInvoiceCandidate.invoiceEvidenceLabel}</strong>
+                        </div>
+                        <div>
+                          <span>Last known agreement</span>
+                          <strong>{selectedInvoiceCandidate.agreementEvidenceLabel}</strong>
+                        </div>
+                      </div>
+
+                      <div class="invoice-line-card-list">
+                        {selectedInvoiceExceptionRows.map((line) => {
+                          const action = primaryLineDecision(line);
+                          return (
+                            <article class="invoice-line-card" data-decision-context>
+                              <header>
+                                <div>
+                                  <p class="eyebrow">Line {line.lineNumber}</p>
+                                  <h3>{line.itemNumber}</h3>
+                                  <p>{line.itemDescription}</p>
+                                </div>
+                                <span class={`status-badge gap-${line.severity}`}>{line.severity}</span>
+                              </header>
+
+                              <div class="human-answer-callout">
+                                <span>Lucinda needs to decide</span>
+                                <strong>{line.humanAction}</strong>
+                              </div>
+
+                              <div class="line-evidence-grid">
+                                <div>
+                                  <span>What does not match</span>
+                                  <strong>{lineMismatchSummary(line)}</strong>
+                                </div>
+                                <div>
+                                  <span>Invoice line</span>
+                                  <strong>{formatCurrency(line.invoicePrice)} / {line.quantity ?? "qty missing"} {line.invoiceUom}</strong>
+                                </div>
+                                <div>
+                                  <span>Trusted reference</span>
+                                  <strong>{line.referenceAgreement}</strong>
+                                </div>
+                                <div>
+                                  <span>Branch / region</span>
+                                  <strong>{line.branchNumber} / {line.branchRegion}</strong>
+                                </div>
+                                <div>
+                                  <span>Authority state</span>
+                                  <strong>{priceAuthorityLabel(line)}</strong>
+                                </div>
+                                <div>
+                                  <span>Source evidence</span>
+                                  <strong>{line.evidenceStatusLabel} / {line.agreementSource}</strong>
+                                </div>
+                              </div>
+
+                              <div class="line-direct-entry">
+                                <label>
+                                  <span>Approved price</span>
+                                  <input data-decision-field="approved price" type="number" name={`price-${line.id}`} inputmode="decimal" step="0.01" value={line.referencePrice ?? ""} />
+                                </label>
+                                <label>
+                                  <span>UOM</span>
+                                  <input data-decision-field="approved UOM" type="text" name={`uom-${line.id}`} value={line.invoiceUom === "Missing" ? "" : line.invoiceUom} />
+                                </label>
+                                <label>
+                                  <span>Active start</span>
+                                  <input data-decision-field="active start" type="date" name={`active-start-${line.id}`} />
+                                </label>
+                                <label>
+                                  <span>Active end</span>
+                                  <input data-decision-field="active end" type="date" name={`active-end-${line.id}`} />
+                                </label>
+                              </div>
+
+                              <div class="line-evidence-actions">
+                                <button
+                                  class={lineActionClass(action.tone)}
+                                  type="button"
+                                  data-live-decision={action.decision}
+                                  data-work-key={`accounting:price-gap:${line.id}`}
+                                  data-action-intent={action.intent}
+                                  data-action-label={action.label}
+                                  data-action-next-step={action.nextStep}
+                                >
+                                  {action.label}
+                                </button>
+                                <button
+                                  class="button button-secondary"
+                                  type="button"
+                                  data-live-decision="approve"
+                                  data-work-key={`accounting:price-gap:${line.id}`}
+                                  data-action-intent="create_official_price_agreement_line"
+                                  data-action-label="Create official price line"
+                                  data-action-next-step="Create or update the price agreement header and line item, map Vendor-branch-id / Branch Price / Branch UOM into products, send Roberto the FYI acknowledgement task, and require Lucinda to mark the price approved."
+                                >
+                                  Create official price line
+                                </button>
+                                <button
+                                  class="button button-ghost"
+                                  type="button"
+                                  data-live-decision="needs_more_evidence"
+                                  data-work-key={`accounting:price-gap:${line.id}`}
+                                  data-action-intent="request_pdf_or_csv_price_agreement"
+                                  data-action-label="Request PDF/CSV agreement"
+                                  data-action-next-step="Agent drafts Lucinda's rep email requesting the PDF/CSV agreement and attaches the invoice PDF, original order, branch, SKU, and current API/pricing evidence. Agent does not send externally."
+                                >
+                                  Request PDF/CSV agreement
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+
+                        {selectedInvoiceExceptionRows.length === 0 && (
+                          <BoundaryNotice
+                            title="No exception lines remain"
+                            detail="This unpaid invoice has no line-level pricing blocker in the current Supabase gap surface."
+                            action="Agent may re-check payment release prerequisites before Lucinda marks it ready."
+                          />
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <BoundaryNotice
+                      title={requestedInvoice ? "Invoice is not in the open unpaid exception queue" : "No unpaid invoice exception is open"}
+                      detail={requestedInvoice ? `${requestedInvoice} may be paid, resolved, or missing from the current ABC mirror.` : "Paid invoices are treated as processed and hidden from this dashboard."}
+                      action="Refresh the ABC invoice mirror or open Accounting audit log if this looks wrong."
+                    />
+                  )}
+                </section>
+
+                <aside class="invoice-guidance-panel" aria-label="Pricing flow guidance">
+                  <p class="eyebrow">Pricing Source Of Truth</p>
+                  <h3>Products becomes the final branch pricing catalog.</h3>
+                  <dl>
+                    <div>
+                      <dt>PDF / CSV agreement</dt>
+                      <dd>Create agreement header and parsed line items immediately, then map approved branch prices into products.</dd>
+                    </div>
+                    <div>
+                      <dt>API pricing match</dt>
+                      <dd>May unblock as API Pricing after Lucinda approves the temporary observation-backed rule.</dd>
+                    </div>
+                    <div>
+                      <dt>Manual entry</dt>
+                      <dd>Creates an official price-agreement line after Roberto acknowledges and Lucinda marks the price approved.</dd>
+                    </div>
+                    <div>
+                      <dt>Suppression rule</dt>
+                      <dd>A resolved SKU/branch should not reappear unless a new agreement is added or the current agreement expires.</dd>
+                    </div>
+                  </dl>
+                  <label class="decision-note-label">
+                    <span>Decision note</span>
+                    <textarea data-decision-note rows="3" placeholder="Add Lucinda's answer, vendor context, or approval constraint"></textarea>
+                  </label>
+                  <p class="action-note" data-action-note>
+                    Pick a line action to save the decision, entered price fields, and next agent step to Supabase.
+                  </p>
+                  <BoundaryNotice
+                    title="Dashboard is source, Slack is mirror"
+                    detail="These actions write to Supabase first. Slack mirrors the action ID and packet after the dashboard decision is accepted."
+                    action="External vendor emails remain Lucinda-only."
+                  />
+                </aside>
+              </div>
+            ) : (
+              <BoundaryNotice
+                title="No unpaid invoice blockers"
+                detail="The current live surface has no unpaid invoice rows that require price-agreement review."
+                action="Open audit log if an expected invoice is missing."
+              />
+            )}
+          </section>
+        )}
+
+        {dashboard.slug !== "invoices" && (
+          <>
+            <HumanUnblockerDashboard
+              items={routeLiveItems.length > 0 ? routeLiveItems : liveSurface.items}
+              department="accounting"
+              emptyLabel="No live accounting blocker is open for this source path."
+            />
 
         <details class="accounting-full-source-detail" open={Boolean(selectedReviewItemId || selectedInvoice)}>
           <summary>Full accounting source detail</summary>
@@ -196,128 +516,6 @@ const boundaryDetail =
                         <td colspan="6">No open ABC review rows are present in the live queue.</td>
                       </tr>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {dashboard.slug === "invoices" && (
-              <div class="queue-table-wrap">
-                <table class="queue-table accounting-table invoice-review-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Vendor</th>
-                      <th scope="col">Invoice</th>
-                      <th scope="col">AccuLynx Job #</th>
-                      <th scope="col">Lines to review</th>
-                      <th scope="col">Current evidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {surface.invoiceGateCandidates.map((invoice: InvoiceGateCandidate) => (
-                      <tr class:list={[selectedInvoice === invoice.invoiceNumber && "is-selected"]}>
-                        <td><strong>{invoice.vendor}</strong><span>{invoice.paymentStatus}</span></td>
-                        <td><strong>{invoice.invoiceNumber}</strong><span>{invoice.primaryAction}</span></td>
-                        <td><strong>{invoice.acculynxJobNumber}</strong></td>
-                        <td>
-                          <strong>{formatNumber(invoice.missingAgreementLineCount)}</strong>
-                          <span>{formatNumber(invoice.lineCount)} total open line rows</span>
-                        </td>
-                        <td>
-                          <details class="invoice-evidence-details">
-                            <summary>{invoice.currentEvidenceSummary}</summary>
-                            <div class="invoice-evidence-summary">
-                              <dl>
-                                <div>
-                                  <dt>Last known agreement</dt>
-                                  <dd>{invoice.agreementEvidenceLabel}</dd>
-                                </div>
-                                <div>
-                                  <dt>Invoice PDF</dt>
-                                  <dd>{invoice.invoiceEvidenceLabel}</dd>
-                                </div>
-                              </dl>
-                            </div>
-                            <div class="invoice-line-evidence-list">
-                              {invoice.lines.filter(needsAgreementEvidence).slice(0, 10).map((line) => (
-                                <article class="invoice-line-evidence">
-                                  <header>
-                                    <div>
-                                      <strong>{line.lineNumber} / {line.itemNumber}</strong>
-                                      <span>{line.itemDescription}</span>
-                                    </div>
-                                    <span class={`status-badge gap-${line.severity}`}>{line.severity}</span>
-                                  </header>
-                                  <dl>
-                                    <div>
-                                      <dt>What does not match</dt>
-                                      <dd>{lineMismatchSummary(line)}</dd>
-                                    </div>
-                                    <div>
-                                      <dt>Invoice line</dt>
-                                      <dd>{formatCurrency(line.invoicePrice)} / {line.quantity ?? "qty missing"} {line.invoiceUom}</dd>
-                                    </div>
-                                    <div>
-                                      <dt>Agent evidence</dt>
-                                      <dd>{line.evidenceStatusLabel} / {line.agreementSource}</dd>
-                                    </div>
-                                  </dl>
-                                  <div class="line-evidence-actions">
-                                    <label class="button button-secondary line-upload-button">
-                                      Upload required data
-                                      <input type="file" name={`line-evidence-${line.id}`} accept=".pdf,.csv,.xlsx,.xls,.json" />
-                                    </label>
-                                    <button
-                                      class="button button-primary"
-                                      type="button"
-                                      data-live-decision="approve"
-                                      data-work-key={`accounting:price-gap:${line.id}`}
-                                      data-action-intent="approve_agent_supplied_line_evidence"
-                                      data-action-label="Approve agent supplied data"
-                                      data-action-next-step="Agent applies the approved line evidence to the invoice pricing gate."
-                                    >
-                                      Approve agent supplied data
-                                    </button>
-                                  </div>
-                                  <div class="line-direct-entry">
-                                    <label>
-                                      <span>Price</span>
-                                      <input type="number" name={`price-${line.id}`} inputmode="decimal" step="0.01" value={line.referencePrice ?? ""} />
-                                    </label>
-                                    <label>
-                                      <span>UOM</span>
-                                      <input type="text" name={`uom-${line.id}`} value={line.invoiceUom === "Missing" ? "" : line.invoiceUom} />
-                                    </label>
-                                    <label>
-                                      <span>Active start</span>
-                                      <input type="date" name={`active-start-${line.id}`} />
-                                    </label>
-                                    <label>
-                                      <span>Active end</span>
-                                      <input type="date" name={`active-end-${line.id}`} />
-                                    </label>
-                                    <button
-                                      class="button button-ghost"
-                                      type="button"
-                                      data-live-decision="needs_more_evidence"
-                                      data-work-key={`accounting:price-gap:${line.id}`}
-                                      data-action-intent="human_entered_pricing_decision"
-                                      data-action-label="Use entered pricing decision"
-                                      data-action-next-step="Agent validates the entered price, UOM, and active dates against the invoice line."
-                                    >
-                                      Use entered data
-                                    </button>
-                                  </div>
-                                </article>
-                              ))}
-                              {invoice.lines.filter(needsAgreementEvidence).length === 0 && (
-                                <p class="empty-state">No unpaid line item needs price-agreement evidence.</p>
-                              )}
-                            </div>
-                          </details>
-                        </td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>
@@ -631,9 +829,12 @@ const boundaryDetail =
           </aside>
           </section>
         </details>
+          </>
+        )}
       </>
     ) : (
       <BoundaryNotice title="Dashboard not found" detail={`No Accounting dashboard exists for "${slug}".`} action="Return to /accounting." />
     )
   }
+  <script src="/src/scripts/command-center.ts"></script>
 </AppShell>

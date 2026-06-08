@@ -7,8 +7,15 @@ import {
   serializeActor,
   type WorkQueueDecision,
 } from "@lib/access-control";
+import { formatCurrency, loadAgreementGapSurface, type AgreementGapRow } from "@lib/abc-price-gaps";
 import { jsonApiResponse } from "@lib/agent-api";
-import { loadCommandCenterSurface, recordLiveWorkDecision, serializeLiveWorkQueueItem } from "@lib/live-work";
+import {
+  loadCommandCenterSurface,
+  recordLiveWorkDecision,
+  serializeLiveWorkQueueItem,
+  type LiveWorkItem,
+  type LiveWorkPriority,
+} from "@lib/live-work";
 import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
@@ -29,13 +36,72 @@ function isWorkQueueDecision(value: unknown): value is WorkQueueDecision {
   return typeof value === "string" && WORK_QUEUE_DECISIONS.includes(value as WorkQueueDecision);
 }
 
+function priorityForGap(row: AgreementGapRow): LiveWorkPriority {
+  if (row.severity === "critical") return "critical";
+  if (row.severity === "blocked") return "high";
+  return "normal";
+}
+
+function statusForPriority(priority: LiveWorkPriority): LiveWorkItem["status"] {
+  return priority === "critical" ? "blocked" : "needs_review";
+}
+
+function buildPriceGapWorkItem(row: AgreementGapRow): LiveWorkItem {
+  const priority = priorityForGap(row);
+  const valueAtRisk = Math.abs(row.variance ?? 0) * Math.max(row.quantity ?? 1, 1);
+  const workKey = `accounting:price-gap:${row.id}`;
+
+  return {
+    action: "Resolve price authority",
+    approval: "before_write",
+    auditTrail: [
+      "Source row resolved from the live ABC price gap surface.",
+      row.evidenceStatusLabel,
+      `Invoice price: ${formatCurrency(row.invoicePrice)}; reference price: ${formatCurrency(row.referencePrice)}.`,
+      `Branch/region: ${row.branchNumber} / ${row.branchRegion}.`,
+      "Product identity is mandatory before price approval.",
+      "Products is the final branch pricing catalog after Lucinda approval.",
+    ],
+    auditorRequired: priority !== "normal",
+    cadence: "daily",
+    department: "accounting",
+    detail: row.humanAction,
+    evidence: `${row.vendorName} / ${row.invoiceNumber} / ${row.itemNumber} / ${row.evidenceStatusLabel}`,
+    href: `/accounting/invoices?invoice=${encodeURIComponent(row.invoiceNumber)}`,
+    id: `price-gap:${row.id}`,
+    nextRun: row.invoiceDate ?? "Ready now",
+    owner: "@ob-accounting",
+    primaryHuman: "Lucinda",
+    priority,
+    sourceLabel: "ABC price gap",
+    sourcePk: row.id,
+    sourceTable: "abc_invoice_lines",
+    status: statusForPriority(priority),
+    title: `Price gap / ${row.invoiceNumber} / ${row.itemNumber}`,
+    valueAtRisk,
+    workflow: "price-agreement-gap",
+    workKey,
+  };
+}
+
+async function loadFallbackWorkItem(decodedWorkId: string): Promise<LiveWorkItem | null> {
+  const prefix = "accounting:price-gap:";
+  if (!decodedWorkId.startsWith(prefix)) return null;
+
+  const rowId = decodedWorkId.slice(prefix.length);
+  const gapSurface = await loadAgreementGapSurface();
+  const row = gapSurface.rows.find((candidate) => candidate.id === rowId);
+  return row ? buildPriceGapWorkItem(row) : null;
+}
+
 export const POST: APIRoute = async ({ request, params }) => {
   const actor = resolveCommandCenterActor(request, getRuntimeEnv());
   if (!actor) return buildUnauthorizedResponse();
 
   const surface = await loadCommandCenterSurface();
   const decodedWorkId = params.workId ? decodeURIComponent(params.workId) : "";
-  const work = surface.items.find((candidate) => candidate.workKey === decodedWorkId || candidate.id === decodedWorkId);
+  let work = surface.items.find((candidate) => candidate.workKey === decodedWorkId || candidate.id === decodedWorkId) ?? null;
+  work ??= await loadFallbackWorkItem(decodedWorkId);
   if (!work) {
     return jsonApiResponse(
       {

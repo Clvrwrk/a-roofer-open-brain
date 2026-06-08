@@ -1335,68 +1335,6 @@ main {
   color: #334155;
 }
 
-.invoice-review-table {
-  min-width: 1120px;
-}
-
-.invoice-review-table th:nth-child(1),
-.invoice-review-table td:nth-child(1) {
-  width: 16%;
-}
-
-.invoice-review-table th:nth-child(2),
-.invoice-review-table td:nth-child(2) {
-  width: 17%;
-}
-
-.invoice-review-table th:nth-child(3),
-.invoice-review-table td:nth-child(3) {
-  width: 14%;
-}
-
-.invoice-review-table th:nth-child(4),
-.invoice-review-table td:nth-child(4) {
-  width: 13%;
-}
-
-.invoice-review-table th:nth-child(5),
-.invoice-review-table td:nth-child(5) {
-  width: 40%;
-}
-
-.invoice-evidence-details {
-  min-width: 0;
-}
-
-.invoice-evidence-details summary {
-  cursor: pointer;
-  color: var(--primary);
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.invoice-evidence-summary dl,
-.invoice-line-evidence dl {
-  display: grid;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
-}
-
-.invoice-evidence-summary dl {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.invoice-evidence-summary div,
-.invoice-line-evidence dl div {
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-inset);
-  padding: var(--space-2);
-}
-
-.invoice-evidence-summary dt,
-.invoice-line-evidence dt,
 .line-direct-entry span {
   color: var(--text-muted);
   font-size: 11px;
@@ -1404,55 +1342,12 @@ main {
   text-transform: uppercase;
 }
 
-.invoice-evidence-summary dd,
-.invoice-line-evidence dd {
-  margin: var(--space-1) 0 0;
-  overflow-wrap: anywhere;
-  color: var(--text);
-  font-size: 13px;
-}
-
-.invoice-line-evidence-list {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.invoice-line-evidence {
-  display: grid;
-  gap: var(--space-3);
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-3);
-}
-
-.invoice-line-evidence header,
 .line-evidence-actions,
 .line-direct-entry {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-}
-
-.invoice-line-evidence header {
-  justify-content: space-between;
-}
-
-.invoice-line-evidence header span {
-  display: block;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.line-upload-button {
-  position: relative;
-  overflow: hidden;
-}
-
-.line-upload-button input[type="file"] {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  opacity: 0;
 }
 
 .line-direct-entry {
@@ -1474,6 +1369,240 @@ main {
   color: var(--text);
   font: inherit;
   padding: 9px 10px;
+}
+
+.invoice-gate-workbench {
+  display: grid;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.invoice-workbench-heading {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-5);
+  box-shadow: var(--shadow);
+}
+
+.invoice-workbench-heading h2,
+.invoice-repair-heading h2 {
+  max-width: 780px;
+  color: var(--primary);
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.05;
+}
+
+.invoice-workbench-heading p,
+.invoice-repair-heading p,
+.invoice-line-card p {
+  max-width: 780px;
+  color: var(--text-secondary);
+}
+
+.invoice-workbench-count {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-4);
+}
+
+.invoice-workbench-count strong {
+  color: var(--primary);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.invoice-workbench-count span,
+.invoice-fact-grid span,
+.invoice-evidence-board span,
+.line-evidence-grid span,
+.human-answer-callout span,
+.invoice-guidance-panel dt,
+.invoice-queue-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-gate-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.invoice-queue-rail,
+.invoice-repair-surface,
+.invoice-guidance-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.invoice-queue-rail,
+.invoice-guidance-panel {
+  position: sticky;
+  top: var(--space-5);
+}
+
+.invoice-queue-rail-heading,
+.invoice-guidance-panel,
+.invoice-repair-surface {
+  padding: var(--space-4);
+}
+
+.invoice-queue-list {
+  display: grid;
+  max-height: 68vh;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.invoice-queue-item {
+  display: grid;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+}
+
+.invoice-queue-item:hover,
+.invoice-queue-item.is-selected {
+  background: var(--surface-alt);
+  box-shadow: inset 4px 0 0 var(--tertiary);
+}
+
+.invoice-queue-main,
+.invoice-queue-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.invoice-queue-main strong {
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+
+.invoice-queue-main span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.invoice-repair-surface {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-repair-heading {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-4);
+}
+
+.invoice-fact-grid,
+.invoice-evidence-board,
+.line-evidence-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.invoice-fact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.invoice-evidence-board,
+.line-evidence-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.invoice-fact-grid div,
+.invoice-evidence-board div,
+.line-evidence-grid div,
+.human-answer-callout {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.invoice-fact-grid strong,
+.invoice-evidence-board strong,
+.line-evidence-grid strong,
+.human-answer-callout strong {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.invoice-line-card-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-line-card {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.invoice-line-card header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+}
+
+.invoice-line-card h3 {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.human-answer-callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.invoice-guidance-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-guidance-panel h3 {
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.invoice-guidance-panel dl {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.invoice-guidance-panel div {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-3);
+}
+
+.invoice-guidance-panel dd {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
 }
 
 .action-note {
@@ -2485,6 +2614,7 @@ main {
   .gap-workbench,
   .monitor-grid,
   .snapshot-layout,
+  .invoice-gate-layout,
   .accounting-workbench,
   .human-workbench,
   .live-workbench {
@@ -2498,10 +2628,24 @@ main {
   .detail-panel,
   .gap-detail-panel,
   .snapshot-dashboard,
+  .invoice-queue-rail,
+  .invoice-guidance-panel,
   .accounting-decision-panel,
   .human-decision-panel,
   .live-decision-panel {
     position: static;
+  }
+
+  .invoice-repair-surface {
+    order: 1;
+  }
+
+  .invoice-queue-rail {
+    order: 2;
+  }
+
+  .invoice-guidance-panel {
+    order: 3;
   }
 
   .monitor-summary {
@@ -2515,6 +2659,26 @@ main {
 
 @media (max-width: 820px) {
   .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-workbench-heading,
+  .invoice-repair-heading,
+  .invoice-line-card header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invoice-workbench-count {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
+    padding-left: 0;
+  }
+
+  .invoice-fact-grid,
+  .invoice-evidence-board,
+  .line-evidence-grid {
     grid-template-columns: 1fr;
   }
 
