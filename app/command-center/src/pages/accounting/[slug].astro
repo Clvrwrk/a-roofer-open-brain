@@ -14,6 +14,7 @@ import {
 } from "@lib/accounting-dashboard";
 import type { AgreementGapRow } from "@lib/abc-price-gaps";
 import { loadDepartmentSurface } from "@lib/live-work";
+import { loadVendorTerritorySurface } from "@lib/vendor-territories";
 
 const slug = Astro.params.slug;
 const dashboard = getAccountingDashboard(slug);
@@ -24,6 +25,7 @@ if (!dashboard) {
 
 const surface = await loadAccountingSurface();
 const liveSurface = await loadDepartmentSurface("accounting");
+const territorySurface = dashboard?.slug === "vendor-regions" ? await loadVendorTerritorySurface() : null;
 const reviewQueueItems = liveSurface.items.filter((item) => item.workflow === "abc-review");
 const routeLiveItems = dashboard
   ? liveSurface.items.filter((item) => {
@@ -47,13 +49,30 @@ function hasReason(row: AgreementGapRow, code: string) {
   return row.gapReasons.some((reason) => reason.code === code);
 }
 
+function needsAgreementEvidence(row: AgreementGapRow) {
+  return row.evidenceStatus !== "pdf_mapped";
+}
+
+function lineMismatchSummary(row: AgreementGapRow) {
+  const parts = [
+    row.gapReasons.map((reason) => reason.label).join(", "),
+    row.variance !== null ? `Variance ${formatCurrency(row.variance)} per ${row.invoiceUom}` : null,
+    row.referencePrice === null ? "No trusted reference price" : null,
+  ].filter(Boolean);
+  return parts.join(" / ") || row.evidenceStatusLabel;
+}
+
 function sourceRowHref(href: string) {
   return `${href.split("#")[0]}#source-row-detail`;
 }
 
 const productRows = surface.gapRows.filter((row) => hasReason(row, "no_price_list_item") || hasReason(row, "uom_mismatch"));
 const branchRows = surface.gapRows.filter((row) => hasReason(row, "no_branch_agreement") || hasReason(row, "no_fixed_agreement"));
-const visibleGapRows = surface.gapRows.slice(0, 100);
+const apiEvidenceRows = surface.gapRows.filter((row) =>
+  ["no_pdf_api_match", "no_pdf_api_mismatch", "no_pdf_api_missing"].includes(row.evidenceStatus),
+);
+const apiEvidenceRowIds = new Set(apiEvidenceRows.map((row) => row.id));
+const visibleGapRows = [...apiEvidenceRows, ...surface.gapRows.filter((row) => !apiEvidenceRowIds.has(row.id))].slice(0, 100);
 const selectedInvoice = Astro.url.searchParams.get("invoice");
 const selectedInvoiceRows = selectedInvoice ? surface.gapRows.filter((row) => row.invoiceNumber === selectedInvoice) : [];
 const branchGroups = Array.from(
@@ -184,29 +203,119 @@ const boundaryDetail =
 
             {dashboard.slug === "invoices" && (
               <div class="queue-table-wrap">
-                <table class="queue-table accounting-table">
+                <table class="queue-table accounting-table invoice-review-table">
                   <thead>
                     <tr>
+                      <th scope="col">Vendor</th>
                       <th scope="col">Invoice</th>
-                      <th scope="col">Payment</th>
-                      <th scope="col">Rows</th>
-                      <th scope="col">Severity</th>
-                      <th scope="col">Expected credit</th>
-                      <th scope="col">Action</th>
+                      <th scope="col">AccuLynx Job #</th>
+                      <th scope="col">Lines to review</th>
+                      <th scope="col">Current evidence</th>
                     </tr>
                   </thead>
                   <tbody>
                     {surface.invoiceGateCandidates.map((invoice: InvoiceGateCandidate) => (
                       <tr class:list={[selectedInvoice === invoice.invoiceNumber && "is-selected"]}>
+                        <td><strong>{invoice.vendor}</strong><span>{invoice.paymentStatus}</span></td>
                         <td><strong>{invoice.invoiceNumber}</strong><span>{invoice.primaryAction}</span></td>
-                        <td>{invoice.paymentStatus}</td>
-                        <td>{formatNumber(invoice.lineCount)}</td>
+                        <td><strong>{invoice.acculynxJobNumber}</strong></td>
                         <td>
-                          <span>{formatNumber(invoice.criticalRows)} critical</span>
-                          <span>{formatNumber(invoice.blockedRows)} blocked</span>
+                          <strong>{formatNumber(invoice.missingAgreementLineCount)}</strong>
+                          <span>{formatNumber(invoice.lineCount)} total open line rows</span>
                         </td>
-                        <td><strong>{formatCurrency(invoice.expectedCredit)}</strong></td>
-                        <td><a class="row-action" href={`/accounting/invoices?invoice=${encodeURIComponent(invoice.invoiceNumber)}`}>Inspect</a></td>
+                        <td>
+                          <details class="invoice-evidence-details">
+                            <summary>{invoice.currentEvidenceSummary}</summary>
+                            <div class="invoice-evidence-summary">
+                              <dl>
+                                <div>
+                                  <dt>Last known agreement</dt>
+                                  <dd>{invoice.agreementEvidenceLabel}</dd>
+                                </div>
+                                <div>
+                                  <dt>Invoice PDF</dt>
+                                  <dd>{invoice.invoiceEvidenceLabel}</dd>
+                                </div>
+                              </dl>
+                            </div>
+                            <div class="invoice-line-evidence-list">
+                              {invoice.lines.filter(needsAgreementEvidence).slice(0, 10).map((line) => (
+                                <article class="invoice-line-evidence">
+                                  <header>
+                                    <div>
+                                      <strong>{line.lineNumber} / {line.itemNumber}</strong>
+                                      <span>{line.itemDescription}</span>
+                                    </div>
+                                    <span class={`status-badge gap-${line.severity}`}>{line.severity}</span>
+                                  </header>
+                                  <dl>
+                                    <div>
+                                      <dt>What does not match</dt>
+                                      <dd>{lineMismatchSummary(line)}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Invoice line</dt>
+                                      <dd>{formatCurrency(line.invoicePrice)} / {line.quantity ?? "qty missing"} {line.invoiceUom}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Agent evidence</dt>
+                                      <dd>{line.evidenceStatusLabel} / {line.agreementSource}</dd>
+                                    </div>
+                                  </dl>
+                                  <div class="line-evidence-actions">
+                                    <label class="button button-secondary line-upload-button">
+                                      Upload required data
+                                      <input type="file" name={`line-evidence-${line.id}`} accept=".pdf,.csv,.xlsx,.xls,.json" />
+                                    </label>
+                                    <button
+                                      class="button button-primary"
+                                      type="button"
+                                      data-live-decision="approve"
+                                      data-work-key={`accounting:price-gap:${line.id}`}
+                                      data-action-intent="approve_agent_supplied_line_evidence"
+                                      data-action-label="Approve agent supplied data"
+                                      data-action-next-step="Agent applies the approved line evidence to the invoice pricing gate."
+                                    >
+                                      Approve agent supplied data
+                                    </button>
+                                  </div>
+                                  <div class="line-direct-entry">
+                                    <label>
+                                      <span>Price</span>
+                                      <input type="number" name={`price-${line.id}`} inputmode="decimal" step="0.01" value={line.referencePrice ?? ""} />
+                                    </label>
+                                    <label>
+                                      <span>UOM</span>
+                                      <input type="text" name={`uom-${line.id}`} value={line.invoiceUom === "Missing" ? "" : line.invoiceUom} />
+                                    </label>
+                                    <label>
+                                      <span>Active start</span>
+                                      <input type="date" name={`active-start-${line.id}`} />
+                                    </label>
+                                    <label>
+                                      <span>Active end</span>
+                                      <input type="date" name={`active-end-${line.id}`} />
+                                    </label>
+                                    <button
+                                      class="button button-ghost"
+                                      type="button"
+                                      data-live-decision="needs_more_evidence"
+                                      data-work-key={`accounting:price-gap:${line.id}`}
+                                      data-action-intent="human_entered_pricing_decision"
+                                      data-action-label="Use entered pricing decision"
+                                      data-action-next-step="Agent validates the entered price, UOM, and active dates against the invoice line."
+                                    >
+                                      Use entered data
+                                    </button>
+                                  </div>
+                                </article>
+                              ))}
+                              {invoice.lines.filter(needsAgreementEvidence).length === 0 && (
+                                <p class="empty-state">No unpaid line item needs price-agreement evidence.</p>
+                              )}
+                            </div>
+                          </details>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -232,9 +341,13 @@ const boundaryDetail =
                       <tr>
                         <td><strong>{row.invoiceNumber}</strong><span>{row.itemNumber} / {row.itemDescription}</span></td>
                         <td><strong>{row.branchNumber}</strong><span>{row.branchName}</span></td>
-                        <td><span class={`status-badge gap-${row.severity}`}>{row.severity}</span><span>{row.gapReasons.map((reason) => reason.label).join(", ")}</span></td>
+                        <td>
+                          <span class={`status-badge gap-${row.severity}`}>{row.severity}</span>
+                          <span>{row.gapReasons.map((reason) => reason.label).join(", ")}</span>
+                          <small>{row.evidenceStatusLabel}</small>
+                        </td>
                         <td><strong>{formatCurrency(row.invoicePrice)}</strong><span>{row.quantity ?? "Qty missing"} {row.invoiceUom}</span></td>
-                        <td><span>{row.referenceAgreement}</span></td>
+                        <td><span>{row.referenceAgreement}</span><small>{row.agreementSource}</small></td>
                         <td>{row.humanAction}</td>
                       </tr>
                     ))}
@@ -300,29 +413,141 @@ const boundaryDetail =
             )}
 
             {dashboard.slug === "vendor-regions" && (
-              <div class="queue-table-wrap">
-                <table class="queue-table accounting-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Branch</th>
-                      <th scope="col">Rows</th>
-                      <th scope="col">Invoices</th>
-                      <th scope="col">Reasons</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {branchGroups.map((branch) => (
+              <div class="vendor-territory-stack">
+                <section class="vendor-territory-panel" aria-label="Vendor territory coverage map">
+                  <div class="vendor-territory-top">
+                    <div class="vendor-logo-lockup">
+                      <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="190" height="56" />
+                      <div>
+                        <p class="eyebrow">Vendor Territories</p>
+                        <h3>Branch coverage by PE office drive-time territory</h3>
+                      </div>
+                    </div>
+                    {territorySurface && (
+                      <span class="runtime-pill" data-tone={territorySurface.status === "live" ? "ready" : "watch"}>
+                        <span class="signal-dot" aria-hidden="true"></span>
+                        {territorySurface.status}
+                      </span>
+                    )}
+                  </div>
+
+                  {territorySurface ? (
+                    <>
+                      <div class="territory-stat-grid" aria-label="Territory counts">
+                        <div><strong>{formatNumber(territorySurface.counts.offices)}</strong><span>PE offices</span></div>
+                        <div><strong>{formatNumber(territorySurface.counts.branches)}</strong><span>vendor branches</span></div>
+                        <div><strong>{formatNumber(territorySurface.counts.pdfAgreementBranches)}</strong><span>PDF agreement</span></div>
+                        <div><strong>{formatNumber(territorySurface.counts.apiOnlyBranches)}</strong><span>API only</span></div>
+                        <div><strong>{formatNumber(territorySurface.counts.noPriceAgreementBranches)}</strong><span>no agreement</span></div>
+                        <div><strong>{formatNumber(territorySurface.counts.needsDecision)}</strong><span>need decision</span></div>
+                      </div>
+
+                      {territorySurface.errors.length > 0 ? (
+                        <BoundaryNotice
+                          title="Territory map degraded"
+                          detail={territorySurface.errors.join(" ")}
+                          action="Refresh the Supabase territory mirror before using this page for branch decisions."
+                        />
+                      ) : (
+                        <div class="vendor-map-shell">
+                          <svg class="vendor-territory-map" viewBox="0 0 1000 620" role="img" aria-label="PE office territories and vendor branch coverage">
+                            <rect x="0" y="0" width="1000" height="620" rx="18"></rect>
+                            {territorySurface.offices.map((office) => (
+                              <>
+                                {office.polygonPoints && <polygon class="territory-boundary" points={office.polygonPoints}><title>{office.name} / {office.driveTimeMinutes ?? 120} minute drive-time</title></polygon>}
+                              </>
+                            ))}
+                            {territorySurface.branches.map((branch) => (
+                              <circle
+                                class={`branch-pin pin-${branch.priceEvidenceStatus} route-${branch.status}${branch.pricingApproved ? " is-approved" : ""}`}
+                                cx={branch.x}
+                                cy={branch.y}
+                                r={branch.status === "overlap_pending" ? "5.8" : branch.status === "out_of_boundary" ? "5.2" : "3.8"}
+                              >
+                                <title>{branch.vendorName} / {branch.branchNumber} {branch.branchName} / {branch.location} / {branch.priceEvidenceLabel} / {branch.status} / assigned: {branch.assignedOfficeName}</title>
+                              </circle>
+                            ))}
+                            {territorySurface.offices.map((office) => (
+                              office.x !== null && office.y !== null && (
+                                <g class="office-marker">
+                                  <circle cx={office.x} cy={office.y} r="8"></circle>
+                                  <text x={office.x + 12} y={office.y + 4}>{office.name}</text>
+                                </g>
+                              )
+                            ))}
+                          </svg>
+                          <div class="territory-legend" aria-label="Map legend">
+                            <span><i class="pin-pdf_price_agreement"></i>PDF agreement</span>
+                            <span><i class="pin-api_only_pricing"></i>API only</span>
+                            <span><i class="pin-no_price_agreement"></i>No agreement</span>
+                            <span><i class="route-overlap_pending"></i>Overlap ring</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div class="queue-table-wrap territory-review-table">
+                        <table class="queue-table accounting-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">Branch</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">Assigned / suggested</th>
+                              <th scope="col">Candidates</th>
+                              <th scope="col">Human answer</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {territorySurface.reviewBranches.slice(0, 40).map((branch) => (
+                              <tr>
+                                <td><strong>{branch.branchNumber} / {branch.branchName}</strong><span>{branch.vendorName} / {branch.location}</span></td>
+                                <td>
+                                  <span class={`territory-status status-${branch.status}`}>{branch.status.replace("_", " ")}</span>
+                                  <span>{branch.priceEvidenceLabel}</span>
+                                  <span>{branch.pricingApproved ? "pricing approved" : "pricing not approved"}</span>
+                                </td>
+                                <td><strong>{branch.assignedOfficeName}</strong><span>Suggested: {branch.suggestedOfficeName}</span></td>
+                                <td>{formatNumber(branch.candidateOfficeCount)}</td>
+                                <td>{branch.status === "overlap_pending" ? "Choose the default PE office/branch pricing path." : branch.status === "out_of_boundary" ? "Request branch-level price agreement evidence." : "Approve territory pricing evidence or request the missing source."}</td>
+                              </tr>
+                            ))}
+                            {territorySurface.reviewBranches.length === 0 && (
+                              <tr>
+                                <td colspan="5">Every mapped vendor branch is covered and approved in the live territory surface.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <BoundaryNotice title="Territory surface not loaded" detail="This dashboard did not receive a vendor territory surface." action="Refresh /accounting/vendor-regions." />
+                  )}
+                </section>
+
+                <div class="queue-table-wrap">
+                  <table class="queue-table accounting-table">
+                    <thead>
                       <tr>
-                        <td><strong>{branch.branchNumber}</strong><span>{branch.branchName}</span></td>
-                        <td>{formatNumber(branch.rows)}</td>
-                        <td>{formatNumber(branch.invoices.size)}</td>
-                        <td>{Array.from(branch.reasons).slice(0, 3).join(", ")}</td>
-                        <td>Approve mapping, flag exception, or escalate.</td>
+                        <th scope="col">Branch</th>
+                        <th scope="col">Rows</th>
+                        <th scope="col">Invoices</th>
+                        <th scope="col">Reasons</th>
+                        <th scope="col">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {branchGroups.map((branch) => (
+                        <tr>
+                          <td><strong>{branch.branchNumber}</strong><span>{branch.branchName}</span></td>
+                          <td>{formatNumber(branch.rows)}</td>
+                          <td>{formatNumber(branch.invoices.size)}</td>
+                          <td>{Array.from(branch.reasons).slice(0, 3).join(", ")}</td>
+                          <td>Approve mapping, flag exception, or escalate.</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

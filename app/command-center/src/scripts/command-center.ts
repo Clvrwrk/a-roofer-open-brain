@@ -210,9 +210,8 @@ document.addEventListener("click", async (event) => {
   if (!target || !note) return;
 
   const selected = rows.find((row) => row.classList.contains("is-selected"));
-  if (!selected) return;
 
-  const workKey = selected.dataset.workKey ?? selected.dataset.workId;
+  const workKey = target.dataset.workKey ?? selected?.dataset.workKey ?? selected?.dataset.workId;
   if (!workKey) {
     note.textContent = "No work key is attached to this row.";
     return;
@@ -227,7 +226,7 @@ document.addEventListener("click", async (event) => {
         decision: target.dataset.liveDecision,
         intent: target.dataset.actionIntent ?? null,
         label: target.dataset.actionLabel ?? target.textContent?.trim() ?? null,
-        nextStep: target.dataset.actionNextStep ?? selected.dataset.nextStep ?? null,
+        nextStep: target.dataset.actionNextStep ?? selected?.dataset.nextStep ?? null,
         note: decisionNote?.value.trim() || null,
       }),
       headers: {

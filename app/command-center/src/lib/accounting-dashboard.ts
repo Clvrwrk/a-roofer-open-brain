@@ -47,14 +47,21 @@ export interface CreditMemoCandidate {
 export interface InvoiceGateCandidate {
   invoiceNumber: string;
   href: string;
+  vendor: string;
+  acculynxJobNumber: string;
   paymentStatus: string;
   lineCount: number;
+  missingAgreementLineCount: number;
   criticalRows: number;
   blockedRows: number;
   reviewRows: number;
   expectedCredit: number;
   absoluteVariance: number;
+  currentEvidenceSummary: string;
+  invoiceEvidenceLabel: string;
+  agreementEvidenceLabel: string;
   primaryAction: string;
+  lines: AgreementGapRow[];
 }
 
 export interface AccountingSurface {
@@ -271,6 +278,26 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
+function hasMissingAgreementEvidence(row: AgreementGapRow) {
+  const missingEvidenceStatuses = new Set([
+    "no_pdf_api_match",
+    "no_pdf_api_mismatch",
+    "no_pdf_api_missing",
+    "no_pdf_no_api_agreement",
+    "no_reference_agreement",
+    "no_price_line",
+  ]);
+  return missingEvidenceStatuses.has(row.evidenceStatus) || row.gapReasons.some((reason) =>
+    ["no_price_list_item", "no_branch_agreement", "no_fixed_agreement", "no_pdf_price_agreement"].includes(reason.code),
+  );
+}
+
+function isPaidPaymentStatus(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized.includes("unpaid") || normalized.includes("not paid")) return false;
+  return normalized === "paid" || normalized.includes(" paid");
+}
+
 export async function loadAccountingSurface(): Promise<AccountingSurface> {
   const gaps = await loadAgreementGapSurface();
   const byInvoice = groupByInvoice(gaps.rows);
@@ -301,26 +328,40 @@ export async function loadAccountingSurface(): Promise<AccountingSurface> {
 
   const invoiceGateCandidates: InvoiceGateCandidate[] = Array.from(byInvoice.entries())
     .map(([invoiceNumber, lines]) => {
+      const activeLines = lines.filter((row) => !isPaidPaymentStatus(row.paymentStatus));
       const criticalRows = lines.filter((row) => row.severity === "critical").length;
       const blockedRows = lines.filter((row) => row.severity === "blocked").length;
       const reviewRows = lines.filter((row) => row.severity === "review").length;
       const expectedCredit = lines.reduce((sum, row) => sum + expectedCreditForRow(row), 0);
       const absoluteVariance = lines.reduce((sum, row) => sum + Math.abs(row.variance ?? 0) * (row.quantity ?? 1), 0);
       const first = lines[0];
+      const missingAgreementLineCount = activeLines.filter(hasMissingAgreementEvidence).length;
+      const agreementEvidence = unique(lines.map((row) => row.agreementSource).filter((source) => source !== "No source file mapped"));
+      const invoiceEvidence = unique(lines.map((row) => row.invoiceEvidenceLabel).filter(Boolean));
+      const agreementEvidenceLabel = agreementEvidence[0] ?? "No price agreement evidence mapped";
+      const invoiceEvidenceLabel = invoiceEvidence[0] ?? "Invoice PDF metadata missing";
 
       return {
         invoiceNumber,
         href: `/accounting/invoices?invoice=${encodeURIComponent(invoiceNumber)}`,
+        vendor: first?.vendorName ?? "ABC Supply Co.",
+        acculynxJobNumber: first?.acculynxJobNumber ?? "needs job #",
         paymentStatus: first?.paymentStatus ?? "unknown",
         lineCount: lines.length,
+        missingAgreementLineCount,
         criticalRows,
         blockedRows,
         reviewRows,
         expectedCredit,
         absoluteVariance,
+        currentEvidenceSummary: `${agreementEvidenceLabel} / ${invoiceEvidenceLabel}`,
+        invoiceEvidenceLabel,
+        agreementEvidenceLabel,
         primaryAction: criticalRows > 0 ? "Keep blocked" : blockedRows > 0 ? "Resolve agreement" : expectedCredit > 0 ? "Draft credit memo" : "Review",
+        lines,
       };
     })
+    .filter((candidate) => !isPaidPaymentStatus(candidate.paymentStatus))
     .sort((a, b) => b.criticalRows - a.criticalRows || b.blockedRows - a.blockedRows || b.expectedCredit - a.expectedCredit);
 
   return {

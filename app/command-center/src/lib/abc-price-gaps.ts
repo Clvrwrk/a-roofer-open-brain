@@ -13,6 +13,7 @@ interface AgreementRow {
   version_label: string | null;
   effective_date: string | null;
   expiry_date: string | null;
+  source_file: string | null;
   ceo_verified: boolean | null;
   staleness_status: string | null;
 }
@@ -81,6 +82,8 @@ interface InvoiceDocumentRow {
   id: string;
   invoice_number: string | null;
   payment_status: string | null;
+  original_filename: string | null;
+  extraction_status: string | null;
 }
 
 interface Candidate {
@@ -93,6 +96,15 @@ export interface GapReason {
   code: string;
   label: string;
 }
+
+export type PriceAgreementEvidenceStatus =
+  | "pdf_mapped"
+  | "no_pdf_api_match"
+  | "no_pdf_api_mismatch"
+  | "no_pdf_api_missing"
+  | "no_pdf_no_api_agreement"
+  | "no_reference_agreement"
+  | "no_price_line";
 
 export interface AgreementGapRow {
   id: string;
@@ -108,6 +120,10 @@ export interface AgreementGapRow {
   orderName: string;
   purchaseOrderNumber: string;
   paymentStatus: string;
+  vendorName: string;
+  acculynxJobNumber: string;
+  invoiceEvidenceLabel: string;
+  invoiceEvidenceStatus: string;
   quantity: number | null;
   invoiceUom: string;
   invoicePrice: number | null;
@@ -117,6 +133,9 @@ export interface AgreementGapRow {
   pastAgreement: string;
   currentAgreement: string;
   referenceAgreement: string;
+  agreementSource: string;
+  evidenceStatus: PriceAgreementEvidenceStatus;
+  evidenceStatusLabel: string;
   gapReasons: GapReason[];
   humanAction: string;
   escalationPayload: string;
@@ -160,6 +179,7 @@ const TODAY = new Date("2026-06-06T00:00:00Z");
 const PAGE_SIZE = 1000;
 const MONEY_FORMATTER = new Intl.NumberFormat("en-US", { currency: "USD", style: "currency" });
 const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+const ABC_VENDOR_NAME = "ABC Supply Co.";
 
 async function selectAll<T extends Record<string, unknown>>(
   client: SupabaseClient,
@@ -213,6 +233,19 @@ function hasFixedWindow(agreement: AgreementRow) {
   return Boolean(agreement.effective_date && agreement.expiry_date);
 }
 
+function agreementSourceText(agreement: AgreementRow | null | undefined) {
+  return compact(agreement?.source_file, "No source file mapped");
+}
+
+function isPdfAgreement(agreement: AgreementRow | null | undefined) {
+  return /\.pdf(?:$|[?#])/i.test(agreementSourceText(agreement));
+}
+
+function isApiAgreement(agreement: AgreementRow | null | undefined) {
+  const source = `${agreement?.source_file ?? ""} ${agreement?.version_label ?? ""} ${agreement?.agreement_number ?? ""}`;
+  return /\bapi\b/i.test(source);
+}
+
 function isActiveOn(agreement: AgreementRow, date: Date | null) {
   if (!date || !hasFixedWindow(agreement)) return false;
   const effective = toDate(agreement.effective_date);
@@ -226,6 +259,44 @@ function compact(value: unknown, fallback = "Unknown") {
   return text || fallback;
 }
 
+function normalizePaymentStatus(value: string | null | undefined) {
+  return compact(value, "unpaid").toLowerCase();
+}
+
+function isPaidPaymentStatus(value: string | null | undefined) {
+  const normalized = normalizePaymentStatus(value);
+  if (normalized.includes("unpaid") || normalized.includes("not paid")) return false;
+  return normalized === "paid" || normalized.includes(" paid");
+}
+
+function normalizeOfficePrefix(value: string | null | undefined) {
+  const normalized = compact(value, "job").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (normalized === "colorado") return "co";
+  if (normalized === "kansas") return "ks";
+  if (normalized === "texas") return "tx";
+  return normalized.slice(0, 2) || "job";
+}
+
+function extractAcculynxJobNumber(values: Array<string | null | undefined>, regionCode: string) {
+  const prefix = normalizeOfficePrefix(regionCode);
+  const explicitPattern = /\b([a-z]{2})[-\s_]?(\d{2,})\b/i;
+  const numberPattern = /\b(\d{2,})\b/;
+
+  for (const value of values) {
+    const text = compact(value, "");
+    const explicit = text.match(explicitPattern);
+    if (explicit) return `${explicit[1].toLowerCase()}-${explicit[2]}`;
+  }
+
+  for (const value of values) {
+    const text = compact(value, "");
+    const number = text.match(numberPattern);
+    if (number) return `${prefix}-${number[1]}`;
+  }
+
+  return `needs ${prefix}-##`;
+}
+
 function formatMoney(value: number | null) {
   return value === null ? "Missing" : MONEY_FORMATTER.format(value);
 }
@@ -235,10 +306,14 @@ function formatAgreement(candidate: Candidate | null, empty = "None found") {
   const agreement = candidate.agreement;
   const label = compact(agreement.agreement_number ?? agreement.version_label, "Agreement");
   const start = compact(agreement.effective_date, "missing start");
-  const end = compact(agreement.expiry_date, "missing end");
+  const end = isApiAgreement(agreement) ? "current API price" : compact(agreement.expiry_date, "missing end");
   const verified = agreement.ceo_verified ? "CEO verified" : "not CEO verified";
   const price = formatMoney(toNumber(candidate.item.unit_price));
   return `${label} / ${start} to ${end} / ${price} / ${verified}`;
+}
+
+function formatAgreementSource(candidate: Candidate | null) {
+  return agreementSourceText(candidate?.agreement);
 }
 
 function agreementSortDesc(a: Candidate, b: Candidate) {
@@ -264,7 +339,10 @@ function chooseSeverity(reasons: GapReason[]): GapSeverity {
     codes.has("missing_invoice_price") ||
     codes.has("no_price_list_item") ||
     codes.has("no_branch_agreement") ||
-    codes.has("no_fixed_agreement")
+    codes.has("no_fixed_agreement") ||
+    codes.has("no_pdf_api_mismatch") ||
+    codes.has("no_pdf_api_missing") ||
+    codes.has("no_pdf_no_api_agreement")
   ) {
     return "critical";
   }
@@ -274,8 +352,12 @@ function chooseSeverity(reasons: GapReason[]): GapSeverity {
 
 function chooseHumanAction(reasons: GapReason[]) {
   const codes = new Set(reasons.map((reason) => reason.code));
-  if (codes.has("no_price_list_item")) return "Create fixed SKU price line with start and end date.";
-  if (codes.has("no_branch_agreement")) return "Map this branch and region to a fixed agreement.";
+  if (codes.has("no_pdf_api_match")) return "Approve or deny the API-backed match: no PDF is mapped, but the ABC API price matches this invoice line.";
+  if (codes.has("no_pdf_api_mismatch")) return "Human intervention: API price does not match invoice. Decide credit-memo path or request current PDF agreement evidence.";
+  if (codes.has("no_pdf_api_missing")) return "Human intervention: no PDF is mapped and the API price is missing. Request branch/SKU price evidence.";
+  if (codes.has("no_pdf_no_api_agreement")) return "Map/upload the PDF agreement product file or request API-backed branch/SKU pricing.";
+  if (codes.has("no_price_list_item")) return "Create or fetch the branch/SKU price line from PDF or API evidence.";
+  if (codes.has("no_branch_agreement")) return "Map this branch and region to a PDF agreement or API-backed agreement.";
   if (codes.has("no_fixed_agreement")) return "Add a fixed agreement window for this branch/SKU.";
   if (codes.has("expired_agreement")) return "Renew the agreement or confirm backdated pricing.";
   if (codes.has("future_agreement")) return "Confirm whether the future agreement should cover this invoice.";
@@ -283,6 +365,47 @@ function chooseHumanAction(reasons: GapReason[]) {
   if (codes.has("price_variance")) return "Approve the variance or correct the agreement price.";
   if (codes.has("uom_mismatch")) return "Confirm UOM conversion and normalize the agreement unit.";
   return "Review agreement guardrail.";
+}
+
+function priceMatches(invoicePrice: number | null, referencePrice: number | null) {
+  return invoicePrice !== null && referencePrice !== null && Math.abs(invoicePrice - referencePrice) <= 0.005;
+}
+
+function evidenceStatusFrom(reasons: GapReason[], referenceAgreement: Candidate | null): {
+  status: PriceAgreementEvidenceStatus;
+  label: string;
+} {
+  const codes = new Set(reasons.map((reason) => reason.code));
+
+  if (codes.has("no_pdf_api_match")) {
+    return { status: "no_pdf_api_match", label: "No PDF mapped; ABC API price matched invoice" };
+  }
+
+  if (codes.has("no_pdf_api_mismatch")) {
+    return { status: "no_pdf_api_mismatch", label: "No PDF mapped; ABC API price does not match invoice" };
+  }
+
+  if (codes.has("no_pdf_api_missing")) {
+    return { status: "no_pdf_api_missing", label: "No PDF mapped; ABC API price missing" };
+  }
+
+  if (codes.has("no_pdf_no_api_agreement")) {
+    return { status: "no_pdf_no_api_agreement", label: "No PDF/API agreement mapped for branch and SKU" };
+  }
+
+  if (codes.has("no_price_list_item")) {
+    return { status: "no_price_line", label: "No PDF/API product price line mapped" };
+  }
+
+  if (!referenceAgreement) {
+    return { status: "no_reference_agreement", label: "No branch/region agreement reference" };
+  }
+
+  if (isApiAgreement(referenceAgreement?.agreement)) {
+    return { status: "no_pdf_api_match", label: "ABC API agreement used as reference evidence" };
+  }
+
+  return { status: "pdf_mapped", label: "PDF price agreement mapped" };
 }
 
 function getInvoiceQuantity(raw: Record<string, unknown> | null) {
@@ -378,7 +501,7 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
         selectAll<AgreementRow>(
           client,
           "abc_price_agreements",
-          "id,branch_number,region_code,agreement_number,version_label,effective_date,expiry_date,ceo_verified,staleness_status",
+          "id,branch_number,region_code,agreement_number,version_label,effective_date,expiry_date,source_file,ceo_verified,staleness_status",
         ),
         selectAll<PriceListItemRow>(
           client,
@@ -403,7 +526,7 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
           "ship_to_number,branch_number,abc_price_agreement_id,match_type,confidence_score",
         ),
         selectAll<ShipToBranchRow>(client, "abc_ship_to_branch_access", "ship_to_number,branch_number,home_branch,branch_name"),
-        selectAll<InvoiceDocumentRow>(client, "invoice_documents", "id,invoice_number,payment_status"),
+        selectAll<InvoiceDocumentRow>(client, "invoice_documents", "id,invoice_number,payment_status,original_filename,extraction_status"),
       ]);
 
     const agreementById = new Map(agreements.map((agreement) => [agreement.id, agreement]));
@@ -437,9 +560,14 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
     }
 
     const rows: AgreementGapRow[] = [];
+    let reviewedInvoiceLineCount = 0;
 
     for (const line of invoiceLines) {
       const invoice = invoiceByNumber.get(line.invoice_number);
+      const invoiceDocument = documentByInvoice.get(line.invoice_number);
+      const paymentStatus = compact(invoiceDocument?.payment_status, "unpaid");
+      if (isPaidPaymentStatus(paymentStatus)) continue;
+      reviewedInvoiceLineCount += 1;
       const order = invoice?.order_number ? orderByNumber.get(invoice.order_number) : undefined;
       const fallbackBranch = invoice?.ship_to_number ? shipToBranchByShipTo.get(invoice.ship_to_number) : undefined;
       const branchNumber = order?.branch_number ?? fallbackBranch?.branch_number ?? "Unknown";
@@ -462,7 +590,14 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
         })
         .filter((candidate): candidate is Candidate => Boolean(candidate));
 
-      const fixedCandidates = candidates.filter((candidate) => hasFixedWindow(candidate.agreement));
+      const pdfCandidates = candidates.filter((candidate) => isPdfAgreement(candidate.agreement));
+      const apiCandidates = candidates
+        .filter((candidate) => isApiAgreement(candidate.agreement))
+        .sort((a, b) => {
+          const scopeRank: Record<Candidate["scope"], number> = { branch: 0, "ship-to match": 1, region: 2 };
+          return scopeRank[a.scope] - scopeRank[b.scope] || dateTime(b.agreement.effective_date) - dateTime(a.agreement.effective_date);
+        });
+      const fixedCandidates = pdfCandidates.filter((candidate) => hasFixedWindow(candidate.agreement));
       const activeAtInvoice = fixedCandidates.find((candidate) => isActiveOn(candidate.agreement, invoiceDate));
       const activeToday = fixedCandidates.find((candidate) => isActiveOn(candidate.agreement, TODAY));
       const pastAgreement =
@@ -479,8 +614,10 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
             return Boolean(effective && invoiceDate && effective > invoiceDate);
           })
           .sort(agreementSortAsc)[0] ?? null;
-      const nonFixedAgreement = candidates.find((candidate) => !hasFixedWindow(candidate.agreement)) ?? null;
-      const referenceAgreement = activeAtInvoice ?? activeToday ?? pastAgreement ?? futureAgreement ?? nonFixedAgreement;
+      const apiReference = apiCandidates[0] ?? null;
+      const nonFixedAgreement =
+        candidates.find((candidate) => !hasFixedWindow(candidate.agreement) && !isApiAgreement(candidate.agreement)) ?? null;
+      const referenceAgreement = activeAtInvoice ?? activeToday ?? pastAgreement ?? futureAgreement ?? apiReference ?? nonFixedAgreement;
       const invoicePrice = getInvoicePrice(line.raw);
       const referencePrice = toNumber(referenceAgreement?.item.unit_price);
       const variance = invoicePrice !== null && referencePrice !== null ? invoicePrice - referencePrice : null;
@@ -493,7 +630,22 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
       if (!skuItems.length) reasons.push({ code: "no_price_list_item", label: "No price-list item" });
       else if (!candidates.length) reasons.push({ code: "no_branch_agreement", label: "No branch agreement" });
 
-      if (!fixedCandidates.length && skuItems.length) {
+      if (!pdfCandidates.length && skuItems.length && candidates.length) {
+        if (apiReference) {
+          reasons.push({ code: "no_pdf_price_agreement", label: "No PDF mapped" });
+          if (invoicePrice === null || referencePrice === null) {
+            reasons.push({ code: "no_pdf_api_missing", label: "No PDF and missing API price" });
+          } else if (priceMatches(invoicePrice, referencePrice)) {
+            reasons.push({ code: "no_pdf_api_match", label: "API price matches invoice" });
+          } else {
+            reasons.push({ code: "no_pdf_api_mismatch", label: "API price does not match invoice" });
+          }
+        } else {
+          reasons.push({ code: "no_pdf_no_api_agreement", label: "No PDF/API agreement" });
+        }
+      }
+
+      if (!fixedCandidates.length && skuItems.length && !apiReference) {
         reasons.push({ code: "no_fixed_agreement", label: "No fixed date window" });
       } else if (fixedCandidates.length && !activeAtInvoice) {
         if (pastAgreement) reasons.push({ code: "expired_agreement", label: "Expired at invoice date" });
@@ -522,6 +674,13 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
       const purchaseOrderNumber = compact(order?.purchase_order_number ?? invoice?.purchase_order_number, "Missing PO");
       const branchName = toBranchLabel(branch, branchNumber);
       const humanAction = chooseHumanAction(gapReasons);
+      const evidenceStatus = evidenceStatusFrom(gapReasons, referenceAgreement);
+      const invoiceEvidenceLabel = compact(invoiceDocument?.original_filename, `Invoice PDF metadata missing for ${line.invoice_number}`);
+      const invoiceEvidenceStatus = compact(invoiceDocument?.extraction_status, "document not linked");
+      const acculynxJobNumber = extractAcculynxJobNumber(
+        [purchaseOrderNumber, orderName, invoice?.order_number, invoice?.order_name],
+        branchRegion,
+      );
 
       rows.push({
         id: `${line.invoice_number}-${line.line_key ?? line.line_number ?? itemNumber}`,
@@ -536,7 +695,11 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
         branchRegion,
         orderName,
         purchaseOrderNumber,
-        paymentStatus: compact(documentByInvoice.get(line.invoice_number)?.payment_status, "not linked"),
+        paymentStatus,
+        vendorName: ABC_VENDOR_NAME,
+        acculynxJobNumber,
+        invoiceEvidenceLabel,
+        invoiceEvidenceStatus,
         quantity: getInvoiceQuantity(line.raw),
         invoiceUom,
         invoicePrice,
@@ -546,6 +709,9 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
         pastAgreement: formatAgreement(pastAgreement, "No past fixed agreement"),
         currentAgreement: formatAgreement(activeToday, "No current fixed agreement"),
         referenceAgreement: formatAgreement(referenceAgreement, "No agreement reference"),
+        agreementSource: formatAgreementSource(referenceAgreement),
+        evidenceStatus: evidenceStatus.status,
+        evidenceStatusLabel: evidenceStatus.label,
         gapReasons,
         humanAction,
         escalationPayload: `${humanAction} Branch ${branchNumber}, SKU ${itemNumber}, invoice ${line.invoice_number}, PO ${purchaseOrderNumber}.`,
@@ -571,7 +737,7 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
       missingConfig: [],
       errors: [],
       totals: {
-        invoiceLines: invoiceLines.length,
+        invoiceLines: reviewedInvoiceLineCount,
         gapRows: rows.length,
         criticalRows: rows.filter((row) => row.severity === "critical").length,
         blockedRows: rows.filter((row) => row.severity === "blocked").length,

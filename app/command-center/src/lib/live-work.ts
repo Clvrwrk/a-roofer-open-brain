@@ -327,6 +327,12 @@ function compact(value: unknown, fallback = "Unknown") {
   return text || fallback;
 }
 
+function isPaidPaymentStatus(value: string | null | undefined) {
+  const normalized = compact(value, "").toLowerCase();
+  if (normalized.includes("unpaid") || normalized.includes("not paid")) return false;
+  return normalized === "paid" || normalized.includes(" paid");
+}
+
 function maybeDate(value: string | null | undefined) {
   if (!value) return null;
   const date = new Date(value);
@@ -572,7 +578,6 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
     openReviewCount,
     actionCount,
     creditMemoPacketCount,
-    invoiceGateCount,
     creditMemoIssuedCount,
     jobCostingCount,
     reviewRows,
@@ -585,7 +590,6 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
     safeCount(client, "abc_review_queue", (query) => query.eq("resolved", false)),
     safeCount(client, "dashboard_action_log", (query) => query.eq("department", "accounting")),
     safeCount(client, "credit_memo_requests"),
-    safeCount(client, "invoice_documents", (query) => query.or("payment_status.neq.paid,payment_blocked_reason.not.is.null")),
     safeCount(client, "abc_invoices", (query) => query.eq("is_credit_memo", true)),
     safeCount(client, "crm_pipeline", (query) => query.in("current_milestone", ["approved", "completed", "invoiced"])),
     safeRows<AbcReviewRow>(
@@ -616,12 +620,22 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
   ]);
   const reviewValue = reviewRows.reduce((total, row) => total + toNumber(row.ext_price), 0);
   const gapValue = gapSurface.totals.absoluteVariance;
+  const apiEvidenceGapRows = gapSurface.rows.filter((row) =>
+    ["no_pdf_api_match", "no_pdf_api_mismatch", "no_pdf_api_missing"].includes(row.evidenceStatus),
+  );
+  const apiEvidenceGapIds = new Set(apiEvidenceGapRows.map((row) => row.id));
+  const prioritizedGapRows = [
+    ...apiEvidenceGapRows,
+    ...gapSurface.rows.filter((row) => !apiEvidenceGapIds.has(row.id)),
+  ];
+  const unpaidInvoiceRows = invoiceRows.filter((row) => !isPaidPaymentStatus(row.payment_status));
+
   const items = [
     ...buildAccountingItems(reviewRows),
-    ...buildInvoiceGateItems(invoiceRows),
+    ...buildInvoiceGateItems(unpaidInvoiceRows),
     ...buildCreditMemoIssuedItems(creditMemoRows),
     ...buildJobCostingItems(jobCostingRows),
-    ...gapSurface.rows.slice(0, 25).map((row) => {
+    ...prioritizedGapRows.slice(0, 25).map((row) => {
       const value = Math.abs(row.variance ?? 0) * Math.max(row.quantity ?? 1, 1);
       const priority = row.severity === "critical" ? "critical" : row.severity === "blocked" ? "high" : "normal";
       return item({
@@ -629,6 +643,9 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
         approval: "before_write",
         auditTrail: [
           "Source row is live from ABC invoice/order/price mirrors.",
+          row.evidenceStatusLabel,
+          `Agreement source: ${row.agreementSource}.`,
+          `Reference price: ${formatMoney(row.referencePrice)}; invoice price: ${formatMoney(row.invoicePrice)}.`,
           "Roberto owns product/UOM/branch decisions.",
           "Chris verifies final agreement authority on escalations.",
         ],
@@ -636,7 +653,7 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
         cadence: "daily",
         department: "accounting",
         detail: row.humanAction,
-        evidence: `${row.branchName} / ${row.itemNumber} / ${row.invoiceUom}`,
+        evidence: `${row.branchName} / ${row.itemNumber} / ${row.invoiceUom} / ${row.evidenceStatusLabel}`,
         href: "/accounting/price-agreement-gaps",
         nextRun: formatShortDate(row.invoiceDate, "Ready now"),
         owner: "@ob-accounting",
@@ -664,7 +681,7 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
       metric("Open ABC review rows", formatNumber(openReviewCount), `${formatNumber(reviewCount)} total rows`, openReviewCount ? "review" : "ready", "/accounting/review-queue"),
       metric("Review value in first 50", formatMoney(reviewValue), "Open rows sorted by value at risk", reviewValue ? "critical" : "ready"),
       metric("Price gap rows", formatNumber(gapSurface.totals.gapRows), `${formatMoney(gapValue)} absolute variance`, gapSurface.totals.gapRows ? "review" : "ready", "/accounting/price-agreement-gaps"),
-      metric("Invoice gates", formatNumber(invoiceGateCount), "Unpaid or blocked invoice documents", invoiceGateCount ? "critical" : "ready", "/accounting/invoices"),
+      metric("Invoice gates", formatNumber(unpaidInvoiceRows.length), "Unpaid invoice documents", unpaidInvoiceRows.length ? "critical" : "ready", "/accounting/invoices"),
       metric("ABC credit memos", formatNumber(creditMemoIssuedCount), `${formatNumber(creditMemoPacketCount)} tracked request packets`, creditMemoIssuedCount ? "review" : "ready", "/accounting/credit-memos"),
       metric("Job packets", formatNumber(jobCostingCount), "Approved, completed, or invoiced jobs", jobCostingCount ? "review" : "ready", "/accounting/job-costing"),
       metric("Accounting actions logged", formatNumber(actionCount), "Durable dashboard decisions", "info", "/accounting/audit-log"),

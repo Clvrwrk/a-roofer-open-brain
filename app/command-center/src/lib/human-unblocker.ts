@@ -336,10 +336,10 @@ function defaultActions(work: LiveWorkItem): HumanAction[] {
 function accountingActions(work: LiveWorkItem): HumanAction[] {
   if (work.workflow === "price-agreement-gap") {
     return [
-      action("Approve Pricing Fix", "approve", "approve_pricing_fix", "Pricing fix becomes the next evidence step for the agent.", "primary"),
-      action("Needs Agreement", "needs_more_evidence", "request_price_agreement", "Agent drafts the missing price agreement request for Lucinda."),
+      action("Approve Evidence", "approve", "approve_pricing_evidence", "Agent may use the confirmed PDF/API evidence as the next pricing step.", "primary"),
+      action("Needs PDF/API Evidence", "needs_more_evidence", "request_price_agreement", "Agent drafts the missing price agreement or API evidence request for Lucinda."),
       action("Send To Lucinda", "resume_agent", "route_to_lucinda", "Conductor mirrors the packet to Lucinda for human send."),
-      action("Reject Match", "reject", "reject_pricing_match", "Agent keeps the invoice blocked and rebuilds the match.", "danger"),
+      action("Deny Match", "reject", "reject_pricing_match", "Agent keeps the invoice blocked and rebuilds the price match.", "danger"),
     ];
   }
 
@@ -433,7 +433,7 @@ const WORKFLOW_PROFILES: Record<string, WorkflowProfile> = {
     actions: accountingActions,
     nextStep: (work) => `Agent applies the approved pricing path, drafts any missing-agreement email for Lucinda, and keeps the invoice blocked until coverage is proven.`,
     recommendation: (work) => work.action || "Verify product, UOM, branch, agreement date, and variance before invoice payment.",
-    requiredResponse: () => "Roberto/Chris confirm the pricing fix or Lucinda gets a request packet for the missing price agreement.",
+    requiredResponse: () => "Approve or deny the PDF/API-backed pricing evidence, or tell the agent exactly what price-agreement evidence is missing.",
     stuckBecause: (work) => `Invoice pricing cannot be trusted until this price agreement gap is resolved: ${work.detail}`,
   },
   "invoice-payment-gate": {

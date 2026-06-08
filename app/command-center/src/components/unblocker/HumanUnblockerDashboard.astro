@@ -12,12 +12,15 @@ interface Props {
   department?: DepartmentId;
   emptyLabel?: string;
   maxItems?: number;
+  showSopPanel?: boolean;
 }
 
 const {
   items,
+  department,
   emptyLabel = "No live source-backed human blockers are open right now.",
   maxItems = 50,
+  showSopPanel = department === "executive" || department === "system",
 } = Astro.props;
 const allPackets = items.map(toHumanUnblockerItem);
 const packets = allPackets.slice(0, maxItems);
@@ -219,45 +222,49 @@ function actionButtonClass(tone: HumanActionTone) {
   </aside>
 </section>
 
-<section class="human-sop-panel" aria-label="SOP reduction candidates">
-  <div class="panel-heading">
-    <div>
-      <p class="eyebrow">SOP Reduction</p>
-      <h2>Repeated blockers agents may be able to absorb</h2>
-    </div>
-    <span class="runtime-pill" data-tone={automationCandidates.length ? "watch" : "ready"}>
-      <span class="signal-dot" aria-hidden="true"></span>
-      {automationCandidates.length ? `${automationCandidates.length} candidates` : "no repeats"}
-    </span>
-  </div>
-  <div class="queue-table-wrap">
-    <table class="queue-table human-sop-table">
-      <thead>
-        <tr>
-          <th scope="col">Workflow</th>
-          <th scope="col">Department</th>
-          <th scope="col">Visible count</th>
-          <th scope="col">Human owner</th>
-          <th scope="col">Next review</th>
-        </tr>
-      </thead>
-      <tbody>
-        {automationCandidates.length > 0 ? (
-          automationCandidates.map((candidate) => (
+{
+  showSopPanel && (
+    <section class="human-sop-panel" aria-label="SOP reduction candidates">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">SOP Reduction</p>
+          <h2>Repeated blockers agents may be able to absorb</h2>
+        </div>
+        <span class="runtime-pill" data-tone={automationCandidates.length ? "watch" : "ready"}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {automationCandidates.length ? `${automationCandidates.length} candidates` : "no repeats"}
+        </span>
+      </div>
+      <div class="queue-table-wrap">
+        <table class="queue-table human-sop-table">
+          <thead>
             <tr>
-              <td><strong>{candidate.workflow}</strong></td>
-              <td>{candidate.department}</td>
-              <td>{candidate.count}</td>
-              <td>{candidate.owner}</td>
-              <td>Create or reject SOP/process-change candidate after the human pattern is confirmed.</td>
+              <th scope="col">Workflow</th>
+              <th scope="col">Department</th>
+              <th scope="col">Visible count</th>
+              <th scope="col">Human owner</th>
+              <th scope="col">Next review</th>
             </tr>
-          ))
-        ) : (
-          <tr>
-            <td colspan="5">No live workflow has reached the three-item SOP review threshold.</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-</section>
+          </thead>
+          <tbody>
+            {automationCandidates.length > 0 ? (
+              automationCandidates.map((candidate) => (
+                <tr>
+                  <td><strong>{candidate.workflow}</strong></td>
+                  <td>{candidate.department}</td>
+                  <td>{candidate.count}</td>
+                  <td>{candidate.owner}</td>
+                  <td>Create or reject SOP/process-change candidate after the human pattern is confirmed.</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colspan="5">No live workflow has reached the three-item SOP review threshold.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
