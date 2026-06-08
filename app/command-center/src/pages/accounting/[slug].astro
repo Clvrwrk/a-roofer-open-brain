@@ -24,6 +24,10 @@ if (!dashboard) {
 const surface = await loadAccountingSurface();
 const liveSurface = await loadDepartmentSurface("accounting");
 const reviewQueueItems = liveSurface.items.filter((item) => item.workflow === "abc-review");
+const selectedReviewItemId = Astro.url.searchParams.get("item");
+const selectedReviewItem = selectedReviewItemId
+  ? reviewQueueItems.find((item) => item.sourcePk === selectedReviewItemId)
+  : null;
 const generatedAt = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   hour: "numeric",
@@ -34,6 +38,10 @@ const pageTitle = dashboard?.title ?? "Accounting dashboard not found";
 
 function hasReason(row: AgreementGapRow, code: string) {
   return row.gapReasons.some((reason) => reason.code === code);
+}
+
+function sourceRowHref(href: string) {
+  return `${href}#source-row-detail`;
 }
 
 const productRows = surface.gapRows.filter((row) => hasReason(row, "no_price_list_item") || hasReason(row, "uom_mismatch"));
@@ -140,13 +148,13 @@ const boundaryDetail =
                   </thead>
                   <tbody>
                     {reviewQueueItems.map((item) => (
-                      <tr>
+                      <tr class:list={[selectedReviewItemId === item.sourcePk && "is-selected"]}>
                         <td><strong>{item.title}</strong><span>{item.detail}</span></td>
                         <td>{item.primaryHuman}</td>
                         <td><span class={`status-badge priority-${item.priority}`}>{item.priority}</span></td>
                         <td>{item.evidence}</td>
                         <td><strong>{formatCurrency(item.valueAtRisk)}</strong></td>
-                        <td><a class="row-action" href={item.href}>Open source</a></td>
+                        <td><a class="row-action" href={sourceRowHref(item.href)}>Open source</a></td>
                       </tr>
                     ))}
                     {reviewQueueItems.length === 0 && (
@@ -336,6 +344,42 @@ const boundaryDetail =
                 <ul class="gap-reason-list">
                   {selectedInvoiceRows.slice(0, 8).map((row) => <li>{row.itemNumber}: {row.humanAction}</li>)}
                 </ul>
+              </div>
+            )}
+
+            {dashboard.slug === "review-queue" && selectedReviewItem && (
+              <div class="reasoning-block source-row-detail" id="source-row-detail" tabindex="-1">
+                <p class="eyebrow">Selected Source Row</p>
+                <h3>{selectedReviewItem.title}</h3>
+                <EvidenceStack
+                  items={[
+                    { label: "Source table", value: selectedReviewItem.sourceTable },
+                    { label: "Source row ID", value: selectedReviewItem.sourcePk },
+                    { label: "Workflow", value: selectedReviewItem.workflow },
+                    { label: "Evidence", value: selectedReviewItem.evidence },
+                    { label: "Value at risk", value: formatCurrency(selectedReviewItem.valueAtRisk) },
+                    { label: "Priority", value: selectedReviewItem.priority },
+                    { label: "Required action", value: selectedReviewItem.action },
+                    { label: "Detail", value: selectedReviewItem.detail },
+                  ]}
+                />
+                <div class="audit-block">
+                  <h3>Why this is in Lucinda's queue</h3>
+                  <ol>
+                    {selectedReviewItem.auditTrail.map((entry) => <li>{entry}</li>)}
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {dashboard.slug === "review-queue" && selectedReviewItemId && !selectedReviewItem && (
+              <div class="reasoning-block source-row-detail" id="source-row-detail" tabindex="-1">
+                <p class="eyebrow">Selected Source Row</p>
+                <h3>Source row not in the open queue</h3>
+                <p>
+                  Item {selectedReviewItemId} is not present in the current unresolved ABC review queue surface. It may have
+                  been resolved, dropped below the current priority window, or moved out of the live queue.
+                </p>
               </div>
             )}
 

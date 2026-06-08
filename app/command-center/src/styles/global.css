@@ -723,12 +723,14 @@ main {
 .work-row.is-selected,
 .gap-row:hover,
 .gap-row:focus,
-.gap-row.is-selected {
+.gap-row.is-selected,
+.accounting-table tr.is-selected {
   background: var(--surface-alt);
 }
 
 .work-row.is-selected,
-.gap-row.is-selected {
+.gap-row.is-selected,
+.accounting-table tr.is-selected {
   box-shadow: inset 4px 0 0 var(--tertiary);
 }
 
@@ -867,6 +869,10 @@ main {
 .action-note {
   margin-bottom: 0;
   color: var(--text-secondary);
+}
+
+.source-row-detail {
+  scroll-margin-top: var(--space-5);
 }
 
 .gap-reason-list {
