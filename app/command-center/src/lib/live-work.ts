@@ -192,6 +192,8 @@ interface DashboardActionInsert {
 const MONEY_FORMATTER = new Intl.NumberFormat("en-US", { currency: "USD", maximumFractionDigits: 0, style: "currency" });
 const NUMBER_FORMATTER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
+const LIVE_SURFACE_CACHE_TTL_MS = 30_000;
+const DEGRADED_SURFACE_CACHE_TTL_MS = 5_000;
 const DEPARTMENT_META: Record<DepartmentId, Pick<LiveDepartmentSurface, "primaryHuman" | "sourceSummary" | "subtitle" | "title">> = {
   accounting: {
     primaryHuman: "Lucinda",
@@ -230,6 +232,23 @@ const DEPARTMENT_META: Record<DepartmentId, Pick<LiveDepartmentSurface, "primary
     title: "System",
   },
 };
+
+let commandCenterSurfaceCache:
+  | {
+      expiresAt: number;
+      surface: LiveCommandCenterSurface;
+    }
+  | null = null;
+let commandCenterSurfaceInflight: Promise<LiveCommandCenterSurface> | null = null;
+
+function surfaceCacheTtl(status: LiveDataStatus) {
+  return status === "live" ? LIVE_SURFACE_CACHE_TTL_MS : DEGRADED_SURFACE_CACHE_TTL_MS;
+}
+
+export function invalidateCommandCenterSurfaceCache() {
+  commandCenterSurfaceCache = null;
+  commandCenterSurfaceInflight = null;
+}
 
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -916,7 +935,7 @@ export async function loadDepartmentSurface(department: DepartmentId, env: Runti
   }
 }
 
-export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<LiveCommandCenterSurface> {
+async function loadFreshCommandCenterSurface(env: RuntimeEnv): Promise<LiveCommandCenterSurface> {
   const surfaces = await Promise.all(departments.map((department) => loadDepartmentSurface(department.id, env)));
   const items = surfaces.flatMap((surface) => surface.items).sort((a, b) => {
     const priorityRank: Record<LiveWorkPriority, number> = { critical: 4, high: 3, normal: 2, low: 1 };
@@ -939,6 +958,29 @@ export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()
     ],
     status: errors.length ? "degraded" : "live",
   };
+}
+
+export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<LiveCommandCenterSurface> {
+  const now = Date.now();
+  if (commandCenterSurfaceCache && commandCenterSurfaceCache.expiresAt > now) {
+    return commandCenterSurfaceCache.surface;
+  }
+
+  if (!commandCenterSurfaceInflight) {
+    commandCenterSurfaceInflight = loadFreshCommandCenterSurface(env)
+      .then((surface) => {
+        commandCenterSurfaceCache = {
+          expiresAt: Date.now() + surfaceCacheTtl(surface.status),
+          surface,
+        };
+        return surface;
+      })
+      .finally(() => {
+        commandCenterSurfaceInflight = null;
+      });
+  }
+
+  return commandCenterSurfaceInflight;
 }
 
 export function serializeLiveWorkQueueItem(work: LiveWorkItem, actor: CommandCenterActor) {
@@ -1096,6 +1138,8 @@ export async function recordLiveWorkDecision(
         work_key: work.workKey,
       });
   }
+
+  invalidateCommandCenterSurfaceCache();
 
   return { action, workItem };
 }

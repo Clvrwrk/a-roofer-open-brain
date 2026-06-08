@@ -146,6 +146,22 @@ const MONEY_FORMATTER = new Intl.NumberFormat("en-US", { currency: "USD", maximu
 const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
 const SHORT_DATE = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" });
 const PAGE_SIZE = 1000;
+const SNAPSHOT_CACHE_TTL_MS = 60_000;
+const DEGRADED_SNAPSHOT_CACHE_TTL_MS = 5_000;
+
+let weeklySnapshotCache:
+  | {
+      expiresAt: number;
+      key: string;
+      snapshot: WeeklySnapshot;
+    }
+  | null = null;
+let weeklySnapshotInflight:
+  | {
+      key: string;
+      promise: Promise<WeeklySnapshot>;
+    }
+  | null = null;
 
 function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -197,6 +213,15 @@ export function formatSnapshotCurrency(value: number) {
 
 function formatDateRange(start: Date, end: Date) {
   return `${SHORT_DATE.format(start)} - ${SHORT_DATE.format(end)}`;
+}
+
+function snapshotCacheKey(env: RuntimeEnv, start: Date, end: Date) {
+  const projectUrl = env.SUPABASE_URL ?? env.PUBLIC_SUPABASE_URL ?? "unconfigured";
+  return `${projectUrl}:${start.toISOString()}:${end.toISOString()}`;
+}
+
+function snapshotCacheTtl(status: WeeklySnapshotStatus) {
+  return status === "live" ? SNAPSHOT_CACHE_TTL_MS : DEGRADED_SNAPSHOT_CACHE_TTL_MS;
 }
 
 function formatShortDate(value: string | null | undefined) {
@@ -522,7 +547,7 @@ function groupedActivity(records: SnapshotRecord[]) {
     .sort((a, b) => b.records.length - a.records.length);
 }
 
-export async function loadWeeklySnapshot(env: RuntimeEnv = getRuntimeEnv(), now = new Date()): Promise<WeeklySnapshot> {
+async function loadFreshWeeklySnapshot(env: RuntimeEnv, now: Date): Promise<WeeklySnapshot> {
   const end = startOfDay(now);
   const start = addDays(end, -14);
   const live = await loadLiveData(env);
@@ -670,4 +695,35 @@ export async function loadWeeklySnapshot(env: RuntimeEnv = getRuntimeEnv(), now 
       start: start.toISOString(),
     },
   };
+}
+
+export async function loadWeeklySnapshot(env: RuntimeEnv = getRuntimeEnv(), now = new Date()): Promise<WeeklySnapshot> {
+  const end = startOfDay(now);
+  const start = addDays(end, -14);
+  const key = snapshotCacheKey(env, start, end);
+  const currentTime = Date.now();
+
+  if (weeklySnapshotCache && weeklySnapshotCache.key === key && weeklySnapshotCache.expiresAt > currentTime) {
+    return weeklySnapshotCache.snapshot;
+  }
+
+  if (!weeklySnapshotInflight || weeklySnapshotInflight.key !== key) {
+    weeklySnapshotInflight = {
+      key,
+      promise: loadFreshWeeklySnapshot(env, now)
+        .then((snapshot) => {
+          weeklySnapshotCache = {
+            expiresAt: Date.now() + snapshotCacheTtl(snapshot.status),
+            key,
+            snapshot,
+          };
+          return snapshot;
+        })
+        .finally(() => {
+          weeklySnapshotInflight = null;
+        }),
+    };
+  }
+
+  return weeklySnapshotInflight.promise;
 }
