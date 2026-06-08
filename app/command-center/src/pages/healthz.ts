@@ -10,10 +10,15 @@ import {
   getAgentMailRuntimeConfig,
 } from "@lib/agentmail";
 import { getAgentAccessRuntimeConfig } from "@lib/access-control";
+import { loadCommandCenterSurface } from "@lib/live-work";
 
 export const prerender = false;
 
-export const GET: APIRoute = () => {
+function firstSet(...values: Array<string | undefined>) {
+  return values.find((value) => value && value !== "__set_me__") ?? null;
+}
+
+export const GET: APIRoute = async () => {
   const supabase = getSupabaseRuntimeConfig();
   const agentAuth = getAgentAuthRuntimeConfig();
   const agentMail = getAgentMailRuntimeConfig();
@@ -22,15 +27,34 @@ export const GET: APIRoute = () => {
   const slackRuntimeConfigured = Boolean(
     env.SLACK_BOT_TOKEN && env.SLACK_APP_TOKEN && env.SLACK_SIGNING_SECRET,
   );
+  const liveSurface = supabase.configured
+    ? await loadCommandCenterSurface(env).catch((error) => ({
+        errors: [error instanceof Error ? error.message : "Live command-center surface failed"],
+        items: [],
+        status: "degraded" as const,
+      }))
+    : null;
 
   return new Response(
     JSON.stringify(
       {
         status: "ok",
         service: "open-brain-command-center",
-        phase: "phase-1-walking-skeleton",
+        phase: "live-command-center",
         timestamp: new Date().toISOString(),
+        buildCommit: firstSet(
+          env.COMMAND_CENTER_BUILD_SHA,
+          env.SOURCE_COMMIT,
+          env.COOLIFY_GIT_COMMIT,
+          env.GIT_COMMIT,
+          env.RAILWAY_GIT_COMMIT_SHA,
+          env.VERCEL_GIT_COMMIT_SHA,
+        ),
         workDefinitions: workDefinitions.length,
+        liveWorkItems: liveSurface?.items.length ?? 0,
+        liveSurfaceStatus: liveSurface?.status ?? (supabase.configured ? "degraded" : "unconfigured"),
+        liveSurfaceErrors: liveSurface?.errors ?? [],
+        requiredRoutes: ["/", "/weekly-snapshot", "/api/agent/work-queue"],
         trackedAgents: agentRuntimeStatuses.length,
         workOsConfigured: isWorkOsConfigured(),
         supabaseConfigured: supabase.configured,

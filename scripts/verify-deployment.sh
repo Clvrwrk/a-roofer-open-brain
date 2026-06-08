@@ -67,11 +67,62 @@ if is_set "${BRAIN_MCP_URL:-}" && is_set "${OB_ACCESS_KEY_HISTORIAN:-}" && comma
   [[ "$code" == "200" ]] && ok "brain-mcp tools/list → 200" || warn "brain-mcp tools/list → ${code:-no response}"
 else warn "BRAIN_MCP_URL / access key unset — skipping live MCP ping"; fi
 
-# 6. Dashboard reachable (if configured)
-if is_set "${DASHBOARD_URL:-}" && command -v curl >/dev/null; then
-  code=$(curl -s -o /dev/null -w "%{http_code}" "$DASHBOARD_URL" 2>/dev/null)
-  [[ "$code" == "200" ]] && ok "dashboard → 200" || warn "dashboard → ${code:-no response}"
-else warn "DASHBOARD_URL unset — skipping dashboard ping"; fi
+# 6. Command Center reachable and serving the live dashboard build (if configured)
+DASHBOARD_ORIGIN="${DASHBOARD_URL:-${COMMAND_CENTER_PUBLIC_URL:-}}"
+DASHBOARD_ORIGIN="${DASHBOARD_ORIGIN%/}"
+if is_set "${DASHBOARD_ORIGIN:-}" && command -v curl >/dev/null; then
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$DASHBOARD_ORIGIN/" 2>/dev/null)
+  [[ "$code" == "200" ]] && ok "command-center / → 200" || bad "command-center / → ${code:-no response}"
+
+  health_file=$(mktemp)
+  health_code=$(curl -s -o "$health_file" -w "%{http_code}" "$DASHBOARD_ORIGIN/healthz" 2>/dev/null)
+  if [[ "$health_code" == "200" ]]; then
+    ok "command-center /healthz → 200"
+    if command -v node >/dev/null; then
+      health_eval=$(node -e '
+        const fs = require("fs");
+        const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+        const failures = [];
+        if (data.phase !== "live-command-center") failures.push(`phase=${data.phase}`);
+        if (!Number.isFinite(data.liveWorkItems) || data.liveWorkItems <= 0) failures.push(`liveWorkItems=${data.liveWorkItems}`);
+        if (data.liveSurfaceStatus !== "live") failures.push(`liveSurfaceStatus=${data.liveSurfaceStatus}`);
+        process.stdout.write(failures.length ? failures.join("; ") : "ok");
+      ' "$health_file" 2>/dev/null || printf "invalid health json")
+      [[ "$health_eval" == "ok" ]] && ok "command-center health proves live dashboard surface" || bad "command-center health not live: $health_eval"
+    else
+      grep -q '"phase": "live-command-center"' "$health_file" && ok "command-center health phase is live-command-center" || bad "command-center health phase is not live-command-center"
+    fi
+  else
+    bad "command-center /healthz → ${health_code:-no response}"
+  fi
+  rm -f "$health_file"
+
+  snapshot_code=$(curl -s -o /dev/null -w "%{http_code}" "$DASHBOARD_ORIGIN/weekly-snapshot" 2>/dev/null)
+  [[ "$snapshot_code" == "200" ]] && ok "command-center /weekly-snapshot → 200" || bad "command-center /weekly-snapshot → ${snapshot_code:-no response}"
+
+  queue_file=$(mktemp)
+  queue_code=$(curl -s -o "$queue_file" -w "%{http_code}" "$DASHBOARD_ORIGIN/api/agent/work-queue" 2>/dev/null)
+  if [[ "$queue_code" == "200" ]]; then
+    ok "command-center work-queue API → 200"
+    if command -v node >/dev/null; then
+      queue_eval=$(node -e '
+        const fs = require("fs");
+        const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+        const failures = [];
+        if (data.source !== "live") failures.push(`source=${data.source}`);
+        if (!Number.isFinite(data.count) || data.count <= 0) failures.push(`count=${data.count}`);
+        if (Array.isArray(data.errors) && data.errors.length) failures.push(`errors=${data.errors.join(",")}`);
+        process.stdout.write(failures.length ? failures.join("; ") : "ok");
+      ' "$queue_file" 2>/dev/null || printf "invalid queue json")
+      [[ "$queue_eval" == "ok" ]] && ok "command-center work-queue API is live" || bad "command-center work-queue API not live: $queue_eval"
+    else
+      grep -q '"source": "live"' "$queue_file" && ok "command-center work-queue source is live" || bad "command-center work-queue source is not live"
+    fi
+  else
+    bad "command-center work-queue API → ${queue_code:-no response}"
+  fi
+  rm -f "$queue_file"
+else warn "DASHBOARD_URL/COMMAND_CENTER_PUBLIC_URL unset — skipping command-center ping"; fi
 
 # 7. Design system: brand DESIGN.md lints clean + Tailwind v3 theme in sync (standards/design/v1.md)
 DESIGN_MD="$ROOT/config/brand/DESIGN.md"
