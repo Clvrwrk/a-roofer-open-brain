@@ -951,6 +951,7 @@ export function serializeLiveWorkQueueItem(work: LiveWorkItem, actor: CommandCen
     title: work.title,
     department: work.department,
     departmentLabel: department?.label ?? work.department,
+    workflow: work.workflow,
     cadence: work.cadence,
     cadenceLabel: cadence?.label ?? work.cadence,
     owner: work.owner,

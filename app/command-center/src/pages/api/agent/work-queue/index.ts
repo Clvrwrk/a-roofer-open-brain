@@ -20,12 +20,23 @@ export const GET: APIRoute = async ({ request, url }) => {
     .filter((work) => !department || work.department === department)
     .map((work) => serializeLiveWorkQueueItem(work, actor));
 
+  const departmentCounts = items.reduce<Record<string, number>>((counts, item) => {
+    counts[item.department] = (counts[item.department] ?? 0) + 1;
+    return counts;
+  }, {});
+  const workflowCounts = items.reduce<Record<string, number>>((counts, item) => {
+    counts[item.workflow] = (counts[item.workflow] ?? 0) + 1;
+    return counts;
+  }, {});
+
   return jsonApiResponse({
     status: "ok",
     source: surface.status,
     actor: serializeActor(actor),
     count: items.length,
+    departmentCounts,
     errors: surface.errors,
     items,
+    workflowCounts,
   });
 };
