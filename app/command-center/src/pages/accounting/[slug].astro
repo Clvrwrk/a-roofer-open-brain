@@ -1,5 +1,6 @@
 ---
 import BoundaryNotice from "../../components/accounting/BoundaryNotice.astro";
+import AccountingModeTabs from "../../components/accounting/AccountingModeTabs.astro";
 import EvidenceStack from "../../components/accounting/EvidenceStack.astro";
 import MetricLinkCard from "../../components/accounting/MetricLinkCard.astro";
 import AppShell from "../../layouts/AppShell.astro";
@@ -51,6 +52,16 @@ function hasReason(row: AgreementGapRow, code: string) {
 
 function needsAgreementEvidence(row: AgreementGapRow) {
   return row.evidenceStatus !== "pdf_mapped";
+}
+
+function needsAgreementMatch(row: AgreementGapRow) {
+  return (
+    hasReason(row, "no_branch_agreement") ||
+    hasReason(row, "no_fixed_agreement") ||
+    hasReason(row, "no_pdf_no_api_agreement") ||
+    hasReason(row, "no_pdf_price_agreement") ||
+    row.evidenceStatus === "no_reference_agreement"
+  );
 }
 
 function lineMismatchSummary(row: AgreementGapRow) {
@@ -108,6 +119,10 @@ function primaryLineDecision(row: AgreementGapRow) {
   };
 }
 
+function inheritanceScope(row: AgreementGapRow) {
+  return `Apply to unpaid invoice exceptions matching vendor ${row.vendorName}, SKU ${row.itemNumber}, branch ${row.branchNumber}, and region ${row.branchRegion}. Re-evaluate sibling invoice lines after this decision and clear every line whose blocker is satisfied by the selected/approved price authority.`;
+}
+
 function lineActionClass(tone: string) {
   if (tone === "primary") return "button button-primary";
   if (tone === "ghost") return "button button-ghost";
@@ -160,6 +175,8 @@ const boundaryDetail =
   {
     dashboard ? (
       <>
+        <AccountingModeTabs active={dashboard.slug === "invoices" ? "invoice-gate" : "other"} />
+
         {dashboard.slug !== "invoices" && (
           <section class="accounting-hero" aria-label={`${dashboard.title} summary`}>
             <div class="surface-heading">
@@ -265,9 +282,19 @@ const boundaryDetail =
                             blocked while Lucinda requests source evidence.
                           </p>
                         </div>
-                        <span class={`status-badge priority-${selectedInvoiceCandidate.criticalRows > 0 ? "critical" : selectedInvoiceCandidate.blockedRows > 0 ? "high" : "normal"}`}>
-                          {selectedInvoiceCandidate.primaryAction}
-                        </span>
+                        <div class="invoice-heading-actions">
+                          <span class={`status-badge priority-${selectedInvoiceCandidate.criticalRows > 0 ? "critical" : selectedInvoiceCandidate.blockedRows > 0 ? "high" : "normal"}`}>
+                            {selectedInvoiceCandidate.primaryAction}
+                          </span>
+                          <button
+                            class="button button-secondary"
+                            type="button"
+                            data-invoice-paid-action
+                            data-invoice-number={selectedInvoiceCandidate.invoiceNumber}
+                          >
+                            Mark invoice paid
+                          </button>
+                        </div>
                       </div>
 
                       <div class="invoice-fact-grid" aria-label="Invoice facts">
@@ -303,8 +330,14 @@ const boundaryDetail =
                       <div class="invoice-line-card-list">
                         {selectedInvoiceExceptionRows.map((line) => {
                           const action = primaryLineDecision(line);
+                          const showAgreementMatch = needsAgreementMatch(line);
                           return (
                             <article class="invoice-line-card" data-decision-context>
+                              <input data-decision-field="inheritance scope" type="hidden" value={inheritanceScope(line)} />
+                              <input data-decision-field="invoice" type="hidden" value={line.invoiceNumber} />
+                              <input data-decision-field="SKU" type="hidden" value={line.itemNumber} />
+                              <input data-decision-field="branch" type="hidden" value={line.branchNumber} />
+                              <input data-decision-field="region" type="hidden" value={line.branchRegion} />
                               <header>
                                 <div>
                                   <p class="eyebrow">Line {line.lineNumber}</p>
@@ -346,6 +379,44 @@ const boundaryDetail =
                                 </div>
                               </div>
 
+                              {showAgreementMatch && (
+                                <div class="agreement-match-control">
+                                  <div>
+                                    <label>
+                                      <span>Match branch / region agreement</span>
+                                      <select
+                                        data-decision-field="matched agreement"
+                                        name={`matched-agreement-${line.id}`}
+                                        disabled={line.agreementOptions.length === 0}
+                                      >
+                                        {line.agreementOptions.length > 0 ? (
+                                          <>
+                                            <option value="">Choose a PDF/API agreement from live pricing data</option>
+                                            {line.agreementOptions.map((option) => (
+                                              <option
+                                                value={`${option.agreementId} / ${option.priceListItemId} / ${option.label} / source: ${option.source}`}
+                                              >
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </>
+                                        ) : (
+                                          <option value="">No live PDF/API candidate exists for this SKU yet</option>
+                                        )}
+                                      </select>
+                                    </label>
+                                    <p>
+                                      A selected agreement maps this SKU to branch {line.branchNumber} / region {line.branchRegion}; the agent then
+                                      re-checks sibling invoice lines and clears any blocker satisfied by the same authority.
+                                    </p>
+                                  </div>
+                                  <div class="agreement-match-meta">
+                                    <span>{formatNumber(line.agreementOptions.length)}</span>
+                                    <strong>live options</strong>
+                                  </div>
+                                </div>
+                              )}
+
                               <div class="line-direct-entry">
                                 <label>
                                   <span>Approved price</span>
@@ -366,6 +437,19 @@ const boundaryDetail =
                               </div>
 
                               <div class="line-evidence-actions">
+                                {showAgreementMatch && line.agreementOptions.length > 0 && (
+                                  <button
+                                    class="button button-primary"
+                                    type="button"
+                                    data-live-decision="approve"
+                                    data-work-key={`accounting:price-gap:${line.id}`}
+                                    data-action-intent="map_branch_region_agreement"
+                                    data-action-label="Use selected agreement"
+                                    data-action-next-step={`Map the selected PDF/API agreement to SKU ${line.itemNumber}, branch ${line.branchNumber}, and region ${line.branchRegion}; roll the approved branch price into products; re-evaluate all unpaid sibling invoice lines with the same SKU/branch/region; clear every blocker satisfied by this authority; keep only remaining exceptions visible.`}
+                                  >
+                                    Use selected agreement
+                                  </button>
+                                )}
                                 <button
                                   class={lineActionClass(action.tone)}
                                   type="button"
@@ -373,7 +457,7 @@ const boundaryDetail =
                                   data-work-key={`accounting:price-gap:${line.id}`}
                                   data-action-intent={action.intent}
                                   data-action-label={action.label}
-                                  data-action-next-step={action.nextStep}
+                                  data-action-next-step={`${action.nextStep} ${inheritanceScope(line)}`}
                                 >
                                   {action.label}
                                 </button>
@@ -384,7 +468,7 @@ const boundaryDetail =
                                   data-work-key={`accounting:price-gap:${line.id}`}
                                   data-action-intent="create_official_price_agreement_line"
                                   data-action-label="Create official price line"
-                                  data-action-next-step="Create or update the price agreement header and line item, map Vendor-branch-id / Branch Price / Branch UOM into products, send Roberto the FYI acknowledgement task, and require Lucinda to mark the price approved."
+                                  data-action-next-step={`Create or update the price agreement header and line item, map Vendor-branch-id / Branch Price / Branch UOM into products, send Roberto the FYI acknowledgement task, require Lucinda to mark the price approved, then re-evaluate sibling unpaid invoice lines matching SKU ${line.itemNumber}, branch ${line.branchNumber}, and region ${line.branchRegion}.`}
                                 >
                                   Create official price line
                                 </button>
@@ -395,7 +479,7 @@ const boundaryDetail =
                                   data-work-key={`accounting:price-gap:${line.id}`}
                                   data-action-intent="request_pdf_or_csv_price_agreement"
                                   data-action-label="Request PDF/CSV agreement"
-                                  data-action-next-step="Agent drafts Lucinda's rep email requesting the PDF/CSV agreement and attaches the invoice PDF, original order, branch, SKU, and current API/pricing evidence. Agent does not send externally."
+                                  data-action-next-step={`Agent drafts Lucinda's rep email requesting the PDF/CSV agreement and attaches the invoice PDF, original order, branch, SKU, and current API/pricing evidence. Agent does not send externally. Once evidence lands, apply it to matching unpaid lines for SKU ${line.itemNumber}, branch ${line.branchNumber}, and region ${line.branchRegion}.`}
                                 >
                                   Request PDF/CSV agreement
                                 </button>

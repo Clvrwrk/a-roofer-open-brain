@@ -94,12 +94,18 @@ function collectDecisionContext(target: HTMLElement) {
   return facts.length ? `Decision fields: ${facts.join("; ")}` : null;
 }
 
-function missingOfficialPriceFields(target: HTMLElement) {
-  if (target.dataset.actionIntent !== "create_official_price_agreement_line") return [];
+function missingRequiredDecisionFields(target: HTMLElement) {
   const container = target.closest<HTMLElement>("[data-decision-context]");
-  if (!container) return ["approved price", "approved UOM", "active start", "active end"];
+  const required =
+    target.dataset.actionIntent === "create_official_price_agreement_line"
+      ? ["approved price", "approved UOM", "active start", "active end"]
+      : target.dataset.actionIntent === "map_branch_region_agreement"
+        ? ["matched agreement"]
+        : [];
 
-  const required = ["approved price", "approved UOM", "active start", "active end"];
+  if (!required.length) return [];
+  if (!container) return required;
+
   return required.filter((label) => {
     const field = container.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
       `[data-decision-field="${label}"]`,
@@ -235,6 +241,43 @@ document.querySelectorAll<HTMLButtonElement>("[data-live-decision]").forEach((bu
 });
 
 document.addEventListener("click", async (event) => {
+  const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-invoice-paid-action]") : null;
+  if (!target || !note) return;
+
+  const invoiceNumber = target.dataset.invoiceNumber;
+  if (!invoiceNumber) {
+    note.textContent = "No invoice number is attached to the paid action.";
+    return;
+  }
+
+  target.disabled = true;
+  note.textContent = "Marking invoice paid and recording the invoice price observation...";
+
+  try {
+    const response = await fetch(`/api/accounting/invoices/${encodeURIComponent(invoiceNumber)}/mark-paid`, {
+      body: JSON.stringify({
+        note: decisionNote?.value.trim() || null,
+      }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      note.textContent = payload.error_description ?? payload.error ?? "Invoice paid action failed.";
+      return;
+    }
+    note.textContent = `Invoice marked paid. Observation id: ${payload.observationId ?? "recorded"}; ${payload.lineCount ?? 0} lines captured. Refreshing...`;
+    window.setTimeout(() => window.location.assign("/accounting/invoices"), 900);
+  } catch (error) {
+    note.textContent = error instanceof Error ? error.message : "Invoice paid action failed.";
+  } finally {
+    target.disabled = false;
+  }
+});
+
+document.addEventListener("click", async (event) => {
   const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-live-decision]") : null;
   if (!target || !note) return;
 
@@ -246,9 +289,9 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const missingFields = missingOfficialPriceFields(target);
+  const missingFields = missingRequiredDecisionFields(target);
   if (missingFields.length) {
-    note.textContent = `Enter ${missingFields.join(", ")} before creating an official price line.`;
+    note.textContent = `Enter ${missingFields.join(", ")} before saving this action.`;
     return;
   }
 

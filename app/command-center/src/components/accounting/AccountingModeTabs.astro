@@ -1,0 +1,16 @@
+---
+interface Props {
+  active: "invoice-gate" | "overview" | "other";
+}
+
+const { active } = Astro.props;
+---
+
+<nav class="accounting-mode-tabs" aria-label="Accounting dashboard mode">
+  <a class:list={["accounting-mode-tab", active === "invoice-gate" && "is-active"]} href="/accounting/invoices">
+    Invoice gate
+  </a>
+  <a class:list={["accounting-mode-tab", active === "overview" && "is-active"]} href="/accounting/overview">
+    Overview
+  </a>
+</nav>

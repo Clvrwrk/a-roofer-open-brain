@@ -1,14 +1,16 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
+import AccountingModeTabs from "../accounting/AccountingModeTabs.astro";
 import LiveMetricGrid from "./LiveMetricGrid.astro";
 import HumanUnblockerDashboard from "../unblocker/HumanUnblockerDashboard.astro";
 import type { LiveDepartmentSurface } from "@lib/live-work";
 
 interface Props {
   surface: LiveDepartmentSurface;
+  accountingMode?: "overview";
 }
 
-const { surface } = Astro.props;
+const { accountingMode, surface } = Astro.props;
 const generatedAt = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   hour: "numeric",
@@ -19,6 +21,8 @@ const tone = surface.status === "live" ? "ready" : surface.status === "degraded"
 ---
 
 <AppShell title={surface.title} eyebrow="Department Home" activePage={surface.department} surface={surface}>
+  {surface.department === "accounting" && <AccountingModeTabs active={accountingMode === "overview" ? "overview" : "other"} />}
+
   <section class="live-department-hero" aria-label={`${surface.title} summary`}>
     <div class="surface-heading">
       <div>

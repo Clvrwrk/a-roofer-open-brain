@@ -92,6 +92,26 @@ interface Candidate {
   scope: "branch" | "ship-to match" | "region";
 }
 
+export type AgreementMatchScope = "branch" | "ship-to match" | "region" | "api" | "same SKU";
+
+export interface AgreementMatchOption {
+  id: string;
+  agreementId: string;
+  priceListItemId: string;
+  agreementNumber: string;
+  authority: "PDF" | "API" | "Mapped";
+  branchNumber: string;
+  regionCode: string;
+  description: string;
+  effectiveDate: string;
+  expiryDate: string;
+  label: string;
+  price: number | null;
+  scope: AgreementMatchScope;
+  source: string;
+  unit: string;
+}
+
 export interface GapReason {
   code: string;
   label: string;
@@ -136,6 +156,7 @@ export interface AgreementGapRow {
   agreementSource: string;
   evidenceStatus: PriceAgreementEvidenceStatus;
   evidenceStatusLabel: string;
+  agreementOptions: AgreementMatchOption[];
   gapReasons: GapReason[];
   humanAction: string;
   escalationPayload: string;
@@ -314,6 +335,120 @@ function formatAgreement(candidate: Candidate | null, empty = "None found") {
 
 function formatAgreementSource(candidate: Candidate | null) {
   return agreementSourceText(candidate?.agreement);
+}
+
+function agreementAuthority(agreement: AgreementRow): AgreementMatchOption["authority"] {
+  if (isPdfAgreement(agreement)) return "PDF";
+  if (isApiAgreement(agreement)) return "API";
+  return "Mapped";
+}
+
+function agreementOptionScope(
+  agreement: AgreementRow,
+  branchNumber: string,
+  branchRegion: string,
+  matchedAgreementIds: Set<string>,
+): AgreementMatchOption["scope"] {
+  if (agreement.branch_number === branchNumber) return "branch";
+  if (matchedAgreementIds.has(agreement.id)) return "ship-to match";
+  if (agreement.region_code && branchRegion !== "Unknown" && agreement.region_code === branchRegion) return "region";
+  if (isApiAgreement(agreement)) return "api";
+  return "same SKU";
+}
+
+function agreementScopeLabel(scope: AgreementMatchOption["scope"]) {
+  if (scope === "branch") return "branch match";
+  if (scope === "ship-to match") return "ship-to mapped";
+  if (scope === "region") return "region match";
+  if (scope === "api") return "API-backed";
+  return "same SKU, unmapped branch";
+}
+
+function agreementWindowLabel(agreement: AgreementRow) {
+  if (isApiAgreement(agreement)) return "current API price";
+  const start = compact(agreement.effective_date, "missing start");
+  const end = compact(agreement.expiry_date, "missing end");
+  return `${start} to ${end}`;
+}
+
+function buildAgreementOptions(
+  candidates: Candidate[],
+  skuItems: PriceListItemRow[],
+  agreementById: Map<string, AgreementRow>,
+  branchNumber: string,
+  branchRegion: string,
+  matchedAgreementIds: Set<string>,
+): AgreementMatchOption[] {
+  const options = new Map<string, AgreementMatchOption>();
+
+  const addOption = (item: PriceListItemRow, agreement: AgreementRow, preferredScope?: AgreementMatchOption["scope"]) => {
+    const scope = preferredScope ?? agreementOptionScope(agreement, branchNumber, branchRegion, matchedAgreementIds);
+    const price = toNumber(item.unit_price);
+    const unit = compact(item.unit, "UOM missing");
+    const agreementNumber = compact(agreement.agreement_number ?? agreement.version_label, "Agreement");
+    const branch = compact(agreement.branch_number, "any branch");
+    const region = compact(agreement.region_code, "any region");
+    const authority = agreementAuthority(agreement);
+    const source = agreementSourceText(agreement);
+    const key = `${agreement.id}:${item.id}`;
+
+    if (options.has(key)) return;
+
+    const label = [
+      `${authority} ${agreementNumber}`,
+      agreementScopeLabel(scope),
+      `branch ${branch}`,
+      `region ${region}`,
+      `${formatMoney(price)} / ${unit}`,
+      agreementWindowLabel(agreement),
+    ].join(" | ");
+
+    options.set(key, {
+      agreementId: agreement.id,
+      agreementNumber,
+      authority,
+      branchNumber: branch,
+      description: compact(item.description, "No product description"),
+      effectiveDate: compact(agreement.effective_date, ""),
+      expiryDate: compact(agreement.expiry_date, ""),
+      id: key,
+      label,
+      price,
+      priceListItemId: item.id,
+      regionCode: region,
+      scope,
+      source,
+      unit,
+    });
+  };
+
+  for (const candidate of candidates) addOption(candidate.item, candidate.agreement, candidate.scope);
+
+  for (const item of skuItems) {
+    if (!item.agreement_id) continue;
+    const agreement = agreementById.get(item.agreement_id);
+    if (!agreement) continue;
+    addOption(item, agreement);
+  }
+
+  const scopeRank: Record<AgreementMatchOption["scope"], number> = {
+    branch: 0,
+    "ship-to match": 1,
+    region: 2,
+    api: 3,
+    "same SKU": 4,
+  };
+  const authorityRank: Record<AgreementMatchOption["authority"], number> = { PDF: 0, API: 1, Mapped: 2 };
+
+  return Array.from(options.values())
+    .sort(
+      (a, b) =>
+        scopeRank[a.scope] - scopeRank[b.scope] ||
+        authorityRank[a.authority] - authorityRank[b.authority] ||
+        (b.price ?? -1) - (a.price ?? -1) ||
+        a.agreementNumber.localeCompare(b.agreementNumber),
+    )
+    .slice(0, 25);
 }
 
 function agreementSortDesc(a: Candidate, b: Candidate) {
@@ -712,6 +847,7 @@ export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv())
         agreementSource: formatAgreementSource(referenceAgreement),
         evidenceStatus: evidenceStatus.status,
         evidenceStatusLabel: evidenceStatus.label,
+        agreementOptions: buildAgreementOptions(candidates, skuItems, agreementById, branchNumber, branchRegion, matchedAgreementIds),
         gapReasons,
         humanAction,
         escalationPayload: `${humanAction} Branch ${branchNumber}, SKU ${itemNumber}, invoice ${line.invoice_number}, PO ${purchaseOrderNumber}.`,
