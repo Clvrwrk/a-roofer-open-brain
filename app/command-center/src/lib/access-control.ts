@@ -90,6 +90,8 @@ const SERVICE_AGENT_PERMISSIONS: CommandCenterPermission[] = [
   "agent.resume",
 ];
 
+const VIEWER_PERMISSIONS: CommandCenterPermission[] = ["command_center.read", "work_queue.read"];
+
 export const NAMED_AGENT_IDENTITIES: NamedAgentIdentity[] = [
   {
     id: "maya-chen",
@@ -329,21 +331,27 @@ function namedAgentToActor(agent: NamedAgentIdentity): CommandCenterActor {
   };
 }
 
-function humanActor(email: string | null, env: RuntimeEnv): CommandCenterActor {
+function humanActor(
+  email: string,
+  displayName: string,
+  roles: string[],
+  permissions: CommandCenterPermission[],
+  departmentAccess: DepartmentId[] | "all",
+): CommandCenterActor {
   return {
-    id: email ?? "human-operator",
+    id: email,
     type: "human",
-    displayName: email ? "Human Operator" : "Authenticated Operator",
+    displayName,
     email,
     source: "workos",
-    roles: ["human", isHumanAdminEmail(email, env) ? "admin" : "operator"],
-    permissions: HUMAN_PERMISSIONS,
-    departmentAccess: "all",
+    roles,
+    permissions,
+    departmentAccess,
     desktopEnabled: false,
   };
 }
 
-function localActor(): CommandCenterActor {
+export function localActor(): CommandCenterActor {
   return {
     id: "local-operator",
     type: "local_operator",
@@ -364,13 +372,18 @@ function isHumanAdminEmail(email: string | null, env: RuntimeEnv) {
   return Boolean(normalized && allowlist.map((item) => item.toLowerCase()).includes(normalized));
 }
 
-function getWorkOsEmailFromHeaders(headers: Headers) {
-  return cleanEmail(
-    headers.get("x-workos-user-email") ??
-      headers.get("x-workos-email") ??
-      headers.get("x-auth-request-email") ??
-      headers.get("x-forwarded-email"),
-  );
+function isEmailOnList(email: string, listCsv?: string) {
+  return splitCsv(listCsv)
+    .map((item) => item.toLowerCase())
+    .includes(email);
+}
+
+function isViewerDomain(email: string, env: RuntimeEnv) {
+  const domain = email.split("@")[1];
+  if (!domain) return false;
+  return splitCsv(env.COMMAND_CENTER_VIEWER_DOMAINS)
+    .map((item) => item.toLowerCase().replace(/^@/, ""))
+    .includes(domain);
 }
 
 function getBearerToken(request: Request) {
@@ -422,24 +435,52 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
   return null;
 }
 
-export function resolveWorkOsActorFromHeaders(headers: Headers, env: RuntimeEnv = getRuntimeEnv()) {
-  const email = getWorkOsEmailFromHeaders(headers);
+/** Bearer-token resolution for service agents (no header-based identity trust). */
+export function resolveServiceActorFromBearer(request: Request, env: RuntimeEnv = getRuntimeEnv()) {
+  return resolveServiceActorFromToken(getBearerToken(request), env);
+}
+
+export interface WorkOsSessionIdentity {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+/**
+ * Map a verified WorkOS session identity to a Command Center actor.
+ * Order: named agent roster -> admin allowlist -> purchasing -> accounting -> viewer domain.
+ * Returns null for authenticated-but-unauthorized identities (middleware sends those to /auth/denied).
+ *
+ * Identity headers (x-workos-user-email and friends) are intentionally NOT consulted
+ * anywhere: the only trusted human identity source is the sealed WorkOS session.
+ */
+export function resolveActorFromSessionUser(
+  user: WorkOsSessionIdentity,
+  env: RuntimeEnv = getRuntimeEnv(),
+): CommandCenterActor | null {
+  const email = cleanEmail(user.email);
   if (!email) return null;
 
   const namedAgent = NAMED_AGENT_IDENTITIES.find((agent) => agent.email === email);
   if (namedAgent) return namedAgentToActor(namedAgent);
 
-  return humanActor(email, env);
-}
+  const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || email;
 
-export function resolveCommandCenterActor(request: Request, env: RuntimeEnv = getRuntimeEnv()) {
-  const serviceActor = resolveServiceActorFromToken(getBearerToken(request), env);
-  if (serviceActor) return serviceActor;
+  if (isHumanAdminEmail(email, env)) {
+    return humanActor(email, displayName, ["human", "admin", "ceo"], HUMAN_PERMISSIONS, "all");
+  }
 
-  const workOsActor = resolveWorkOsActorFromHeaders(request.headers, env);
-  if (workOsActor) return workOsActor;
+  if (isEmailOnList(email, env.COMMAND_CENTER_ROLE_PURCHASING_EMAILS)) {
+    return humanActor(email, displayName, ["human", "purchasing"], HUMAN_PERMISSIONS, ["accounting", "operations"]);
+  }
 
-  if (env.COMMAND_CENTER_AUTH_MODE !== "workos") return localActor();
+  if (isEmailOnList(email, env.COMMAND_CENTER_ROLE_ACCOUNTING_EMAILS)) {
+    return humanActor(email, displayName, ["human", "accounting"], HUMAN_PERMISSIONS, ["accounting"]);
+  }
+
+  if (isViewerDomain(email, env)) {
+    return humanActor(email, displayName, ["human", "viewer"], VIEWER_PERMISSIONS, "all");
+  }
 
   return null;
 }

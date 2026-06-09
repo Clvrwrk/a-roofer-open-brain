@@ -299,6 +299,26 @@ h3 {
   font-weight: 700;
 }
 
+.logout-form {
+  margin: 0;
+}
+
+.logout-button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-height: 38px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  border-color: var(--text-muted);
+}
+
 .signal-dot {
   width: 9px;
   height: 9px;

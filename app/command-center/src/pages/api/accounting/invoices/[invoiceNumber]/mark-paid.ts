@@ -4,12 +4,10 @@ import {
   actorCanAccessDepartment,
   buildUnauthorizedResponse,
   hasPermission,
-  resolveCommandCenterActor,
   serializeActor,
 } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
-import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
 
@@ -78,8 +76,8 @@ function hashJson(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export const POST: APIRoute = async ({ request, params }) => {
-  const actor = resolveCommandCenterActor(request, getRuntimeEnv());
+export const POST: APIRoute = async ({ request, params, locals }) => {
+  const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
 
   if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {

@@ -3,7 +3,6 @@ import {
   actorCanAccessDepartment,
   buildUnauthorizedResponse,
   hasPermission,
-  resolveCommandCenterActor,
   serializeActor,
   type WorkQueueDecision,
 } from "@lib/access-control";
@@ -16,7 +15,6 @@ import {
   type LiveWorkItem,
   type LiveWorkPriority,
 } from "@lib/live-work";
-import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
 
@@ -94,8 +92,8 @@ async function loadFallbackWorkItem(decodedWorkId: string): Promise<LiveWorkItem
   return row ? buildPriceGapWorkItem(row) : null;
 }
 
-export const POST: APIRoute = async ({ request, params }) => {
-  const actor = resolveCommandCenterActor(request, getRuntimeEnv());
+export const POST: APIRoute = async ({ request, params, locals }) => {
+  const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
 
   const surface = await loadCommandCenterSurface();

@@ -1,0 +1,29 @@
+---
+import "../../styles/global.css";
+
+export const prerender = false;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Access denied | Open Brain</title>
+  </head>
+  <body>
+    <main class="auth-denied" style="max-width: 32rem; margin: 12vh auto; padding: 0 1.5rem; text-align: center;">
+      <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="140" height="50" style="margin-bottom: 1.5rem;" />
+      <h1>Access denied</h1>
+      <p>
+        Your sign-in succeeded, but this account is not authorized for the Pro Exteriors Command Center.
+        If you believe this is a mistake, contact the administrator.
+      </p>
+      <form action="/auth/logout" method="POST" style="margin-top: 1.5rem;">
+        <button type="submit">Sign out and try a different account</button>
+      </form>
+    </main>
+  </body>
+</html>

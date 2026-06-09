@@ -5,7 +5,6 @@ import {
   SERVICE_AGENT_IDENTITIES,
   buildUnauthorizedResponse,
   getAgentAccessRuntimeConfig,
-  resolveCommandCenterActor,
   serializeActor,
 } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
@@ -13,9 +12,9 @@ import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
 
-export const GET: APIRoute = ({ request }) => {
+export const GET: APIRoute = ({ locals }) => {
   const env = getRuntimeEnv();
-  const actor = resolveCommandCenterActor(request, env);
+  const actor = locals.actor;
 
   if (!actor) return buildUnauthorizedResponse();
 

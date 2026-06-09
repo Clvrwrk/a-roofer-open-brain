@@ -11,8 +11,9 @@ interface Props {
 }
 
 const { title, eyebrow = "Command Center", activePage = "command", surface } = Astro.props;
-const user = getCommandCenterUser();
+const user = getCommandCenterUser(Astro.locals.actor);
 const workOsReady = isWorkOsConfigured();
+const workOsSession = user.authMode === "workos";
 const commandSurface = surface ? null : await loadCommandCenterSurface();
 const shellItems = surface?.items ?? commandSurface?.items ?? [];
 const needsReviewCount = shellItems.filter((work) => work.status === "needs_review").length;
@@ -89,14 +90,21 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
           </div>
 
           <div class="operator-cluster" aria-label="Runtime summary">
-            <div class="runtime-pill" data-tone={workOsReady ? "ready" : "watch"}>
+            <div class="runtime-pill" data-tone={workOsSession ? "ready" : "watch"}>
               <span class="signal-dot" aria-hidden="true"></span>
-              {workOsReady ? "WorkOS ready" : "Local auth"}
+              {workOsSession ? "WorkOS session" : workOsReady ? "WorkOS ready" : "Local auth"}
             </div>
             <div class="operator-card">
               <strong>{user.name}</strong>
               <span>{user.role}</span>
             </div>
+            {
+              workOsSession && (
+                <form action="/auth/logout" method="POST" class="logout-form">
+                  <button type="submit" class="logout-button">Sign out</button>
+                </form>
+              )
+            }
           </div>
         </header>
 

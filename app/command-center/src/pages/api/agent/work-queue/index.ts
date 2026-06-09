@@ -1,13 +1,12 @@
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, resolveCommandCenterActor, serializeActor } from "@lib/access-control";
+import { actorCanAccessDepartment, buildUnauthorizedResponse, serializeActor } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadCommandCenterSurface, serializeLiveWorkQueueItem } from "@lib/live-work";
-import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request, url }) => {
-  const actor = resolveCommandCenterActor(request, getRuntimeEnv());
+export const GET: APIRoute = async ({ locals, url }) => {
+  const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
 
   const status = url.searchParams.get("status");
