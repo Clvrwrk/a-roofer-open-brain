@@ -7,6 +7,8 @@
 -- Note: the spec's `kb_regulatory_snapshots` is realized as a staging table
 -- whose promoted rows become public.regulatory_snapshot entries
 -- (10-property-jurisdiction.sql) rather than a parallel snapshot store.
+-- Live-DB binding (decision 2026-06-10): property FK targets public.properties;
+-- jurisdiction/regulatory_snapshot are created by 89-jurisdiction-snapshot.sql.
 -- ADDITIVE + IDEMPOTENT. service-role-only until WorkOS/RLS policies land.
 
 BEGIN;
@@ -131,7 +133,7 @@ CREATE TABLE IF NOT EXISTS public.kb_atoms_staging (
   content            text NOT NULL,
   trust_tier         text NOT NULL DEFAULT 'evidence'
                        CHECK (trust_tier IN ('evidence','instruction')),
-  property_id        uuid REFERENCES public.property(id) ON DELETE SET NULL,
+  property_id        uuid REFERENCES public.properties(id) ON DELETE SET NULL,
   jurisdiction_id    uuid REFERENCES public.jurisdiction(id) ON DELETE SET NULL,
   era_of_practice    text,
   regulatory_snapshot_id uuid REFERENCES public.regulatory_snapshot(id) ON DELETE SET NULL,

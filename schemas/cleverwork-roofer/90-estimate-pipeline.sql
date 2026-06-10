@@ -4,6 +4,10 @@
 -- invoice / order / schedule drafts → handoff, with verification evidence,
 -- approval tasks, and learning records on every artifact.
 -- Every extracted/calculated value carries provenance (§8.2).
+-- Live-DB binding (decision 2026-06-10): properties are public.properties
+-- (uuid, live since 2026-05-08) and jobs are public.acculynx_jobs (text ids,
+-- AccuLynx GUIDs) — NOT the OB1-template property/job/crew core, which was
+-- never applied to this brain. Crew is a text ref until a crew table exists.
 -- ADDITIVE + IDEMPOTENT. service-role-only until WorkOS/RLS policies land.
 
 BEGIN;
@@ -14,9 +18,8 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.estimate_runs (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id        uuid REFERENCES public.property(id) ON DELETE SET NULL,
-  job_id             uuid REFERENCES public.job(id) ON DELETE SET NULL,
-  acculynx_job_ref   text,                  -- optional existing AccuLynx job
+  property_id        uuid REFERENCES public.properties(id) ON DELETE SET NULL,
+  acculynx_job_id    text REFERENCES public.acculynx_jobs(id) ON DELETE SET NULL,
   job_type           text NOT NULL DEFAULT 'retail'
                        CHECK (job_type IN ('retail','insurance')),
   status             text NOT NULL DEFAULT 'intake'
@@ -395,7 +398,7 @@ CREATE TABLE IF NOT EXISTS public.estimate_schedule_recommendations (
   option_id          uuid REFERENCES public.estimate_scenario_options(id) ON DELETE SET NULL,
   proposed_start     date,
   proposed_end       date,
-  crew_id            uuid REFERENCES public.crew(id) ON DELETE SET NULL,
+  crew_ref           text,                  -- crew name/id; FK once a crew table exists
   inputs             jsonb NOT NULL DEFAULT '{}'::jsonb,   -- size/pitch/stories/layers/weather/permit (§4.12)
   status             text NOT NULL DEFAULT 'draft'
                        CHECK (status IN ('draft','verified','awaiting_approval','approved',
@@ -496,7 +499,7 @@ CREATE INDEX IF NOT EXISTS estimate_approval_tasks_status_idx
 CREATE TABLE IF NOT EXISTS public.estimate_learning_events (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id             uuid REFERENCES public.estimate_runs(id) ON DELETE SET NULL,
-  job_id             uuid REFERENCES public.job(id) ON DELETE SET NULL,
+  acculynx_job_id    text REFERENCES public.acculynx_jobs(id) ON DELETE SET NULL,
   event_kind         text NOT NULL,         -- §6.1 trigger, e.g. 'estimate_override'
   artifact_type      text,
   artifact_id        uuid,
