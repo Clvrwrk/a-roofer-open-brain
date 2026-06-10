@@ -115,13 +115,38 @@ Current project:
 ```bash
 SUPABASE_URL=https://rnhmvcpsvtqjlffpsayu.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_PROJECT_REF=rnhmvcpsvtqjlffpsayu
 ```
 
 Need from Chris:
 
-- Keep service-role key in `.env` locally and Coolify env server-side only.
-- Add anon/public keys when the browser-facing path needs them.
-- Confirm whether migrations should be run by Codex or kept manual until production cutover.
+- Keep service-role key in `.env` locally, Coolify env server-side, and mirrored vault entries only.
+- Rotate any Supabase secret that was pasted into chat before treating it as durable production access.
+- Install/authenticate 1Password and Dashlane CLIs if agents should link projects or run vault-backed automation across chats.
+- Confirm production PITR/backup tier in the Supabase dashboard.
+- Use [`36-supabase-infrastructure-ops.md`](36-supabase-infrastructure-ops.md) as the change-control source of truth.
+
+Codex/Supabase access lanes:
+
+```bash
+SUPABASE_PROJECT_REF=...
+SUPABASE_ACCESS_TOKEN=...
+SUPABASE_MCP_URL=https://mcp.supabase.com/mcp?project_ref=...
+SUPABASE_DB_PASSWORD=...
+SUPABASE_DB_URL=...
+```
+
+Before any schema or infrastructure change:
+
+```bash
+node scripts/supabase-preflight.mjs --target branch
+```
+
+Before any production change:
+
+```bash
+node scripts/supabase-preflight.mjs --target prod --backup-proof <backup-id-or-manifest>
+```
 
 First verification:
 

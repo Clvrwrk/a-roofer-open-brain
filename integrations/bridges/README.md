@@ -20,6 +20,15 @@ Supplier API planning references now live alongside operational bridge specs:
 - [AccuLynx source provenance](acculynx/SOURCES.md) - source-linked endpoint assumptions for the
   existing AccuLynx bridge.
 
+Infrastructure knowledge resources use the same folder pattern, but they are governance references, not
+business-data bridges:
+
+- [Supabase Infrastructure](supabase-infrastructure/README.md) - source-of-truth access, migration,
+  backup, branch, restore, and preflight rules.
+- [Ghost](ghost/README.md) - disposable Postgres lab for schema experiments and restore drills.
+- [Dolt](dolt/README.md) - version-controlled SQL/data-diff lab for selected non-sensitive reference
+  datasets.
+
 ---
 
 ## 1. The Four-Tier Taxonomy

@@ -1,0 +1,17 @@
+{
+  "name": "dolt-resource",
+  "display_name": "Dolt",
+  "version": "0.1.0-research",
+  "tier": "infrastructure-data-versioning-lab",
+  "source_system_type": "version-controlled-sql-database",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["innovator", "quality-control", "auditor", "maintenance"],
+  "env_vars": {
+    "required": [],
+    "optional": ["DOLT_REMOTE_URL", "DOLT_USER", "DOLT_EMAIL", "DOLTHUB_TOKEN"]
+  },
+  "api_docs": "https://www.dolthub.com/docs/introduction/what-is-dolt/",
+  "objects_governed": ["repositories", "tables", "branches", "commits", "diffs", "pull_requests"],
+  "notes": "Research resource only. Dolt is MySQL-compatible and should not replace Supabase/Postgres for the live brain."
+}

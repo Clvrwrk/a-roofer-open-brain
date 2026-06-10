@@ -1,0 +1,17 @@
+{
+  "name": "ghost-resource",
+  "display_name": "Ghost",
+  "version": "0.1.0-research",
+  "tier": "infrastructure-postgres-lab",
+  "source_system_type": "agent-database-lab",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["innovator", "maintenance", "auditor", "quality-control"],
+  "env_vars": {
+    "required": [],
+    "optional": ["GHOST_API_KEY", "GHOST_SPACE_ID", "GHOST_DEFAULT_DATABASE"]
+  },
+  "api_docs": "https://ghost.build/docs/#introduction",
+  "objects_governed": ["databases", "forks", "schemas", "sql_queries", "logs", "restore_drills"],
+  "notes": "Research resource only until Ghost account, CLI, MCP, billing, retention, and data-class rules are approved."
+}

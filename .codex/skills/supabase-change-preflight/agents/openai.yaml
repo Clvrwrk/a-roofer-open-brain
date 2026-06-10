@@ -1,0 +1,6 @@
+interface:
+  display_name: "Supabase Change Preflight"
+  short_description: "Gate Supabase infra and schema changes before production."
+  default_prompt: "Use $supabase-change-preflight before any Supabase schema, migration, backup, branch, restore, RLS, policy, or production data operation."
+policy:
+  allow_implicit_invocation: true

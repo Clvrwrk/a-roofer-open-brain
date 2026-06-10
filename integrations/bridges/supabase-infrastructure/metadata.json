@@ -1,0 +1,42 @@
+{
+  "name": "supabase-infrastructure-resource",
+  "display_name": "Supabase Infrastructure",
+  "version": "0.1.0-draft",
+  "tier": "infrastructure-source-of-truth",
+  "source_system_type": "database-platform",
+  "enabled": true,
+  "origin": "cleverwork",
+  "bound_agents": ["ob-exec", "maintenance", "auditor", "quality-control", "conductor"],
+  "env_vars": {
+    "required": [
+      "SUPABASE_URL",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_DB_PASSWORD",
+      "SUPABASE_DB_URL",
+      "SUPABASE_PROJECT_REF"
+    ],
+    "optional": [
+      "SUPABASE_ACCESS_TOKEN",
+      "SUPABASE_ORG_ID",
+      "SUPABASE_MCP_URL",
+      "BACKUP_ENCRYPTION_KEY",
+      "BACKUP_STORAGE_BUCKET",
+      "BACKUP_STORAGE_ENDPOINT",
+      "BACKUP_STORAGE_ACCESS_KEY_ID",
+      "BACKUP_STORAGE_SECRET_ACCESS_KEY"
+    ]
+  },
+  "api_docs": "https://supabase.com/docs",
+  "objects_governed": [
+    "projects",
+    "branches",
+    "migrations",
+    "backups",
+    "restore_drills",
+    "advisors",
+    "secrets",
+    "production_change_approvals"
+  ],
+  "notes": "Infrastructure governance resource. Store only names and identifiers in git; real credentials stay in vaults, repo-root .env, or production runtime env."
+}
