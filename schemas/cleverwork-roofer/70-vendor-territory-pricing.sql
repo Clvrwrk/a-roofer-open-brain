@@ -126,8 +126,9 @@ CREATE TRIGGER office_set_updated_at BEFORE UPDATE ON public.office
 
 -- ── Pricing-approved gate ─────────────────────────────────────────────────────
 -- TRUE when the branch is covered by an approved (active + CEO-verified, in-date)
--- price agreement: either its assigned office's REGIONAL agreement, or a
--- BRANCH-level agreement (the out-of-boundary negotiated case).
+-- price agreement with a complete ingested line set: either its assigned
+-- office's REGIONAL agreement, or a BRANCH-level agreement (the out-of-boundary
+-- negotiated case).
 CREATE OR REPLACE FUNCTION public.branch_pricing_ok(p_branch_id uuid)
 RETURNS boolean
 LANGUAGE sql STABLE AS $$
@@ -146,6 +147,30 @@ LANGUAGE sql STABLE AS $$
       AND pa.ceo_verified IS TRUE
       AND (pa.effective_date IS NULL OR pa.effective_date <= current_date)
       AND (pa.expiry_date    IS NULL OR pa.expiry_date    >= current_date)
+      AND EXISTS (
+        SELECT 1
+        FROM (
+          SELECT
+            count(*) AS line_count,
+            count(DISTINCT concat_ws('|',
+              coalesce(
+                nullif(trim(pai.raw_item_number), ''),
+                pai.product_id::text,
+                nullif(trim(pai.raw_description_normalized), ''),
+                nullif(trim(pai.raw_description), '')
+              ),
+              coalesce(
+                pai.color_variant_id::text,
+                nullif(trim(pai.raw_description_normalized), ''),
+                nullif(trim(pai.raw_description), '')
+              )
+            )) AS sku_count
+          FROM public.price_agreement_items pai
+          WHERE pai.agreement_id = pa.id
+        ) item_gate
+        WHERE item_gate.line_count >= 200
+          AND item_gate.sku_count >= 200
+      )
       AND (
             (b.office_region_id IS NOT NULL AND pa.region_id = b.office_region_id)
          OR (pa.vendor_branch_id = b.id)
@@ -154,7 +179,7 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 COMMENT ON FUNCTION public.branch_pricing_ok(uuid) IS
-  'Pricing-approved gate. TRUE only if the branch has an approved (active+ceo_verified, in-date) regional OR branch-level price agreement. Invoice-paid must block when FALSE.';
+  'Pricing-approved gate. TRUE only if the branch has an approved (active+ceo_verified, in-date) regional OR branch-level price agreement with at least 200 ingested negotiated SKU/colorway lines. Invoice-paid must block when FALSE.';
 
 -- ── Dashboard read view ───────────────────────────────────────────────────────
 CREATE OR REPLACE VIEW public.v_branch_territory AS

@@ -116,7 +116,8 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
               <div><dt>Address</dt><dd>{[selectedBranch.address, selectedBranch.city, selectedBranch.state].filter(Boolean).join(", ") || "Missing"}</dd></div>
               <div><dt>Assigned office</dt><dd>{selectedBranch.assignedOfficeName ?? "Unassigned"}</dd></div>
               <div><dt>Suggested office</dt><dd>{selectedBranch.suggestedOfficeName ?? "No suggestion"}</dd></div>
-              <div><dt>Price agreement</dt><dd>{selectedBranch.currentAgreement?.versionLabel ?? selectedBranch.priceEvidenceLabel}</dd></div>
+              <div><dt>Pricing source</dt><dd>{selectedBranch.priceEvidenceLabel}</dd></div>
+              <div><dt>Price rows</dt><dd>{selectedBranch.pricingWaterfall.itemCount} lines / {selectedBranch.pricingWaterfall.uniqueSkuCount} SKUs</dd></div>
             </dl>
           </>
         ) : selectedOffice ? (
@@ -465,6 +466,16 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
               isSuggested: office.id === branch.suggestedOfficeId,
             }));
         const agreement = branch.currentAgreement;
+        const waterfall = branch.pricingWaterfall || {
+          label: branch.priceEvidenceLabel || "No price available",
+          itemCount: 0,
+          uniqueSkuCount: 0,
+          expectedSkuMin: 200,
+          expectedSkuMax: 350,
+          auditStatus: "missing",
+          requiresApproval: true,
+          sourceTable: null,
+        };
         const assigned = branch.assignedOfficeName || "Unassigned";
         const candidates = candidateOptions
           .map((candidate) => {
@@ -495,13 +506,23 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
             <div><dt>Geocode</dt><dd>${escapeHtml(branch.geocodeStatus)}${branch.geocodePrecision ? ` / ${escapeHtml(branch.geocodePrecision)}` : ""}</dd></div>
           </dl>
           <div class="vendor-agreement-card">
-            <span>Current price agreement</span>
+            <span>Pricing waterfall</span>
+            <strong>${escapeHtml(waterfall.label)}</strong>
+            <p>${escapeHtml(`${waterfall.itemCount || 0} lines / ${waterfall.uniqueSkuCount || 0} SKUs`)}</p>
+            <small>${escapeHtml([
+              waterfall.sourceTable ? `source ${waterfall.sourceTable}` : null,
+              waterfall.auditStatus ? `audit ${waterfall.auditStatus}` : null,
+              waterfall.requiresApproval ? "approval required" : "approved source",
+            ].filter(Boolean).join(" · "))}</small>
+          </div>
+          <div class="vendor-agreement-card">
+            <span>Mapped agreement</span>
             ${
               agreement
                 ? `<strong>${escapeHtml(agreement.versionLabel || agreement.agreementNumber || agreement.scope)}</strong>
                    <p>${escapeHtml([agreement.vendorName, agreement.regionCode || agreement.regionName, agreement.accountNumber].filter(Boolean).join(" / "))}</p>
                    <small>${escapeHtml([agreement.effectiveDate, agreement.expiryDate ? `expires ${agreement.expiryDate}` : null, agreement.ceoVerified ? "CEO verified" : "not CEO verified"].filter(Boolean).join(" · "))}</small>`
-                : `<strong>${escapeHtml(branch.priceEvidenceLabel)}</strong><p>No current mapped agreement covers this branch.</p>`
+                : `<strong>No current mapped agreement</strong><p>${escapeHtml(branch.priceEvidenceLabel)}</p>`
             }
           </div>
           <div class="vendor-assignment-box">

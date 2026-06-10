@@ -11,6 +11,9 @@
     "start": "node runtime/start-command-center.mjs",
     "start:web": "node dist/server/entry.mjs",
     "slack:runtime": "node runtime/slack-socket-runtime.mjs",
+    "price-agreements:audit": "node scripts/audit-price-agreement-items.mjs",
+    "price-agreements:audit:active": "node scripts/audit-price-agreement-items.mjs --active-only",
+    "price-agreements:audit:fail": "node scripts/audit-price-agreement-items.mjs --fail-on-gaps",
     "vendor:reconcile": "node scripts/reconcile-vendor-branches.mjs",
     "vendor:reconcile:write": "node scripts/reconcile-vendor-branches.mjs --write"
   },

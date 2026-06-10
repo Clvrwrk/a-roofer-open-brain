@@ -6,6 +6,7 @@ import {
   serializeActor,
 } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
+import { recordLiveWorkDecision, type LiveWorkItem } from "@lib/live-work";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { loadVendorTerritoryMapPayload } from "@lib/vendor-territories";
 
@@ -22,7 +23,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
 
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
+  const canAssignTerritory =
+    hasPermission(actor, "approval.decide") &&
+    (actorCanAccessDepartment(actor, "accounting") || actorCanAccessDepartment(actor, "operations"));
+
+  if (!canAssignTerritory) {
     return jsonApiResponse(
       {
         actor: serializeActor(actor),
@@ -81,6 +86,61 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const payload = await loadVendorTerritoryMapPayload();
   const branch = payload.branches.find((item) => item.id === vendorBranchId) ?? null;
+  const office = payload.offices.find((item) => item.id === officeId) ?? null;
+  let workDecision: Awaited<ReturnType<typeof recordLiveWorkDecision>> | null = null;
+  let workSyncError: string | null = null;
+
+  if (branch) {
+    const branchLabel = [branch.vendorName, branch.branchNumber, branch.branchName].filter(Boolean).join(" / ");
+    const officeLabel = office?.name ?? branch.assignedOfficeName ?? officeId;
+    const work: LiveWorkItem = {
+      id: `vendor-territory-branch-route-${vendorBranchId}`,
+      workKey: `vendor-territory:branch-route:${vendorBranchId}`,
+      title: `Vendor branch routed: ${branchLabel}`,
+      department: "accounting",
+      workflow: "vendor-territory-branch-route",
+      cadence: "ad-hoc",
+      owner: "@ob-accounting",
+      primaryHuman: actor.displayName || "Command Center",
+      nextRun: "Immediate",
+      status: "needs_review",
+      priority: branch.markerPriority === "needs_office_route" ? "high" : "normal",
+      approval: "before_write",
+      auditorRequired: false,
+      evidence: `Branch ${branchLabel} assigned to ${officeLabel}.`,
+      action: "Review pricing waterfall",
+      detail:
+        `${branchLabel} is now assigned to ${officeLabel}. Next pricing source: ${branch.priceEvidenceLabel}.`,
+      href: `/vendor-territories?branch=${encodeURIComponent(branch.id)}`,
+      sourceLabel: "Vendor Territory Map",
+      sourceTable: "vendor_branches",
+      sourcePk: branch.id,
+      valueAtRisk: 0,
+      auditTrail: [
+        `Saved office route at ${now}`,
+        `Pricing waterfall status: ${branch.priceEvidenceStatus}`,
+        `Pricing rows: ${branch.pricingWaterfall.itemCount} lines / ${branch.pricingWaterfall.uniqueSkuCount} SKUs`,
+      ],
+    };
+
+    try {
+      workDecision = await recordLiveWorkDecision(
+        work,
+        actor,
+        "mark_done",
+        `Assigned ${branchLabel} to ${officeLabel}.`,
+        {
+          actionIntent: "assign_vendor_branch_office",
+          actionLabel: "Save vendor branch PE office route",
+          nextStep: branch.pricingWaterfall.isAuthoritative
+            ? "Pricing waterfall is authoritative; branch can inherit vendor color."
+            : "Pricing remains incomplete; route Ops and Accounting through the pricing waterfall.",
+        },
+      );
+    } catch (decisionError) {
+      workSyncError = decisionError instanceof Error ? decisionError.message : "Dashboard work item sync failed.";
+    }
+  }
 
   return jsonApiResponse({
     ok: true,
@@ -89,5 +149,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     actor: serializeActor(actor),
     branch,
     counts: payload.counts,
+    workDecision: workDecision
+      ? {
+          actionId: workDecision.action?.id ?? null,
+          workItemId: workDecision.workItem?.id ?? null,
+          memory: workDecision.memory,
+        }
+      : null,
+    workSyncError,
   });
 };

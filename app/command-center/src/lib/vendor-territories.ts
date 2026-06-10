@@ -6,7 +6,14 @@ import territorySnapshotJson from "../data/vendor-territories-snapshot.json";
 export type VendorTerritoryStatus = "live" | "degraded" | "unconfigured";
 export type VendorTerritorySource = "live" | "snapshot" | "none";
 export type VendorBranchPricingStatus = "covered" | "overlap_pending" | "out_of_boundary" | "unclassified";
-export type BranchPriceEvidenceStatus = "pdf_price_agreement" | "api_only_pricing" | "no_price_agreement";
+export type BranchPriceEvidenceStatus =
+  | "pdf_price_list_ingested"
+  | "pdf_price_list_incomplete"
+  | "api_price_available"
+  | "api_price_incomplete"
+  | "api_pull_pending_approval"
+  | "invoice_history_90d"
+  | "no_price_available";
 export type TerritoryMarkerPriority = "needs_office_route" | "missing_branch_pricing" | "vendor_brand";
 
 interface RegionRow {
@@ -110,8 +117,30 @@ interface PriceAgreementRow {
 }
 
 interface AbcAgreementEvidenceRow {
+  id: string;
   branch_number: string | null;
   source_file: string | null;
+}
+
+interface PriceAgreementItemRow {
+  agreement_id: string | null;
+  product_id: string | null;
+  color_variant_id: string | null;
+  raw_item_number: string | null;
+  raw_description: string | null;
+  raw_description_normalized: string | null;
+  approval_status: string | null;
+}
+
+interface AbcPriceListItemRow {
+  agreement_id: string | null;
+  item_number: string | null;
+  description: string | null;
+  approval_status: string | null;
+}
+
+interface AbcPriceObservationLineRow {
+  [key: string]: unknown;
 }
 
 interface AbcVendorBranchRow {
@@ -203,6 +232,28 @@ export interface PriceAgreementSummary {
   sourceFile: string | null;
 }
 
+export interface PriceWaterfallSummary {
+  status: BranchPriceEvidenceStatus;
+  label: string;
+  sourceRank: number;
+  sourceTable:
+    | "price_agreements"
+    | "abc_price_agreements"
+    | "abc_api_pull"
+    | "abc_price_observation_lines"
+    | "abc_price_observations_lines"
+    | null;
+  agreementId: string | null;
+  agreementNumber: string | null;
+  itemCount: number;
+  uniqueSkuCount: number;
+  expectedSkuMin: number;
+  expectedSkuMax: number;
+  requiresApproval: boolean;
+  isAuthoritative: boolean;
+  auditStatus: "complete" | "incomplete" | "missing" | "pending_approval" | "fallback";
+}
+
 export interface OfficeMapNode {
   id: string;
   name: string;
@@ -267,6 +318,7 @@ export interface VendorBranchMapNode {
   suggestedOfficeName: string | null;
   candidateOffices: CandidateOffice[];
   currentAgreement: PriceAgreementSummary | null;
+  pricingWaterfall: PriceWaterfallSummary;
   priceEvidenceStatus: BranchPriceEvidenceStatus;
   priceEvidenceLabel: string;
   pricingApproved: boolean;
@@ -307,6 +359,8 @@ export interface VendorTerritoryMapPayload {
 export type VendorTerritorySurface = VendorTerritoryMapPayload;
 
 const PAGE_SIZE = 1000;
+const EXPECTED_PRICE_AGREEMENT_SKU_MIN = 200;
+const EXPECTED_PRICE_AGREEMENT_SKU_MAX = 350;
 const territorySnapshot = territorySnapshotJson as VendorTerritorySnapshot;
 
 const PLANNED_VENDORS: VendorMapVendor[] = [
@@ -418,14 +472,6 @@ function normalizeStatus(value: string | null): VendorBranchPricingStatus {
   return "unclassified";
 }
 
-function isPdfSource(value: string | null | undefined) {
-  return /\.pdf(?:$|[?#])/i.test(String(value ?? ""));
-}
-
-function isApiSource(value: string | null | undefined) {
-  return /\bapi\b/i.test(String(value ?? ""));
-}
-
 function normalizeBranchNumber(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   if (!text) return "";
@@ -528,25 +574,318 @@ function plannedOrLiveVendors(rows: VendorRow[]) {
   return [...liveVendors, ...planned];
 }
 
-function priceEvidenceFrom(pdfCount: number, apiCount: number) {
-  if (pdfCount > 0) {
+interface ItemStats {
+  itemCount: number;
+  uniqueSkuCount: number;
+  uniqueItemCount: number;
+}
+
+interface ApiAgreementStats extends ItemStats {
+  agreementCount: number;
+  agreementIds: string[];
+}
+
+function emptyItemStats(): ItemStats {
+  return { itemCount: 0, uniqueSkuCount: 0, uniqueItemCount: 0 };
+}
+
+function skuText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text.toUpperCase().replace(/\s+/g, " ");
+  }
+  return null;
+}
+
+function priceAgreementLineSku(item: PriceAgreementItemRow) {
+  return skuText(item.raw_item_number, item.product_id, item.raw_description_normalized, item.raw_description);
+}
+
+function priceAgreementLineColorwaySku(item: PriceAgreementItemRow) {
+  const sku = priceAgreementLineSku(item);
+  if (!sku) return null;
+  const colorway = skuText(item.color_variant_id, item.raw_description_normalized, item.raw_description);
+  return colorway ? `${sku}|${colorway}` : sku;
+}
+
+function abcPriceLineSku(item: AbcPriceListItemRow) {
+  return skuText(item.item_number, item.description);
+}
+
+function buildPriceAgreementItemStats(items: PriceAgreementItemRow[]) {
+  const byAgreement = new Map<string, ItemStats>();
+  const itemKeysByAgreement = new Map<string, Set<string>>();
+  const skuKeysByAgreement = new Map<string, Set<string>>();
+
+  for (const item of items) {
+    if (!item.agreement_id) continue;
+    const stats = byAgreement.get(item.agreement_id) ?? emptyItemStats();
+    const itemKeys = itemKeysByAgreement.get(item.agreement_id) ?? new Set<string>();
+    const skuKeys = skuKeysByAgreement.get(item.agreement_id) ?? new Set<string>();
+    const itemSku = priceAgreementLineSku(item);
+    const colorwaySku = priceAgreementLineColorwaySku(item);
+
+    stats.itemCount += 1;
+    if (itemSku) itemKeys.add(itemSku);
+    if (colorwaySku) skuKeys.add(colorwaySku);
+    stats.uniqueItemCount = itemKeys.size;
+    stats.uniqueSkuCount = Math.max(itemKeys.size, skuKeys.size);
+
+    byAgreement.set(item.agreement_id, stats);
+    itemKeysByAgreement.set(item.agreement_id, itemKeys);
+    skuKeysByAgreement.set(item.agreement_id, skuKeys);
+  }
+
+  return byAgreement;
+}
+
+function buildAbcPriceListStats(items: AbcPriceListItemRow[]) {
+  const byAgreement = new Map<string, ItemStats>();
+  const skuKeysByAgreement = new Map<string, Set<string>>();
+
+  for (const item of items) {
+    if (!item.agreement_id) continue;
+    const stats = byAgreement.get(item.agreement_id) ?? emptyItemStats();
+    const skuKeys = skuKeysByAgreement.get(item.agreement_id) ?? new Set<string>();
+    const sku = abcPriceLineSku(item);
+
+    stats.itemCount += 1;
+    if (sku) skuKeys.add(sku);
+    stats.uniqueItemCount = skuKeys.size;
+    stats.uniqueSkuCount = skuKeys.size;
+
+    byAgreement.set(item.agreement_id, stats);
+    skuKeysByAgreement.set(item.agreement_id, skuKeys);
+  }
+
+  return byAgreement;
+}
+
+function aggregateApiAgreementStats(
+  agreements: AbcAgreementEvidenceRow[],
+  itemStatsByAgreementId: Map<string, ItemStats>,
+): ApiAgreementStats {
+  const agreementIds = agreements.map((agreement) => agreement.id).filter(Boolean);
+  const totals = agreementIds.reduce<ApiAgreementStats>(
+    (sum, agreementId) => {
+      const stats = itemStatsByAgreementId.get(agreementId) ?? emptyItemStats();
+      sum.itemCount += stats.itemCount;
+      sum.uniqueSkuCount += stats.uniqueSkuCount;
+      sum.uniqueItemCount += stats.uniqueItemCount;
+      return sum;
+    },
+    { agreementCount: agreements.length, agreementIds, itemCount: 0, uniqueSkuCount: 0, uniqueItemCount: 0 },
+  );
+
+  return totals;
+}
+
+function isCompletePriceList(stats: ItemStats) {
+  return stats.itemCount >= EXPECTED_PRICE_AGREEMENT_SKU_MIN && stats.uniqueSkuCount >= EXPECTED_PRICE_AGREEMENT_SKU_MIN;
+}
+
+function formatCountLabel(stats: Pick<ItemStats, "itemCount" | "uniqueSkuCount">) {
+  return `${stats.itemCount} lines / ${stats.uniqueSkuCount} SKUs`;
+}
+
+function sourceRankFor(status: BranchPriceEvidenceStatus) {
+  const ranks: Record<BranchPriceEvidenceStatus, number> = {
+    pdf_price_list_ingested: 1,
+    pdf_price_list_incomplete: 1,
+    api_price_available: 2,
+    api_price_incomplete: 2,
+    api_pull_pending_approval: 3,
+    invoice_history_90d: 4,
+    no_price_available: 5,
+  };
+  return ranks[status];
+}
+
+function buildWaterfallSummary(input: {
+  currentAgreement: PriceAgreementSummary | null;
+  currentAgreementStats: ItemStats;
+  apiStats: ApiAgreementStats;
+  branchNumber: string | null;
+  invoiceHistoryCount: number;
+}): PriceWaterfallSummary {
+  const { currentAgreement, currentAgreementStats, apiStats, branchNumber, invoiceHistoryCount } = input;
+
+  if (currentAgreement && isCompletePriceList(currentAgreementStats)) {
     return {
-      status: "pdf_price_agreement" as const,
-      label: apiCount > 0 ? "PDF agreement plus API pricing" : "PDF price agreement",
+      status: "pdf_price_list_ingested",
+      label: `PDF price list ingested (${formatCountLabel(currentAgreementStats)})`,
+      sourceRank: sourceRankFor("pdf_price_list_ingested"),
+      sourceTable: "price_agreements",
+      agreementId: currentAgreement.id,
+      agreementNumber: currentAgreement.agreementNumber,
+      itemCount: currentAgreementStats.itemCount,
+      uniqueSkuCount: currentAgreementStats.uniqueSkuCount,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: false,
+      isAuthoritative: true,
+      auditStatus: "complete",
     };
   }
 
-  if (apiCount > 0) {
+  if (currentAgreement) {
+    const countLabel = currentAgreementStats.itemCount > 0 ? formatCountLabel(currentAgreementStats) : "0 negotiated lines";
     return {
-      status: "api_only_pricing" as const,
-      label: "API-only pricing; no PDF agreement mapped",
+      status: "pdf_price_list_incomplete",
+      label: `PDF price agreement mapped, item ingestion incomplete (${countLabel})`,
+      sourceRank: sourceRankFor("pdf_price_list_incomplete"),
+      sourceTable: "price_agreements",
+      agreementId: currentAgreement.id,
+      agreementNumber: currentAgreement.agreementNumber,
+      itemCount: currentAgreementStats.itemCount,
+      uniqueSkuCount: currentAgreementStats.uniqueSkuCount,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: true,
+      isAuthoritative: false,
+      auditStatus: "incomplete",
+    };
+  }
+
+  if (apiStats.itemCount > 0) {
+    return {
+      status: "api_price_available",
+      label: `ABC API price list available (${formatCountLabel(apiStats)})`,
+      sourceRank: sourceRankFor("api_price_available"),
+      sourceTable: "abc_price_agreements",
+      agreementId: apiStats.agreementIds[0] ?? null,
+      agreementNumber: null,
+      itemCount: apiStats.itemCount,
+      uniqueSkuCount: apiStats.uniqueSkuCount,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: false,
+      isAuthoritative: true,
+      auditStatus: "complete",
+    };
+  }
+
+  if (apiStats.agreementCount > 0) {
+    return {
+      status: "api_price_incomplete",
+      label: "ABC API agreement header found, but no API price list items are stored",
+      sourceRank: sourceRankFor("api_price_incomplete"),
+      sourceTable: "abc_price_agreements",
+      agreementId: apiStats.agreementIds[0] ?? null,
+      agreementNumber: null,
+      itemCount: 0,
+      uniqueSkuCount: 0,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: true,
+      isAuthoritative: false,
+      auditStatus: "incomplete",
+    };
+  }
+
+  if (branchNumber) {
+    return {
+      status: "api_pull_pending_approval",
+      label: "No stored price; next step is branch/product API pull for Ops and Accounting approval",
+      sourceRank: sourceRankFor("api_pull_pending_approval"),
+      sourceTable: "abc_api_pull",
+      agreementId: null,
+      agreementNumber: null,
+      itemCount: 0,
+      uniqueSkuCount: 0,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: true,
+      isAuthoritative: false,
+      auditStatus: "pending_approval",
+    };
+  }
+
+  if (invoiceHistoryCount > 0) {
+    return {
+      status: "invoice_history_90d",
+      label: `Invoice history fallback available (${invoiceHistoryCount} recent lines)`,
+      sourceRank: sourceRankFor("invoice_history_90d"),
+      sourceTable: "abc_price_observation_lines",
+      agreementId: null,
+      agreementNumber: null,
+      itemCount: invoiceHistoryCount,
+      uniqueSkuCount: 0,
+      expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+      expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+      requiresApproval: true,
+      isAuthoritative: false,
+      auditStatus: "fallback",
     };
   }
 
   return {
-    status: "no_price_agreement" as const,
-    label: "No price agreement mapped",
+    status: "no_price_available",
+    label: "No price available",
+    sourceRank: sourceRankFor("no_price_available"),
+    sourceTable: null,
+    agreementId: null,
+    agreementNumber: null,
+    itemCount: 0,
+    uniqueSkuCount: 0,
+    expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+    expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+    requiresApproval: true,
+    isAuthoritative: false,
+    auditStatus: "missing",
   };
+}
+
+function firstPresent(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== null && value !== undefined && String(value).trim()) return value;
+  }
+  return null;
+}
+
+function observationBranchKey(row: Record<string, unknown>) {
+  return normalizeBranchNumber(
+    firstPresent(row, [
+      "branch_number",
+      "branchNumber",
+      "branch",
+      "vendor_branch_number",
+      "abc_branch_number",
+      "location_branch_number",
+      "source_branch_number",
+    ]) as string | null,
+  );
+}
+
+function observationDate(row: Record<string, unknown>) {
+  const value = firstPresent(row, [
+    "invoice_date",
+    "observed_at",
+    "created_at",
+    "updated_at",
+    "price_observed_at",
+    "document_date",
+  ]);
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function buildRecentObservationCountByBranch(rows: AbcPriceObservationLineRow[]) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const byBranch = new Map<string, number>();
+
+  for (const row of rows) {
+    const branchKey = observationBranchKey(row);
+    if (!branchKey) continue;
+    const date = observationDate(row);
+    if (date && date < cutoff) continue;
+    byBranch.set(branchKey, (byBranch.get(branchKey) ?? 0) + 1);
+  }
+
+  return byBranch;
 }
 
 function isAgreementCurrent(agreement: PriceAgreementRow) {
@@ -614,9 +953,8 @@ function compareAgreements(a: PriceAgreementRow, b: PriceAgreementRow) {
 function markerPriority(branch: {
   assignedOfficeId: string | null;
   pricingStatus: VendorBranchPricingStatus;
-  pricingApproved: boolean;
+  pricingWaterfall: PriceWaterfallSummary;
   candidateOffices: CandidateOffice[];
-  currentAgreement: PriceAgreementSummary | null;
 }) {
   const needsOfficeRoute =
     branch.pricingStatus === "overlap_pending" ||
@@ -624,7 +962,7 @@ function markerPriority(branch: {
     (branch.candidateOffices.length > 1 && !branch.assignedOfficeId);
 
   if (needsOfficeRoute) return "needs_office_route" as const;
-  if (!branch.pricingApproved || !branch.currentAgreement || branch.pricingStatus === "out_of_boundary") {
+  if (!branch.pricingWaterfall.isAuthoritative || branch.pricingStatus === "out_of_boundary") {
     return "missing_branch_pricing" as const;
   }
 
@@ -746,12 +1084,24 @@ function surfaceFromSnapshot(reason: string, missingConfig: string[] = []): Vend
           sourceFile: "previous app snapshot",
         }
       : null;
+    const pricingWaterfall = buildWaterfallSummary({
+      currentAgreement,
+      currentAgreementStats: branch.approved
+        ? {
+            itemCount: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+            uniqueItemCount: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+            uniqueSkuCount: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+          }
+        : emptyItemStats(),
+      apiStats: { agreementCount: 0, agreementIds: [], itemCount: 0, uniqueItemCount: 0, uniqueSkuCount: 0 },
+      branchNumber: branch.name,
+      invoiceHistoryCount: 0,
+    });
     const priority = markerPriority({
       assignedOfficeId: branch.assigned,
       pricingStatus,
-      pricingApproved: branch.approved,
       candidateOffices,
-      currentAgreement,
+      pricingWaterfall,
     });
 
     return {
@@ -779,10 +1129,11 @@ function surfaceFromSnapshot(reason: string, missingConfig: string[] = []): Vend
       suggestedOfficeName: branch.suggested ? (officeById.get(branch.suggested)?.name ?? branch.suggested) : null,
       candidateOffices,
       currentAgreement,
-      priceEvidenceStatus: branch.approved ? "pdf_price_agreement" : "no_price_agreement",
-      priceEvidenceLabel: branch.approved ? "Snapshot pricing approved" : "Snapshot pricing missing",
-      pricingApproved: branch.approved,
-      invoiceGateStatus: branch.approved ? "approved" : "blocked",
+      pricingWaterfall,
+      priceEvidenceStatus: pricingWaterfall.status,
+      priceEvidenceLabel: branch.approved ? "Snapshot pricing approved" : pricingWaterfall.label,
+      pricingApproved: pricingWaterfall.isAuthoritative,
+      invoiceGateStatus: pricingWaterfall.isAuthoritative ? "approved" : "blocked",
       territoryDecidedBy: null,
       territoryDecidedAt: null,
     };
@@ -841,8 +1192,23 @@ export async function loadVendorTerritoryMapPayload(
   const nonCriticalErrors: string[] = [];
 
   try {
-    const [regions, officeRows, vendorRows, branchViewRows, branchRows, candidateRows, agreements, abcEvidenceRows, abcApiRows, territoryRpc] =
-      await Promise.all([
+    const observationTableErrors: string[] = [];
+    const [
+      regions,
+      officeRows,
+      vendorRows,
+      branchViewRows,
+      branchRows,
+      candidateRows,
+      agreements,
+      priceAgreementItems,
+      abcEvidenceRows,
+      abcPriceListItems,
+      abcPriceObservationRowsPlural,
+      abcPriceObservationRowsSingular,
+      abcApiRows,
+      territoryRpc,
+    ] = await Promise.all([
         selectAll<RegionRow>(
           client,
           "regions",
@@ -875,11 +1241,35 @@ export async function loadVendorTerritoryMapPayload(
           "id,vendor_id,region_id,vendor_branch_id,agreement_number,version_label,account_number,effective_date,expiry_date,ceo_verified,is_active,source_file",
           nonCriticalErrors,
         ),
+        optionalSelectAll<PriceAgreementItemRow>(
+          client,
+          "price_agreement_items",
+          "agreement_id,product_id,color_variant_id,raw_item_number,raw_description,raw_description_normalized,approval_status",
+          nonCriticalErrors,
+        ),
         optionalSelectAll<AbcAgreementEvidenceRow>(
           client,
           "abc_price_agreements",
-          "branch_number,source_file",
+          "id,branch_number,source_file",
           nonCriticalErrors,
+        ),
+        optionalSelectAll<AbcPriceListItemRow>(
+          client,
+          "abc_price_list_items",
+          "agreement_id,item_number,description,approval_status",
+          nonCriticalErrors,
+        ),
+        optionalSelectAll<AbcPriceObservationLineRow>(
+          client,
+          "abc_price_observations_lines",
+          "*",
+          observationTableErrors,
+        ),
+        optionalSelectAll<AbcPriceObservationLineRow>(
+          client,
+          "abc_price_observation_lines",
+          "*",
+          observationTableErrors,
         ),
         optionalSelectAll<AbcVendorBranchRow>(
           client,
@@ -932,15 +1322,21 @@ export async function loadVendorTerritoryMapPayload(
       });
     }
 
-    const branchEvidence = new Map<string, { pdfCount: number; apiCount: number }>();
+    const priceAgreementItemStatsById = buildPriceAgreementItemStats(priceAgreementItems);
+    const abcPriceListStatsByAgreementId = buildAbcPriceListStats(abcPriceListItems);
+    const abcPriceObservationRows = [...abcPriceObservationRowsPlural, ...abcPriceObservationRowsSingular];
+    if (abcPriceObservationRows.length === 0 && observationTableErrors.length >= 2) {
+      nonCriticalErrors.push(observationTableErrors.join(" "));
+    }
+    const abcAgreementsByBranchNumber = new Map<string, AbcAgreementEvidenceRow[]>();
     for (const agreement of abcEvidenceRows) {
       const branchNumber = normalizeBranchNumber(agreement.branch_number);
       if (!branchNumber) continue;
-      const current = branchEvidence.get(branchNumber) ?? { pdfCount: 0, apiCount: 0 };
-      if (isPdfSource(agreement.source_file)) current.pdfCount += 1;
-      if (isApiSource(agreement.source_file)) current.apiCount += 1;
-      branchEvidence.set(branchNumber, current);
+      const list = abcAgreementsByBranchNumber.get(branchNumber) ?? [];
+      list.push(agreement);
+      abcAgreementsByBranchNumber.set(branchNumber, list);
     }
+    const recentObservationCountByBranch = buildRecentObservationCountByBranch(abcPriceObservationRows);
 
     const abcApiByNumber = new Map<string, AbcVendorBranchRow>();
     const abcApiByAddress = new Map<string, AbcVendorBranchRow>();
@@ -1006,16 +1402,27 @@ export async function loadVendorTerritoryMapPayload(
         const pricingStatus = normalizeStatus(branch.pricing_status);
         const currentAgreement = findCurrentAgreement(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
         const branchNumber = nullableText(abcApiBranch?.branch_number ?? branch.branch_number ?? rawBranch?.branch_number);
-        const evidenceCounts = branchEvidence.get(normalizeBranchNumber(branchNumber)) ?? { pdfCount: 0, apiCount: 0 };
-        const priceEvidence = currentAgreement
-          ? { status: "pdf_price_agreement" as const, label: "Current price agreement mapped" }
-          : priceEvidenceFrom(evidenceCounts.pdfCount, evidenceCounts.apiCount);
+        const branchNumberKey = normalizeBranchNumber(branchNumber);
+        const currentAgreementStats = currentAgreement
+          ? (priceAgreementItemStatsById.get(currentAgreement.id) ?? emptyItemStats())
+          : emptyItemStats();
+        const apiStats = aggregateApiAgreementStats(
+          branchNumberKey ? (abcAgreementsByBranchNumber.get(branchNumberKey) ?? []) : [],
+          abcPriceListStatsByAgreementId,
+        );
+        const pricingWaterfall = buildWaterfallSummary({
+          currentAgreement,
+          currentAgreementStats,
+          apiStats,
+          branchNumber,
+          invoiceHistoryCount: branchNumberKey ? (recentObservationCountByBranch.get(branchNumberKey) ?? 0) : 0,
+        });
+        const pricingApproved = pricingWaterfall.isAuthoritative;
         const priority = markerPriority({
           assignedOfficeId: branch.pricing_territory_office_id,
           pricingStatus,
-          pricingApproved: branch.pricing_approved === true,
           candidateOffices,
-          currentAgreement,
+          pricingWaterfall,
         });
 
         return {
@@ -1043,10 +1450,11 @@ export async function loadVendorTerritoryMapPayload(
           suggestedOfficeName: branch.suggested_office_name,
           candidateOffices,
           currentAgreement,
-          priceEvidenceStatus: priceEvidence.status,
-          priceEvidenceLabel: priceEvidence.label,
-          pricingApproved: branch.pricing_approved === true,
-          invoiceGateStatus: branch.pricing_approved === true ? "approved" : "blocked",
+          pricingWaterfall,
+          priceEvidenceStatus: pricingWaterfall.status,
+          priceEvidenceLabel: pricingWaterfall.label,
+          pricingApproved,
+          invoiceGateStatus: pricingApproved ? "approved" : "blocked",
           territoryDecidedBy: branch.territory_decided_by,
           territoryDecidedAt: branch.territory_decided_at,
         };
