@@ -191,6 +191,15 @@ Pricing must be requested using:
 
 The system must not rely on static spreadsheet pricing for final approval. Static sheets and screenshot templates may be used for mapping, template creation, scenario modeling, and fallback analysis, but the final approved proposal requires verified vendor pricing unless a human explicitly approves an exception.
 
+Pricing source waterfall (decided 2026-06-10, Chris):
+
+1. **Ingested PDF price list** — current negotiated price agreement / price list already ingested into the brain (`price_agreement_items` / `abc_price_list_items`).
+2. **Live ABC API price** — pulled by branch + product via the API; the pulled price is submitted to Ops and Accounting through the operations dashboard for approval before use.
+3. **Invoice history** — most recent invoiced price for the product within the last 90 days.
+4. **No price available** — line is flagged; human pricing required before proposal approval.
+
+Every priced line records which waterfall tier produced it.
+
 ### 4.6 Quantity And UOM Rounding
 
 The system must round every line up to the purchasing unit of measure.

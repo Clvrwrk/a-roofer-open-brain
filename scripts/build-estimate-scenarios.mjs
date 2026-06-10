@@ -9,11 +9,15 @@
 //   node scripts/build-estimate-scenarios.mjs --inputs /tmp/engine_inputs.json \
 //     [--config config/roofer.config.yaml] > scenarios.json
 //
-// Pricing discipline (§4.5): this engine uses MIRRORED pricing (price
-// agreements / price list / order history) and stamps every line
-// price_source='static_fallback'. Final proposal approval still requires a
-// live ABC pull or an explicit human exception — the pricing verification
-// row records that.
+// Pricing waterfall (§4.5, decided 2026-06-10):
+//   1. ingested PDF price list (price_agreement_items / abc_price_list_items)
+//   2. live ABC API by branch+product — pulled price goes to Ops+Accounting
+//      dashboard approval before use (not wired in this surface yet)
+//   3. invoice history ≤90 days (abc_invoice_lines.effective_unit_price)
+//   4. no price → line flagged, human pricing required
+// This engine implements tiers 1 and 3 against the mirror and stamps every
+// line with its tier; tier 2 (live pull + approval) is the production path
+// and remains a hard gate before proposal approval.
 
 import { readFileSync } from 'node:fs';
 
@@ -108,20 +112,25 @@ function quantity(rule, f) {
   }
 }
 
-// price reconciliation: agreement price uom -> purchase uom unit cost
+// price reconciliation per the §4.5 waterfall: tier 1 PDF price list,
+// (tier 2 live API not wired here), tier 3 invoice history ≤90d, else flag.
 function unitCost(line, pricing) {
+  const conv = (price, uom) => {
+    if (uom === 'SQ' && (line.vendor_uom === 'BD' || line.qty_basis === 'shingle_3bd_sq')) {
+      return { cost: price / SQ_TO_BD, factor: SQ_TO_BD, note: `price ${price}/SQ ÷ ${SQ_TO_BD} BD/SQ` };
+    }
+    return { cost: price, factor: 1, note: null };
+  };
   const p = pricing.find((x) => x.item === line.item);
   if (p) {
-    let cost = num(p.price); let conv = 1; let note = null;
-    if (p.uom === 'SQ' && (line.vendor_uom === 'BD' || line.qty_basis === 'shingle_3bd_sq')) {
-      cost = cost / SQ_TO_BD; conv = SQ_TO_BD; note = `price ${p.price}/SQ ÷ ${SQ_TO_BD} BD/SQ`;
-    }
-    return { unit_cost: +cost.toFixed(4), price_uom: p.uom, conversion: conv, source: p.src, note };
+    const c = conv(num(p.price), p.uom);
+    return { unit_cost: +c.cost.toFixed(4), price_uom: p.uom, conversion: c.factor, source: 'pdf_price_list', note: c.note };
   }
-  if (line.hist_cost !== null && line.hist_cost !== undefined) {
-    return { unit_cost: num(line.hist_cost), price_uom: line.vendor_uom || line.sell_uom, conversion: 1, source: 'order_history_avg', note: 'no agreement/list price in mirror — order-history average, needs review' };
+  if (line.inv90 !== null && line.inv90 !== undefined) {
+    const c = conv(num(line.inv90), line.inv90_uom || line.vendor_uom);
+    return { unit_cost: +c.cost.toFixed(4), price_uom: line.inv90_uom || line.vendor_uom, conversion: c.factor, source: 'invoice_history_90d', note: [c.note, 'priced from invoice history (≤90 days)'].filter(Boolean).join('; ') };
   }
-  return { unit_cost: null, price_uom: null, conversion: 1, source: 'none', note: 'no price available — human pricing required' };
+  return { unit_cost: null, price_uom: null, conversion: 1, source: 'none', note: 'no price in waterfall (no PDF list price, live API not pulled, no invoice ≤90d) — human pricing required' };
 }
 
 const out = [];
