@@ -36,12 +36,17 @@ The deployable template for a single roofing company's persistent, property-firs
 
 On every session start, read only the frozen memory snapshot:
 
-1. `context/USER.md` (~1.4 KB max)
-2. `context/MEMORY.md` (~2.5 KB max)
-3. `context/memory/{today in YYYY-MM-DD}.md` if it exists
-4. Yesterday's daily log only when today's log has no prior session
+1. `context/SOUL.md` (~2.1 KB max — agent identity)
+2. `context/USER.md` (~1.4 KB max)
+3. `context/MEMORY.md` (~2.5 KB max)
+4. `context/memory/{today in YYYY-MM-DD}.md` if it exists
+5. Yesterday's daily log only when today's log has no prior session
 
-These files are the hot-path memory layer. Do not load raw archive folders, imported project trees, `.memsearch/`, `node_modules`, or build outputs at startup.
+In Claude Code, the `SessionStart` hook (`.claude/hooks/load-memory-snapshot.js`) injects this snapshot automatically — do not re-read the files. In Cowork, Codex, or any surface where the hook does not fire, read them manually per the list above.
+
+These files are the hot-path memory layer. Do not load raw archive folders, imported project trees, `.memsearch/`, `node_modules`, or build outputs at startup. Exception: `.memsearch/memory/*.md` (the plugin's auto-captured turn summaries) are durable and indexed for recall — just not loaded at startup.
+
+Curated memory writes ("remember this", "note that") go through `.claude/skills/meta-memory-write/` — dedup, section targeting, cap enforcement.
 
 ## Memory Budget
 
@@ -55,8 +60,8 @@ These files are the hot-path memory layer. Do not load raw archive folders, impo
 When the user asks about past context, decisions, or prior conversations:
 
 1. Tier 0: check loaded `context/` snapshot and today's daily log.
-2. Tier 1: run `memsearch search "<query>" --top-k 5 --collection open_brain_memory`.
-3. Tier 2: run `memsearch expand <chunk_hash> --collection open_brain_memory`.
+2. Tier 1: if `memsearch` is on PATH, run `memsearch search "<query>" --top-k 5 --collection open_brain_memory`. If it is not (e.g. Cowork's sandboxed VM, where the host's `~/.memsearch` Milvus index is unreachable), do NOT install it or touch `~/.memsearch` — grep the source-of-truth markdown instead: search `context/` and `.memsearch/memory/` for the query terms, then read the matching files. This grep path is the expected Tier 1 in sandboxed surfaces; do not report it as a blocker.
+3. Tier 2: run `memsearch expand <chunk_hash> --collection open_brain_memory` (memsearch surfaces only); in sandboxed surfaces, read the full matched file instead.
 4. Tier 3: inspect transcript or rollout anchors only when exact historical wording matters.
 5. Fallback: say no relevant memory was found.
 
