@@ -4,6 +4,7 @@
 ## About
 
 - Chris is building an Open Brain for roofing operators, starting with Pro Exteriors.
+- Pro Exteriors team: Chandler (CEO), Roberto (Ops Manager), Lucinda (Accounting), Chris (CTO/AI Administrator).
 
 ## Preferences
 
