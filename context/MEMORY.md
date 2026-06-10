@@ -4,8 +4,8 @@
 ## Active Threads
 
 - Command Center runs from `app/command-center` with Supabase product surface and WorkOS/auth.md discovery skeleton merged on `main`.
-- Memory Phase 1 validated 2026-06-10 (hook, skill, SOUL.md, caps, recall). Remaining: install MemSearch plugin in Claude Code + rebuild Mac index — see `docs/handoffs/current.md`.
-- Spec `docs/33` v1.1 (twin learning loops, autoresearch pattern) awaits review; next build: Phase 1 Supabase schema (`estimate_*`/`kb_*`).
+- Estimate pipeline (docs/33) BUILT through Phase 6 (2026-06-10): 36 schema tables live, 5 sample runs end-to-end (measurement→GBB scenarios→proposal/internal-estimate PDFs→handoff→order/schedule drafts). Now waits on humans: Roberto's `labor-rates-wichita-v1` approval (observed $80/sq vs $165 placeholder), tier labels, live ABC pull. See `docs/handoffs/current.md`.
+- Pricing waterfall (Chris): PDF price list → live API w/ Ops+Acct approval → invoice ≤90d → flag. AccuLynx V2 has NO milestone/invoice/order/schedule writes (docs/37) — fallback permanent.
 - Raw imports are parked in `archive/local-uncommitted-2026-06-04/` pending Maintenance sanitize/extract manifest.
 
 ## Environment Notes
