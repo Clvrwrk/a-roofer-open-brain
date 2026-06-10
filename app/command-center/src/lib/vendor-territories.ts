@@ -1,25 +1,72 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import territorySnapshotJson from "../data/vendor-territories-snapshot.json";
 
 export type VendorTerritoryStatus = "live" | "degraded" | "unconfigured";
+export type VendorTerritorySource = "live" | "snapshot" | "none";
 export type VendorBranchPricingStatus = "covered" | "overlap_pending" | "out_of_boundary" | "unclassified";
 export type BranchPriceEvidenceStatus = "pdf_price_agreement" | "api_only_pricing" | "no_price_agreement";
+export type TerritoryMarkerPriority = "needs_office_route" | "missing_branch_pricing" | "vendor_brand";
+
+interface RegionRow {
+  id: string;
+  region_code: string | null;
+  region_name: string | null;
+  primary_city: string | null;
+  primary_state: string | null;
+  is_active: boolean | null;
+}
 
 interface OfficeRow {
   id: string;
   name: string | null;
+  office_type: string | null;
+  region_id: string | null;
+  address: string | null;
   city: string | null;
   state: string | null;
+  postal_code: string | null;
   latitude: number | string | null;
   longitude: number | string | null;
   drive_time_minutes: number | string | null;
-  boundary: unknown;
+  boundary_method: string | null;
+  boundary_computed_at: string | null;
+  is_active: boolean | null;
+}
+
+interface VendorRow {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  is_active: boolean | null;
+}
+
+interface VendorBranchRow {
+  id: string;
+  vendor_id: string | null;
+  region_id: string | null;
+  branch_number: string | null;
+  branch_name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
+  geocode_status: string | null;
+  geocode_precision: string | null;
+  pricing_status: string | null;
+  pricing_territory_office_id: string | null;
+  suggested_office_id: string | null;
+  territory_decided_by: string | null;
+  territory_decided_at: string | null;
   is_active: boolean | null;
 }
 
 interface BranchTerritoryRow {
   vendor_branch_id: string;
+  vendor_id: string | null;
   vendor_name: string | null;
   branch_number: string | null;
   branch_name: string | null;
@@ -33,77 +80,265 @@ interface BranchTerritoryRow {
   assigned_office_name: string | null;
   suggested_office_id: string | null;
   suggested_office_name: string | null;
+  territory_decided_by: string | null;
+  territory_decided_at: string | null;
   pricing_approved: boolean | null;
   candidate_office_count: number | string | null;
 }
 
-interface AgreementEvidenceRow {
+interface CandidateRow {
+  vendor_branch_id: string;
+  office_id: string;
+  drive_minutes: number | string | null;
+  straight_km: number | string | null;
+  is_suggested: boolean | null;
+}
+
+interface PriceAgreementRow {
+  id: string;
+  vendor_id: string | null;
+  region_id: string | null;
+  vendor_branch_id: string | null;
+  agreement_number: string | null;
+  version_label: string | null;
+  account_number: string | null;
+  effective_date: string | null;
+  expiry_date: string | null;
+  ceo_verified: boolean | null;
+  is_active: boolean | null;
+  source_file: string | null;
+}
+
+interface AbcAgreementEvidenceRow {
   branch_number: string | null;
   source_file: string | null;
 }
 
-interface BranchPriceEvidence {
-  pdfCount: number;
-  apiCount: number;
-  status: BranchPriceEvidenceStatus;
-  label: string;
+interface AbcVendorBranchRow {
+  branch_number: string | null;
+  branch_name: string | null;
+  address_json: unknown;
+  contact_json: unknown;
+  city: string | null;
+  state: string | null;
+  postal: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
 }
 
-export interface ProjectedOfficeTerritory {
+interface SnapshotOffice {
   id: string;
   name: string;
-  location: string;
-  x: number | null;
-  y: number | null;
-  polygonPoints: string;
-  driveTimeMinutes: number | null;
+  lat: number;
+  lng: number;
+  region: string;
+  drive_time_minutes: number;
+  boundary: {
+    type: "Polygon";
+    coordinates: number[][][];
+  } | null;
 }
 
-export interface ProjectedVendorBranch {
+interface SnapshotBranch {
   id: string;
+  vendor: string;
+  name: string;
+  city: string;
+  state: string;
+  lat: number | null;
+  lng: number | null;
+  status: string;
+  assigned: string | null;
+  suggested: string | null;
+  approved: boolean;
+  cands?: Array<{ o: string; km: number }>;
+}
+
+interface VendorTerritorySnapshot {
+  generated_at: string;
+  note?: string;
+  counts: Partial<Record<VendorBranchPricingStatus, number>>;
+  offices: SnapshotOffice[];
+  branches: SnapshotBranch[];
+}
+
+interface TerritorySnapshotRpc {
+  generated_at?: string;
+  offices?: Array<{
+    id: string;
+    name: string | null;
+    lat: number | string | null;
+    lng: number | string | null;
+    region: string | null;
+    drive_time_minutes: number | string | null;
+    boundary: {
+      type?: string;
+      coordinates?: number[][][];
+    } | null;
+  }>;
+}
+
+export interface VendorMapVendor {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  isActive: boolean;
+  isPlanned: boolean;
+}
+
+export interface PriceAgreementSummary {
+  id: string;
+  scope: "branch" | "region";
   vendorName: string;
-  branchNumber: string;
+  regionCode: string | null;
+  regionName: string | null;
+  agreementNumber: string | null;
+  versionLabel: string | null;
+  accountNumber: string | null;
+  effectiveDate: string | null;
+  expiryDate: string | null;
+  ceoVerified: boolean;
+  isActive: boolean;
+  sourceFile: string | null;
+}
+
+export interface OfficeMapNode {
+  id: string;
+  name: string;
+  officeType: string;
+  regionId: string | null;
+  regionCode: string | null;
+  regionName: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  driveTimeMinutes: number | null;
+  boundary: {
+    type: "Polygon";
+    coordinates: number[][][];
+  } | null;
+  boundaryMethod: string | null;
+  boundaryComputedAt: string | null;
+  activePriceAgreements: PriceAgreementSummary[];
+  branchCounts: {
+    total: number;
+    needsOfficeRoute: number;
+    missingPricing: number;
+    healthy: number;
+  };
+}
+
+export interface CandidateOffice {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  driveMinutes: number | null;
+  straightMiles: number | null;
+  isSuggested: boolean;
+}
+
+export interface VendorBranchMapNode {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  vendorSlug: string;
+  vendorColor: string;
+  branchNumber: string | null;
   branchName: string;
-  location: string;
-  x: number;
-  y: number;
-  status: VendorBranchPricingStatus;
-  assignedOfficeName: string;
-  suggestedOfficeName: string;
-  pricingApproved: boolean;
-  candidateOfficeCount: number;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
   geocodeStatus: string;
+  geocodePrecision: string | null;
+  pricingStatus: VendorBranchPricingStatus;
+  markerPriority: TerritoryMarkerPriority;
+  markerColor: string;
+  assignedOfficeId: string | null;
+  assignedOfficeName: string | null;
+  suggestedOfficeId: string | null;
+  suggestedOfficeName: string | null;
+  candidateOffices: CandidateOffice[];
+  currentAgreement: PriceAgreementSummary | null;
   priceEvidenceStatus: BranchPriceEvidenceStatus;
   priceEvidenceLabel: string;
+  pricingApproved: boolean;
+  invoiceGateStatus: "approved" | "blocked";
+  territoryDecidedBy: string | null;
+  territoryDecidedAt: string | null;
 }
 
-export interface VendorTerritorySurface {
+export interface VendorTerritoryCounts {
+  offices: number;
+  branches: number;
+  branchesWithCoordinates: number;
+  missingCoordinates: number;
+  covered: number;
+  overlapPending: number;
+  outOfBoundary: number;
+  unclassified: number;
+  pricingApproved: number;
+  needsOfficeRoute: number;
+  missingBranchPricing: number;
+  vendorBrand: number;
+}
+
+export interface VendorTerritoryMapPayload {
   status: VendorTerritoryStatus;
+  source: VendorTerritorySource;
   generatedAt: string;
   missingConfig: string[];
   errors: string[];
-  counts: {
-    offices: number;
-    branches: number;
-    covered: number;
-    overlapPending: number;
-    outOfBoundary: number;
-    unclassified: number;
-    pricingApproved: number;
-    needsDecision: number;
-    pdfAgreementBranches: number;
-    apiOnlyBranches: number;
-    noPriceAgreementBranches: number;
-  };
-  offices: ProjectedOfficeTerritory[];
-  branches: ProjectedVendorBranch[];
-  reviewBranches: ProjectedVendorBranch[];
+  vendors: VendorMapVendor[];
+  states: string[];
+  offices: OfficeMapNode[];
+  branches: VendorBranchMapNode[];
+  reviewBranches: VendorBranchMapNode[];
+  counts: VendorTerritoryCounts;
 }
 
-const MAP_WIDTH = 1000;
-const MAP_HEIGHT = 620;
-const MAP_PAD = 54;
+export type VendorTerritorySurface = VendorTerritoryMapPayload;
+
 const PAGE_SIZE = 1000;
+const territorySnapshot = territorySnapshotJson as VendorTerritorySnapshot;
+
+const PLANNED_VENDORS: VendorMapVendor[] = [
+  {
+    id: "planned-qxo",
+    name: "QXO",
+    slug: "qxo",
+    color: "#2563eb",
+    isActive: false,
+    isPlanned: true,
+  },
+  {
+    id: "planned-srs",
+    name: "SRS Distribution",
+    slug: "srs-distribution",
+    color: "#0f766e",
+    isActive: false,
+    isPlanned: true,
+  },
+];
+
+const VENDOR_COLORS: Array<{ pattern: RegExp; color: string }> = [
+  { pattern: /\babc\b|abc supply/i, color: "#d71920" },
+  { pattern: /\bqxo\b/i, color: "#2563eb" },
+  { pattern: /\bsrs\b|srs distribution/i, color: "#0f766e" },
+];
+
+const MARKER_COLORS: Record<TerritoryMarkerPriority, string> = {
+  needs_office_route: "#eab308",
+  missing_branch_pricing: "#dc2626",
+  vendor_brand: "#0f766e",
+};
 
 async function selectAll<T extends Record<string, unknown>>(
   client: SupabaseClient,
@@ -125,6 +360,30 @@ async function selectAll<T extends Record<string, unknown>>(
   }
 }
 
+async function optionalSelectAll<T extends Record<string, unknown>>(
+  client: SupabaseClient,
+  table: string,
+  columns: string,
+  errors: string[],
+): Promise<T[]> {
+  try {
+    return await selectAll<T>(client, table, columns);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : `${table}: unknown select error`);
+    return [];
+  }
+}
+
+async function loadTerritorySnapshotRpc(client: SupabaseClient, errors: string[]) {
+  const { data, error } = await client.rpc("territory_snapshot");
+  if (error) {
+    errors.push(`territory_snapshot: ${error.message}`);
+    return null;
+  }
+
+  return data && typeof data === "object" ? (data as TerritorySnapshotRpc) : null;
+}
+
 function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
@@ -141,6 +400,19 @@ function compact(value: unknown, fallback = "Unknown") {
   return text || fallback;
 }
 
+function nullableText(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function normalizeStatus(value: string | null): VendorBranchPricingStatus {
   if (value === "covered" || value === "overlap_pending" || value === "out_of_boundary") return value;
   return "unclassified";
@@ -154,130 +426,515 @@ function isApiSource(value: string | null | undefined) {
   return /\bapi\b/i.test(String(value ?? ""));
 }
 
-function priceEvidenceFrom(pdfCount: number, apiCount: number): BranchPriceEvidence {
+function normalizeBranchNumber(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const alnum = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const noPrefix = alnum.replace(/^ABC/, "");
+  return noPrefix.replace(/^0+/, "") || noPrefix || alnum;
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function addressKey(city: unknown, state: unknown, address: unknown) {
+  const normalizedAddress = normalizeText(address);
+  if (!normalizedAddress) return "";
+  return [normalizeText(city), normalizeText(state), normalizedAddress].join("|");
+}
+
+function parseJsonish(value: unknown) {
+  if (!value) return null;
+  if (typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function firstStringDeep(value: unknown, keys: string[]): string | null {
+  const root = parseJsonish(value);
+  if (!root) return null;
+
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const stack: unknown[] = [root];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    for (const [key, entry] of Object.entries(current)) {
+      if (wanted.has(key.toLowerCase()) && typeof entry === "string" && entry.trim()) return entry.trim();
+      if (entry && typeof entry === "object") stack.push(entry);
+    }
+  }
+
+  return null;
+}
+
+function abcApiAddress(row: AbcVendorBranchRow | null) {
+  if (!row) return null;
+  return firstStringDeep(row.address_json, [
+    "address",
+    "address1",
+    "addressLine1",
+    "street",
+    "streetAddress",
+    "line1",
+  ]);
+}
+
+function abcApiPhone(row: AbcVendorBranchRow | null) {
+  if (!row) return null;
+  return firstStringDeep(row.contact_json, ["phone", "phoneNumber", "telephone", "mainPhone"]);
+}
+
+function isAbcVendor(vendorName: string, vendorSlug: string) {
+  return /\babc\b|abc supply/i.test(`${vendorName} ${vendorSlug}`);
+}
+
+function vendorColor(name: string, slug: string) {
+  const lookup = `${name} ${slug}`;
+  return VENDOR_COLORS.find((item) => item.pattern.test(lookup))?.color ?? "#334155";
+}
+
+function plannedOrLiveVendors(rows: VendorRow[]) {
+  const liveVendors = rows
+    .filter((vendor) => vendor.is_active !== false)
+    .map((vendor) => {
+      const name = compact(vendor.name, "Vendor");
+      const slug = nullableText(vendor.slug) ?? slugify(name);
+      return {
+        id: vendor.id,
+        name,
+        slug,
+        color: vendorColor(name, slug),
+        isActive: true,
+        isPlanned: false,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const liveSlugs = new Set(liveVendors.map((vendor) => vendor.slug));
+  const planned = PLANNED_VENDORS.filter((vendor) => !liveSlugs.has(vendor.slug));
+  return [...liveVendors, ...planned];
+}
+
+function priceEvidenceFrom(pdfCount: number, apiCount: number) {
   if (pdfCount > 0) {
     return {
-      pdfCount,
-      apiCount,
-      status: "pdf_price_agreement",
+      status: "pdf_price_agreement" as const,
       label: apiCount > 0 ? "PDF agreement plus API pricing" : "PDF price agreement",
     };
   }
 
   if (apiCount > 0) {
     return {
-      pdfCount,
-      apiCount,
-      status: "api_only_pricing",
+      status: "api_only_pricing" as const,
       label: "API-only pricing; no PDF agreement mapped",
     };
   }
 
   return {
-    pdfCount,
-    apiCount,
-    status: "no_price_agreement",
-    label: "No PDF/API price agreement mapped",
+    status: "no_price_agreement" as const,
+    label: "No price agreement mapped",
   };
 }
 
-function boundaryPoints(boundary: unknown): Array<[number, number]> {
-  if (!boundary || typeof boundary !== "object") return [];
-  const coordinates = (boundary as { coordinates?: unknown }).coordinates;
-  if (!Array.isArray(coordinates)) return [];
-  const ring = Array.isArray(coordinates[0]) ? coordinates[0] : [];
-
-  return ring.filter((point): point is [number, number] => {
-    return (
-      Array.isArray(point) &&
-      point.length >= 2 &&
-      typeof point[0] === "number" &&
-      typeof point[1] === "number"
-    );
-  });
-}
-
-function buildProjection(points: Array<[number, number]>) {
-  const lons = points.map(([longitude]) => longitude);
-  const lats = points.map(([, latitude]) => latitude);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const lonSpan = maxLon - minLon || 1;
-  const latSpan = maxLat - minLat || 1;
-  const width = MAP_WIDTH - MAP_PAD * 2;
-  const height = MAP_HEIGHT - MAP_PAD * 2;
-
-  return (longitude: number, latitude: number) => {
-    const x = MAP_PAD + ((longitude - minLon) / lonSpan) * width;
-    const y = MAP_HEIGHT - MAP_PAD - ((latitude - minLat) / latSpan) * height;
-    return {
-      x: Number(x.toFixed(2)),
-      y: Number(y.toFixed(2)),
-    };
-  };
-}
-
-function branchNeedsDecision(branch: ProjectedVendorBranch) {
+function isAgreementCurrent(agreement: PriceAgreementRow) {
+  const today = new Date().toISOString().slice(0, 10);
   return (
-    branch.status !== "covered" ||
-    !branch.pricingApproved ||
-    branch.candidateOfficeCount > 1 ||
-    branch.assignedOfficeName === "Unassigned"
+    agreement.is_active !== false &&
+    agreement.ceo_verified === true &&
+    (!agreement.effective_date || agreement.effective_date <= today) &&
+    (!agreement.expiry_date || agreement.expiry_date >= today)
   );
 }
 
-export async function loadVendorTerritorySurface(env: RuntimeEnv = getRuntimeEnv()): Promise<VendorTerritorySurface> {
-  const { client, config } = createServerSupabaseClient(env);
+function agreementSummary(
+  agreement: PriceAgreementRow,
+  vendorById: Map<string, VendorMapVendor>,
+  regionById: Map<string, RegionRow>,
+  scope: "branch" | "region",
+): PriceAgreementSummary {
+  const region = agreement.region_id ? regionById.get(agreement.region_id) : null;
+  return {
+    id: agreement.id,
+    scope,
+    vendorName: agreement.vendor_id ? (vendorById.get(agreement.vendor_id)?.name ?? "Vendor") : "Vendor",
+    regionCode: region?.region_code ?? null,
+    regionName: region?.region_name ?? null,
+    agreementNumber: agreement.agreement_number,
+    versionLabel: agreement.version_label,
+    accountNumber: agreement.account_number,
+    effectiveDate: agreement.effective_date,
+    expiryDate: agreement.expiry_date,
+    ceoVerified: agreement.ceo_verified === true,
+    isActive: agreement.is_active !== false,
+    sourceFile: agreement.source_file,
+  };
+}
 
-  if (!client) {
+function findCurrentAgreement(
+  branch: BranchTerritoryRow,
+  branchRaw: VendorBranchRow | null,
+  assignedOffice: OfficeRow | null,
+  agreements: PriceAgreementRow[],
+  vendorById: Map<string, VendorMapVendor>,
+  regionById: Map<string, RegionRow>,
+) {
+  const branchAgreement = agreements
+    .filter((agreement) => agreement.vendor_branch_id === branch.vendor_branch_id && isAgreementCurrent(agreement))
+    .sort(compareAgreements)[0];
+
+  if (branchAgreement) return agreementSummary(branchAgreement, vendorById, regionById, "branch");
+
+  const regionId = assignedOffice?.region_id ?? branchRaw?.region_id ?? null;
+  if (!branch.vendor_id || !regionId) return null;
+
+  const regionAgreement = agreements
+    .filter((agreement) => agreement.vendor_id === branch.vendor_id && agreement.region_id === regionId && isAgreementCurrent(agreement))
+    .sort(compareAgreements)[0];
+
+  return regionAgreement ? agreementSummary(regionAgreement, vendorById, regionById, "region") : null;
+}
+
+function compareAgreements(a: PriceAgreementRow, b: PriceAgreementRow) {
+  return String(b.effective_date ?? "").localeCompare(String(a.effective_date ?? ""));
+}
+
+function markerPriority(branch: {
+  assignedOfficeId: string | null;
+  pricingStatus: VendorBranchPricingStatus;
+  pricingApproved: boolean;
+  candidateOffices: CandidateOffice[];
+  currentAgreement: PriceAgreementSummary | null;
+}) {
+  const needsOfficeRoute =
+    branch.pricingStatus === "overlap_pending" ||
+    (branch.pricingStatus !== "out_of_boundary" && !branch.assignedOfficeId) ||
+    (branch.candidateOffices.length > 1 && !branch.assignedOfficeId);
+
+  if (needsOfficeRoute) return "needs_office_route" as const;
+  if (!branch.pricingApproved || !branch.currentAgreement || branch.pricingStatus === "out_of_boundary") {
+    return "missing_branch_pricing" as const;
+  }
+
+  return "vendor_brand" as const;
+}
+
+function statesFrom(offices: OfficeMapNode[], branches: VendorBranchMapNode[]) {
+  return [...new Set([...offices.map((office) => office.state), ...branches.map((branch) => branch.state)].filter(Boolean) as string[])]
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function countsFrom(offices: OfficeMapNode[], branches: VendorBranchMapNode[]): VendorTerritoryCounts {
+  return {
+    offices: offices.length,
+    branches: branches.length,
+    branchesWithCoordinates: branches.filter((branch) => branch.latitude !== null && branch.longitude !== null).length,
+    missingCoordinates: branches.filter((branch) => branch.latitude === null || branch.longitude === null).length,
+    covered: branches.filter((branch) => branch.pricingStatus === "covered").length,
+    overlapPending: branches.filter((branch) => branch.pricingStatus === "overlap_pending").length,
+    outOfBoundary: branches.filter((branch) => branch.pricingStatus === "out_of_boundary").length,
+    unclassified: branches.filter((branch) => branch.pricingStatus === "unclassified").length,
+    pricingApproved: branches.filter((branch) => branch.pricingApproved).length,
+    needsOfficeRoute: branches.filter((branch) => branch.markerPriority === "needs_office_route").length,
+    missingBranchPricing: branches.filter((branch) => branch.markerPriority === "missing_branch_pricing").length,
+    vendorBrand: branches.filter((branch) => branch.markerPriority === "vendor_brand").length,
+  };
+}
+
+function reviewBranchesFrom(branches: VendorBranchMapNode[]) {
+  const rank: Record<TerritoryMarkerPriority, number> = {
+    needs_office_route: 0,
+    missing_branch_pricing: 1,
+    vendor_brand: 2,
+  };
+
+  return branches
+    .filter((branch) => branch.markerPriority !== "vendor_brand")
+    .sort((a, b) => {
+      return (
+        rank[a.markerPriority] - rank[b.markerPriority] ||
+        a.vendorName.localeCompare(b.vendorName) ||
+        a.state?.localeCompare(b.state ?? "") ||
+        a.branchName.localeCompare(b.branchName)
+      );
+    })
+    .slice(0, 100);
+}
+
+function surfaceFromSnapshot(reason: string, missingConfig: string[] = []): VendorTerritoryMapPayload {
+  const officeById = new Map(territorySnapshot.offices.map((office) => [office.id, office]));
+  const vendors: VendorMapVendor[] = [
+    {
+      id: "snapshot-abc",
+      name: "ABC Supply Co.",
+      slug: "abc-supply",
+      color: vendorColor("ABC Supply Co.", "abc-supply"),
+      isActive: true,
+      isPlanned: false,
+    },
+    ...PLANNED_VENDORS,
+  ];
+  const vendorBySlug = new Map(vendors.map((vendor) => [vendor.slug, vendor]));
+
+  const offices: OfficeMapNode[] = territorySnapshot.offices.map((office) => ({
+    id: office.id,
+    name: office.name,
+    officeType: "brick_mortar",
+    regionId: null,
+    regionCode: office.region,
+    regionName: office.region,
+    address: null,
+    city: null,
+    state: null,
+    postalCode: null,
+    latitude: office.lat,
+    longitude: office.lng,
+    driveTimeMinutes: office.drive_time_minutes,
+    boundary: office.boundary,
+    boundaryMethod: "snapshot",
+    boundaryComputedAt: null,
+    activePriceAgreements: [],
+    branchCounts: {
+      total: 0,
+      needsOfficeRoute: 0,
+      missingPricing: 0,
+      healthy: 0,
+    },
+  }));
+
+  const branches: VendorBranchMapNode[] = territorySnapshot.branches.map((branch) => {
+    const vendor = vendorBySlug.get("abc-supply") ?? vendors[0];
+    const candidateOffices = (branch.cands ?? []).map((candidate) => {
+      const office = officeById.get(candidate.o);
+      return {
+        id: candidate.o,
+        name: office?.name ?? candidate.o,
+        city: null,
+        state: null,
+        driveMinutes: null,
+        straightMiles: Number.isFinite(candidate.km) ? Number((candidate.km * 0.621371).toFixed(1)) : null,
+        isSuggested: branch.suggested === candidate.o,
+      };
+    });
+    const pricingStatus = normalizeStatus(branch.status);
+    const currentAgreement = branch.approved
+      ? {
+          id: "snapshot-agreement",
+          scope: "region" as const,
+          vendorName: vendor.name,
+          regionCode: null,
+          regionName: null,
+          agreementNumber: null,
+          versionLabel: "Snapshot",
+          accountNumber: null,
+          effectiveDate: null,
+          expiryDate: null,
+          ceoVerified: true,
+          isActive: true,
+          sourceFile: "previous app snapshot",
+        }
+      : null;
+    const priority = markerPriority({
+      assignedOfficeId: branch.assigned,
+      pricingStatus,
+      pricingApproved: branch.approved,
+      candidateOffices,
+      currentAgreement,
+    });
+
     return {
-      status: "unconfigured",
-      generatedAt: new Date().toISOString(),
-      missingConfig: config.missing,
-      errors: [],
-      counts: {
-        offices: 0,
-        branches: 0,
-        covered: 0,
-        overlapPending: 0,
-        outOfBoundary: 0,
-        unclassified: 0,
-        pricingApproved: 0,
-        needsDecision: 0,
-        pdfAgreementBranches: 0,
-        apiOnlyBranches: 0,
-        noPriceAgreementBranches: 0,
-      },
-      offices: [],
-      branches: [],
-      reviewBranches: [],
+      id: branch.id,
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      vendorSlug: vendor.slug,
+      vendorColor: vendor.color,
+      branchNumber: branch.name,
+      branchName: branch.name,
+      address: null,
+      city: branch.city,
+      state: branch.state,
+      phone: null,
+      latitude: branch.lat,
+      longitude: branch.lng,
+      geocodeStatus: "snapshot",
+      geocodePrecision: null,
+      pricingStatus,
+      markerPriority: priority,
+      markerColor: priority === "vendor_brand" ? vendor.color : MARKER_COLORS[priority],
+      assignedOfficeId: branch.assigned,
+      assignedOfficeName: branch.assigned ? (officeById.get(branch.assigned)?.name ?? branch.assigned) : null,
+      suggestedOfficeId: branch.suggested,
+      suggestedOfficeName: branch.suggested ? (officeById.get(branch.suggested)?.name ?? branch.suggested) : null,
+      candidateOffices,
+      currentAgreement,
+      priceEvidenceStatus: branch.approved ? "pdf_price_agreement" : "no_price_agreement",
+      priceEvidenceLabel: branch.approved ? "Snapshot pricing approved" : "Snapshot pricing missing",
+      pricingApproved: branch.approved,
+      invoiceGateStatus: branch.approved ? "approved" : "blocked",
+      territoryDecidedBy: null,
+      territoryDecidedAt: null,
+    };
+  });
+
+  attachOfficeBranchCounts(offices, branches);
+
+  return {
+    status: missingConfig.length ? "unconfigured" : "degraded",
+    source: "snapshot",
+    generatedAt: territorySnapshot.generated_at,
+    missingConfig,
+    errors: [
+      `${reason} Showing the previous app territory snapshot from ${new Date(territorySnapshot.generated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`,
+    ],
+    vendors,
+    states: statesFrom(offices, branches),
+    offices,
+    branches,
+    reviewBranches: reviewBranchesFrom(branches),
+    counts: countsFrom(offices, branches),
+  };
+}
+
+function attachOfficeBranchCounts(offices: OfficeMapNode[], branches: VendorBranchMapNode[]) {
+  const officeById = new Map(offices.map((office) => [office.id, office]));
+  for (const office of offices) {
+    office.branchCounts = {
+      total: 0,
+      needsOfficeRoute: 0,
+      missingPricing: 0,
+      healthy: 0,
     };
   }
 
+  for (const branch of branches) {
+    if (!branch.assignedOfficeId) continue;
+    const office = officeById.get(branch.assignedOfficeId);
+    if (!office) continue;
+    office.branchCounts.total += 1;
+    if (branch.markerPriority === "needs_office_route") office.branchCounts.needsOfficeRoute += 1;
+    else if (branch.markerPriority === "missing_branch_pricing") office.branchCounts.missingPricing += 1;
+    else office.branchCounts.healthy += 1;
+  }
+}
+
+export async function loadVendorTerritoryMapPayload(
+  env: RuntimeEnv = getRuntimeEnv(),
+): Promise<VendorTerritoryMapPayload> {
+  const { client, config } = createServerSupabaseClient(env);
+
+  if (!client) {
+    return surfaceFromSnapshot("Supabase territory data is not configured.", config.missing);
+  }
+
+  const nonCriticalErrors: string[] = [];
+
   try {
-    const [officeRows, branchRows, agreementRows] = await Promise.all([
-      selectAll<OfficeRow>(
-        client,
-        "office",
-        "id,name,city,state,latitude,longitude,drive_time_minutes,boundary,is_active",
-      ),
-      selectAll<BranchTerritoryRow>(
-        client,
-        "v_branch_territory",
-        "vendor_branch_id,vendor_name,branch_number,branch_name,city,state,latitude,longitude,geocode_status,pricing_status,pricing_territory_office_id,assigned_office_name,suggested_office_id,suggested_office_name,pricing_approved,candidate_office_count",
-      ),
-      selectAll<AgreementEvidenceRow>(
-        client,
-        "abc_price_agreements",
-        "branch_number,source_file",
-      ),
-    ]);
+    const [regions, officeRows, vendorRows, branchViewRows, branchRows, candidateRows, agreements, abcEvidenceRows, abcApiRows, territoryRpc] =
+      await Promise.all([
+        selectAll<RegionRow>(
+          client,
+          "regions",
+          "id,region_code,region_name,primary_city,primary_state,is_active",
+        ),
+        selectAll<OfficeRow>(
+          client,
+          "office",
+          "id,name,office_type,region_id,address,city,state,postal_code,latitude,longitude,drive_time_minutes,boundary_method,boundary_computed_at,is_active",
+        ),
+        selectAll<VendorRow>(client, "vendors", "id,name,slug,is_active"),
+        selectAll<BranchTerritoryRow>(
+          client,
+          "v_branch_territory",
+          "vendor_branch_id,vendor_id,vendor_name,branch_number,branch_name,city,state,latitude,longitude,geocode_status,pricing_status,pricing_territory_office_id,assigned_office_name,suggested_office_id,suggested_office_name,territory_decided_by,territory_decided_at,pricing_approved,candidate_office_count",
+        ),
+        selectAll<VendorBranchRow>(
+          client,
+          "vendor_branches",
+          "id,vendor_id,region_id,branch_number,branch_name,address,city,state,phone,latitude,longitude,geocode_status,geocode_precision,pricing_status,pricing_territory_office_id,suggested_office_id,territory_decided_by,territory_decided_at,is_active",
+        ),
+        selectAll<CandidateRow>(
+          client,
+          "branch_office_candidate",
+          "vendor_branch_id,office_id,drive_minutes,straight_km,is_suggested",
+        ),
+        optionalSelectAll<PriceAgreementRow>(
+          client,
+          "price_agreements",
+          "id,vendor_id,region_id,vendor_branch_id,agreement_number,version_label,account_number,effective_date,expiry_date,ceo_verified,is_active,source_file",
+          nonCriticalErrors,
+        ),
+        optionalSelectAll<AbcAgreementEvidenceRow>(
+          client,
+          "abc_price_agreements",
+          "branch_number,source_file",
+          nonCriticalErrors,
+        ),
+        optionalSelectAll<AbcVendorBranchRow>(
+          client,
+          "abc_vendor_branches",
+          "branch_number,branch_name,address_json,contact_json,city,state,postal,latitude,longitude",
+          nonCriticalErrors,
+        ),
+        loadTerritorySnapshotRpc(client, nonCriticalErrors),
+      ]);
+
+    const vendors = plannedOrLiveVendors(vendorRows);
+    const vendorById = new Map(vendors.map((vendor) => [vendor.id, vendor]));
+    const regionById = new Map(regions.map((region) => [region.id, region]));
+    const officeById = new Map(officeRows.map((office) => [office.id, office]));
+    const branchById = new Map(branchRows.map((branch) => [branch.id, branch]));
+    const rpcBoundaryByOfficeId = new Map(
+      (territoryRpc?.offices ?? []).map((office) => [
+        office.id,
+        office.boundary?.type === "Polygon" && Array.isArray(office.boundary.coordinates)
+          ? ({ type: "Polygon", coordinates: office.boundary.coordinates } as const)
+          : null,
+      ]),
+    );
+
+    const candidateByBranch = new Map<string, CandidateOffice[]>();
+    for (const candidate of candidateRows) {
+      const office = officeById.get(candidate.office_id);
+      const list = candidateByBranch.get(candidate.vendor_branch_id) ?? [];
+      const straightKm = toNumber(candidate.straight_km);
+      list.push({
+        id: candidate.office_id,
+        name: compact(office?.name, candidate.office_id),
+        city: office?.city ?? null,
+        state: office?.state ?? null,
+        driveMinutes: toNumber(candidate.drive_minutes),
+        straightMiles: straightKm === null ? null : Number((straightKm * 0.621371).toFixed(1)),
+        isSuggested: candidate.is_suggested === true,
+      });
+      candidateByBranch.set(candidate.vendor_branch_id, list);
+    }
+
+    for (const candidates of candidateByBranch.values()) {
+      candidates.sort((a, b) => {
+        return (
+          Number(b.isSuggested) - Number(a.isSuggested) ||
+          (a.driveMinutes ?? Number.POSITIVE_INFINITY) - (b.driveMinutes ?? Number.POSITIVE_INFINITY) ||
+          (a.straightMiles ?? Number.POSITIVE_INFINITY) - (b.straightMiles ?? Number.POSITIVE_INFINITY) ||
+          a.name.localeCompare(b.name)
+        );
+      });
+    }
 
     const branchEvidence = new Map<string, { pdfCount: number; apiCount: number }>();
-    for (const agreement of agreementRows) {
-      const branchNumber = compact(agreement.branch_number, "");
+    for (const agreement of abcEvidenceRows) {
+      const branchNumber = normalizeBranchNumber(agreement.branch_number);
       if (!branchNumber) continue;
       const current = branchEvidence.get(branchNumber) ?? { pdfCount: 0, apiCount: 0 };
       if (isPdfSource(agreement.source_file)) current.pdfCount += 1;
@@ -285,140 +942,143 @@ export async function loadVendorTerritorySurface(env: RuntimeEnv = getRuntimeEnv
       branchEvidence.set(branchNumber, current);
     }
 
-    const activeOffices = officeRows.filter((office) => office.is_active !== false);
-    const coordinatePool: Array<[number, number]> = [];
-
-    for (const office of activeOffices) {
-      coordinatePool.push(...boundaryPoints(office.boundary));
-      const longitude = toNumber(office.longitude);
-      const latitude = toNumber(office.latitude);
-      if (longitude !== null && latitude !== null) coordinatePool.push([longitude, latitude]);
+    const abcApiByNumber = new Map<string, AbcVendorBranchRow>();
+    const abcApiByAddress = new Map<string, AbcVendorBranchRow>();
+    for (const apiBranch of abcApiRows) {
+      const numberKey = normalizeBranchNumber(apiBranch.branch_number);
+      if (numberKey) abcApiByNumber.set(numberKey, apiBranch);
+      const apiAddress = abcApiAddress(apiBranch);
+      const key = addressKey(apiBranch.city, apiBranch.state, apiAddress);
+      if (key) abcApiByAddress.set(key, apiBranch);
     }
 
-    for (const branch of branchRows) {
-      const longitude = toNumber(branch.longitude);
-      const latitude = toNumber(branch.latitude);
-      if (longitude !== null && latitude !== null) coordinatePool.push([longitude, latitude]);
-    }
+    const offices: OfficeMapNode[] = officeRows
+      .filter((office) => office.is_active !== false)
+      .map((office) => {
+        const region = office.region_id ? regionById.get(office.region_id) : null;
+        const activePriceAgreements = agreements
+          .filter((agreement) => agreement.region_id === office.region_id && isAgreementCurrent(agreement))
+          .sort(compareAgreements)
+          .map((agreement) => agreementSummary(agreement, vendorById, regionById, "region"));
 
-    if (!coordinatePool.length) throw new Error("No office or vendor branch coordinates available.");
+        return {
+          id: office.id,
+          name: compact(office.name, "Office"),
+          officeType: compact(office.office_type, "brick_mortar"),
+          regionId: office.region_id,
+          regionCode: region?.region_code ?? null,
+          regionName: region?.region_name ?? null,
+          address: office.address,
+          city: office.city,
+          state: office.state,
+          postalCode: office.postal_code,
+          latitude: toNumber(office.latitude),
+          longitude: toNumber(office.longitude),
+          driveTimeMinutes: toNumber(office.drive_time_minutes),
+          boundary: rpcBoundaryByOfficeId.get(office.id) ?? null,
+          boundaryMethod: office.boundary_method,
+          boundaryComputedAt: office.boundary_computed_at,
+          activePriceAgreements,
+          branchCounts: {
+            total: 0,
+            needsOfficeRoute: 0,
+            missingPricing: 0,
+            healthy: 0,
+          },
+        };
+      });
 
-    const project = buildProjection(coordinatePool);
-
-    const offices = activeOffices.map((office) => {
-      const longitude = toNumber(office.longitude);
-      const latitude = toNumber(office.latitude);
-      const center = longitude !== null && latitude !== null ? project(longitude, latitude) : null;
-      const polygonPoints = boundaryPoints(office.boundary)
-        .map(([pointLongitude, pointLatitude]) => {
-          const point = project(pointLongitude, pointLatitude);
-          return `${point.x},${point.y}`;
-        })
-        .join(" ");
-
-      return {
-        id: office.id,
-        name: compact(office.name, "Office"),
-        location: [office.city, office.state].filter(Boolean).join(", ") || compact(office.name, "Office"),
-        x: center?.x ?? null,
-        y: center?.y ?? null,
-        polygonPoints,
-        driveTimeMinutes: toNumber(office.drive_time_minutes),
-      };
-    });
-
-    const branches = branchRows
+    const branches: VendorBranchMapNode[] = branchViewRows
       .map((branch) => {
-        const longitude = toNumber(branch.longitude);
-        const latitude = toNumber(branch.latitude);
-        if (longitude === null || latitude === null) return null;
-        const point = project(longitude, latitude);
-        const status = normalizeStatus(branch.pricing_status);
-        const branchNumber = compact(branch.branch_number, "No branch #");
-        const evidenceCounts = branchEvidence.get(branchNumber) ?? { pdfCount: 0, apiCount: 0 };
-        const priceEvidence = priceEvidenceFrom(evidenceCounts.pdfCount, evidenceCounts.apiCount);
+        const rawBranch = branchById.get(branch.vendor_branch_id) ?? null;
+        const vendor = branch.vendor_id ? vendorById.get(branch.vendor_id) : null;
+        const vendorName = compact(branch.vendor_name ?? vendor?.name, "Vendor");
+        const vendorSlug = vendor?.slug ?? slugify(vendorName);
+        const vendorMainColor = vendor?.color ?? vendorColor(vendorName, vendorSlug);
+        const abcApiBranch = isAbcVendor(vendorName, vendorSlug)
+          ? abcApiByNumber.get(normalizeBranchNumber(branch.branch_number ?? rawBranch?.branch_number)) ??
+            abcApiByAddress.get(addressKey(branch.city ?? rawBranch?.city, branch.state ?? rawBranch?.state, rawBranch?.address))
+          : null;
+        const assignedOffice = branch.pricing_territory_office_id
+          ? (officeById.get(branch.pricing_territory_office_id) ?? null)
+          : null;
+        const candidateOffices = candidateByBranch.get(branch.vendor_branch_id) ?? [];
+        const pricingStatus = normalizeStatus(branch.pricing_status);
+        const currentAgreement = findCurrentAgreement(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
+        const branchNumber = nullableText(abcApiBranch?.branch_number ?? branch.branch_number ?? rawBranch?.branch_number);
+        const evidenceCounts = branchEvidence.get(normalizeBranchNumber(branchNumber)) ?? { pdfCount: 0, apiCount: 0 };
+        const priceEvidence = currentAgreement
+          ? { status: "pdf_price_agreement" as const, label: "Current price agreement mapped" }
+          : priceEvidenceFrom(evidenceCounts.pdfCount, evidenceCounts.apiCount);
+        const priority = markerPriority({
+          assignedOfficeId: branch.pricing_territory_office_id,
+          pricingStatus,
+          pricingApproved: branch.pricing_approved === true,
+          candidateOffices,
+          currentAgreement,
+        });
+
         return {
           id: branch.vendor_branch_id,
-          vendorName: compact(branch.vendor_name, "Vendor"),
+          vendorId: branch.vendor_id ?? vendor?.id ?? "unknown-vendor",
+          vendorName,
+          vendorSlug,
+          vendorColor: vendorMainColor,
           branchNumber,
-          branchName: compact(branch.branch_name, "Branch"),
-          location: [branch.city, branch.state].filter(Boolean).join(", ") || "Unknown location",
-          x: point.x,
-          y: point.y,
-          status,
-          assignedOfficeName: compact(branch.assigned_office_name, "Unassigned"),
-          suggestedOfficeName: compact(branch.suggested_office_name, "No suggestion"),
-          pricingApproved: Boolean(branch.pricing_approved),
-          candidateOfficeCount: toNumber(branch.candidate_office_count) ?? 0,
-          geocodeStatus: compact(branch.geocode_status, "unknown"),
+          branchName: compact(branch.branch_name ?? rawBranch?.branch_name ?? abcApiBranch?.branch_name, "Branch"),
+          address: rawBranch?.address ?? abcApiAddress(abcApiBranch),
+          city: branch.city ?? rawBranch?.city ?? abcApiBranch?.city ?? null,
+          state: branch.state ?? rawBranch?.state ?? abcApiBranch?.state ?? null,
+          phone: rawBranch?.phone ?? abcApiPhone(abcApiBranch),
+          latitude: toNumber(branch.latitude ?? rawBranch?.latitude ?? abcApiBranch?.latitude),
+          longitude: toNumber(branch.longitude ?? rawBranch?.longitude ?? abcApiBranch?.longitude),
+          geocodeStatus: compact(branch.geocode_status ?? rawBranch?.geocode_status, "unknown"),
+          geocodePrecision: rawBranch?.geocode_precision ?? null,
+          pricingStatus,
+          markerPriority: priority,
+          markerColor: priority === "vendor_brand" ? vendorMainColor : MARKER_COLORS[priority],
+          assignedOfficeId: branch.pricing_territory_office_id,
+          assignedOfficeName: branch.assigned_office_name,
+          suggestedOfficeId: branch.suggested_office_id,
+          suggestedOfficeName: branch.suggested_office_name,
+          candidateOffices,
+          currentAgreement,
           priceEvidenceStatus: priceEvidence.status,
           priceEvidenceLabel: priceEvidence.label,
+          pricingApproved: branch.pricing_approved === true,
+          invoiceGateStatus: branch.pricing_approved === true ? "approved" : "blocked",
+          territoryDecidedBy: branch.territory_decided_by,
+          territoryDecidedAt: branch.territory_decided_at,
         };
       })
-      .filter((branch): branch is ProjectedVendorBranch => Boolean(branch));
-
-    const reviewBranches = branches
-      .filter(branchNeedsDecision)
       .sort((a, b) => {
-        const statusRank: Record<VendorBranchPricingStatus, number> = {
-          overlap_pending: 0,
-          out_of_boundary: 1,
-          unclassified: 2,
-          covered: 3,
-        };
         return (
-          statusRank[a.status] - statusRank[b.status] ||
-          Number(a.pricingApproved) - Number(b.pricingApproved) ||
-          b.candidateOfficeCount - a.candidateOfficeCount ||
           a.vendorName.localeCompare(b.vendorName) ||
+          (a.state ?? "").localeCompare(b.state ?? "") ||
           a.branchName.localeCompare(b.branchName)
         );
       });
 
+    attachOfficeBranchCounts(offices, branches);
+
     return {
-      status: "live",
+      status: nonCriticalErrors.length ? "degraded" : "live",
+      source: "live",
       generatedAt: new Date().toISOString(),
       missingConfig: [],
-      errors: [],
-      counts: {
-        offices: offices.length,
-        branches: branches.length,
-        covered: branches.filter((branch) => branch.status === "covered").length,
-        overlapPending: branches.filter((branch) => branch.status === "overlap_pending").length,
-        outOfBoundary: branches.filter((branch) => branch.status === "out_of_boundary").length,
-        unclassified: branches.filter((branch) => branch.status === "unclassified").length,
-        pricingApproved: branches.filter((branch) => branch.pricingApproved).length,
-        needsDecision: reviewBranches.length,
-        pdfAgreementBranches: branches.filter((branch) => branch.priceEvidenceStatus === "pdf_price_agreement").length,
-        apiOnlyBranches: branches.filter((branch) => branch.priceEvidenceStatus === "api_only_pricing").length,
-        noPriceAgreementBranches: branches.filter((branch) => branch.priceEvidenceStatus === "no_price_agreement").length,
-      },
+      errors: nonCriticalErrors,
+      vendors,
+      states: statesFrom(offices, branches),
       offices,
       branches,
-      reviewBranches,
+      reviewBranches: reviewBranchesFrom(branches),
+      counts: countsFrom(offices, branches),
     };
   } catch (error) {
-    return {
-      status: "degraded",
-      generatedAt: new Date().toISOString(),
-      missingConfig: [],
-      errors: [error instanceof Error ? error.message : "Unknown vendor territory error"],
-      counts: {
-        offices: 0,
-        branches: 0,
-        covered: 0,
-        overlapPending: 0,
-        outOfBoundary: 0,
-        unclassified: 0,
-        pricingApproved: 0,
-        needsDecision: 0,
-        pdfAgreementBranches: 0,
-        apiOnlyBranches: 0,
-        noPriceAgreementBranches: 0,
-      },
-      offices: [],
-      branches: [],
-      reviewBranches: [],
-    };
+    return surfaceFromSnapshot(error instanceof Error ? error.message : "Unknown vendor territory error");
   }
+}
+
+export async function loadVendorTerritorySurface(env: RuntimeEnv = getRuntimeEnv()) {
+  return loadVendorTerritoryMapPayload(env);
 }

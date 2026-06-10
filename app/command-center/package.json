@@ -10,7 +10,9 @@
     "check": "astro build",
     "start": "node runtime/start-command-center.mjs",
     "start:web": "node dist/server/entry.mjs",
-    "slack:runtime": "node runtime/slack-socket-runtime.mjs"
+    "slack:runtime": "node runtime/slack-socket-runtime.mjs",
+    "vendor:reconcile": "node scripts/reconcile-vendor-branches.mjs",
+    "vendor:reconcile:write": "node scripts/reconcile-vendor-branches.mjs --write"
   },
   "dependencies": {
     "@astrojs/node": "^10.1.3",

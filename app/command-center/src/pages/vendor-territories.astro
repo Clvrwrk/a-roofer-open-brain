@@ -1,0 +1,35 @@
+---
+import BoundaryNotice from "../components/accounting/BoundaryNotice.astro";
+import VendorTerritoryMap from "../components/accounting/VendorTerritoryMap.astro";
+import HumanUnblockerDashboard from "../components/unblocker/HumanUnblockerDashboard.astro";
+import AppShell from "../layouts/AppShell.astro";
+import { loadDepartmentSurface } from "@lib/live-work";
+import { getRuntimeEnv } from "@lib/runtime-env";
+import { loadVendorTerritorySurface } from "@lib/vendor-territories";
+
+const liveSurface = await loadDepartmentSurface("accounting");
+const territorySurface = await loadVendorTerritorySurface();
+const mapsBrowserKey = getRuntimeEnv().GOOGLE_MAPS_BROWSER_KEY ?? "";
+const territoryItems = liveSurface.items.filter((item) => {
+  const itemRoute = item.href.split("?")[0];
+  return itemRoute === "/vendor-territories" || itemRoute === "/accounting/vendor-regions";
+});
+---
+
+<AppShell title="Vendor Territory Map" eyebrow="Live Command Center" activePage="territories" layoutMode="map" surface={liveSurface}>
+  <VendorTerritoryMap surface={territorySurface} mapsBrowserKey={mapsBrowserKey} />
+
+  <BoundaryNotice
+    title="Human-in-the-loop boundary"
+    detail="This map can suggest coverage and pricing evidence, but Roberto or Lucinda must approve any branch assignment, price authority, or vendor-facing request before it changes operations."
+    action="Agents may prepare the packet; humans make the territory decision."
+  />
+
+  <HumanUnblockerDashboard
+    items={territoryItems.length > 0 ? territoryItems : liveSurface.items}
+    department="accounting"
+    emptyLabel="No live vendor-territory blocker is open right now."
+  />
+
+  <script src="/src/scripts/command-center.ts"></script>
+</AppShell>
