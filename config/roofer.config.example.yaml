@@ -117,3 +117,29 @@ model_tiers:
   workhorse:  "standard"   # vertical agents day-to-day
   capture:    "fast"       # atomization, dedup, classification
   embeddings: "managed"    # managed cloud embeddings (or 'ollama' in local profile)
+
+# ── Estimating assumptions (docs/33 Phase 3) ────────────────────────────────
+# PLACEHOLDERS until Ops confirms (docs/33 §12 open questions: labor rates,
+# commission formula, deposit policy). scripts/build-estimate-scenarios.mjs
+# reads these; every cost component built from them carries
+# source=placeholder_config until confirmed.
+estimating:
+  target_gm_retail: 0.40            # §4.7 retail target
+  target_gm_insurance: 0.42         # §4.7 insurance minimum
+  floor_gm: 0.28                    # below this → CEO escalation
+  labor_per_square: 165             # TODO Ops: tear-off+install, 1 story 1 layer
+  labor_low_slope_per_square: 210   # TODO Ops: SA low-slope system
+  labor_two_story_factor: 1.15      # TODO Ops
+  disposal_base: 450                # TODO Ops: trailer + dump fees
+  disposal_per_square_over_30: 9    # TODO Ops
+  delivery_fee: 75                  # TODO Ops: ABC delivery
+  permit_allowance: 250             # jurisdiction-dependent (§2.3)
+  commission_pct_of_price: 0.08     # TODO Ops: formula pending §12
+  payment_fees_pct_of_price: 0.02   # TODO Ops
+  supplement_admin: 150             # TODO Ops
+  contingency_pct_of_materials: 0.03
+  decking_allowance_sheets: 2       # included; beyond = change order (§4.8)
+  nails_coil_squares_per_box: 16
+  nails_cap_squares_per_box: 30
+  starter_includes_rakes: false
+  ice_water_lf_per_roll: 67
