@@ -1,0 +1,6 @@
+interface:
+  display_name: "Interview Me"
+  short_description: "Align on product vision before building."
+  default_prompt: "Use $interview-me to align on the end goal, UI/UX vision, constraints, and acceptance criteria before planning or building."
+policy:
+  allow_implicit_invocation: true

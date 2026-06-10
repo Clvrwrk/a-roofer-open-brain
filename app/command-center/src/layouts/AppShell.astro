@@ -6,11 +6,12 @@ import { departments, loadCommandCenterSurface, type LiveDepartmentSurface } fro
 interface Props {
   title: string;
   eyebrow?: string;
-  activePage?: "command" | "agents" | "pricing" | "snapshot" | "accounting" | "operations" | "sales" | "marketing" | "executive" | "system";
+  activePage?: "command" | "agents" | "pricing" | "territories" | "snapshot" | "accounting" | "operations" | "sales" | "marketing" | "executive" | "system";
+  layoutMode?: "default" | "map";
   surface?: Pick<LiveDepartmentSurface, "items" | "status">;
 }
 
-const { title, eyebrow = "Command Center", activePage = "command", surface } = Astro.props;
+const { title, eyebrow = "Command Center", activePage = "command", layoutMode = "default", surface } = Astro.props;
 const user = getCommandCenterUser(Astro.locals.actor);
 const workOsReady = isWorkOsConfigured();
 const workOsSession = user.authMode === "workos";
@@ -58,6 +59,10 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
             <span class="nav-icon" aria-hidden="true">△</span>
             Price Gaps
           </a>
+          <a class:list={["nav-link", activePage === "territories" && "is-active"]} href="/vendor-territories">
+            <span class="nav-icon" aria-hidden="true">M</span>
+            Vendor Map
+          </a>
           <a class:list={["nav-link", activePage === "snapshot" && "is-active"]} href="/weekly-snapshot">
             <span class="nav-icon" aria-hidden="true">↗</span>
             Weekly Snapshot
@@ -82,7 +87,7 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
         </div>
       </aside>
 
-      <div class="app-main">
+      <div class:list={["app-main", layoutMode === "map" && "app-main-map"]}>
         <header class="top-bar">
           <div>
             <p class="eyebrow">{eyebrow}</p>

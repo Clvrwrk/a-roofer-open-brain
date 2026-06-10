@@ -7,7 +7,6 @@ export type AccountingDashboardSlug =
   | "price-agreement-gaps"
   | "credit-memos"
   | "product-matches"
-  | "vendor-regions"
   | "ar-aging"
   | "insurance-proceeds"
   | "change-orders"
@@ -161,18 +160,6 @@ export const accountingDashboards: AccountingDashboardDefinition[] = [
     route: "/accounting/product-matches",
     source: "ABC invoice lines, ABC price list items, and dashboard action log.",
     description: "Shows SKU and UOM blockers that prevent credit memo packets from going external.",
-  },
-  {
-    slug: "vendor-regions",
-    title: "Vendor Region and Branch Mapping",
-    owner: "Roberto",
-    decision: "Which vendor branch or region agreement covers this Ship-To account?",
-    action: "Approve mapping, flag exception, or escalate for agreement verification.",
-    hidden: "Map decoration unless it explains a blocked invoice line.",
-    readiness: "live",
-    route: "/accounting/vendor-regions",
-    source: "abc_regions, abc_vendor_branches, branch matches, Ship-To access.",
-    description: "Branch and agreement coverage queue for the pricing zone decisions that protect invoice math.",
   },
   {
     slug: "ar-aging",

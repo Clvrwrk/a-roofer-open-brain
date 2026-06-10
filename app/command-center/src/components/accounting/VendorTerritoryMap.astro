@@ -1,0 +1,638 @@
+---
+import { formatNumber } from "@lib/accounting-dashboard";
+import type { VendorTerritorySurface } from "@lib/vendor-territories";
+import BoundaryNotice from "./BoundaryNotice.astro";
+
+interface Props {
+  surface: VendorTerritorySurface;
+  mapsBrowserKey: string;
+}
+
+const { surface, mapsBrowserKey } = Astro.props;
+const payloadJson = JSON.stringify(surface).replace(/</g, "\\u003c");
+const selectedBranch = surface.reviewBranches[0] ?? surface.branches[0] ?? null;
+const selectedOffice = selectedBranch?.assignedOfficeId
+  ? surface.offices.find((office) => office.id === selectedBranch.assignedOfficeId)
+  : surface.offices[0] ?? null;
+const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : surface.source;
+---
+
+<section
+  class="vendor-map-workspace"
+  data-vendor-territory-app
+  data-maps-key={mapsBrowserKey}
+  aria-label="Vendor territory map"
+>
+  <script type="application/json" id="vendor-territories-payload" set:html={payloadJson}></script>
+
+  <header class="vendor-map-header">
+    <div>
+      <p class="eyebrow">Vendor Territories</p>
+      <h2>PE office coverage and vendor branch pricing</h2>
+    </div>
+    <div class="vendor-map-header-actions">
+      <span class="runtime-pill" data-tone={surface.status === "live" ? "ready" : "watch"}>
+        <span class="signal-dot" aria-hidden="true"></span>
+        {sourceLabel}
+      </span>
+      <span class="runtime-pill" data-tone={mapsBrowserKey ? "ready" : "watch"}>
+        <span class="signal-dot" aria-hidden="true"></span>
+        Google Maps
+      </span>
+    </div>
+  </header>
+
+  {
+    surface.errors.length > 0 && (
+      <BoundaryNotice
+        title="Map data degraded"
+        detail={surface.errors.join(" ")}
+        action="Use the map for orientation, then refresh live Supabase data before final territory decisions."
+      />
+    )
+  }
+
+  <div class="vendor-map-toolbar" aria-label="Vendor map filters">
+    <label>
+      <span>Vendor</span>
+      <select id="vt-vendor-filter">
+        <option value="all">All vendors</option>
+        {surface.vendors.map((vendor) => (
+          <option value={vendor.slug}>{vendor.name}{vendor.isPlanned ? " · planned" : ""}</option>
+        ))}
+      </select>
+    </label>
+    <label>
+      <span>State</span>
+      <select id="vt-state-filter">
+        <option value="all">Full US</option>
+        {surface.states.map((state) => <option value={state}>{state}</option>)}
+      </select>
+    </label>
+    <label>
+      <span>Status</span>
+      <select id="vt-status-filter">
+        <option value="all">All status</option>
+        <option value="needs_office_route">Needs PE route</option>
+        <option value="missing_branch_pricing">Missing pricing</option>
+        <option value="vendor_brand">Healthy</option>
+        <option value="overlap_pending">Overlap</option>
+        <option value="out_of_boundary">Out of boundary</option>
+        <option value="unclassified">Unclassified</option>
+      </select>
+    </label>
+    <label class="vendor-map-search-label">
+      <span>Search</span>
+      <input id="vt-search" type="search" placeholder="Branch, city, state" autocomplete="off" />
+    </label>
+    <div class="vendor-map-button-group">
+      <button type="button" class="inline-action" data-vt-action="fit-us">US</button>
+      <button type="button" class="inline-action" data-vt-action="fit-selection">Fit</button>
+    </div>
+  </div>
+
+  <div class="vendor-map-shell">
+    <div class="vendor-map-canvas-column">
+      <div id="vendor-territory-google-map" class="vendor-google-map" role="application" aria-label="Google Map of PE offices and vendor branches"></div>
+      <div class="vendor-map-legend" aria-label="Marker legend">
+        <span><i style="background:#eab308"></i>Needs PE route</span>
+        <span><i style="background:#dc2626"></i>Missing pricing</span>
+        <span><i style="background:#d71920"></i>Vendor color</span>
+        <span><i class="office-legend-mark"></i>PE office</span>
+      </div>
+    </div>
+
+    <aside class="vendor-map-detail-panel" id="vendor-territory-detail-panel" aria-live="polite">
+      {
+        selectedBranch ? (
+          <>
+            <p class="eyebrow">{selectedBranch.vendorName}</p>
+            <h3>{selectedBranch.branchNumber ? `${selectedBranch.branchNumber} / ` : ""}{selectedBranch.branchName}</h3>
+            <div class="vendor-detail-chip-row">
+              <span class={`territory-status status-${selectedBranch.pricingStatus}`}>{selectedBranch.pricingStatus.replace("_", " ")}</span>
+              <span class={`territory-marker-chip marker-${selectedBranch.markerPriority}`}>{selectedBranch.markerPriority.replaceAll("_", " ")}</span>
+            </div>
+            <dl class="vendor-detail-list">
+              <div><dt>Address</dt><dd>{[selectedBranch.address, selectedBranch.city, selectedBranch.state].filter(Boolean).join(", ") || "Missing"}</dd></div>
+              <div><dt>Assigned office</dt><dd>{selectedBranch.assignedOfficeName ?? "Unassigned"}</dd></div>
+              <div><dt>Suggested office</dt><dd>{selectedBranch.suggestedOfficeName ?? "No suggestion"}</dd></div>
+              <div><dt>Price agreement</dt><dd>{selectedBranch.currentAgreement?.versionLabel ?? selectedBranch.priceEvidenceLabel}</dd></div>
+            </dl>
+          </>
+        ) : selectedOffice ? (
+          <>
+            <p class="eyebrow">PE Office</p>
+            <h3>{selectedOffice.name}</h3>
+            <dl class="vendor-detail-list">
+              <div><dt>Address</dt><dd>{[selectedOffice.address, selectedOffice.city, selectedOffice.state].filter(Boolean).join(", ") || "Missing"}</dd></div>
+              <div><dt>Region</dt><dd>{selectedOffice.regionName ?? selectedOffice.regionCode ?? "Unmapped"}</dd></div>
+              <div><dt>Branches</dt><dd>{formatNumber(selectedOffice.branchCounts.total)}</dd></div>
+            </dl>
+          </>
+        ) : (
+          <>
+            <p class="eyebrow">Vendor Territories</p>
+            <h3>No branch selected</h3>
+          </>
+        )
+      }
+    </aside>
+  </div>
+
+  <div class="vendor-map-metric-grid" aria-label="Territory counts">
+    <div><strong data-vt-count="branches">{formatNumber(surface.counts.branches)}</strong><span>branches</span></div>
+    <div><strong data-vt-count="offices">{formatNumber(surface.counts.offices)}</strong><span>PE offices</span></div>
+    <div><strong data-vt-count="needsOfficeRoute">{formatNumber(surface.counts.needsOfficeRoute)}</strong><span>need route</span></div>
+    <div><strong data-vt-count="missingBranchPricing">{formatNumber(surface.counts.missingBranchPricing)}</strong><span>missing pricing</span></div>
+    <div><strong data-vt-count="vendorBrand">{formatNumber(surface.counts.vendorBrand)}</strong><span>healthy</span></div>
+    <div><strong data-vt-count="missingCoordinates">{formatNumber(surface.counts.missingCoordinates)}</strong><span>no coords</span></div>
+  </div>
+
+  <script is:inline>
+    (() => {
+      const root = document.querySelector("[data-vendor-territory-app]");
+      if (!root) return;
+
+      const payloadScript = document.getElementById("vendor-territories-payload");
+      const payload = JSON.parse(payloadScript?.textContent || "{}");
+      const mapsKey = root.dataset.mapsKey || "";
+      const mapEl = document.getElementById("vendor-territory-google-map");
+      const detailPanel = document.getElementById("vendor-territory-detail-panel");
+      const vendorFilter = document.getElementById("vt-vendor-filter");
+      const stateFilter = document.getElementById("vt-state-filter");
+      const statusFilter = document.getElementById("vt-status-filter");
+      const searchInput = document.getElementById("vt-search");
+      const countEls = {
+        branches: root.querySelector('[data-vt-count="branches"]'),
+        offices: root.querySelector('[data-vt-count="offices"]'),
+        needsOfficeRoute: root.querySelector('[data-vt-count="needsOfficeRoute"]'),
+        missingBranchPricing: root.querySelector('[data-vt-count="missingBranchPricing"]'),
+        vendorBrand: root.querySelector('[data-vt-count="vendorBrand"]'),
+        missingCoordinates: root.querySelector('[data-vt-count="missingCoordinates"]'),
+      };
+
+      const state = {
+        map: null,
+        infoWindow: null,
+        branchMarkers: [],
+        officeMarkers: [],
+        clusterMarkers: [],
+        polygons: [],
+        selectedBranchId: payload.reviewBranches?.[0]?.id || payload.branches?.[0]?.id || null,
+      };
+
+      const officeById = new Map((payload.offices || []).map((office) => [office.id, office]));
+      const vendorBySlug = new Map((payload.vendors || []).map((vendor) => [vendor.slug, vendor]));
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function numberText(value) {
+        return new Intl.NumberFormat("en-US").format(Number(value || 0));
+      }
+
+      function statusText(value) {
+        return String(value || "").replaceAll("_", " ");
+      }
+
+      function locationText(item) {
+        return [item.address, item.city, item.state].filter(Boolean).join(", ") || [item.city, item.state].filter(Boolean).join(", ") || "Missing";
+      }
+
+      function loadMapsApi() {
+        return new Promise((resolve, reject) => {
+          if (window.google?.maps) {
+            resolve();
+            return;
+          }
+          if (!mapsKey) {
+            reject(new Error("missing-key"));
+            return;
+          }
+          const callbackName = "__vendorTerritoryMapsReady";
+          window[callbackName] = () => {
+            delete window[callbackName];
+            resolve();
+          };
+          const script = document.createElement("script");
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(mapsKey)}&v=weekly&loading=async&callback=${callbackName}`;
+          script.async = true;
+          script.onerror = () => reject(new Error("maps-load-failed"));
+          document.head.appendChild(script);
+        });
+      }
+
+      function branchIcon(branch, scale = 6) {
+        return {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: branch.markerColor || branch.vendorColor || "#334155",
+          fillOpacity: 0.96,
+          strokeColor: branch.markerPriority === "needs_office_route" ? "#78350f" : "#ffffff",
+          strokeOpacity: 1,
+          strokeWeight: branch.markerPriority === "vendor_brand" ? 1.8 : 2.6,
+          scale,
+        };
+      }
+
+      function officeIcon() {
+        return {
+          path: "M -7 6 L 0 -8 L 7 6 Z",
+          fillColor: "#11133f",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+          scale: 1.55,
+        };
+      }
+
+      function clusterIcon(size) {
+        const large = size >= 50;
+        return {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: "#11133f",
+          fillOpacity: 0.92,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
+          scale: large ? 18 : size >= 20 ? 15 : 12,
+        };
+      }
+
+      function clearMarkers(markers) {
+        markers.forEach((marker) => marker.setMap(null));
+        markers.length = 0;
+      }
+
+      function visibleBranches() {
+        const vendor = vendorFilter.value;
+        const selectedState = stateFilter.value;
+        const selectedStatus = statusFilter.value;
+        const query = searchInput.value.trim().toLowerCase();
+
+        return (payload.branches || []).filter((branch) => {
+          if (branch.latitude === null || branch.longitude === null) return false;
+          if (vendor !== "all" && branch.vendorSlug !== vendor) return false;
+          if (selectedState !== "all" && branch.state !== selectedState) return false;
+          if (selectedStatus !== "all") {
+            const priorityHit = branch.markerPriority === selectedStatus;
+            const statusHit = branch.pricingStatus === selectedStatus;
+            if (!priorityHit && !statusHit) return false;
+          }
+          if (!query) return true;
+          const haystack = [
+            branch.vendorName,
+            branch.branchNumber,
+            branch.branchName,
+            branch.address,
+            branch.city,
+            branch.state,
+            branch.assignedOfficeName,
+            branch.suggestedOfficeName,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(query);
+        });
+      }
+
+      function visibleOffices() {
+        const selectedState = stateFilter.value;
+        return (payload.offices || []).filter((office) => {
+          if (office.latitude === null || office.longitude === null) return false;
+          return selectedState === "all" || office.state === selectedState;
+        });
+      }
+
+      function clusterCellSize(zoom) {
+        if (zoom <= 4) return 6;
+        if (zoom <= 5) return 3;
+        if (zoom <= 6) return 1.5;
+        if (zoom <= 7) return 0.75;
+        return 0.35;
+      }
+
+      function groupedBranches(branches) {
+        const zoom = state.map?.getZoom() || 4;
+        if (zoom >= 8) return branches.map((branch) => ({ branches: [branch] }));
+        const cell = clusterCellSize(zoom);
+        const groups = new Map();
+        branches.forEach((branch) => {
+          const key = `${Math.floor(branch.latitude / cell)}:${Math.floor(branch.longitude / cell)}`;
+          const group = groups.get(key) || [];
+          group.push(branch);
+          groups.set(key, group);
+        });
+        return [...groups.values()].map((branches) => ({ branches }));
+      }
+
+      function renderCounts(branches) {
+        const counts = {
+          branches: branches.length,
+          offices: visibleOffices().length,
+          needsOfficeRoute: branches.filter((branch) => branch.markerPriority === "needs_office_route").length,
+          missingBranchPricing: branches.filter((branch) => branch.markerPriority === "missing_branch_pricing").length,
+          vendorBrand: branches.filter((branch) => branch.markerPriority === "vendor_brand").length,
+          missingCoordinates: (payload.branches || []).filter((branch) => branch.latitude === null || branch.longitude === null).length,
+        };
+
+        Object.entries(counts).forEach(([key, value]) => {
+          if (countEls[key]) countEls[key].textContent = numberText(value);
+        });
+      }
+
+      function renderOfficeLayers() {
+        const selectedState = stateFilter.value;
+        state.polygons.forEach((polygon) => polygon.setMap(null));
+        state.polygons = [];
+        clearMarkers(state.officeMarkers);
+
+        visibleOffices().forEach((office) => {
+          if (office.boundary?.coordinates?.[0]?.length && (selectedState === "all" || office.state === selectedState)) {
+            const polygon = new google.maps.Polygon({
+              paths: office.boundary.coordinates[0].map((point) => ({ lat: point[1], lng: point[0] })),
+              strokeColor: "#11133f",
+              strokeOpacity: 0.58,
+              strokeWeight: 1.4,
+              fillColor: "#0f766e",
+              fillOpacity: 0.07,
+              map: state.map,
+            });
+            polygon.addListener("click", () => renderOfficeDetail(office));
+            state.polygons.push(polygon);
+          }
+
+          const marker = new google.maps.Marker({
+            position: { lat: office.latitude, lng: office.longitude },
+            map: state.map,
+            title: office.name,
+            icon: officeIcon(),
+            zIndex: 1000,
+          });
+          marker.addListener("click", () => {
+            renderOfficeDetail(office);
+            state.map.panTo(marker.getPosition());
+          });
+          state.officeMarkers.push(marker);
+        });
+      }
+
+      function renderBranches() {
+        const branches = visibleBranches();
+        renderCounts(branches);
+        clearMarkers(state.branchMarkers);
+        clearMarkers(state.clusterMarkers);
+
+        groupedBranches(branches).forEach((group) => {
+          if (group.branches.length === 1) {
+            const branch = group.branches[0];
+            const marker = new google.maps.Marker({
+              position: { lat: branch.latitude, lng: branch.longitude },
+              map: state.map,
+              title: `${branch.vendorName} / ${branch.branchNumber || ""} ${branch.branchName}`,
+              icon: branchIcon(branch, branch.markerPriority === "needs_office_route" ? 7.5 : 6.2),
+              zIndex: branch.markerPriority === "needs_office_route" ? 750 : branch.markerPriority === "missing_branch_pricing" ? 700 : 500,
+            });
+            marker.addListener("click", () => {
+              state.selectedBranchId = branch.id;
+              renderBranchDetail(branch);
+              state.map.panTo(marker.getPosition());
+            });
+            state.branchMarkers.push(marker);
+            return;
+          }
+
+          const lat = group.branches.reduce((sum, branch) => sum + branch.latitude, 0) / group.branches.length;
+          const lng = group.branches.reduce((sum, branch) => sum + branch.longitude, 0) / group.branches.length;
+          const urgentCount = group.branches.filter((branch) => branch.markerPriority !== "vendor_brand").length;
+          const marker = new google.maps.Marker({
+            position: { lat, lng },
+            map: state.map,
+            title: `${group.branches.length} vendor branches`,
+            icon: clusterIcon(group.branches.length),
+            label: {
+              text: String(group.branches.length),
+              color: "#ffffff",
+              fontSize: "12px",
+              fontWeight: "800",
+            },
+            zIndex: urgentCount ? 650 : 450,
+          });
+          marker.addListener("click", () => {
+            state.map.panTo(marker.getPosition());
+            state.map.setZoom(Math.min((state.map.getZoom() || 4) + 2, 10));
+          });
+          state.clusterMarkers.push(marker);
+        });
+
+        const selected = branches.find((branch) => branch.id === state.selectedBranchId) || branches[0];
+        const plannedVendor = vendorFilter.value !== "all" ? vendorBySlug.get(vendorFilter.value) : null;
+        if (selected) renderBranchDetail(selected);
+        else if (plannedVendor?.isPlanned) renderPlannedVendorDetail(plannedVendor);
+      }
+
+      function fitTo(items) {
+        const bounds = new google.maps.LatLngBounds();
+        items.forEach((item) => {
+          if (item.latitude !== null && item.longitude !== null) bounds.extend({ lat: item.latitude, lng: item.longitude });
+        });
+        if (!bounds.isEmpty()) state.map.fitBounds(bounds, 44);
+      }
+
+      function fitUnitedStates() {
+        const bounds = new google.maps.LatLngBounds(
+          { lat: 24.3, lng: -125.1 },
+          { lat: 49.6, lng: -66.8 },
+        );
+        state.map.fitBounds(bounds, 18);
+      }
+
+      function renderBranchDetail(branch) {
+        const candidateOptions = branch.candidateOffices.length
+          ? branch.candidateOffices
+          : (payload.offices || []).map((office) => ({
+              id: office.id,
+              name: office.name,
+              city: office.city,
+              state: office.state,
+              driveMinutes: null,
+              straightMiles: null,
+              isSuggested: office.id === branch.suggestedOfficeId,
+            }));
+        const agreement = branch.currentAgreement;
+        const assigned = branch.assignedOfficeName || "Unassigned";
+        const candidates = candidateOptions
+          .map((candidate) => {
+            const suffix = [
+              candidate.driveMinutes !== null ? `${Math.round(candidate.driveMinutes)} min` : null,
+              candidate.straightMiles !== null ? `${candidate.straightMiles} mi` : null,
+              candidate.isSuggested ? "suggested" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return `<option value="${escapeHtml(candidate.id)}" ${candidate.id === branch.suggestedOfficeId ? "selected" : ""}>${escapeHtml(candidate.name)}${suffix ? ` / ${escapeHtml(suffix)}` : ""}</option>`;
+          })
+          .join("");
+
+        detailPanel.innerHTML = `
+          <p class="eyebrow">${escapeHtml(branch.vendorName)}</p>
+          <h3>${escapeHtml(branch.branchNumber ? `${branch.branchNumber} / ${branch.branchName}` : branch.branchName)}</h3>
+          <div class="vendor-detail-chip-row">
+            <span class="territory-status status-${escapeHtml(branch.pricingStatus)}">${escapeHtml(statusText(branch.pricingStatus))}</span>
+            <span class="territory-marker-chip marker-${escapeHtml(branch.markerPriority)}">${escapeHtml(statusText(branch.markerPriority))}</span>
+            <span class="territory-gate-chip" data-gate="${branch.invoiceGateStatus}">${escapeHtml(branch.invoiceGateStatus)}</span>
+          </div>
+          <dl class="vendor-detail-list">
+            <div><dt>Address</dt><dd>${escapeHtml(locationText(branch))}</dd></div>
+            <div><dt>Phone</dt><dd>${escapeHtml(branch.phone || "Missing")}</dd></div>
+            <div><dt>Assigned office</dt><dd>${escapeHtml(assigned)}</dd></div>
+            <div><dt>Suggested office</dt><dd>${escapeHtml(branch.suggestedOfficeName || "No suggestion")}</dd></div>
+            <div><dt>Geocode</dt><dd>${escapeHtml(branch.geocodeStatus)}${branch.geocodePrecision ? ` / ${escapeHtml(branch.geocodePrecision)}` : ""}</dd></div>
+          </dl>
+          <div class="vendor-agreement-card">
+            <span>Current price agreement</span>
+            ${
+              agreement
+                ? `<strong>${escapeHtml(agreement.versionLabel || agreement.agreementNumber || agreement.scope)}</strong>
+                   <p>${escapeHtml([agreement.vendorName, agreement.regionCode || agreement.regionName, agreement.accountNumber].filter(Boolean).join(" / "))}</p>
+                   <small>${escapeHtml([agreement.effectiveDate, agreement.expiryDate ? `expires ${agreement.expiryDate}` : null, agreement.ceoVerified ? "CEO verified" : "not CEO verified"].filter(Boolean).join(" · "))}</small>`
+                : `<strong>${escapeHtml(branch.priceEvidenceLabel)}</strong><p>No current mapped agreement covers this branch.</p>`
+            }
+          </div>
+          <div class="vendor-assignment-box">
+            <label>
+              <span>PE office route</span>
+              <select data-office-select>${candidates}</select>
+            </label>
+            <button type="button" class="primary-action" data-assign-branch="${escapeHtml(branch.id)}">Save office route</button>
+            <p data-assignment-status>${branch.territoryDecidedAt ? `Saved ${escapeHtml(new Date(branch.territoryDecidedAt).toLocaleString())}` : ""}</p>
+          </div>
+        `;
+
+        const saveButton = detailPanel.querySelector("[data-assign-branch]");
+        saveButton?.addEventListener("click", () => saveAssignment(branch));
+      }
+
+      function renderOfficeDetail(office) {
+        const agreements = (office.activePriceAgreements || [])
+          .map((agreement) => `<li><strong>${escapeHtml(agreement.vendorName)}</strong><span>${escapeHtml(agreement.versionLabel || agreement.agreementNumber || "Agreement")} / ${escapeHtml(agreement.expiryDate ? `expires ${agreement.expiryDate}` : "no expiry")}</span></li>`)
+          .join("");
+        detailPanel.innerHTML = `
+          <p class="eyebrow">PE Office</p>
+          <h3>${escapeHtml(office.name)}</h3>
+          <dl class="vendor-detail-list">
+            <div><dt>Address</dt><dd>${escapeHtml(locationText(office))}</dd></div>
+            <div><dt>Region</dt><dd>${escapeHtml(office.regionName || office.regionCode || "Unmapped")}</dd></div>
+            <div><dt>Drive time</dt><dd>${escapeHtml(office.driveTimeMinutes || 120)} minutes</dd></div>
+            <div><dt>Boundary</dt><dd>${escapeHtml(office.boundaryComputedAt || office.boundaryMethod || "Not cached")}</dd></div>
+          </dl>
+          <div class="vendor-office-counts">
+            <div><strong>${numberText(office.branchCounts.total)}</strong><span>assigned</span></div>
+            <div><strong>${numberText(office.branchCounts.needsOfficeRoute)}</strong><span>need route</span></div>
+            <div><strong>${numberText(office.branchCounts.missingPricing)}</strong><span>missing pricing</span></div>
+            <div><strong>${numberText(office.branchCounts.healthy)}</strong><span>healthy</span></div>
+          </div>
+          <div class="vendor-agreement-card">
+            <span>Regional agreements</span>
+            ${agreements ? `<ul class="vendor-agreement-list">${agreements}</ul>` : "<p>No active regional agreements mapped.</p>"}
+          </div>
+        `;
+      }
+
+      function renderPlannedVendorDetail(vendor) {
+        detailPanel.innerHTML = `
+          <p class="eyebrow">Planned vendor</p>
+          <h3>${escapeHtml(vendor.name)}</h3>
+          <dl class="vendor-detail-list">
+            <div><dt>Status</dt><dd>API not connected yet</dd></div>
+            <div><dt>Workflow</dt><dd>Mirror table, canonical branch reconciliation, weekly pull</dd></div>
+          </dl>
+        `;
+      }
+
+      async function saveAssignment(branch) {
+        const select = detailPanel.querySelector("[data-office-select]");
+        const statusEl = detailPanel.querySelector("[data-assignment-status]");
+        const officeId = select?.value;
+        if (!officeId) return;
+
+        const button = detailPanel.querySelector("[data-assign-branch]");
+        button.disabled = true;
+        if (statusEl) statusEl.textContent = "Saving...";
+
+        try {
+          const response = await fetch("/api/vendor-territories/assign", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ vendorBranchId: branch.id, officeId }),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok) throw new Error(result.error_description || result.error || "assignment failed");
+          const index = payload.branches.findIndex((item) => item.id === branch.id);
+          if (index >= 0 && result.branch) payload.branches[index] = result.branch;
+          const updated = result.branch || payload.branches[index] || branch;
+          state.selectedBranchId = updated.id;
+          renderBranches();
+          renderBranchDetail(updated);
+        } catch (error) {
+          if (statusEl) statusEl.textContent = error instanceof Error ? error.message : "Assignment failed";
+          button.disabled = false;
+        }
+      }
+
+      function bindControls() {
+        [vendorFilter, stateFilter, statusFilter, searchInput].forEach((control) => {
+          control.addEventListener("input", () => {
+            renderOfficeLayers();
+            renderBranches();
+          });
+        });
+
+        root.querySelector('[data-vt-action="fit-us"]')?.addEventListener("click", () => {
+          fitUnitedStates();
+        });
+        root.querySelector('[data-vt-action="fit-selection"]')?.addEventListener("click", () => {
+          fitTo([...visibleOffices(), ...visibleBranches()]);
+        });
+      }
+
+      async function init() {
+        if (!mapEl) return;
+        try {
+          await loadMapsApi();
+        } catch (error) {
+          mapEl.innerHTML = `<div class="vendor-map-empty"><strong>Google Maps unavailable</strong><span>${error?.message === "missing-key" ? "GOOGLE_MAPS_BROWSER_KEY is not configured." : "Maps JavaScript failed to load for this origin."}</span></div>`;
+          return;
+        }
+
+        state.map = new google.maps.Map(mapEl, {
+          center: { lat: 39.4, lng: -98.35 },
+          zoom: 4,
+          minZoom: 3,
+          mapTypeControl: true,
+          streetViewControl: false,
+          fullscreenControl: true,
+          clickableIcons: false,
+          styles: [{ featureType: "poi", stylers: [{ visibility: "off" }] }],
+        });
+        state.infoWindow = new google.maps.InfoWindow();
+        bindControls();
+        renderOfficeLayers();
+        renderBranches();
+        state.map.addListener("zoom_changed", renderBranches);
+        state.map.addListener("idle", () => {
+          if (!state.branchMarkers.length && !state.clusterMarkers.length) renderBranches();
+        });
+        fitUnitedStates();
+      }
+
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+      else init();
+    })();
+  </script>
+</section>
