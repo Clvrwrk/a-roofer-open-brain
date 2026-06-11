@@ -6,6 +6,7 @@
 - Command Center runs from `app/command-center` with Supabase product surface and WorkOS/auth.md discovery skeleton merged on `main`.
 - MemSearch Codex plugin is installed in user-level hooks/skills. Use curated `context/` files as source-of-truth and `.memsearch/` as generated/plugin runtime state.
 - Raw imports are parked in `archive/local-uncommitted-2026-06-04/` pending Maintenance sanitize/extract manifest.
+- Supabase/Ghost/Dolt infrastructure KBs are complete on `main` at `d51d80a`; use `/supabase-change-preflight` and the new preflight scripts before schema, lab, or data-diff work.
 
 ## Environment Notes
 
