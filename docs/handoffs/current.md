@@ -268,6 +268,26 @@ Two completed lines existed:
 
 They were merged so `origin/main` can carry both completed histories.
 
+Two additional AccuLynx worktree commits were then completed and merged into the main integration line:
+
+- `b148b20 Draft AccuLynx API blocker email`
+- `438f958 Add AccuLynx API docs skill resources`
+
+Remote branch heads verified on GitHub:
+
+- `origin/main`
+- `origin/contrib/cleverwork/supabase-ops-knowledge-live`
+- `origin/contrib/cleverwork/supabase-ops-knowledge`
+- `origin/contrib/cleverwork/acculynx-api-blockers-email`
+- `origin/contrib/cleverwork/acculynx-api-docs-skill`
+- `origin/contrib/cleverwork/vendor-territory-map-live`
+- `origin/contrib/cleverwork/vendor-territory-map`
+- `origin/contrib/cleverwork/ai-agent-workspace-app`
+- `origin/contrib/cleverwork/maintenance-agent-app-transition`
+- `origin/contrib/cleverwork/product-data-auth-integration`
+
+The canonical checkout at `/Users/chussey/Documents/a-roofers-open-brain` still has local dirty/raw/generated files. Those were not bulk-committed because they include local logs, screenshots, raw estimate/accounting material, generated outputs, and unreviewed ABC bridge files that need a separate safety review before promotion.
+
 ### Current Safety Notes
 
 - Do not repeat or store secrets pasted in chat.
