@@ -37,5 +37,13 @@ deployment/remote/orgo/pro-exteriors-orgo-desktops.json
 supabase/.temp/
 supabase/.branches/
 
+# Sandbox API smoke outputs
+integrations/bridges/abc-supply/.sandbox-runs/
+integrations/bridges/abc-supply/.production-runs/
+integrations/bridges/abc-supply/.mirror-runs/
+
 # Node
 node_modules/
+
+# Claude local (machine-specific permissions)
+.claude/settings.local.json

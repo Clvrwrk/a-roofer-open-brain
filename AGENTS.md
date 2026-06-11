@@ -42,9 +42,10 @@ When multiple AI agents work on this repo, do not share a checkout.
 
 ## Memory discipline
 
-- Read the frozen startup memory in `context/USER.md`, `context/MEMORY.md`, and today's `context/memory/YYYY-MM-DD.md` before broad repo exploration.
+- Read the frozen startup memory in `context/SOUL.md`, `context/USER.md`, `context/MEMORY.md`, and today's `context/memory/YYYY-MM-DD.md` before broad repo exploration. In Claude Code the `.claude/hooks/load-memory-snapshot.js` SessionStart hook injects this automatically; in Codex/Cowork read the files manually.
 - Use MemSearch for historical recall: `memsearch search "<query>" --top-k 5 --collection open_brain_memory`, then `memsearch expand <chunk_hash> --collection open_brain_memory` when more context is needed.
-- Treat `.memsearch/` and Milvus/Zilliz state as generated cache. Markdown under `context/` is the durable source-of-truth.
+- Treat `.memsearch/` and Milvus/Zilliz state as generated cache, with one exception: `.memsearch/memory/*.md` are the plugin's auto-captured per-turn summaries (the transcript layer) — durable, indexed, do not hand-edit. Curated markdown under `context/` is the durable source-of-truth.
+- Curated memory writes (`remember this` / `note that`) go through the `meta-memory-write` skill: dedup check, section targeting, hard caps (`MEMORY.md` 2,500 / `USER.md` 1,375 chars).
 - Never index `archive/local-uncommitted-*` directly. Maintenance must sanitize/extract archived imports before promotion into memory, Supabase, or active source paths.
 - Do not store secrets, service-role keys, raw PII, or raw customer exports in curated memory.
 

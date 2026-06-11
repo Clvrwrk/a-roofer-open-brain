@@ -7,14 +7,14 @@ if ! command -v memsearch >/dev/null 2>&1; then
   exit 1
 fi
 
+# NOTE: "context" already includes context/memory/ and context/transcripts/ —
+# do not list subpaths again or files get walked twice (duplicate recall hits).
+# .memsearch/memory/ lives OUTSIDE context/: it holds the MemSearch plugin's
+# auto-captured per-turn summaries (CLI sessions), so it is added explicitly.
 paths=("context")
 
 if [ -d ".memsearch/memory" ]; then
   paths+=(".memsearch/memory")
-fi
-
-if [ -d "context/transcripts" ]; then
-  paths+=("context/transcripts")
 fi
 
 memsearch index "${paths[@]}" --collection open_brain_memory "$@"
