@@ -1,7 +1,7 @@
 {
   "name": "supabase-infrastructure-resource",
   "display_name": "Supabase Infrastructure",
-  "version": "0.1.0-draft",
+  "version": "1.0.0-kb",
   "tier": "infrastructure-source-of-truth",
   "source_system_type": "database-platform",
   "enabled": true,

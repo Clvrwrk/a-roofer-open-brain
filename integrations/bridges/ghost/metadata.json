@@ -1,10 +1,10 @@
 {
   "name": "ghost-resource",
   "display_name": "Ghost",
-  "version": "0.1.0-research",
+  "version": "1.0.0-kb",
   "tier": "infrastructure-postgres-lab",
   "source_system_type": "agent-database-lab",
-  "enabled": false,
+  "enabled": true,
   "origin": "cleverwork",
   "bound_agents": ["innovator", "maintenance", "auditor", "quality-control"],
   "env_vars": {
@@ -13,5 +13,5 @@
   },
   "api_docs": "https://ghost.build/docs/#introduction",
   "objects_governed": ["databases", "forks", "schemas", "sql_queries", "logs", "restore_drills"],
-  "notes": "Research resource only until Ghost account, CLI, MCP, billing, retention, and data-class rules are approved."
+  "notes": "Enabled as a lab resource only. Ghost CLI, OAuth, MCP, and a lab database are configured; production data remains in Supabase."
 }

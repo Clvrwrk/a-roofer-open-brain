@@ -1,7 +1,7 @@
 # Supabase Infrastructure Operations
 
-Status: draft v0.1  
-Last verified: 2026-06-10  
+Status: active KB v1
+Last verified: 2026-06-10
 Related: [29-connection-and-access-checklist.md](29-connection-and-access-checklist.md), [24-supabase-product-surface-integration.md](24-supabase-product-surface-integration.md), [26-open-brain-memory-system.md](26-open-brain-memory-system.md), [integrations/bridges/supabase-infrastructure](../integrations/bridges/supabase-infrastructure/README.md)
 
 This is the operating model for giving agents durable Supabase access without turning production into a lab.
@@ -199,3 +199,17 @@ To make sure memory is never lost:
 - Supabase branching: https://supabase.com/docs/guides/deployment/branching
 - Dolt introduction: https://www.dolthub.com/docs/introduction/what-is-dolt/
 - Ghost documentation: https://ghost.build/docs/#introduction
+
+## Resource KBs
+
+- Supabase infrastructure: [integrations/bridges/supabase-infrastructure](../integrations/bridges/supabase-infrastructure/README.md)
+- Ghost lab: [integrations/bridges/ghost](../integrations/bridges/ghost/README.md)
+- Dolt data-diff lab: [integrations/bridges/dolt](../integrations/bridges/dolt/README.md)
+
+Runnable preflights:
+
+```bash
+node scripts/supabase-preflight.mjs --target branch
+node scripts/ghost-lab-preflight.mjs --database pro-exteriors-open-brain-lab
+node scripts/dolt-lab-preflight.mjs --offline
+```

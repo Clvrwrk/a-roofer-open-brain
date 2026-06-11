@@ -36,15 +36,28 @@ Use this skill before touching Supabase infrastructure or schema.
    node scripts/supabase-preflight.mjs --target prod --backup-proof <backup-id-or-manifest>
    ```
 
-3. For schema changes, create or update a migration file. Do not hand-apply mystery SQL without a tracked artifact.
-4. Test first against one of:
+3. If using a Ghost lab database, run:
+
+   ```bash
+   node scripts/ghost-lab-preflight.mjs --database pro-exteriors-open-brain-lab
+   ```
+
+4. If using a Dolt data-diff lab, run:
+
+   ```bash
+   node scripts/dolt-lab-preflight.mjs
+   ```
+
+5. For schema changes, create or update a migration file. Do not hand-apply mystery SQL without a tracked artifact.
+6. If a migration creates tables in `public`, include both an RLS decision and explicit Data API grants for `anon` / `authenticated` when the app expects REST access.
+7. Test first against one of:
    - Supabase preview branch,
    - local Supabase,
    - restored staging database,
    - Ghost lab database with sanitized data.
-5. Run advisors/security checks when CLI/MCP access is available.
-6. Run the relevant app smoke tests.
-7. For production destructive actions, stop and request this approval phrase:
+8. Run advisors/security checks when CLI/MCP access is available.
+9. Run the relevant app smoke tests.
+10. For production destructive actions, stop and request this approval phrase:
 
    ```text
    Approved for production destructive action: <exact action> on <project-ref> after backup <backup-id-or-proof>.
@@ -73,6 +86,26 @@ Prefer this stack:
 
 Ghost and Dolt are not production replacements. Ghost is a disposable Postgres lab. Dolt is a possible
 data-diff lab for selected non-sensitive reference datasets.
+
+## Lab Preflights
+
+Ghost lab check:
+
+```bash
+node scripts/ghost-lab-preflight.mjs --database pro-exteriors-open-brain-lab
+```
+
+Dolt lab check:
+
+```bash
+node scripts/dolt-lab-preflight.mjs --offline
+```
+
+Use the online Dolt check only when remote credentials need to be verified:
+
+```bash
+node scripts/dolt-lab-preflight.mjs
+```
 
 ## If Access Is Missing
 

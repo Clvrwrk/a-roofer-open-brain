@@ -1,20 +1,27 @@
 # Supabase Infrastructure Resource - Source Of Truth, Migrations, Backups, And Branching
 
-Status: active/draft  
-Tier: infrastructure source of truth  
+Status: active KB v1
+Tier: infrastructure source of truth
 Primary agents: Executive, Maintenance, Auditor, Quality Control, Conductor
 
 This resource captures the operating contract for the Pro Exteriors Supabase environment. It is not a
 business-data bridge like ABC Supply or AccuLynx. It is the infrastructure resource that governs how
 agents read, test, migrate, back up, branch, restore, and audit the live Open Brain database.
 
-Source docs:
+## Knowledge Base Map
 
-- Backups: https://supabase.com/docs/guides/platform/backups
-- Branching: https://supabase.com/docs/guides/deployment/branching
-- CLI reference: https://supabase.com/docs/reference/cli
-- Management API: https://supabase.com/docs/reference/api/introduction
-- Local operating model: [docs/36-supabase-infrastructure-ops.md](../../../docs/36-supabase-infrastructure-ops.md)
+| File | Purpose |
+| --- | --- |
+| [README.md](README.md) | Resource overview, current state, and governance posture. |
+| [COMMANDS.md](COMMANDS.md) | Safe command cookbook for CLI/MCP/API use. |
+| [MIGRATION-RUNBOOK.md](MIGRATION-RUNBOOK.md) | Required flow for schema, RLS, policy, function, and data-shape changes. |
+| [BACKUP-RESTORE-RUNBOOK.md](BACKUP-RESTORE-RUNBOOK.md) | Daily backup, PITR, offsite dump, branch/clone, and restore-drill process. |
+| [TEST-PLAN.md](TEST-PLAN.md) | Readiness checks before declaring Supabase infrastructure healthy. |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Known failures, diagnosis steps, and escalation boundaries. |
+| [mapping.md](mapping.md) | How infrastructure events become brain atoms and audit evidence. |
+| [metadata.json](metadata.json) | Machine-readable resource metadata and env var inventory. |
+| [SOURCES.md](SOURCES.md) | Source links, verification dates, and local tool versions. |
+| [docs/36-supabase-infrastructure-ops.md](../../../docs/36-supabase-infrastructure-ops.md) | Cross-tool operating model for Supabase, Ghost, and Dolt. |
 
 ## Current Production Project
 
@@ -25,6 +32,8 @@ Source docs:
 | Project name | `Pro Exteriors LLC - Agent Workforce` |
 | Region | `us-west-1` |
 | Production role | Live Open Brain source of truth |
+| Local CLI verified | Supabase CLI `2.105.0` |
+| Codex MCP state | User-level Supabase MCP entry configured for project ref `rnhmvcpsvtqjlffpsayu` |
 
 Do not store credentials in this folder. Only project identifiers, documentation, env var names, and
 operating rules belong in git.
@@ -50,6 +59,17 @@ Agents may inspect and plan freely. Production writes are gated:
 
 Destructive means any operation that can remove data, reduce access protection, overwrite production,
 rotate live credentials, or materially change source-of-truth semantics.
+
+## Default Workflow
+
+1. Read this resource and the current task context.
+2. Run `node scripts/supabase-preflight.mjs --target branch`.
+3. For schema work, create a migration artifact and test it on a non-production target.
+4. Run `supabase db advisors` when CLI access is available.
+5. Run the relevant app smoke tests.
+6. For production, rerun preflight with backup proof.
+7. Ask for explicit approval if the change is destructive.
+8. Record the result in the brain as an infrastructure atom.
 
 ## Backup Posture
 
@@ -85,3 +105,11 @@ should have a purpose, owner, and delete date.
 - Install and authenticate 1Password and Dashlane CLIs if vault-backed automation is desired.
 - Link this checkout to the Supabase project through the vault-backed DB password path.
 - Confirm production plan/PITR status in the Supabase dashboard before declaring backup coverage complete.
+
+## Explicit Non-Goals
+
+- Do not use Ghost or Dolt as production replacements for Supabase.
+- Do not make daily Supabase branches the backup strategy.
+- Do not apply production SQL that has no migration artifact.
+- Do not let agents run destructive production changes without backup proof and exact approval.
+- Do not expose new Data API tables by accident; public-schema tables that need REST/GraphQL access must pair explicit grants with RLS and policies.

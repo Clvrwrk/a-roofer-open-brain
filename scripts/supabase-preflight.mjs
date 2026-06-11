@@ -178,6 +178,27 @@ function destructiveSqlHits(root, files) {
   return hits;
 }
 
+function changedSqlFiles(root, changedFiles) {
+  return changedFiles
+    .filter((file) => file.endsWith(".sql"))
+    .map((file) => path.join(root, file))
+    .filter((file) => fs.existsSync(file));
+}
+
+function dataApiGrantWarnings(root, files) {
+  const hits = [];
+  for (const file of files) {
+    const text = readTextSafe(file);
+    const createsPublicTable = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\.)/i.test(text);
+    const hasGrant = /\bgrant\s+(?:select|insert|update|delete|all|usage)\b/i.test(text);
+    const hasRls = /\benable\s+row\s+level\s+security\b/i.test(text);
+    if (createsPublicTable && (!hasGrant || !hasRls)) {
+      hits.push(`${path.relative(root, file)}${!hasGrant ? " missing GRANT review" : ""}${!hasRls ? " missing RLS enable" : ""}`);
+    }
+  }
+  return hits;
+}
+
 function linkedProjectRef(root) {
   const tempRef = path.join(root, "supabase", ".temp", "project-ref");
   const text = readTextSafe(tempRef).trim();
@@ -274,6 +295,14 @@ function main() {
     destructiveHits.length ? "warn" : "pass",
     "changed SQL has no obvious destructive statements",
     destructiveHits.join(", "),
+  );
+
+  const grantWarnings = dataApiGrantWarnings(root, changedSqlFiles(root, changedFiles));
+  check(
+    results,
+    grantWarnings.length ? "warn" : "pass",
+    "changed public table SQL includes Data API grant/RLS review",
+    grantWarnings.join(", "),
   );
 
   if (opts.target === "prod" && !opts.backupProof) {
