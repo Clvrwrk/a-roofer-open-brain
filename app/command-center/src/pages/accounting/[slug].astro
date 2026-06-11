@@ -23,8 +23,10 @@ if (!dashboard) {
   Astro.response.status = 404;
 }
 
-const surface = await loadAccountingSurface();
-const liveSurface = await loadDepartmentSurface("accounting");
+const [surface, liveSurface] = await Promise.all([
+  loadAccountingSurface(),
+  loadDepartmentSurface("accounting"),
+]);
 const reviewQueueItems = liveSurface.items.filter((item) => item.workflow === "abc-review");
 const routeLiveItems = dashboard
   ? liveSurface.items.filter((item) => {
@@ -153,7 +155,7 @@ const accountingMode = dashboard?.slug === "invoices" ? "invoice-gate" : "other"
 const activePage = "accounting";
 ---
 
-<AppShell title={pageTitle} eyebrow="Accounting Dashboard" activePage={activePage}>
+<AppShell title={pageTitle} eyebrow="Accounting Dashboard" activePage={activePage} surface={liveSurface}>
   {
     dashboard ? (
       <>
