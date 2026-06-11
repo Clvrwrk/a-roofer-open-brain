@@ -7,8 +7,10 @@ import { loadDepartmentSurface } from "@lib/live-work";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { loadVendorTerritorySurface } from "@lib/vendor-territories";
 
-const liveSurface = await loadDepartmentSurface("accounting");
-const territorySurface = await loadVendorTerritorySurface();
+const [liveSurface, territorySurface] = await Promise.all([
+  loadDepartmentSurface("accounting"),
+  loadVendorTerritorySurface(),
+]);
 const mapsBrowserKey = getRuntimeEnv().GOOGLE_MAPS_BROWSER_KEY ?? "";
 const territoryItems = liveSurface.items.filter((item) => {
   const itemRoute = item.href.split("?")[0];

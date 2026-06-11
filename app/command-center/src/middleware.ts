@@ -6,7 +6,10 @@ import {
   resolveServiceActorFromBearer,
 } from "@lib/access-control";
 import { getRuntimeEnv } from "@lib/runtime-env";
+import { prewarmSurfaceCaches } from "@lib/prewarm.server";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
+
+prewarmSurfaceCaches();
 
 /**
  * Routes that must stay reachable without a WorkOS session:

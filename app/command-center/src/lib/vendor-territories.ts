@@ -143,6 +143,11 @@ interface AbcPriceObservationLineRow {
   [key: string]: unknown;
 }
 
+interface RecentObservationCountRow {
+  branch_number: string | null;
+  recent_line_count: number | string | null;
+}
+
 interface AbcVendorBranchRow {
   branch_number: string | null;
   branch_name: string | null;
@@ -1204,8 +1209,7 @@ export async function loadVendorTerritoryMapPayload(
       priceAgreementItems,
       abcEvidenceRows,
       abcPriceListItems,
-      abcPriceObservationRowsPlural,
-      abcPriceObservationRowsSingular,
+      recentObservationRows,
       abcApiRows,
       territoryRpc,
     ] = await Promise.all([
@@ -1259,16 +1263,10 @@ export async function loadVendorTerritoryMapPayload(
           "agreement_id,item_number,description,approval_status",
           nonCriticalErrors,
         ),
-        optionalSelectAll<AbcPriceObservationLineRow>(
+        optionalSelectAll<RecentObservationCountRow>(
           client,
-          "abc_price_observations_lines",
-          "*",
-          observationTableErrors,
-        ),
-        optionalSelectAll<AbcPriceObservationLineRow>(
-          client,
-          "abc_price_observation_lines",
-          "*",
+          "v_branch_recent_price_observations",
+          "branch_number,recent_line_count",
           observationTableErrors,
         ),
         optionalSelectAll<AbcVendorBranchRow>(
@@ -1324,8 +1322,7 @@ export async function loadVendorTerritoryMapPayload(
 
     const priceAgreementItemStatsById = buildPriceAgreementItemStats(priceAgreementItems);
     const abcPriceListStatsByAgreementId = buildAbcPriceListStats(abcPriceListItems);
-    const abcPriceObservationRows = [...abcPriceObservationRowsPlural, ...abcPriceObservationRowsSingular];
-    if (abcPriceObservationRows.length === 0 && observationTableErrors.length >= 2) {
+    if (recentObservationRows.length === 0 && observationTableErrors.length > 0) {
       nonCriticalErrors.push(observationTableErrors.join(" "));
     }
     const abcAgreementsByBranchNumber = new Map<string, AbcAgreementEvidenceRow[]>();
@@ -1336,7 +1333,16 @@ export async function loadVendorTerritoryMapPayload(
       list.push(agreement);
       abcAgreementsByBranchNumber.set(branchNumber, list);
     }
-    const recentObservationCountByBranch = buildRecentObservationCountByBranch(abcPriceObservationRows);
+    const recentObservationCountByBranch = new Map<string, number>();
+    for (const observationRow of recentObservationRows) {
+      const observationBranch = normalizeBranchNumber(observationRow.branch_number);
+      if (!observationBranch) continue;
+      const lineCount = toNumber(observationRow.recent_line_count) ?? 0;
+      recentObservationCountByBranch.set(
+        observationBranch,
+        (recentObservationCountByBranch.get(observationBranch) ?? 0) + lineCount,
+      );
+    }
 
     const abcApiByNumber = new Map<string, AbcVendorBranchRow>();
     const abcApiByAddress = new Map<string, AbcVendorBranchRow>();
@@ -1487,6 +1493,40 @@ export async function loadVendorTerritoryMapPayload(
   }
 }
 
+const TERRITORY_SURFACE_LIVE_TTL_MS = 30_000;
+const TERRITORY_SURFACE_DEGRADED_TTL_MS = 5_000;
+const TERRITORY_SURFACE_MAX_STALE_MS = 10 * 60_000;
+let territorySurfaceCache: { expiresAt: number; payload: VendorTerritoryMapPayload } | null = null;
+let territorySurfaceInflight: Promise<VendorTerritoryMapPayload> | null = null;
+
+export function invalidateVendorTerritorySurfaceCache() {
+  territorySurfaceCache = null;
+  territorySurfaceInflight = null;
+}
+
 export async function loadVendorTerritorySurface(env: RuntimeEnv = getRuntimeEnv()) {
-  return loadVendorTerritoryMapPayload(env);
+  const now = Date.now();
+  const cached = territorySurfaceCache;
+  if (cached && cached.expiresAt > now) {
+    return cached.payload;
+  }
+
+  if (!territorySurfaceInflight) {
+    territorySurfaceInflight = loadVendorTerritoryMapPayload(env)
+      .then((payload) => {
+        const ttl = payload.source === "live" ? TERRITORY_SURFACE_LIVE_TTL_MS : TERRITORY_SURFACE_DEGRADED_TTL_MS;
+        territorySurfaceCache = { expiresAt: Date.now() + ttl, payload };
+        return payload;
+      })
+      .finally(() => {
+        territorySurfaceInflight = null;
+      });
+    territorySurfaceInflight.catch(() => undefined);
+  }
+
+  if (cached && cached.expiresAt + TERRITORY_SURFACE_MAX_STALE_MS > now) {
+    return cached.payload;
+  }
+
+  return territorySurfaceInflight;
 }

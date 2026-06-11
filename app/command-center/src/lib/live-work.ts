@@ -311,6 +311,8 @@ function surfaceCacheTtl(status: LiveDataStatus) {
 export function invalidateCommandCenterSurfaceCache() {
   commandCenterSurfaceCache = null;
   commandCenterSurfaceInflight = null;
+  departmentSurfaceCache.clear();
+  departmentSurfaceInflight.clear();
 }
 
 function toNumber(value: unknown) {
@@ -1197,7 +1199,39 @@ async function loadSystemSurface(client: SupabaseClient): Promise<LiveDepartment
   };
 }
 
+const departmentSurfaceCache = new Map<DepartmentId, { expiresAt: number; surface: LiveDepartmentSurface }>();
+const departmentSurfaceInflight = new Map<DepartmentId, Promise<LiveDepartmentSurface>>();
+
 export async function loadDepartmentSurface(department: DepartmentId, env: RuntimeEnv = getRuntimeEnv()): Promise<LiveDepartmentSurface> {
+  const now = Date.now();
+  const cached = departmentSurfaceCache.get(department);
+  if (cached && cached.expiresAt > now) return cached.surface;
+
+  let inflight = departmentSurfaceInflight.get(department);
+  if (!inflight) {
+    inflight = loadDepartmentSurfaceFresh(department, env)
+      .then((surface) => {
+        departmentSurfaceCache.set(department, {
+          expiresAt: Date.now() + surfaceCacheTtl(surface.status),
+          surface,
+        });
+        return surface;
+      })
+      .finally(() => {
+        departmentSurfaceInflight.delete(department);
+      });
+    departmentSurfaceInflight.set(department, inflight);
+    inflight.catch(() => undefined);
+  }
+
+  if (cached && cached.expiresAt + SURFACE_MAX_STALE_MS > now) {
+    return cached.surface;
+  }
+
+  return inflight;
+}
+
+async function loadDepartmentSurfaceFresh(department: DepartmentId, env: RuntimeEnv = getRuntimeEnv()): Promise<LiveDepartmentSurface> {
   const { client, config } = createServerSupabaseClient(env);
   if (!client) {
     return {
@@ -1256,10 +1290,13 @@ async function loadFreshCommandCenterSurface(env: RuntimeEnv): Promise<LiveComma
   };
 }
 
+const SURFACE_MAX_STALE_MS = 10 * 60_000;
+
 export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<LiveCommandCenterSurface> {
   const now = Date.now();
-  if (commandCenterSurfaceCache && commandCenterSurfaceCache.expiresAt > now) {
-    return commandCenterSurfaceCache.surface;
+  const cached = commandCenterSurfaceCache;
+  if (cached && cached.expiresAt > now) {
+    return cached.surface;
   }
 
   if (!commandCenterSurfaceInflight) {
@@ -1274,6 +1311,12 @@ export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()
       .finally(() => {
         commandCenterSurfaceInflight = null;
       });
+    commandCenterSurfaceInflight.catch(() => undefined);
+  }
+
+  // Stale-while-revalidate: serve the previous surface while the refresh runs.
+  if (cached && cached.expiresAt + SURFACE_MAX_STALE_MS > now) {
+    return cached.surface;
   }
 
   return commandCenterSurfaceInflight;

@@ -601,7 +601,43 @@ export function formatNumber(value: number) {
   return NUMBER_FORMATTER.format(value);
 }
 
+const GAP_SURFACE_LIVE_TTL_MS = 30_000;
+const GAP_SURFACE_DEGRADED_TTL_MS = 5_000;
+const GAP_SURFACE_MAX_STALE_MS = 10 * 60_000;
+let gapSurfaceCache: { expiresAt: number; surface: AgreementGapSurface } | null = null;
+let gapSurfaceInflight: Promise<AgreementGapSurface> | null = null;
+
+export function invalidateAgreementGapSurfaceCache() {
+  gapSurfaceCache = null;
+  gapSurfaceInflight = null;
+}
+
 export async function loadAgreementGapSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<AgreementGapSurface> {
+  const now = Date.now();
+  const cached = gapSurfaceCache;
+  if (cached && cached.expiresAt > now) return cached.surface;
+
+  if (!gapSurfaceInflight) {
+    gapSurfaceInflight = loadAgreementGapSurfaceFresh(env)
+      .then((surface) => {
+        const ttl = surface.status === "live" ? GAP_SURFACE_LIVE_TTL_MS : GAP_SURFACE_DEGRADED_TTL_MS;
+        gapSurfaceCache = { expiresAt: Date.now() + ttl, surface };
+        return surface;
+      })
+      .finally(() => {
+        gapSurfaceInflight = null;
+      });
+    gapSurfaceInflight.catch(() => undefined);
+  }
+
+  if (cached && cached.expiresAt + GAP_SURFACE_MAX_STALE_MS > now) {
+    return cached.surface;
+  }
+
+  return gapSurfaceInflight;
+}
+
+async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): Promise<AgreementGapSurface> {
   const { client, config } = createServerSupabaseClient(env);
 
   if (!client) {

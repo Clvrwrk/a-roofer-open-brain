@@ -148,6 +148,7 @@ const SHORT_DATE = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "sh
 const PAGE_SIZE = 1000;
 const SNAPSHOT_CACHE_TTL_MS = 60_000;
 const DEGRADED_SNAPSHOT_CACHE_TTL_MS = 5_000;
+const SNAPSHOT_MAX_STALE_MS = 10 * 60_000;
 
 let weeklySnapshotCache:
   | {
@@ -703,8 +704,9 @@ export async function loadWeeklySnapshot(env: RuntimeEnv = getRuntimeEnv(), now 
   const key = snapshotCacheKey(env, start, end);
   const currentTime = Date.now();
 
-  if (weeklySnapshotCache && weeklySnapshotCache.key === key && weeklySnapshotCache.expiresAt > currentTime) {
-    return weeklySnapshotCache.snapshot;
+  const cached = weeklySnapshotCache && weeklySnapshotCache.key === key ? weeklySnapshotCache : null;
+  if (cached && cached.expiresAt > currentTime) {
+    return cached.snapshot;
   }
 
   if (!weeklySnapshotInflight || weeklySnapshotInflight.key !== key) {
@@ -723,6 +725,12 @@ export async function loadWeeklySnapshot(env: RuntimeEnv = getRuntimeEnv(), now 
           weeklySnapshotInflight = null;
         }),
     };
+    weeklySnapshotInflight.promise.catch(() => undefined);
+  }
+
+  // Stale-while-revalidate: serve the previous snapshot while the refresh runs.
+  if (cached && cached.expiresAt + SNAPSHOT_MAX_STALE_MS > currentTime) {
+    return cached.snapshot;
   }
 
   return weeklySnapshotInflight.promise;
