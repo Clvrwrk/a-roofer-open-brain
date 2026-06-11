@@ -1,0 +1,15 @@
+{
+  "name": "acculynx-api",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": [
+    "capture",
+    "conductor",
+    "auditor",
+    "ob-sales",
+    "ob-ops",
+    "ob-accounting"
+  ],
+  "a3_ref": "proposals/2026-06-09-acculynx-api.md"
+}
