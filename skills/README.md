@@ -101,6 +101,7 @@ Original OB1 skills: https://github.com/open-brain-initiative/OB1
 | `eagleview-takeoff-qa` | `ob-ops` | Operations owns scope and measurement accuracy |
 | `roof-estimate-qa` | `ob-sales`, `auditor` | Sales produces; Auditor gates before delivery |
 | `gaf-warranty-registration` | `ob-accounting`, `ob-ops` | Accounting tracks warranties financially; Ops owns install completion proof |
+| `acculynx-api` | `capture`, `conductor`, `auditor`, `ob-sales`, `ob-ops`, `ob-accounting` | Endpoint planning and safety gates for the primary PM adapter |
 | `eeat-publishing` | `ob-marketing` | Marketing drives publication; dual consent check required |
 | `schema-markup` | `ob-marketing` | Structured-data output for every published page |
 | `post-op-debrief-atomizer` | `capture` | Capture runs dual-track hard/soft atomization on every debrief transcript |
@@ -141,7 +142,7 @@ No new skill enters this directory without a completed A3 proposal stored at `pr
 
 This is a Scaffold-phase repo. Per the governance model (CONVENTIONS §10), a skill does **not** exist as code until it clears the 10x A3 gate — so agent skill packs in `agents/**/skills.md` deliberately **name** skills that are not yet built. That is the 80/20 default, not a gap.
 
-**Built now (8 cleverwork-roofer):** `eagleview-takeoff-qa`, `eeat-publishing`, `gaf-warranty-registration`, `insurance-adjuster-prep`, `post-op-debrief-atomizer`, `roof-estimate-qa`, `schema-markup`, `storm-claim-supplement`.
+**Built now (9 cleverwork-roofer):** `acculynx-api`, `eagleview-takeoff-qa`, `eeat-publishing`, `gaf-warranty-registration`, `insurance-adjuster-prep`, `post-op-debrief-atomizer`, `roof-estimate-qa`, `schema-markup`, `storm-claim-supplement`.
 
 **Cited cognition (4 infranodus):** `critical-perspective`, `ontology-creator`, `rhetorical-analyst`, `shifting-perspective`.
 

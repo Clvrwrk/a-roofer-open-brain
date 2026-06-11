@@ -1,10 +1,24 @@
 # AccuLynx API Source Provenance
 
 Status: source index for existing bridge  
-Last verified: 2026-06-04
+Last verified: 2026-06-09
 
 The AccuLynx bridge is already present in this repo. This file anchors its assumptions to public
 AccuLynx documentation so planning and future maintenance can verify behavior.
+
+Generated local docs:
+
+- `integrations/bridges/acculynx/API.md`
+- `skills/cleverwork-roofer/acculynx-api/SKILL.md`
+- `skills/cleverwork-roofer/acculynx-api/reference/full-endpoint-reference.md`
+- `skills/cleverwork-roofer/acculynx-api/reference/openapi-index.json`
+- `skills/cleverwork-roofer/acculynx-api/reference/source-index.md`
+
+Refresh command:
+
+```bash
+ACCULYNX_DOCS_REFRESH=1 node integrations/bridges/acculynx/scripts/refresh-api-docs.mjs
+```
 
 ## Core docs
 
@@ -18,6 +32,7 @@ AccuLynx documentation so planning and future maintenance can verify behavior.
 | Webhooks end-user reference | https://apidocs.acculynx.com/docs/webhooks-end-user-reference |
 | Webhook endpoints | https://apidocs.acculynx.com/docs/endpoints |
 | Changelog: V1 docs removed | https://apidocs.acculynx.com/changelog/acculynx-api-v1-documentation-removed |
+| AI/documentation index | https://apidocs.acculynx.com/llms.txt |
 
 ## Authentication and limits
 
@@ -33,7 +48,7 @@ AccuLynx documentation so planning and future maintenance can verify behavior.
 | Bridge object | Endpoint/source |
 | --- | --- |
 | Jobs list | https://apidocs.acculynx.com/reference/getjobs |
-| Job by ID | https://apidocs.acculynx.com/reference/getjob-1 |
+| Job by ID | https://apidocs.acculynx.com/reference/getjob |
 | Job external references | https://apidocs.acculynx.com/reference/getjobexternalreferences |
 | Contacts list | https://apidocs.acculynx.com/reference/getcontacts |
 | Contact by ID | https://apidocs.acculynx.com/reference/getcontact |
@@ -49,6 +64,10 @@ AccuLynx documentation so planning and future maintenance can verify behavior.
 | Webhook subscriptions list | https://apidocs.acculynx.com/reference/getsubscriptions |
 | Webhook endpoint guide | https://apidocs.acculynx.com/docs/endpoints |
 | Reply to job message | https://apidocs.acculynx.com/reference/postreplyjobmessage |
+
+The generated endpoint index currently covers 124 unique OpenAPI operations from 159 source pages,
+plus 23 webhook event reference pages. For exact endpoint parameters and request/response schemas,
+use `skills/cleverwork-roofer/acculynx-api/reference/openapi-index.json`.
 
 ## Bridge planning notes to preserve
 
