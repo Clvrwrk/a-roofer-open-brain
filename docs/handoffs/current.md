@@ -95,6 +95,22 @@ Not applicable.
 - One-off/project-specific pricing must never leak into reusable pricing views or `product_price_matrix`.
 - Every migrated or quarantined row must retain `source_table`, `source_pk`, and a source hash.
 
+### Worktree inventory at wrap-up
+
+| Worktree | Branch | Note |
+|----------|--------|------|
+| `/Users/chussey/Documents/a-roofers-open-brain` | `main` | Canonical checkout; pre-existing unrelated dirty files remain. |
+| `/Users/chussey/Documents/a-roofers-open-brain/.worktrees/db-price-foundation-round2` | `contrib/cleverwork/db-price-foundation-round2` | Round 2 local branch; no repo docs were committed there. Durable Round 2 evidence is in the Dolt playground. |
+| `/Users/chussey/Documents/a-roofers-open-brain/.worktrees/db-price-foundation-round3` | `contrib/cleverwork/db-price-foundation-round3` | Round 3 owned worktree; report/handoff committed and pushed. |
+| `/private/tmp/a-roofers-open-brain-acculynx-api-blockers-worktree` | `contrib/cleverwork/acculynx-api-blockers-email` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/a-roofers-open-brain-acculynx-api-docs-skill-worktree` | `contrib/cleverwork/acculynx-api-docs-skill` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/a-roofers-open-brain-ai-agent-workspace` | `contrib/cleverwork/ai-agent-workspace-app` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/a-roofers-open-brain-supabase-ops-knowledge-live-worktree` | `contrib/cleverwork/supabase-ops-knowledge-live` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/a-roofers-open-brain-supabase-ops-knowledge-worktree` | `contrib/cleverwork/supabase-ops-knowledge` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/a-roofers-open-brain-vendor-territory-map-worktree` | `contrib/cleverwork/vendor-territory-map-live` | Pre-existing prunable worktree; not touched or pushed in this task. |
+| `/private/tmp/database-playground-plugin-worktree` | `contrib/cleverwork/database-playground-plugin` | Pre-existing plugin worktree; not touched or pushed in this task. |
+| `/tmp/vt-live-fix` | `main-perf` | Pre-existing locked worktree; not touched or pushed in this task. |
+
 ### Service / deployment map
 
 | Service | Detail |
