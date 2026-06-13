@@ -81,11 +81,47 @@ Before branch testing, confirm:
 
 ## Validation Status From Round 4 Authoring
 
-This Codex run completed local static artifact checks:
+This Codex run completed local static artifact checks and follow-up execution
+validation in a disposable Ghost Postgres database.
+
+Execution validation database:
+
+```text
+price-foundation-r4-validation-20260613-codex (unwc10myfx)
+```
+
+Validated execution order:
+
+1. `900_ghost_smoke_fixture.sql`
+2. `001_phase1_sidecars.sql`
+3. `002_phase1_backfill_and_quarantine.sql`
+4. `003_phase1_validation_queries.sql`
+5. Re-run `001_phase1_sidecars.sql`
+6. Re-run `002_phase1_backfill_and_quarantine.sql`
+7. Re-run `003_phase1_validation_queries.sql`
+
+Execution evidence:
+
+- `001_phase1_sidecars.sql` passed initial execution and re-run.
+- `002_phase1_backfill_and_quarantine.sql` passed after fixing an ambiguous `target_item_id` alias in the item upsert CTE; re-run also passed.
+- `003_phase1_validation_queries.sql` passed after initial execution and after re-run.
+- Final validation checks showed `5 / 5` `abc_price_list_items` source refs reconciled, `0` review queue source-ref orphans, `0` source-hash mismatches, `0` duplicate source refs, and `0` one-off rows leaking into the reusable view.
+
+Final Ghost fixture counts after the idempotence re-run:
+
+| Surface | Rows |
+| --- | ---: |
+| `price_agreements` | 2 |
+| `price_agreement_items` | 5 |
+| `price_foundation_source_refs` | 9 |
+| `price_foundation_sku_review_queue` | 3 |
+| `price_foundation_branch_review_queue` | 2 |
+| `price_foundation_business_rule_review_queue` | 3 |
+| `v_price_foundation_reusable_price_agreement_items` | 1 |
+
+Static checks:
 
 - All required files are present.
 - Scripts contain no `drop table`, `drop column`, destructive canonical-table `delete`, or destructive canonical-table `truncate` statements.
 - Sidecar/review tables include `source_table`, `source_pk`, and `source_hash`.
 - Backfill logic uses `on conflict` upserts and deterministic IDs.
-
-Execution validation is still required. The Database Playground MCP tools were unavailable during this run because the workspace credit gate rejected Ghost/Dolt calls, and no local `psql`, `postgres`, or SQL linter was installed in the workspace.

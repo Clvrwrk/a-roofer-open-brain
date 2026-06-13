@@ -319,7 +319,7 @@ existing_items as (
 ),
 items_to_upsert as (
   select
-    coalesce(ei.existing_item_id, c.target_item_id) as target_item_id,
+    coalesce(ei.existing_item_id, c.target_item_id) as resolved_target_item_id,
     c.*
   from classified_with_rules c
   left join existing_items ei
@@ -348,7 +348,7 @@ upsert_items as (
     updated_at
   )
   select
-    target_item_id,
+    resolved_target_item_id,
     target_agreement_id,
     target_product_id,
     item_number,
