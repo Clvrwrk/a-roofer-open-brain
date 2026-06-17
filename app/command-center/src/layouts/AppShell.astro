@@ -6,7 +6,7 @@ import { departments, loadCommandCenterSurface, type LiveDepartmentSurface } fro
 interface Props {
   title: string;
   eyebrow?: string;
-  activePage?: "command" | "agents" | "pricing" | "territories" | "snapshot" | "accounting" | "operations" | "sales" | "marketing" | "executive" | "system";
+  activePage?: "command" | "agents" | "pricing" | "territories" | "data-quality" | "snapshot" | "accounting" | "operations" | "sales" | "marketing" | "executive" | "system";
   layoutMode?: "default" | "map";
   surface?: Pick<LiveDepartmentSurface, "items" | "status">;
 }
@@ -57,7 +57,11 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
           </a>
           <a class:list={["nav-link", activePage === "pricing" && "is-active"]} href="/abc-price-agreement-gaps">
             <span class="nav-icon" aria-hidden="true">△</span>
-            Price Gaps
+            Price Agreement Audit
+          </a>
+          <a class:list={["nav-link", activePage === "data-quality" && "is-active"]} href="/data-quality/price-foundation">
+            <span class="nav-icon" aria-hidden="true">▤</span>
+            Price Foundation
           </a>
           <a class:list={["nav-link", activePage === "territories" && "is-active"]} href="/vendor-territories">
             <span class="nav-icon" aria-hidden="true">M</span>

@@ -1,0 +1,153 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import PfStatCard from "../../../components/data-quality/PfStatCard.astro";
+import { loadPriceFoundationOverview, type QueueType } from "@lib/price-foundation";
+
+const overview = await loadPriceFoundationOverview();
+
+const numberFormat = new Intl.NumberFormat("en-US");
+const fmt = (value: number) => numberFormat.format(value);
+const pct = (value: number | null) => (value === null ? null : `${value}%`);
+
+function lastUpdatedLabel(iso: string | null) {
+  if (!iso) return "No completed run yet";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+const statusTone = overview.status === "live" ? "ready" : overview.status === "degraded" ? "blocked" : "watch";
+const statusLabel =
+  overview.status === "live" ? "Completed" : overview.status === "degraded" ? "Degraded" : "Not configured";
+
+const queueHref = (queue: QueueType) => `/data-quality/price-foundation/queues?queue=${queue}`;
+const health = overview.health;
+const leakageClean = health.leakage === 0;
+---
+
+<AppShell title="Price Foundation — Migration Review" eyebrow="Data Quality" activePage="data-quality">
+  <section class="pf-overview">
+    <div class="surface-heading pf-heading">
+      <div>
+        <h2>Phase 1 price foundation migration</h2>
+        <p class="pf-run-line">
+          <code>{overview.runLabel}</code>
+          <span class="runtime-pill" data-tone={statusTone}>
+            <span class="signal-dot" aria-hidden="true"></span>
+            {statusLabel}
+          </span>
+          <small>Last updated: {lastUpdatedLabel(overview.lastRunAt)}</small>
+        </p>
+      </div>
+      <button type="button" class="button button-secondary" data-pf-refresh>Refresh data</button>
+    </div>
+
+    {
+      overview.errors.length > 0 && (
+        <div class="pf-notice" role="status">
+          <strong>Live data unavailable.</strong>
+          <span>{overview.errors.join(" · ")}</span>
+        </div>
+      )
+    }
+
+    <div class="accounting-metric-grid pf-card-grid">
+      {
+        overview.cards.map((card) => (
+          <PfStatCard
+            label={card.label}
+            value={fmt(card.value)}
+            percent={pct(card.percent)}
+            caption={card.detail}
+            tone={card.tone}
+          />
+        ))
+      }
+    </div>
+
+    <section class="pf-panel">
+      <header class="pf-panel-head">
+        <h3>Review queues</h3>
+        <small>Diagnostic lenses on the {fmt(overview.totalSourceRecords)} source records. The card partition above is exclusive; queues may overlap by design.</small>
+      </header>
+      <div class="queue-table-wrap">
+        <table class="queue-table pf-queue-table">
+          <thead>
+            <tr>
+              <th scope="col">Queue</th>
+              <th scope="col">Open</th>
+              <th scope="col">Resolved</th>
+              <th scope="col">Rejected</th>
+              <th scope="col">Deferred</th>
+              <th scope="col">Oldest open</th>
+              <th scope="col">Priority</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              overview.queues.map((queue) => (
+                <tr>
+                  <td><strong>{queue.label}</strong><span>{fmt(queue.total)} total</span></td>
+                  <td><strong>{fmt(queue.open)}</strong></td>
+                  <td>{fmt(queue.resolved)}</td>
+                  <td>{fmt(queue.rejected)}</td>
+                  <td>{fmt(queue.deferred)}</td>
+                  <td>{queue.oldestOpenDays === null ? "—" : `${queue.oldestOpenDays}d`}</td>
+                  <td><span class={`status-badge pf-priority-${queue.priority}`}>{queue.priority}</span></td>
+                  <td><a class="button button-ghost button-small" href={queueHref(queue.queue)}>View queue</a></td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="pf-panel pf-health">
+      <header class="pf-panel-head">
+        <h3>Reusable pricing health</h3>
+        <small>From <code>price_agreement_items</code> — what is safe to reuse vs. still gated.</small>
+      </header>
+      <dl class="pf-health-grid">
+        <div>
+          <dt>Immediately reusable</dt>
+          <dd>{fmt(health.reusableItems)}<em>{health.reusablePct === null ? "" : ` (${health.reusablePct}%)`}</em></dd>
+          <small>Approved · matched to product · not flagged</small>
+        </div>
+        <div>
+          <dt>Exact matches</dt>
+          <dd>{fmt(health.exactMatches)}</dd>
+          <small>of {fmt(health.totalAgreementItems)} agreement items</small>
+        </div>
+        <div>
+          <dt>Needs review</dt>
+          <dd>{fmt(health.needsReview)}</dd>
+          <small>{fmt(health.unmatched)} unmatched to catalog</small>
+        </div>
+        <div>
+          <dt>One-off leakage</dt>
+          <dd class={leakageClean ? "pf-ok" : "pf-bad"}>{leakageClean ? "None" : fmt(health.leakage)}</dd>
+          <small>Approved rows still flagged for review (must be 0)</small>
+        </div>
+      </dl>
+      {
+        !health.oneOffModeled && (
+          <p class="pf-fineprint">
+            One-off vs. reusable agreement flagging is not yet modeled on <code>price_agreements</code>; leakage is
+            approximated as approved-but-still-flagged items. Add an <code>is_one_off</code> / <code>is_reusable</code>
+            column to make this exact.
+          </p>
+        )
+      }
+    </section>
+  </section>
+
+  <script src="/src/scripts/price-foundation-overview.ts"></script>
+</AppShell>

@@ -1,0 +1,47 @@
+---
+import "../../styles/audit-queue.css";
+import type { AuditQueuePayload } from "@lib/audit-queues";
+
+interface Props {
+  payload: AuditQueuePayload;
+  backHref?: string;
+  backLabel?: string;
+  searchPlaceholder?: string;
+  embedded?: boolean;
+  heading?: string;
+}
+
+const { payload, backHref = "/accounting/invoice-audit", backLabel = "← Invoice Audit", searchPlaceholder = "Search…", embedded = false, heading } = Astro.props;
+---
+
+<section class:list={["aq", embedded && "aq-embedded"]} data-theme="light" data-pref="system" id="aq">
+  <div class="aq-head">
+    {embedded ? <strong class="aq-title">{heading}</strong> : <a class="aq-back" href={backHref}>{backLabel}</a>}
+    <span class="aq-spacer"></span>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="system" class="is-active">System</button>
+      <button type="button" data-set-theme="light">Light</button>
+      <button type="button" data-set-theme="dark">Dark</button>
+    </div>
+  </div>
+
+  <div class="aq-kpis" id="aq-kpis"></div>
+
+  <div class="aq-toolbar">
+    <input class="aq-input" id="aq-search" type="search" placeholder={searchPlaceholder} autocomplete="off" />
+    <span class="aq-filters" id="aq-filters"></span>
+    <span class="aq-spacer"></span>
+    <span class="aq-count" id="aq-count"></span>
+  </div>
+
+  <div class="aq-panel">
+    <table class="aq-table" id="aq-table">
+      <thead id="aq-head"></thead>
+      <tbody id="aq-body"></tbody>
+    </table>
+    <p class="aq-empty" id="aq-empty" hidden>No rows match these filters.</p>
+  </div>
+</section>
+
+<script type="application/json" id="aq-data" set:html={JSON.stringify(payload)}></script>
+<script src="/src/scripts/audit-queue.ts"></script>

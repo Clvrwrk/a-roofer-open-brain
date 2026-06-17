@@ -1,0 +1,9 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import AuditQueue from "../../../components/audit/AuditQueue.astro";
+import { outOfTolerancePayload } from "@lib/audit-queues";
+---
+
+<AppShell title="Out-of-Tolerance Line Items" eyebrow="Accounting · Invoice Audit" activePage="accounting">
+  <AuditQueue payload={outOfTolerancePayload} searchPlaceholder="Search SKU, invoice, office…" />
+</AppShell>

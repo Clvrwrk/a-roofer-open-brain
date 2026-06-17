@@ -19,10 +19,45 @@ ABC_SUPPLY_CLIENT_ID=...
 ABC_SUPPLY_CLIENT_SECRET=...
 ABC_SUPPLY_API_BASE_URL=https://partners-sb.abcsupply.com
 ABC_SUPPLY_AUTH_BASE_URL=https://sandbox.auth.partners.abcsupply.com/oauth2/aus1vp07knpuqf6Xz0h8
-ABC_SUPPLY_SCOPES=account.read location.read product.read pricing.read order.read invoice.read
+ABC_SUPPLY_SCOPES=location.read product.read account.read pricing.read order.read allOrder.read notification.read invoice.read invoice.history.read
 ```
 
 If the ABC portal labels the credentials as `ClientID` and `Client_Secret`, copy those values into `ABC_SUPPLY_CLIENT_ID` and `ABC_SUPPLY_CLIENT_SECRET` in `.env`. Do not use generic names in committed code.
+
+## Smoke Harness
+
+Run the redacted read-only smoke with:
+
+```bash
+node integrations/bridges/abc-supply/sandbox-smoke.mjs
+```
+
+The script reads repo-root `.env`, requests a sandbox client-credentials token, starts with
+`POST /api/account/v1/search/accounts`, derives sandbox-safe IDs for follow-up reads, and writes a
+redacted JSON run summary under ignored `.sandbox-runs/`. It does not print tokens, client secrets,
+raw account names, addresses, PDFs, or price values.
+
+Flags:
+
+- `--no-output` prints the summary without writing `.sandbox-runs/`.
+- `--include-pdf` will call the invoice PDF endpoint, but should stay off until PDF storage and
+  sandbox safety are reviewed.
+
+The harness emits a `supabaseCoverage` block that maps passed/readable endpoint groups to the
+planned Open Brain surfaces:
+
+- Locations and account access: `vendors`, `vendor_branches`, branch/location atoms.
+- Product catalog: `products`, `product_taxonomy`, `product_color_variants`, `abc_product_categories`.
+- Availability: branch-item availability cache and availability atoms.
+- Pricing per location: `product_vendor_price_observations`, `price_agreements`,
+  `price_agreement_items`, `abc_price_agreements`, `abc_price_list_items`.
+- UOM calculations: `product_uom_conversions` using product detail UOM/dimension/weight fields plus
+  pricing line UOM fields. ABC does not expose a separate UOM conversion endpoint in the documented
+  IB endpoint list.
+- Price dates: `abc_price_change_log` or observation effective-date metadata when date/effective
+  fields are returned. The current Price Items response shape did not include a price date.
+- Orders, invoices, and notifications: supplier-order/job atoms, `invoice_documents`, accounting
+  atoms, invoice pricing gate data, and future webhook event atoms.
 
 ## Phase 0 - Credential Shape
 
@@ -129,3 +164,32 @@ Only then may a separate write-endpoint plan cover:
 - Capture records source-linked atoms.
 - Conductor routes exceptions and human-review gates.
 - Auditor blocks promotion when data provenance, pricing legality, or write safety is unclear.
+
+## Latest Smoke Result
+
+Run: `2026-06-04T22:15:03Z`
+Output: ignored local file `.sandbox-runs/2026-06-04T22-15-03-979Z.json`
+
+Summary:
+
+- OAuth client-credentials token exchange passed with read-only discovery scopes; token lifetime was
+  `1800` seconds.
+- ABC's recommended `accountType = Ship-To` account search returned `49` sandbox Ship-To accounts
+  across `10` pages and provided Ship-To branch access before pricing.
+- Passed read/read-like endpoints: branch search/detail, product hierarchy/catalog/search/detail,
+  product availability search/detail, item image fetch, order history/detail, sold-to/bill-to/ship-to
+  detail, ship-to contacts via `/api/account/v1`, recent/frequent/favorite item reads, per-branch
+  pricing reads for `3` Ship-To-access branches with line status `OK`, order templates/list/detail,
+  invoice history, and invoice-by-ID.
+- Product/UOM coverage found product detail field paths for weights, UOMs, and dimensions, and
+  pricing response field paths for `lines[].quantity` and `lines[].uom`. No pricing date/effective
+  field was returned in this sandbox response shape.
+- Request stats: `29` total HTTP requests, `0` rate-limited responses, observed rate `0.65` req/sec,
+  average endpoint latency `1565` ms, max endpoint latency `10247` ms.
+- Non-passing read endpoints: documented ship-to contacts path `/api/accounts/v1/.../contacts`
+  returned `401`, while `/api/account/v1/.../contacts` passed; notification webhooks returned `404`
+  because no sandbox webhook was registered.
+- Skipped by guardrail: favorite write, order placement, webhook register/update/delete, and invoice
+  PDF download.
+- A Codex heartbeat automation named `ABC sandbox 2-hour validation` will run the same script three
+  more times at two-hour intervals to complete the requested four-run validation spread.

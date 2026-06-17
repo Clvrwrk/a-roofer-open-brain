@@ -1,0 +1,298 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { hasPermission, actorCanAccessDepartment } from "@lib/access-control";
+import {
+  loadPriceFoundationQueues,
+  QUEUE_LABELS,
+  RESOLUTION_STATUSES,
+  type QueueType,
+  type ReviewRow,
+} from "@lib/price-foundation";
+
+const data = await loadPriceFoundationQueues();
+
+const QUEUE_ORDER: QueueType[] = ["sku", "branch", "business_rule"];
+const requested = Astro.url.searchParams.get("queue") as QueueType | null;
+const activeQueue: QueueType = requested && QUEUE_ORDER.includes(requested) ? requested : "sku";
+
+const actor = Astro.locals.actor;
+const canEdit = Boolean(
+  actor &&
+    hasPermission(actor, "approval.decide") &&
+    (actorCanAccessDepartment(actor, "accounting") || actorCanAccessDepartment(actor, "system")),
+);
+
+const numberFormat = new Intl.NumberFormat("en-US");
+const fmt = (value: number) => numberFormat.format(value);
+
+function relativeTime(iso: string | null) {
+  if (!iso) return "—";
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "—";
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1mo ago" : `${months}mo ago`;
+}
+
+const PROBLEM_LABELS: Record<string, string> = {
+  missing_item_number: "Missing item number",
+  sku_not_in_catalog: "SKU not in catalog",
+  pending_approval: "Pending approval",
+  unverified_branch_match: "Unverified branch match",
+};
+const problemLabel = (key: string) => PROBLEM_LABELS[key] ?? key.replace(/_/g, " ");
+
+function money(value: number | null) {
+  if (value === null) return "—";
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function truncate(value: string | null, max = 64) {
+  if (!value) return "—";
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+// Serialised payload the client side-panel reads on row click.
+function detailPayload(row: ReviewRow) {
+  return JSON.stringify({
+    reviewKey: row.reviewKey,
+    queue: row.queue,
+    sourceTable: row.sourceTable,
+    sourcePk: row.sourcePk,
+    rawItemNumber: row.rawItemNumber,
+    rawDescription: row.rawDescription,
+    rawBranchNumber: row.rawBranchNumber,
+    ruleName: row.ruleName,
+    problemCategory: row.problemCategory,
+    problemLabel: problemLabel(row.problemCategory),
+    candidate: row.candidate,
+    proposedResolution: row.proposedResolution,
+    unitPrice: row.unitPrice,
+    resolutionStatus: row.resolutionStatus,
+    resolution: row.resolution,
+    note: row.note,
+    reviewedBy: row.reviewedBy,
+    reviewedAt: row.reviewedAt,
+    createdAt: row.createdAt,
+  });
+}
+
+function searchBlob(row: ReviewRow) {
+  return [row.rawItemNumber, row.rawDescription, row.rawBranchNumber, row.sourcePk, row.candidate]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+const statusTone = data.status === "live" ? "ready" : data.status === "degraded" ? "blocked" : "watch";
+---
+
+<AppShell title="Price Foundation — Review Queues" eyebrow="Data Quality" activePage="data-quality">
+  <section class="pf-queues" data-can-edit={canEdit ? "true" : "false"}>
+    <div class="surface-heading pf-heading">
+      <div>
+        <h2>Review queues</h2>
+        <p class="pf-run-line">
+          <a class="button button-ghost button-small" href="/data-quality/price-foundation">← Overview</a>
+          <span class="runtime-pill" data-tone={statusTone}>
+            <span class="signal-dot" aria-hidden="true"></span>
+            {data.status}
+          </span>
+          {!canEdit && <small class="pf-readonly-tag">Read-only — your role cannot change status</small>}
+        </p>
+      </div>
+    </div>
+
+    {
+      data.errors.length > 0 && (
+        <div class="pf-notice" role="status">
+          <strong>Live data unavailable.</strong>
+          <span>{data.errors.join(" · ")}</span>
+        </div>
+      )
+    }
+
+    <div class="pf-tabs" role="tablist" aria-label="Review queue tabs">
+      {
+        QUEUE_ORDER.map((queue) => (
+          <button
+            type="button"
+            class:list={["pf-tab", queue === activeQueue && "is-active"]}
+            role="tab"
+            aria-selected={queue === activeQueue ? "true" : "false"}
+            data-pf-tab={queue}
+          >
+            {QUEUE_LABELS[queue]}
+            <span class="pf-tab-count">{fmt(data.totals[queue])}</span>
+          </button>
+        ))
+      }
+    </div>
+
+    <div class="pf-filter-bar">
+      <div class="pf-filter-group" role="group" aria-label="Resolution status">
+        {
+          RESOLUTION_STATUSES.map((status) => (
+            <label class="pf-chip">
+              <input type="checkbox" data-pf-status={status} checked={status === "open"} />
+              <span>{status}</span>
+            </label>
+          ))
+        }
+      </div>
+      <label class="pf-filter-field">
+        <span>Problem</span>
+        <select data-pf-problem>
+          <option value="all">All</option>
+          {
+            data.problemCategories[activeQueue].map((cat) => (
+              <option value={cat} data-queue={activeQueue}>{problemLabel(cat)}</option>
+            ))
+          }
+        </select>
+      </label>
+      <label class="pf-filter-field pf-search">
+        <span>Search</span>
+        <input type="search" placeholder="Item #, description, branch…" data-pf-search />
+      </label>
+    </div>
+
+    <div class="pf-queue-layout">
+      <div class="pf-table-region">
+        {
+          QUEUE_ORDER.map((queue) => {
+            const rows = data.rows[queue];
+            const total = data.totals[queue];
+            return (
+              <div class="pf-tabpanel" data-pf-panel={queue} hidden={queue !== activeQueue}>
+                <div class="queue-table-wrap">
+                  <table class="queue-table accounting-table pf-detail-table">
+                    <thead>
+                      <tr>
+                        {queue === "branch" ? (
+                          <>
+                            <th scope="col">Branch #</th>
+                            <th scope="col">Candidate</th>
+                            <th scope="col">Problem</th>
+                          </>
+                        ) : (
+                          <>
+                            <th scope="col">Item #</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">{queue === "business_rule" ? "Rule" : "Problem"}</th>
+                          </>
+                        )}
+                        <th scope="col">{queue === "branch" ? "Source" : "Unit price"}</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {
+                        rows.map((row) => (
+                          <tr
+                            class="pf-row"
+                            tabindex="0"
+                            data-pf-row
+                            data-queue={row.queue}
+                            data-review-key={row.reviewKey}
+                            data-source-table={row.sourceTable}
+                            data-source-pk={row.sourcePk}
+                            data-status={row.resolutionStatus}
+                            data-problem={row.problemCategory}
+                            data-search={searchBlob(row)}
+                            data-detail={detailPayload(row)}
+                          >
+                            {queue === "branch" ? (
+                              <>
+                                <td><strong>{row.rawBranchNumber ?? "—"}</strong></td>
+                                <td><span>{row.candidate ?? "—"}</span></td>
+                                <td><span class="status-badge pf-problem">{problemLabel(row.problemCategory)}</span></td>
+                                <td><span>{row.sourcePk.slice(0, 8)}…</span></td>
+                              </>
+                            ) : (
+                              <>
+                                <td><strong>{row.rawItemNumber ?? "—"}</strong><span>#{row.sourcePk}</span></td>
+                                <td><span>{truncate(row.rawDescription)}</span></td>
+                                <td>
+                                  {queue === "business_rule" ? (
+                                    <span>{row.ruleName ?? "—"}</span>
+                                  ) : (
+                                    <span class="status-badge pf-problem">{problemLabel(row.problemCategory)}</span>
+                                  )}
+                                </td>
+                                <td><span>{money(row.unitPrice)}</span></td>
+                              </>
+                            )}
+                            <td><span class={`status-badge pf-status-${row.resolutionStatus}`} data-pf-status-badge>{row.resolutionStatus}</span></td>
+                            <td><span>{relativeTime(row.createdAt)}</span></td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <p class="pf-pagination">
+                  Showing <strong data-pf-visible-count>{fmt(rows.length)}</strong> of {fmt(total)} {QUEUE_LABELS[queue].toLowerCase()} items
+                  {rows.length < total && <em> · hydrated window; refine filters or resolve to advance</em>}
+                </p>
+              </div>
+            );
+          })
+        }
+      </div>
+
+      <aside class="pf-side-panel" data-pf-detail aria-label="Review item detail">
+        <div class="pf-side-empty" data-pf-empty>
+          <p>Select a row to review the source record and record a decision.</p>
+        </div>
+        <div class="pf-side-body" data-pf-body hidden>
+          <header class="pf-side-head">
+            <span class="status-badge" data-pf-detail-status></span>
+            <h3 data-pf-detail-title></h3>
+          </header>
+
+          <dl class="pf-detail-grid" data-pf-detail-fields></dl>
+
+          <div class="pf-proposed">
+            <span class="pf-detail-label">Proposed resolution</span>
+            <p data-pf-detail-proposed></p>
+          </div>
+
+          {
+            canEdit ? (
+              <div class="pf-actions" data-pf-action-form>
+                <label class="pf-action-field">
+                  <span>Resolution / mapping (optional)</span>
+                  <input type="text" data-pf-resolution placeholder="e.g. mapped to product GAF-TIMB-HD" />
+                </label>
+                <label class="pf-action-field" data-pf-defer-field hidden>
+                  <span>Defer until</span>
+                  <input type="date" data-pf-defer />
+                </label>
+                <label class="pf-action-field">
+                  <span>Note</span>
+                  <textarea rows="3" data-pf-note placeholder="Reviewer note…"></textarea>
+                </label>
+                <div class="pf-action-buttons">
+                  <button type="button" class="button button-primary" data-pf-action="resolved">Resolve</button>
+                  <button type="button" class="button button-danger" data-pf-action="rejected">Reject</button>
+                  <button type="button" class="button button-secondary" data-pf-action="deferred">Defer</button>
+                  <button type="button" class="button button-ghost" data-pf-action="open">Reopen</button>
+                </div>
+                <p class="pf-action-status" data-pf-action-status aria-live="polite"></p>
+              </div>
+            ) : (
+              <p class="pf-readonly-note">You have read access to this queue. Resolve / reject / defer requires an editor role.</p>
+            )
+          }
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <script src="/src/scripts/price-foundation-queues.ts"></script>
+</AppShell>

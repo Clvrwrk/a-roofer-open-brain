@@ -1,0 +1,112 @@
+---
+import AppShell from "../../layouts/AppShell.astro";
+import PriceListCoverage from "../../components/audit/PriceListCoverage.astro";
+import BoundaryNotice from "../../components/accounting/BoundaryNotice.astro";
+import { loadVendorTerritorySurface } from "@lib/vendor-territories";
+import { formatNumber } from "@lib/accounting-dashboard";
+import { loadPriceListCoverage } from "@lib/price-list-coverage";
+
+const territorySurface = await loadVendorTerritorySurface();
+const coverage = await loadPriceListCoverage();
+---
+
+<AppShell title="Price List Audit" eyebrow="Accounting · Vendor Map" activePage="accounting">
+  <section class="vendor-territory-panel" aria-label="Vendor territory coverage map">
+    <div class="vendor-territory-top">
+      <div class="vendor-logo-lockup">
+        <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="190" height="56" />
+        <div>
+          <p class="eyebrow">Vendor Territories</p>
+          <h3>Branch coverage by PE office drive-time territory</h3>
+        </div>
+      </div>
+      {territorySurface && (
+        <span class="runtime-pill" data-tone={territorySurface.status === "live" ? "ready" : "watch"}>
+          <span class="signal-dot" aria-hidden="true"></span>
+          {territorySurface.status}
+        </span>
+      )}
+    </div>
+
+    {territorySurface ? (
+      <>
+        <div class="territory-stat-grid" aria-label="Territory counts">
+          <div><strong>{formatNumber(territorySurface.counts.offices)}</strong><span>PE offices</span></div>
+          <div><strong>{formatNumber(territorySurface.counts.branches)}</strong><span>vendor branches</span></div>
+          <div><strong>{formatNumber(territorySurface.counts.pdfAgreementBranches)}</strong><span>PDF agreement</span></div>
+          <div><strong>{formatNumber(territorySurface.counts.apiOnlyBranches)}</strong><span>API only</span></div>
+          <div><strong>{formatNumber(territorySurface.counts.noPriceAgreementBranches)}</strong><span>no agreement</span></div>
+          <div><strong>{formatNumber(territorySurface.counts.needsDecision)}</strong><span>need decision</span></div>
+        </div>
+
+        {territorySurface.errors.length > 0 ? (
+          <BoundaryNotice
+            title="Territory map degraded"
+            detail={territorySurface.errors.join(" ")}
+            action="Refresh the Supabase territory mirror before using this page for branch decisions."
+          />
+        ) : (
+          <div class="vendor-map-shell">
+            <svg class="vendor-territory-map" viewBox="0 0 1000 620" role="img" aria-label="PE office territories and vendor branch coverage">
+              <rect x="0" y="0" width="1000" height="620" rx="18"></rect>
+              {territorySurface.offices.map((office) => (
+                <>
+                  {office.polygonPoints && <polygon class="territory-boundary" points={office.polygonPoints}><title>{office.name} / {office.driveTimeMinutes ?? 120} minute drive-time</title></polygon>}
+                </>
+              ))}
+              {territorySurface.branches.map((branch) => (
+                <circle
+                  class={`branch-pin pin-${branch.priceEvidenceStatus} route-${branch.status}${branch.pricingApproved ? " is-approved" : ""}`}
+                  cx={branch.x}
+                  cy={branch.y}
+                  r={branch.status === "overlap_pending" ? "5.8" : branch.status === "out_of_boundary" ? "5.2" : "3.8"}
+                  data-branch={branch.branchNumber}
+                  data-vendor={branch.vendorName}
+                  data-office={branch.assignedOfficeName}
+                >
+                  <title>{branch.vendorName} / {branch.branchNumber} {branch.branchName} / {branch.location} / {branch.priceEvidenceLabel} / {branch.status} / assigned: {branch.assignedOfficeName}</title>
+                </circle>
+              ))}
+              {territorySurface.offices.map((office) => (
+                office.x !== null && office.y !== null && (
+                  <g class="office-marker" data-office={office.name}>
+                    <circle cx={office.x} cy={office.y} r="8"></circle>
+                    <text x={office.x + 12} y={office.y + 4}>{office.name}</text>
+                  </g>
+                )
+              ))}
+            </svg>
+            <div class="territory-legend" aria-label="Map legend">
+              <span><i class="pin-pdf_price_agreement"></i>PDF agreement</span>
+              <span><i class="pin-api_only_pricing"></i>API only</span>
+              <span><i class="pin-no_price_agreement"></i>No agreement</span>
+              <span><i class="route-overlap_pending"></i>Overlap ring</span>
+            </div>
+            <p class="territory-map-hint">Click a PE office marker or a vendor branch pin to filter the Price List Audit below.</p>
+          </div>
+        )}
+      </>
+    ) : (
+      <BoundaryNotice title="Territory surface not loaded" detail="This page did not receive a vendor territory surface." action="Refresh /accounting/vendor-regions." />
+    )}
+  </section>
+
+  <PriceListCoverage coverage={coverage} />
+
+  <script is:inline>
+    document.querySelectorAll(".vendor-territory-map .branch-pin").forEach((el) => {
+      el.style.cursor = "pointer";
+      el.addEventListener("click", () => {
+        const b = el.getAttribute("data-branch");
+        if (b) document.dispatchEvent(new CustomEvent("aq:filter", { detail: { col: "branchNo", val: b } }));
+      });
+    });
+    document.querySelectorAll(".vendor-territory-map .office-marker").forEach((el) => {
+      el.style.cursor = "pointer";
+      el.addEventListener("click", () => {
+        const o = el.getAttribute("data-office");
+        if (o) document.dispatchEvent(new CustomEvent("aq:filter", { detail: { col: "office", val: o } }));
+      });
+    });
+  </script>
+</AppShell>

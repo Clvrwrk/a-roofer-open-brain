@@ -1,0 +1,20 @@
+---
+interface Props {
+  label: string;
+  value: string;
+  caption: string;
+  percent?: string | null;
+  tone?: "critical" | "review" | "ready" | "info";
+}
+
+const { label, value, caption, percent = null, tone = "info" } = Astro.props;
+---
+
+<div class="accounting-metric-card pf-stat-card" data-tone={tone}>
+  <span>{label}</span>
+  <strong>
+    {value}
+    {percent && <em class="pf-stat-pct">{percent}</em>}
+  </strong>
+  <small>{caption}</small>
+</div>

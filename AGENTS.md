@@ -31,14 +31,14 @@ The Historian/Researcher split is a **security boundary** (see `CONVENTIONS.md` 
 
 ## Parallel-agent worktree discipline (for building this repo)
 
-When multiple AI agents work on this repo, do not share a checkout.
+When multiple AI agents work on this repo, do not share a checkout. **Stay aligned with the branch deployed to `cc.proexteriorsus.net` — see CLAUDE.md → "Live ⇄ Dev alignment (the deploy contract)". Dev and live must converge into one lineage, never fork into parallel trees.**
 
-- Treat the main checkout as canonical for pulling, inspection, and creating worktrees.
+- **Sync first, then branch.** `git fetch origin`, confirm the branch Coolify actually deploys (do **not** assume `main` — it has been stale behind `origin/main`), and create your worktree branch **from the live branch**, not a stale local `main`. Never start substantial work on a stale or uncommitted tree.
 - One git worktree per active agent/task. Descriptive folder + matching branch (`contrib/cleverwork/<task>`).
 - **Start every agent task by naming the exact absolute path it owns. The assigned path is the boundary — not the chat.**
 - Don't switch branches in the canonical repo while another agent may be working.
-- Before staging: `git status --short`; stage only files belonging to the current task.
-- After merge + clean worktree: `git worktree remove <path>`.
+- Before staging: `git status --short`; stage only files belonging to the current task. **Commit early — never let substantial work sit untracked/uncommitted** (that is how the tracks diverged on 2026-06-17).
+- **Close the loop:** merge the task branch **back into the live branch and push** so dev and live converge — then `git worktree remove <path>`. Never leave a production feature (vendor map, WorkOS auth, a new surface) stranded on a side branch the rest of dev doesn't build on.
 
 ## Memory discipline
 

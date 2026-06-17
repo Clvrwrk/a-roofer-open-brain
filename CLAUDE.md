@@ -18,6 +18,7 @@ The deployable template for a single roofing company's persistent, property-firs
 8. **Era-aware.** Any atom describing a code, material, or practice carries `era_of_practice` + (where known) `regulatory_snapshot_id`. A future retrieval must be able to tell 2026 practice from 2031 practice.
 9. **10x ROI gate.** No new agent skill without an approved A3 (`proposals/`). Mission-grade infrastructure and high-error-cost tasks are the only exemptions.
 10. **No profanity. Clean, professional content** in docs, prompts, comments, seed data.
+11. **Live ⇄ Dev alignment.** Never start app work on a stale or uncommitted tree, and never let local dev and the deployed `cc.proexteriorsus.net` drift into separate branch lineages. Branch from the deployed branch, commit early, merge features back into it. See **Live ⇄ Dev alignment** below.
 
 ## Licensing & attribution
 
@@ -31,6 +32,17 @@ The deployable template for a single roofing company's persistent, property-firs
 - Keep the customization surface in `config/roofer.config.yaml`. Don't hard-code a specific company anywhere else.
 - Parallel agents: one git worktree per workstream. See [`AGENTS.md`](AGENTS.md). The assigned path is the boundary.
 - When a decision changes a schema, an MCP contract, a trust policy, a consent path, or a publishing path — record it in `docs/` while it's fresh, not after.
+
+## Live ⇄ Dev alignment (the deploy contract)
+
+The "live" Command Center at **https://cc.proexteriorsus.net** and your **local dev** must never drift into separate code lineages. This bit us on 2026-06-17: a full session of work sat **uncommitted on a stale local `main`** while production was actually running a *different* branch (the Google-Maps vendor map + WorkOS auth), so "live" and "dev" were two unrelated trees. Prevent it:
+
+- **Source of truth = GitHub** `Clvrwrk/a-roofer-open-brain` (`origin`). `cc.proexteriorsus.net` deploys from GitHub via **Coolify**, building `app/command-center/Dockerfile` (see `docs/27-hetzner-coolify-agent-host.md`). The shared **prod Supabase** (`rnhmvcpsvtqjlffpsayu`) is one DB for both dev and live, so additive/idempotent migrations applied there are live for both immediately — keep them in `schemas/`, never destructive (rule 1).
+- **One canonical LIVE branch deploys.** Confirm which branch/commit Coolify builds **before any app change — do not assume `main`** (local `main` has been stale behind `origin/main`; production app code has lived on `contrib/cleverwork/vendor-territory-map-live` and a local-only `main-perf`). Record the confirmed live branch in the daily log when it changes.
+- **Start-of-work protocol (every app change):** `git fetch origin` → identify the live branch → **branch your work FROM the live branch** (not a stale local `main`) → confirm `git status --short` is clean before starting.
+- **Converge, don't fork.** Every `contrib/cleverwork/<task>` branch **merges back into the live branch and is pushed**; the live branch is the only thing that deploys. Never strand a production feature (vendor map, WorkOS auth, a new surface) on a side branch the rest of dev doesn't build on.
+- **Commit early.** Don't let substantial work sit untracked/uncommitted — that is exactly how the tracks diverged.
+- **Be precise about "live."** When reporting status, say which is true: (a) *dev server reading prod DB* (localhost), (b) *merged to the live branch on GitHub*, (c) *deployed to cc.proexteriorsus.net*. Never call something "live on the site" unless it is (c).
 
 ## Session Startup (silent — do not output anything)
 

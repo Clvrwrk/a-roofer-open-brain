@@ -1,0 +1,72 @@
+---
+import "../../styles/audit-queue.css";
+import type { PriceListCoverage } from "@lib/price-list-coverage";
+
+interface Props {
+  coverage: PriceListCoverage;
+  catalogHref?: string;
+}
+const { coverage, catalogHref = "/accounting/price-list/catalog" } = Astro.props;
+---
+
+<section class="aq aq-embedded" data-theme="light" data-pref="system" id="aq">
+  <div class="aq-head">
+    <strong class="aq-title">Price List Audit — negotiated coverage by vendor / branch</strong>
+    <span class="aq-spacer"></span>
+    <a class="btn btn-small" href={catalogHref}>Negotiated Catalog →</a>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="system" class="is-active">System</button>
+      <button type="button" data-set-theme="light">Light</button>
+      <button type="button" data-set-theme="dark">Dark</button>
+    </div>
+  </div>
+
+  <div class="aq-kpis" id="aq-kpis"></div>
+
+  <div class="aq-toolbar">
+    <span class="fy-pill" id="plc2-fy">FY—</span>
+    <select class="aq-select" id="plc2-year" aria-label="Fiscal year"></select>
+    <span class="aq-filters" id="plc2-filters"></span>
+    <input class="aq-input" id="plc2-search" type="search" placeholder="Search vendor, branch, SKU, office…" autocomplete="off" />
+    <label class="plc2-toggle"><input type="checkbox" id="plc2-scope" checked /> In-scope only (≤2h drive-time or ordered)</label>
+    <span class="aq-spacer"></span>
+    <span class="aq-count" id="plc2-count"></span>
+  </div>
+
+  <div class="aq-panel">
+    <table class="aq-table">
+      <thead>
+        <tr>
+          <th>Vendor / Branch / Item</th>
+          <th>PE Office</th>
+          <th>Drive-time</th>
+          <th>Coverage</th>
+          <th class="num">Non-neg / Items</th>
+          <th class="num">Spend</th>
+          <th>Request</th>
+        </tr>
+      </thead>
+      <tbody id="plc2-body"></tbody>
+    </table>
+    <p class="aq-empty" id="plc2-empty" hidden>No vendor branches match these filters.</p>
+  </div>
+
+  <div class="aq-panel plc2-tracker">
+    <div class="plc2-tracker-head" style="padding:13px 18px 4px">
+      <h3>Price List Requests</h3>
+      <small id="plc2-tracker-sub"></small>
+    </div>
+    <table class="aq-table">
+      <thead>
+        <tr>
+          <th>Vendor</th><th>Branch</th><th>PE Office</th><th>Coverage</th>
+          <th>Request status</th><th>Requested</th><th class="num">Days open</th><th>Next follow-up</th>
+        </tr>
+      </thead>
+      <tbody id="plc2-tracker-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<script type="application/json" id="plc2-data" set:html={JSON.stringify(coverage)}></script>
+<script src="/src/scripts/price-list-coverage.ts"></script>

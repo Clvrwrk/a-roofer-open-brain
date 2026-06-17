@@ -1,0 +1,56 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import "../../../styles/audit-queue.css";
+import { loadVendorTerritorySurface } from "@lib/vendor-territories";
+import { branchSlotsFromSurface, buildCatalog } from "@lib/price-list";
+
+const surface = await loadVendorTerritorySurface();
+const slots = branchSlotsFromSurface(surface);
+const catalog = buildCatalog(slots);
+---
+
+<AppShell title="Negotiated Item Catalog" eyebrow="Accounting · Price List Audit" activePage="accounting">
+  <section class="aq" data-theme="light" data-pref="system" id="aq">
+    <div class="aq-head">
+      <a class="aq-back" href="/accounting/vendor-regions">← Price List Audit</a>
+      <span class="aq-spacer"></span>
+      <div class="plc-period" role="group" aria-label="Period">
+        <button type="button" data-period="Monthly">Monthly</button>
+        <button type="button" data-period="Quarterly">Quarterly</button>
+        <button type="button" data-period="Annual" class="is-active">Annual</button>
+      </div>
+      <div class="theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    <div class="aq-toolbar">
+      <span class="fy-pill" id="plc-fy">FY—</span>
+      <select class="aq-select" id="plc-year" aria-label="Fiscal year"></select>
+      <select class="aq-select" id="plc-vendor" aria-label="Vendor"><option value="">All vendors</option></select>
+      <input class="aq-input" id="plc-search" type="search" placeholder="Search SKU, description, vendor…" autocomplete="off" />
+      <span class="aq-spacer"></span>
+      <span class="aq-count" id="plc-count"></span>
+    </div>
+
+    <div class="plc-legend" id="plc-legend"></div>
+    <div class="plc-viz-grid" id="plc-viz"></div>
+
+    <div class="aq-panel">
+      <table class="aq-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Item ID / SKU</th><th>Description</th><th>Vendor</th>
+            <th class="num">Spend</th><th class="num">Qty</th><th>Coverage</th><th>Margin Impact (TBD)</th>
+          </tr>
+        </thead>
+        <tbody id="plc-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <script type="application/json" id="plc-data" set:html={JSON.stringify(catalog)}></script>
+  <script src="/src/scripts/price-list-catalog.ts"></script>
+</AppShell>

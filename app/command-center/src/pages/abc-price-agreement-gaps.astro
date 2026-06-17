@@ -1,8 +1,18 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
+import MetricLinkCard from "../components/accounting/MetricLinkCard.astro";
 import { formatCurrency, formatNumber, loadAgreementGapSurface } from "@lib/abc-price-gaps";
+import { loadPriceListCoverage } from "@lib/price-list-coverage";
 
 const gapSurface = await loadAgreementGapSurface();
+
+// live price-list coverage (the workflow's headline metric)
+const coverage = await loadPriceListCoverage();
+const covBranches = coverage.vendors.flatMap((v) => v.branches);
+const covInScope = covBranches.filter((b) => b.inScope);
+const covCovered = covInScope.filter((b) => b.listStatus !== "none" || b.requestStatus === "requested").length;
+const coveragePct = covInScope.length ? Math.round((covCovered / covInScope.length) * 100) : 0;
+const covNoList = covInScope.filter((b) => b.listStatus === "none").length;
 const generatedAt = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -16,12 +26,57 @@ const firstRow = gapSurface.rows[0];
 const branchOptions = gapSurface.branches.slice().sort((a, b) => a.branchNumber.localeCompare(b.branchNumber));
 ---
 
-<AppShell title="ABC Price Agreement Gaps" eyebrow="Accounting Guardrails" activePage="pricing">
-  <section class="gap-hero" aria-label="ABC price agreement gap summary">
+<AppShell title="Price Agreement Audit" eyebrow="Accounting" activePage="pricing">
+  <section class="surface-heading" aria-label="Price Agreement Audit workflow home">
+    <div>
+      <p class="eyebrow">Workflow Home</p>
+      <h2>Price Agreement Audit — negotiate, track, and protect vendor pricing before it hits an invoice</h2>
+    </div>
+    <div class="surface-meta">
+      <span class="runtime-pill" data-tone={runtimeTone}>
+        <span class="signal-dot" aria-hidden="true"></span>
+        {runtimeLabel}
+      </span>
+      <span>{generatedAt}</span>
+    </div>
+  </section>
+
+  <div class="accounting-metric-grid">
+    <MetricLinkCard
+      label="Price List Coverage"
+      value={`${coveragePct}%`}
+      caption={`${covInScope.length} in-scope branches · ${covNoList} with no list · target 100%`}
+      href="/accounting/vendor-regions"
+      tone={coveragePct < 80 ? "critical" : "ready"}
+    />
+    <MetricLinkCard
+      label="Negotiated Item Catalog"
+      value="Top 200"
+      caption="Highest-spend items · monthly / quarterly / annual"
+      href="/accounting/price-list/catalog"
+      tone="info"
+    />
+    <MetricLinkCard
+      label="Agreement Gaps"
+      value={formatNumber(gapSurface.totals.gapRows)}
+      caption={`${formatCurrency(gapSurface.totals.absoluteVariance)} variance · review queue below`}
+      href="#gap-queue"
+      tone="critical"
+    />
+    <MetricLinkCard
+      label="Invoice Audit (downstream)"
+      value="Per-invoice"
+      caption="Line-level pricing audit after agreements"
+      href="/accounting/invoice-audit"
+      tone="info"
+    />
+  </div>
+
+  <section class="gap-hero" aria-label="Agreement gap queue" id="gap-queue">
     <div class="surface-heading">
       <div>
         <p class="eyebrow">Human Review Queue</p>
-        <h2>Fixed agreement coverage, branch ownership, and invoice variance</h2>
+        <h2>Agreement gap queue — invoice lines vs negotiated agreements</h2>
       </div>
       <div class="surface-meta">
         <span class="runtime-pill" data-tone={runtimeTone}>

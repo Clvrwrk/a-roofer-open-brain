@@ -1,0 +1,9 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import AuditQueue from "../../../components/audit/AuditQueue.astro";
+import { noPricePayload } from "@lib/audit-queues";
+---
+
+<AppShell title="No-Price Line Items" eyebrow="Accounting · Invoice Audit" activePage="accounting">
+  <AuditQueue payload={noPricePayload} searchPlaceholder="Search SKU, invoice, office…" />
+</AppShell>

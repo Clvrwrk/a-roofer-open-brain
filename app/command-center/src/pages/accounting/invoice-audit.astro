@@ -1,0 +1,446 @@
+---
+import AppShell from "../../layouts/AppShell.astro";
+
+/* ------------------------------------------------------------------ *
+ * Sample audit data. Mirrors the standalone mockups; swap for a live
+ * loader (Supabase price-foundation review surface) when wiring real
+ * data — the client renderer only needs this shape.
+ * ------------------------------------------------------------------ */
+type Line = {
+  sku: string;
+  desc: string;
+  uom: string;
+  qty: number;
+  inv: number;
+  pa: number | null;
+  src: "Negotiated" | "Past Invoices Mean" | "API Derived" | "No Price";
+};
+type Invoice = {
+  office: string;
+  account: string;
+  invoice: string;
+  date: string;
+  vendor: string;
+  pdf: string;
+  lines: Line[];
+};
+
+const INVOICES: Invoice[] = [
+  {
+    office: "PE-WICH-01", account: "4421887", invoice: "INV-558201",
+    date: "2026-06-12", vendor: "ABC Supply", pdf: "#",
+    lines: [
+      { sku: "GAF-THD-CHAR", desc: "GAF Timberline HDZ — Charcoal", uom: "BD", qty: 120, inv: 42.10, pa: 39.50, src: "Negotiated" },
+      { sku: "ABC-SYN-UND", desc: "ABC Synthetic Underlayment 10sq", uom: "RL", qty: 18, inv: 98.00, pa: 95.20, src: "Past Invoices Mean" },
+      { sku: "GAF-PRO-START", desc: "GAF ProStart Starter Strip", uom: "BD", qty: 22, inv: 63.75, pa: 60.10, src: "API Derived" },
+    ],
+  },
+  {
+    office: "PE-WICH-01", account: "4421887", invoice: "INV-558244",
+    date: "2026-06-13", vendor: "ABC Supply", pdf: "#",
+    lines: [
+      { sku: "LEAD-PIPE-3", desc: "Lead Pipe Boot 3in", uom: "EA", qty: 40, inv: 12.40, pa: null, src: "No Price" },
+      { sku: "CDX-OSB-716", desc: 'OSB Sheathing 7/16"', uom: "SHT", qty: 64, inv: 24.80, pa: 24.10, src: "Past Invoices Mean" },
+    ],
+  },
+  {
+    office: "PE-DERBY-02", account: "4419002", invoice: "INV-559010",
+    date: "2026-06-14", vendor: "ABC Supply", pdf: "#",
+    lines: [
+      { sku: "IKO-DYN-WW", desc: "IKO Dynasty — Weathered Wood", uom: "BD", qty: 96, inv: 44.90, pa: 41.00, src: "Negotiated" },
+      { sku: "DRIP-EDGE-10", desc: "Drip Edge 2x2 10ft White", uom: "PC", qty: 50, inv: 9.85, pa: 9.60, src: "API Derived" },
+    ],
+  },
+  {
+    office: "PE-DERBY-02", account: "4419002", invoice: "INV-559088",
+    date: "2026-06-15", vendor: "ABC Supply", pdf: "#",
+    lines: [
+      { sku: "VENT-RIDGE-4", desc: "Ridge Vent 4ft Shingle-Over", uom: "PC", qty: 30, inv: 18.20, pa: 15.10, src: "API Derived" },
+      { sku: "NAIL-COIL-114", desc: 'Coil Roofing Nails 1-1/4"', uom: "BX", qty: 12, inv: 64.00, pa: null, src: "No Price" },
+      { sku: "ICE-WATER-36", desc: "Ice & Water Shield 36in", uom: "RL", qty: 16, inv: 112.50, pa: 109.90, src: "Negotiated" },
+    ],
+  },
+];
+
+const ACTIONS = [
+  { id: "accept-neg", group: "accept", label: "Accept — Single Negotiated Terms", hint: "One-off: add this price to observations as negotiated terms for this invoice only." },
+  { id: "accept-tbn", group: "accept", label: 'Accept — Add to "To Be Negotiated"', hint: "Accept now; queue the item for the next vendor negotiation cycle." },
+  { id: "accept-30d", group: "accept", label: "Accept — 30-Day Weekly Review", hint: "Accept now; re-surface in the weekly review queue for 30 days." },
+  { id: "accept-nochallenge", group: "accept", label: 'Accept — "No Challenge" (always)', hint: "Whitelist this item price; stop flagging it going forward." },
+  { id: "credit-flag", group: "credit", label: "Credit Memo + Flag Non-Payment", hint: "Generate credit-memo request AND hold the invoice from payment until resolved." },
+  { id: "credit-noflag", group: "credit", label: "Credit Memo — Do Not Flag", hint: "Generate credit-memo request; invoice remains payable." },
+];
+
+/* server-side helpers for the card list */
+const variance = (l: Line) =>
+  l.pa == null ? { dollar: null as number | null, pct: null as number | null } : { dollar: l.inv - l.pa, pct: ((l.inv - l.pa) / l.pa) * 100 };
+const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+
+function stats(inv: Invoice) {
+  let flagged = 0, noPrice = 0, atRisk = 0, worst = 0;
+  for (const l of inv.lines) {
+    const v = variance(l);
+    if (l.pa == null) { noPrice++; flagged++; continue; }
+    if (Math.abs(v.pct!) >= 0.01) flagged++;
+    if (v.dollar! > 0) atRisk += v.dollar! * l.qty;
+    worst = Math.max(worst, Math.abs(v.pct!));
+  }
+  return { flagged, noPrice, atRisk, worst, total: inv.lines.length };
+}
+const worstPill = (w: number) => (w > 6 ? "pill-red" : w > 3 ? "pill-orange" : "pill-yellow");
+
+const offices = Array.from(new Set(INVOICES.map((i) => i.office))).sort();
+
+const cards = INVOICES.map((inv, ii) => {
+  const st = stats(inv);
+  const sources = Array.from(new Set(inv.lines.map((l) => l.src)));
+  const haystack = [inv.office, inv.account, inv.invoice, ...inv.lines.flatMap((l) => [l.sku, l.desc])]
+    .join(" ").toLowerCase();
+  return { ii, inv, st, sources, haystack };
+});
+
+/* KPI cards — link out to explore each metric */
+const KPIS = [
+  { lab: "Pending Audit", val: "38", go: "Open queue →", href: "/accounting/audit/pending" },
+  { lab: "Out of Tolerance", val: "214", go: "Breakdown →", href: "/accounting/audit/out-of-tolerance" },
+  { lab: "$ At Risk (MTD)", val: "$18,432", go: "Explore →", href: "/accounting/audit/at-risk" },
+  { lab: "No-Price Lines", val: "57", go: "Resolve →", href: "/accounting/audit/no-price-lines" },
+  { lab: "Credit Memos (MTD)", val: "12 · $6,210", go: "Review →", href: "/accounting/audit/credit-memos" },
+  { lab: "Avg Resolution", val: "2.4 d", go: "Trend →", href: "/accounting/audit/avg-resolution" },
+];
+
+const clientPayload = { invoices: INVOICES, actions: ACTIONS };
+---
+
+<AppShell title="Invoice Pricing Audit" eyebrow="Accounting" activePage="accounting">
+  <section class="ia-dash" data-theme="light" data-pref="system">
+    <!-- toolbar: search + filters (from V2) + theme toggle -->
+    <div class="ia-toolbar">
+      <input class="ia-input" id="ia-search" type="search" placeholder="Search SKU, invoice, office…" autocomplete="off" />
+      <select class="ia-select" id="ia-office">
+        <option value="">All offices</option>
+        {offices.map((o) => <option value={o}>{o}</option>)}
+      </select>
+      <select class="ia-select" id="ia-source">
+        <option value="">All price sources</option>
+        <option value="Negotiated">Negotiated</option>
+        <option value="Past Invoices Mean">Past Invoices Mean</option>
+        <option value="API Derived">API Derived</option>
+        <option value="No Price">No Price</option>
+      </select>
+      <select class="ia-select" id="ia-tol">
+        <option value="0.01">Tolerance ≥ Minor</option>
+        <option value="3">Moderate +</option>
+        <option value="6">Major only</option>
+      </select>
+      <span class="ia-spacer"></span>
+      <span class="ia-count" id="ia-count"></span>
+      <div class="ia-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="ia-kpis">
+      {KPIS.map((k) => (
+        <a class="ia-kpi" href={k.href}>
+          <span class="ia-kpi-lab">{k.lab}</span>
+          <span class="ia-kpi-val">{k.val}</span>
+          <span class="ia-kpi-go">{k.go}</span>
+        </a>
+      ))}
+    </div>
+
+    <!-- two-panel work area -->
+    <div class="ia-work">
+      <div class="ia-queue">
+        <p class="ia-col-h">Queue · oldest first</p>
+        <div id="ia-cards">
+          {cards.map((c) => (
+            <button
+              class="ia-card"
+              data-inv={c.ii}
+              data-office={c.inv.office}
+              data-sources={c.sources.join("|")}
+              data-worst={c.st.worst.toFixed(2)}
+              data-noprice={c.st.noPrice}
+              data-search={c.haystack}
+            >
+              <span class="ia-card-r1">
+                <span>
+                  <span class="ia-card-inv">{c.inv.invoice}</span>
+                  <span class="ia-card-off">{c.inv.office} · {c.inv.account}</span>
+                </span>
+                <span class={`pill ${worstPill(c.st.worst)}`}>{c.st.worst.toFixed(1)}% worst</span>
+              </span>
+              <span class="ia-card-meta">
+                <span class="badge">{c.st.flagged}/{c.st.total} flagged</span>
+                {c.st.noPrice > 0 && <span class="badge">{c.st.noPrice} no-price</span>}
+                <span class="badge risk">{money(c.st.atRisk)} at risk</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <p class="ia-empty" id="ia-empty" hidden>No invoices match these filters.</p>
+      </div>
+
+      <div class="ia-detail" id="ia-detail">
+        <div class="ia-placeholder">Select an invoice from the queue to review its line items and choose dispositions.</div>
+      </div>
+    </div>
+  </section>
+
+  <script type="application/json" id="ia-data" set:html={JSON.stringify(clientPayload)}></script>
+  <div class="ia-toast" id="ia-toast" role="status" aria-live="polite"></div>
+</AppShell>
+
+<style is:global>
+  /* ---- theme tokens scoped to the dashboard surface ---- */
+  .ia-dash{
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --brand-bg:#efecfd; --accept:#0e9f6e; --credit:#d8453d;
+    --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --orange:#a4480d; --orange-bg:#fbe7d6; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4;
+    --shadow:0 6px 18px rgba(20,28,40,.08);
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--gutter, 24px)) calc(-1 * var(--space-6, 24px));
+    padding:18px var(--gutter, 24px) 30px;
+    min-height:70vh;
+    font-family:var(--font-sans, Inter, system-ui, sans-serif);
+  }
+  .ia-dash[data-theme="dark"]{
+    --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+    --brand:#8a7bff; --brand-bg:#21243f; --accept:#2bd07a; --credit:#ff6b6b;
+    --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115;
+    --orange:#f3a766; --orange-bg:#3d2913; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38;
+    --shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+
+  .ia-dash .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5}
+  .ia-dash .pill-green{background:var(--green-bg);color:var(--green)}
+  .ia-dash .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
+  .ia-dash .pill-orange{background:var(--orange-bg);color:var(--orange)}
+  .ia-dash .pill-red{background:var(--red-bg);color:var(--red)}
+  .ia-dash .pill-grey{background:var(--grey-bg);color:var(--grey)}
+
+  /* toolbar */
+  .ia-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .ia-input,.ia-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+  .ia-input{min-width:240px}
+  .ia-input::placeholder{color:var(--muted)}
+  .ia-input:focus,.ia-select:focus{outline:2px solid var(--brand);outline-offset:1px}
+  .ia-spacer{flex:1}
+  .ia-count{font-size:12px;color:var(--muted)}
+  .ia-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .ia-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+  .ia-theme button:hover{color:var(--ink)}
+  .ia-theme button.is-active{background:var(--brand);color:#fff}
+
+  /* KPI cards */
+  .ia-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+  .ia-kpi{display:flex;flex-direction:column;gap:5px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;text-decoration:none;color:inherit;transition:.12s}
+  .ia-kpi:hover{border-color:var(--brand);transform:translateY(-1px);box-shadow:var(--shadow)}
+  .ia-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .ia-kpi-val{font-size:22px;font-weight:750}
+  .ia-kpi-go{font-size:11px;color:var(--brand);font-weight:600}
+
+  /* two-panel */
+  .ia-work{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+  .ia-col-h{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:0 4px 10px}
+  .ia-empty{color:var(--muted);font-size:13px;padding:10px 4px}
+
+  .ia-card{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:12px;cursor:pointer;transition:.12s;font-family:inherit;color:inherit}
+  .ia-card:hover{box-shadow:var(--shadow)}
+  .ia-card.active{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-bg)}
+  .ia-card-r1{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .ia-card-inv{font-weight:700;font-size:14.5px;display:block}
+  .ia-card-off{color:var(--muted);font-size:12px;margin-top:2px;display:block}
+  .ia-card-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  .ia-dash .badge{font-size:11px;background:var(--grey-bg);color:var(--ink);border-radius:7px;padding:3px 8px;font-weight:600}
+  .ia-dash .badge.risk{background:var(--red-bg);color:var(--red)}
+
+  /* detail */
+  .ia-detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;position:sticky;top:14px}
+  .ia-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:40px 24px}
+  .ia-dh{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .ia-dh-inv{font-weight:750;font-size:16px}
+  .ia-dh-off{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .ia-pdf{color:var(--brand);text-decoration:none;font-weight:650;font-size:12.5px;white-space:nowrap}
+  .ia-pdf:hover{text-decoration:underline}
+  .ia-table{width:100%;border-collapse:collapse}
+  .ia-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .ia-table td{padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  .ia-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ia-ln{cursor:pointer}
+  .ia-ln:hover{background:var(--brand-bg)}
+  .ia-ln.sel{background:var(--brand-bg)}
+  .ia-sku{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+
+  .ia-disp{border-top:1px solid var(--line);padding:15px 18px;background:var(--panel2)}
+  .ia-disp-lead{font-size:12.5px;color:var(--muted);margin-bottom:12px}
+  .ia-disp-lead b{color:var(--ink)}
+  .ia-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ia-grp{grid-column:1/-1;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-top:4px}
+  .ia-act{text-align:left;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:11px 13px;cursor:pointer;transition:.12s;font-family:inherit;color:inherit}
+  .ia-act:hover{border-color:var(--brand)}
+  .ia-act .t{font-weight:650;font-size:12.5px}
+  .ia-act .h{color:var(--muted);font-size:11px;margin-top:4px;line-height:1.35}
+  .ia-act.accept .t{color:var(--accept)}
+  .ia-act.credit{grid-column:1/-1;border-color:color-mix(in srgb, var(--credit) 35%, var(--line))}
+  .ia-act.credit .t{color:var(--credit)}
+  .ia-act.chosen{border-color:var(--brand);background:var(--brand-bg)}
+
+  .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .ia-toast.show{opacity:1}
+
+  @media (max-width:1200px){ .ia-kpis{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:960px){ .ia-work{grid-template-columns:1fr} .ia-detail{position:static} }
+</style>
+
+<script>
+  const root = document.querySelector(".ia-dash") as HTMLElement | null;
+  const dataEl = document.getElementById("ia-data");
+  if (root && dataEl) {
+    const { invoices, actions } = JSON.parse(dataEl.textContent || "{}");
+
+    /* ---- helpers (mirror server) ---- */
+    const variance = (l: any) => (l.pa == null ? { dollar: null, pct: null } : { dollar: l.inv - l.pa, pct: ((l.inv - l.pa) / l.pa) * 100 });
+    const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+    const pct = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(1) + "%";
+    const srcClass = (s: string) => ({ "Negotiated": "pill-green", "Past Invoices Mean": "pill-yellow", "API Derived": "pill-orange", "No Price": "pill-red" } as Record<string, string>)[s] || "pill-grey";
+    const tolClass = (p: number | null) => { if (p == null) return "pill-grey"; const a = Math.abs(p); if (a < 0.01) return "pill-green"; if (a <= 3) return "pill-yellow"; if (a <= 6) return "pill-orange"; return "pill-red"; };
+    const tolLabel = (p: number | null) => { if (p == null) return "No Price"; const a = Math.abs(p); if (a < 0.01) return "In Tolerance"; if (a <= 3) return "Minor"; if (a <= 6) return "Moderate"; return "Major"; };
+    const esc = (s: string) => s.replace(/'/g, "");
+
+    /* ---- theme toggle (System / Light / Dark) ---- */
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function applyTheme(pref: string) {
+      const effective = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
+      root!.dataset.theme = effective;
+      root!.dataset.pref = pref;
+      root!.querySelectorAll<HTMLButtonElement>(".ia-theme button").forEach((b) =>
+        b.classList.toggle("is-active", b.dataset.setTheme === pref)
+      );
+    }
+    let pref = "system";
+    try { pref = localStorage.getItem("iaTheme") || "system"; } catch {}
+    applyTheme(pref);
+    root.querySelectorAll<HTMLButtonElement>(".ia-theme button").forEach((b) =>
+      b.addEventListener("click", () => {
+        const p = b.dataset.setTheme!;
+        try { localStorage.setItem("iaTheme", p); } catch {}
+        applyTheme(p);
+      })
+    );
+    mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+
+    /* ---- filtering (search + office + source + tolerance) ---- */
+    const cards = Array.from(root.querySelectorAll<HTMLElement>(".ia-card"));
+    const search = document.getElementById("ia-search") as HTMLInputElement;
+    const fOffice = document.getElementById("ia-office") as HTMLSelectElement;
+    const fSource = document.getElementById("ia-source") as HTMLSelectElement;
+    const fTol = document.getElementById("ia-tol") as HTMLSelectElement;
+    const countEl = document.getElementById("ia-count")!;
+    const emptyEl = document.getElementById("ia-empty")!;
+
+    function applyFilters() {
+      const q = search.value.trim().toLowerCase();
+      const office = fOffice.value, source = fSource.value, thr = parseFloat(fTol.value);
+      let shown = 0;
+      cards.forEach((c) => {
+        const worst = parseFloat(c.dataset.worst || "0");
+        const noPrice = parseInt(c.dataset.noprice || "0", 10);
+        const sources = (c.dataset.sources || "").split("|");
+        const ok =
+          (!q || (c.dataset.search || "").includes(q)) &&
+          (!office || c.dataset.office === office) &&
+          (!source || sources.includes(source)) &&
+          (worst >= thr || (thr <= 0.01 && noPrice > 0) || (source === "No Price" && noPrice > 0));
+        c.style.display = ok ? "" : "none";
+        if (ok) shown++;
+      });
+      countEl.textContent = `${shown} of ${cards.length} invoices`;
+      emptyEl.hidden = shown !== 0;
+    }
+    [search, fOffice, fSource, fTol].forEach((el) => el.addEventListener("input", applyFilters));
+    applyFilters();
+
+    /* ---- detail + disposition ---- */
+    const detail = document.getElementById("ia-detail")!;
+    cards.forEach((c) => c.addEventListener("click", () => openInvoice(parseInt(c.dataset.inv!, 10), c)));
+
+    /* deep-link: auto-open ?invoice=INV-XXXX (e.g. from a drill-down's "Open audit →") */
+    const wantInvoice = new URLSearchParams(window.location.search).get("invoice");
+    if (wantInvoice) {
+      const idx = invoices.findIndex((v: any) => v.invoice === wantInvoice);
+      if (idx >= 0) {
+        const card = cards.find((c) => c.dataset.inv === String(idx));
+        if (card) { openInvoice(idx, card); card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      }
+    }
+
+    function openInvoice(ii: number, cardEl: HTMLElement) {
+      cards.forEach((c) => c.classList.toggle("active", c === cardEl));
+      const inv = invoices[ii];
+      const rows = inv.lines.map((l: any, li: number) => {
+        const v = variance(l);
+        return `<tr class="ia-ln" data-line="${li}">
+          <td class="ia-sku">${l.sku}</td><td>${l.desc}</td><td>${l.uom}</td>
+          <td class="num">${l.qty}</td><td class="num">${money(l.inv)}</td>
+          <td>${l.pa == null ? '<span class="pill pill-red">No Price</span>' : `${money(l.pa)} <span class="pill ${srcClass(l.src)}">${l.src}</span>`}</td>
+          <td class="num">${v.pct == null ? "—" : pct(v.pct)}</td>
+          <td class="num">${v.dollar == null ? "—" : money(v.dollar)}</td>
+          <td><span class="pill ${tolClass(v.pct)}">${tolLabel(v.pct)}</span></td></tr>`;
+      }).join("");
+      detail.innerHTML = `
+        <div class="ia-dh"><div><div class="ia-dh-inv">${inv.invoice}</div>
+          <div class="ia-dh-off">${inv.office} · ${inv.account} · ${inv.vendor} · ${inv.date}</div></div>
+          <a class="ia-pdf" href="${inv.pdf}">📄 View invoice PDF ↗</a></div>
+        <table class="ia-table"><thead><tr>
+          <th>Item ID / SKU</th><th>Description</th><th>UOM</th><th class="num">Qty</th><th class="num">Inv Price</th>
+          <th>Price Agreement</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <div class="ia-disp" id="ia-disp"><div class="ia-disp-lead">Select a line item above to disposition it.</div></div>`;
+      detail.querySelectorAll<HTMLElement>(".ia-ln").forEach((r) =>
+        r.addEventListener("click", () => pick(ii, parseInt(r.dataset.line!, 10), r))
+      );
+    }
+
+    function pick(ii: number, li: number, rowEl: HTMLElement) {
+      detail.querySelectorAll(".ia-ln").forEach((r) => r.classList.remove("sel"));
+      rowEl.classList.add("sel");
+      const inv = invoices[ii], l = inv.lines[li], v = variance(l);
+      const accepts = actions.filter((a: any) => a.group === "accept");
+      const credits = actions.filter((a: any) => a.group === "credit");
+      const btn = (a: any) =>
+        `<button class="ia-act ${a.group}" data-label="${esc(a.label)}"><span class="t">${a.label}</span><span class="h">${a.hint}</span></button>`;
+      const disp = document.getElementById("ia-disp")!;
+      disp.innerHTML = `
+        <div class="ia-disp-lead">Disposition <b>${l.sku}</b> — ${l.desc} · Inv ${money(l.inv)} vs PA ${l.pa == null ? "No Price" : money(l.pa)}
+          ${v.pct != null ? `· <span class="pill ${tolClass(v.pct)}">${pct(v.pct)} ${tolLabel(v.pct)}</span>` : ""}</div>
+        <div class="ia-grid2">
+          <div class="ia-grp">Accept pricing</div>${accepts.map(btn).join("")}
+          <div class="ia-grp">Dispute — generate credit memo</div>${credits.map(btn).join("")}
+        </div>`;
+      disp.querySelectorAll<HTMLButtonElement>(".ia-act").forEach((b) =>
+        b.addEventListener("click", () => {
+          disp.querySelectorAll(".ia-act").forEach((x) => x.classList.remove("chosen"));
+          b.classList.add("chosen");
+          toast("Disposition recorded: " + b.dataset.label);
+        })
+      );
+    }
+
+    /* ---- toast ---- */
+    let toastTimer: number | undefined;
+    const toastEl = document.getElementById("ia-toast")!;
+    function toast(msg: string) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), 2400);
+    }
+  }
+</script>
