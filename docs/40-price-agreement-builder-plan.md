@@ -57,13 +57,19 @@ the validation layer are baked in below.
    prepared-for Justin Garza, DRAFT note) + family-grouped Item/Desc/UOM/Prior/Proposed
    table, paginated (35pp for a full branch). CSV ends with a blank `vendor_final_price`.
    v1 uses a clean vendor-neutral table (exact ABC ledger fidelity deferred unless Chris needs it).
-4. **TODO — drafted handoff (human-gated, zero external send)** — package →
-   `price_refresh_request` draft (`reason='agreement_package'`, `status='awaiting_verification'`),
-   attach PDF/CSV. Notify **Lucinda/Roberto** internally (Slack + internal AgentMail). The send
-   to Justin is a **human** action from Hermes/Google Workspace. Add the outbound allowlist guard.
+4. **DONE (commit 719b6be)** — drafted handoff + outbound guard. `lib/outbound-guard.ts`
+   (`classifyRecipients`/`assertAgentSendAllowed`; internal allowlist proexteriorsus.com/.net +
+   cleverwork.io, subdomains count). `POST /api/price-agreement/package/handoff` (auth-gated)
+   drafts into `price_refresh_request` (`reason='agreement_package'`, `awaiting_verification`,
+   `channel='human_send_required'`, recipient Justin Garza, PDF/CSV links), idempotent per branch,
+   moves package → `pending_review`. NEVER sends. "Draft for review" button on the builder.
+   Verified: full-feature grep shows the only network calls are same-origin saves — no email/SMTP.
 5. **TODO — magic-link submission** — `agreement_package_submissions` (append-only, `magic_token`
-   NULL until a human approves), unauthenticated `/submit-agreement/[token]` (TTL = 7 working days
-   @ 06:00; add to middleware public allowlist) for Justin's per-line final prices + approve/revise/reject.
+   NULL until a human approves), unauthenticated `/submit-agreement/[token]` (TTL = **7 working days
+   @ 06:00**; add to middleware public allowlist) for Justin's per-line final prices +
+   approve/revise/reject. AgentMail "approved" reply = documented manual fallback.
+   **Open before building:** token reuse policy (single-claim vs multi-visit-before-claim); the
+   internal notification mechanism to Lucinda/Roberto (Slack vs internal email) — both human-triggered.
 
 ## Human-gated boundary (never auto-send)
 Email drafts only (`awaiting_verification` → human sends). Magic-link `magic_token` issued only
