@@ -69,6 +69,9 @@ interface VendorBranchRow {
   territory_decided_by: string | null;
   territory_decided_at: string | null;
   is_active: boolean | null;
+  manager_name: string | null;
+  manager_email: string | null;
+  sales_rep_name: string | null;
 }
 
 interface BranchTerritoryRow {
@@ -330,6 +333,9 @@ export interface VendorBranchMapNode {
   invoiceGateStatus: "approved" | "blocked";
   territoryDecidedBy: string | null;
   territoryDecidedAt: string | null;
+  managerName?: string | null;
+  managerEmail?: string | null;
+  salesRepName?: string | null;
 }
 
 export interface VendorTerritoryCounts {
@@ -1232,7 +1238,7 @@ export async function loadVendorTerritoryMapPayload(
         selectAll<VendorBranchRow>(
           client,
           "vendor_branches",
-          "id,vendor_id,region_id,branch_number,branch_name,address,city,state,phone,latitude,longitude,geocode_status,geocode_precision,pricing_status,pricing_territory_office_id,suggested_office_id,territory_decided_by,territory_decided_at,is_active",
+          "id,vendor_id,region_id,branch_number,branch_name,address,city,state,phone,latitude,longitude,geocode_status,geocode_precision,pricing_status,pricing_territory_office_id,suggested_office_id,territory_decided_by,territory_decided_at,is_active,manager_name,manager_email,sales_rep_name",
         ),
         selectAll<CandidateRow>(
           client,
@@ -1463,6 +1469,9 @@ export async function loadVendorTerritoryMapPayload(
           invoiceGateStatus: pricingApproved ? "approved" : "blocked",
           territoryDecidedBy: branch.territory_decided_by,
           territoryDecidedAt: branch.territory_decided_at,
+          managerName: rawBranch?.manager_name ?? null,
+          managerEmail: rawBranch?.manager_email ?? null,
+          salesRepName: rawBranch?.sales_rep_name ?? null,
         };
       })
       .sort((a, b) => {

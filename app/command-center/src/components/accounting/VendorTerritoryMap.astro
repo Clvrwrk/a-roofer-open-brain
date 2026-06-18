@@ -81,6 +81,14 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         <option value="unclassified">Unclassified</option>
       </select>
     </label>
+    <label>
+      <span>Color by</span>
+      <select id="vt-color-lens">
+        <option value="coverage">Price Coverage</option>
+        <option value="invoice">Invoice Audit</option>
+        <option value="composite">Composite</option>
+      </select>
+    </label>
     <label class="vendor-map-search-label">
       <span>Search</span>
       <input id="vt-search" type="search" placeholder="Branch, city, state" autocomplete="off" />
@@ -95,9 +103,10 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
     <div class="vendor-map-canvas-column">
       <div id="vendor-territory-google-map" class="vendor-google-map" role="application" aria-label="Google Map of PE offices and vendor branches"></div>
       <div class="vendor-map-legend" aria-label="Marker legend">
-        <span><i style="background:#eab308"></i>Needs PE route</span>
-        <span><i style="background:#dc2626"></i>Missing pricing</span>
-        <span><i style="background:#d71920"></i>Vendor color</span>
+        <span><i style="background:#16a34a"></i>Healthy</span>
+        <span><i style="background:#eab308"></i>Needs attention</span>
+        <span><i style="background:#dc2626"></i>Problem</span>
+        <span><i style="background:#64748b"></i>Out of scope</span>
         <span><i class="office-legend-mark"></i>PE office</span>
       </div>
     </div>
@@ -140,14 +149,6 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
     </aside>
   </div>
 
-  <div class="vendor-map-metric-grid" aria-label="Territory counts">
-    <div><strong data-vt-count="branches">{formatNumber(surface.counts.branches)}</strong><span>branches</span></div>
-    <div><strong data-vt-count="offices">{formatNumber(surface.counts.offices)}</strong><span>PE offices</span></div>
-    <div><strong data-vt-count="needsOfficeRoute">{formatNumber(surface.counts.needsOfficeRoute)}</strong><span>need route</span></div>
-    <div><strong data-vt-count="missingBranchPricing">{formatNumber(surface.counts.missingBranchPricing)}</strong><span>missing pricing</span></div>
-    <div><strong data-vt-count="vendorBrand">{formatNumber(surface.counts.vendorBrand)}</strong><span>healthy</span></div>
-    <div><strong data-vt-count="missingCoordinates">{formatNumber(surface.counts.missingCoordinates)}</strong><span>no coords</span></div>
-  </div>
 
   <script is:inline>
     (() => {
@@ -179,11 +180,157 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         officeMarkers: [],
         clusterMarkers: [],
         polygons: [],
-        selectedBranchId: payload.reviewBranches?.[0]?.id || payload.branches?.[0]?.id || null,
+        selectedBranchId: null, // load-time default = Richardson, TX office, not a branch
       };
 
       const officeById = new Map((payload.offices || []).map((office) => [office.id, office]));
       const vendorBySlug = new Map((payload.vendors || []).map((vendor) => [vendor.slug, vendor]));
+      const colorLensSelect = document.getElementById("vt-color-lens");
+
+      // --- Color lens: one map, three ways to read "where the issues are" ---
+      const LENS_GREEN = "#16a34a";
+      const LENS_YELLOW = "#eab308";
+      const LENS_RED = "#dc2626";
+      const LENS_GREY = "#64748b";
+
+      function inDriveTime(branch) {
+        // Within a PE office 2-hour isochrone (covered/overlap) = in scope.
+        return branch.pricingStatus === "covered" || branch.pricingStatus === "overlap_pending";
+      }
+
+      function isNegotiated(branch) {
+        return Boolean(branch.currentAgreement);
+      }
+
+      function lensColor(branch) {
+        const lens = colorLensSelect?.value || "coverage";
+        if (lens === "invoice") {
+          if (branch.invoiceGateStatus === "approved") return LENS_GREEN;
+          return LENS_RED;
+        }
+        if (lens === "composite") {
+          if (!inDriveTime(branch)) return LENS_GREY;
+          const issues =
+            (isNegotiated(branch) ? 0 : 1) + (branch.invoiceGateStatus === "approved" ? 0 : 1);
+          if (issues === 0) return LENS_GREEN;
+          if (issues === 1) return LENS_YELLOW;
+          return LENS_RED;
+        }
+        // coverage (default)
+        if (!inDriveTime(branch)) return LENS_GREY;
+        if (isNegotiated(branch)) return LENS_GREEN;
+        if (branch.pricingWaterfall && branch.pricingWaterfall.itemCount > 0) return LENS_YELLOW;
+        return LENS_RED;
+      }
+
+      // --- Branch / office popups (InfoWindow KPI card + quick links) ---
+      function kpiCell(label, value, tone) {
+        return `<div class="vmpop-kpi${tone ? ` tone-${tone}` : ""}"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`;
+      }
+
+      function linkRow(href, label, soon) {
+        if (soon) return `<span class="vmpop-link is-soon">${escapeHtml(label)}<small>soon</small></span>`;
+        return `<a class="vmpop-link" href="${escapeHtml(href)}">${escapeHtml(label)}<span aria-hidden="true">→</span></a>`;
+      }
+
+      function branchPopupHtml(branch) {
+        const scope = inDriveTime(branch);
+        const negotiated = isNegotiated(branch);
+        const gateApproved = branch.invoiceGateStatus === "approved";
+        const branchParam = branch.branchNumber ? `?branch=${encodeURIComponent(branch.branchNumber)}` : "";
+        const waterfall = branch.pricingWaterfall || { itemCount: 0, uniqueSkuCount: 0 };
+
+        const kpis = [
+          kpiCell("Negotiated", negotiated ? "Yes" : "No", negotiated ? "ok" : "bad"),
+          kpiCell("Price lines", numberText(waterfall.itemCount || 0), waterfall.itemCount ? "" : "warn"),
+          kpiCell("Invoice gate", gateApproved ? "OK" : "Blocked", gateApproved ? "ok" : "bad"),
+        ].join("");
+
+        const links = [
+          linkRow(`/accounting/invoice-audit${branchParam}`, "Invoice Audit"),
+          linkRow(`/abc-price-agreement-gaps`, "Price Agreement Audit"),
+          scope ? linkRow(`/accounting/vendor-regions`, "Price List Coverage") : "",
+          linkRow("", "Proposal / Estimate", true),
+        ]
+          .filter(Boolean)
+          .join("");
+
+        let contact = "";
+        if (scope) {
+          const rows = [];
+          if (branch.phone) rows.push(`<a href="tel:${escapeHtml(branch.phone)}">Call branch · ${escapeHtml(branch.phone)}</a>`);
+          if (branch.managerName || branch.managerEmail) {
+            const mgr = escapeHtml(branch.managerName || "Branch manager");
+            rows.push(
+              branch.managerEmail
+                ? `<a href="mailto:${escapeHtml(branch.managerEmail)}">Email ${mgr}</a>`
+                : `<span>${mgr}</span>`,
+            );
+          }
+          rows.push(
+            branch.salesRepName
+              ? `<span>Sales rep · ${escapeHtml(branch.salesRepName)} <small>(email soon)</small></span>`
+              : `<span class="vmpop-muted">Sales rep contact — to be added</span>`,
+          );
+          contact = `<div class="vmpop-contact"><p class="vmpop-section">Fleet / branch contact</p>${rows.join("")}</div>`;
+        } else {
+          contact = `<p class="vmpop-muted">Outside 2-hour drive time — not in active scope.</p>`;
+        }
+
+        return `
+          <div class="vmpop">
+            <p class="vmpop-eyebrow">${escapeHtml(branch.vendorName)}</p>
+            <h4 class="vmpop-title">${escapeHtml(branch.branchNumber ? `${branch.branchNumber} · ${branch.branchName}` : branch.branchName)}</h4>
+            <div class="vmpop-chips">
+              <span class="vmpop-chip ${scope ? "chip-ok" : "chip-muted"}">${scope ? "In drive time" : "Out of scope"}</span>
+              <span class="vmpop-chip chip-status">${escapeHtml(statusText(branch.pricingStatus))}</span>
+            </div>
+            <div class="vmpop-kpis">${kpis}</div>
+            ${contact}
+            <div class="vmpop-links"><p class="vmpop-section">Go to</p>${links}</div>
+          </div>
+        `;
+      }
+
+      function officePopupHtml(office) {
+        const counts = office.branchCounts || { total: 0, needsOfficeRoute: 0, missingPricing: 0, healthy: 0 };
+        // Carry the office NAME so the target dashboards land pre-filtered.
+        const officeParam = `?office=${encodeURIComponent(office.name)}`;
+        const kpis = [
+          kpiCell("Branches", numberText(counts.total), ""),
+          kpiCell("Healthy", numberText(counts.healthy), counts.healthy ? "ok" : ""),
+          kpiCell("Missing pricing", numberText(counts.missingPricing), counts.missingPricing ? "bad" : "ok"),
+        ].join("");
+        const links = [
+          linkRow(`/accounting/vendor-regions${officeParam}`, "Price List Coverage"),
+          linkRow(`/accounting/invoice-audit${officeParam}`, "Invoice Audit"),
+          linkRow("", "Proposal / Estimate", true),
+        ].join("");
+        return `
+          <div class="vmpop">
+            <p class="vmpop-eyebrow">PE Office</p>
+            <h4 class="vmpop-title">${escapeHtml(office.name)}</h4>
+            <div class="vmpop-chips">
+              <span class="vmpop-chip chip-ok">${escapeHtml(office.driveTimeMinutes || 120)} min drive time</span>
+              <span class="vmpop-chip chip-status">${escapeHtml(office.regionName || office.regionCode || "Unmapped")}</span>
+            </div>
+            <div class="vmpop-kpis">${kpis}</div>
+            <div class="vmpop-links"><p class="vmpop-section">Go to</p>${links}</div>
+          </div>
+        `;
+      }
+
+      function openBranchPopup(branch, marker) {
+        if (!state.infoWindow) return;
+        state.infoWindow.setContent(branchPopupHtml(branch));
+        state.infoWindow.open({ anchor: marker, map: state.map });
+      }
+
+      function openOfficePopup(office, marker) {
+        if (!state.infoWindow) return;
+        state.infoWindow.setContent(officePopupHtml(office));
+        state.infoWindow.open({ anchor: marker, map: state.map });
+      }
 
       function escapeHtml(value) {
         return String(value ?? "")
@@ -232,7 +379,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       function branchIcon(branch, scale = 6) {
         return {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: branch.markerColor || branch.vendorColor || "#334155",
+          fillColor: lensColor(branch),
           fillOpacity: 0.96,
           strokeColor: branch.markerPriority === "needs_office_route" ? "#78350f" : "#ffffff",
           strokeOpacity: 1,
@@ -377,6 +524,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
           });
           marker.addListener("click", () => {
             renderOfficeDetail(office);
+            openOfficePopup(office, marker);
             state.map.panTo(marker.getPosition());
           });
           state.officeMarkers.push(marker);
@@ -402,6 +550,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
             marker.addListener("click", () => {
               state.selectedBranchId = branch.id;
               renderBranchDetail(branch);
+              openBranchPopup(branch, marker);
               state.map.panTo(marker.getPosition());
             });
             state.branchMarkers.push(marker);
@@ -431,7 +580,9 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
           state.clusterMarkers.push(marker);
         });
 
-        const selected = branches.find((branch) => branch.id === state.selectedBranchId) || branches[0];
+        // Only render branch detail when a branch was explicitly selected;
+        // the load-time default is the Richardson, TX office (set in init()).
+        const selected = state.selectedBranchId ? branches.find((branch) => branch.id === state.selectedBranchId) : null;
         const plannedVendor = vendorFilter.value !== "all" ? vendorBySlug.get(vendorFilter.value) : null;
         if (selected) renderBranchDetail(selected);
         else if (plannedVendor?.isPlanned) renderPlannedVendorDetail(plannedVendor);
@@ -454,115 +605,13 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       }
 
       function renderBranchDetail(branch) {
-        const candidateOptions = branch.candidateOffices.length
-          ? branch.candidateOffices
-          : (payload.offices || []).map((office) => ({
-              id: office.id,
-              name: office.name,
-              city: office.city,
-              state: office.state,
-              driveMinutes: null,
-              straightMiles: null,
-              isSuggested: office.id === branch.suggestedOfficeId,
-            }));
-        const agreement = branch.currentAgreement;
-        const waterfall = branch.pricingWaterfall || {
-          label: branch.priceEvidenceLabel || "No price available",
-          itemCount: 0,
-          uniqueSkuCount: 0,
-          expectedSkuMin: 200,
-          expectedSkuMax: 350,
-          auditStatus: "missing",
-          requiresApproval: true,
-          sourceTable: null,
-        };
-        const assigned = branch.assignedOfficeName || "Unassigned";
-        const candidates = candidateOptions
-          .map((candidate) => {
-            const suffix = [
-              candidate.driveMinutes !== null ? `${Math.round(candidate.driveMinutes)} min` : null,
-              candidate.straightMiles !== null ? `${candidate.straightMiles} mi` : null,
-              candidate.isSuggested ? "suggested" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return `<option value="${escapeHtml(candidate.id)}" ${candidate.id === branch.suggestedOfficeId ? "selected" : ""}>${escapeHtml(candidate.name)}${suffix ? ` / ${escapeHtml(suffix)}` : ""}</option>`;
-          })
-          .join("");
-
-        detailPanel.innerHTML = `
-          <p class="eyebrow">${escapeHtml(branch.vendorName)}</p>
-          <h3>${escapeHtml(branch.branchNumber ? `${branch.branchNumber} / ${branch.branchName}` : branch.branchName)}</h3>
-          <div class="vendor-detail-chip-row">
-            <span class="territory-status status-${escapeHtml(branch.pricingStatus)}">${escapeHtml(statusText(branch.pricingStatus))}</span>
-            <span class="territory-marker-chip marker-${escapeHtml(branch.markerPriority)}">${escapeHtml(statusText(branch.markerPriority))}</span>
-            <span class="territory-gate-chip" data-gate="${branch.invoiceGateStatus}">${escapeHtml(branch.invoiceGateStatus)}</span>
-          </div>
-          <dl class="vendor-detail-list">
-            <div><dt>Address</dt><dd>${escapeHtml(locationText(branch))}</dd></div>
-            <div><dt>Phone</dt><dd>${escapeHtml(branch.phone || "Missing")}</dd></div>
-            <div><dt>Assigned office</dt><dd>${escapeHtml(assigned)}</dd></div>
-            <div><dt>Suggested office</dt><dd>${escapeHtml(branch.suggestedOfficeName || "No suggestion")}</dd></div>
-            <div><dt>Geocode</dt><dd>${escapeHtml(branch.geocodeStatus)}${branch.geocodePrecision ? ` / ${escapeHtml(branch.geocodePrecision)}` : ""}</dd></div>
-          </dl>
-          <div class="vendor-agreement-card">
-            <span>Pricing waterfall</span>
-            <strong>${escapeHtml(waterfall.label)}</strong>
-            <p>${escapeHtml(`${waterfall.itemCount || 0} lines / ${waterfall.uniqueSkuCount || 0} SKUs`)}</p>
-            <small>${escapeHtml([
-              waterfall.sourceTable ? `source ${waterfall.sourceTable}` : null,
-              waterfall.auditStatus ? `audit ${waterfall.auditStatus}` : null,
-              waterfall.requiresApproval ? "approval required" : "approved source",
-            ].filter(Boolean).join(" · "))}</small>
-          </div>
-          <div class="vendor-agreement-card">
-            <span>Mapped agreement</span>
-            ${
-              agreement
-                ? `<strong>${escapeHtml(agreement.versionLabel || agreement.agreementNumber || agreement.scope)}</strong>
-                   <p>${escapeHtml([agreement.vendorName, agreement.regionCode || agreement.regionName, agreement.accountNumber].filter(Boolean).join(" / "))}</p>
-                   <small>${escapeHtml([agreement.effectiveDate, agreement.expiryDate ? `expires ${agreement.expiryDate}` : null, agreement.ceoVerified ? "CEO verified" : "not CEO verified"].filter(Boolean).join(" · "))}</small>`
-                : `<strong>No current mapped agreement</strong><p>${escapeHtml(branch.priceEvidenceLabel)}</p>`
-            }
-          </div>
-          <div class="vendor-assignment-box">
-            <label>
-              <span>PE office route</span>
-              <select data-office-select>${candidates}</select>
-            </label>
-            <button type="button" class="primary-action" data-assign-branch="${escapeHtml(branch.id)}">Save office route</button>
-            <p data-assignment-status>${branch.territoryDecidedAt ? `Saved ${escapeHtml(new Date(branch.territoryDecidedAt).toLocaleString())}` : ""}</p>
-          </div>
-        `;
-
-        const saveButton = detailPanel.querySelector("[data-assign-branch]");
-        saveButton?.addEventListener("click", () => saveAssignment(branch));
+        // Side card mirrors the marker popup — two distinct paths to the same
+        // working dashboards (click the pin, or scan the rail card).
+        detailPanel.innerHTML = branchPopupHtml(branch);
       }
 
       function renderOfficeDetail(office) {
-        const agreements = (office.activePriceAgreements || [])
-          .map((agreement) => `<li><strong>${escapeHtml(agreement.vendorName)}</strong><span>${escapeHtml(agreement.versionLabel || agreement.agreementNumber || "Agreement")} / ${escapeHtml(agreement.expiryDate ? `expires ${agreement.expiryDate}` : "no expiry")}</span></li>`)
-          .join("");
-        detailPanel.innerHTML = `
-          <p class="eyebrow">PE Office</p>
-          <h3>${escapeHtml(office.name)}</h3>
-          <dl class="vendor-detail-list">
-            <div><dt>Address</dt><dd>${escapeHtml(locationText(office))}</dd></div>
-            <div><dt>Region</dt><dd>${escapeHtml(office.regionName || office.regionCode || "Unmapped")}</dd></div>
-            <div><dt>Drive time</dt><dd>${escapeHtml(office.driveTimeMinutes || 120)} minutes</dd></div>
-            <div><dt>Boundary</dt><dd>${escapeHtml(office.boundaryComputedAt || office.boundaryMethod || "Not cached")}</dd></div>
-          </dl>
-          <div class="vendor-office-counts">
-            <div><strong>${numberText(office.branchCounts.total)}</strong><span>assigned</span></div>
-            <div><strong>${numberText(office.branchCounts.needsOfficeRoute)}</strong><span>need route</span></div>
-            <div><strong>${numberText(office.branchCounts.missingPricing)}</strong><span>missing pricing</span></div>
-            <div><strong>${numberText(office.branchCounts.healthy)}</strong><span>healthy</span></div>
-          </div>
-          <div class="vendor-agreement-card">
-            <span>Regional agreements</span>
-            ${agreements ? `<ul class="vendor-agreement-list">${agreements}</ul>` : "<p>No active regional agreements mapped.</p>"}
-          </div>
-        `;
+        detailPanel.innerHTML = officePopupHtml(office);
       }
 
       function renderPlannedVendorDetail(vendor) {
@@ -607,10 +656,22 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       }
 
       function bindControls() {
-        [vendorFilter, stateFilter, statusFilter, searchInput].forEach((control) => {
-          control.addEventListener("input", () => {
+        [vendorFilter, stateFilter, statusFilter, searchInput, colorLensSelect].forEach((control) => {
+          control?.addEventListener("input", () => {
             renderOfficeLayers();
             renderBranches();
+          });
+        });
+
+        // Beneficial filter behaviors: narrowing by state/vendor/search auto-fits
+        // the map to what's now visible; clearing back to "all" returns to the US.
+        [stateFilter, vendorFilter, searchInput].forEach((control) => {
+          control?.addEventListener("change", () => {
+            if (stateFilter.value === "all" && vendorFilter.value === "all" && !searchInput.value.trim()) {
+              fitUnitedStates();
+            } else {
+              fitTo([...visibleOffices(), ...visibleBranches()]);
+            }
           });
         });
 
@@ -649,7 +710,16 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         state.map.addListener("idle", () => {
           if (!state.branchMarkers.length && !state.clusterMarkers.length) renderBranches();
         });
-        fitUnitedStates();
+
+        // Default selection: Richardson, TX PE office (not the first branch).
+        const defaultOffice = (payload.offices || []).find((o) => /richardson/i.test(o.name || ""));
+        if (defaultOffice && defaultOffice.latitude != null && defaultOffice.longitude != null) {
+          renderOfficeDetail(defaultOffice);
+          state.map.setCenter({ lat: defaultOffice.latitude, lng: defaultOffice.longitude });
+          state.map.setZoom(8);
+        } else {
+          fitUnitedStates();
+        }
       }
 
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

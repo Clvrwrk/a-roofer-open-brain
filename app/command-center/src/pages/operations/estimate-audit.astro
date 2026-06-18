@@ -1,0 +1,128 @@
+---
+import AppShell from "../../layouts/AppShell.astro";
+import { loadEstimateAudit } from "@lib/estimate-audit";
+
+const data = await loadEstimateAudit();
+const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
+const runtimeTone = data.status === "live" ? "ready" : "watch";
+const runtimeLabel = data.status === "live" ? "Supabase live" : data.status === "sample" ? "Sample data" : "Supabase pending";
+const offices = data.offices.map((o) => o.office);
+const payload = JSON.stringify(data).replace(/</g, "\\u003c");
+---
+
+<AppShell title="Estimate Audit" eyebrow="Operations" activePage="operations">
+  <section class="ea" data-theme="light" data-pref="system">
+    <div class="ea-toolbar">
+      <input class="ea-input" id="ea-search" type="search" placeholder="Search address, branch, client…" autocomplete="off" />
+      <select class="ea-select" id="ea-office">
+        <option value="">All PE offices</option>
+        {offices.map((o) => <option value={o}>{o}</option>)}
+      </select>
+      <span class="ea-spacer"></span>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
+      <span class="ea-count">{data.totals.jobs} jobs · {data.totals.estimates} estimates · {generatedAt}</span>
+      <div class="ea-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    {data.totals.jobs === 0 && <p class="ea-empty">No estimate runs found in the live pipeline.</p>}
+
+    <div id="ea-offices"></div>
+  </section>
+
+  <script type="application/json" id="ea-data" set:html={payload}></script>
+  <div class="ia-toast" id="ea-toast" role="status" aria-live="polite"></div>
+</AppShell>
+
+<style is:global>
+  .ea{
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; --shadow:0 6px 18px rgba(20,28,40,.08);
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--gutter, 24px)) calc(-1 * var(--space-6, 24px));
+    padding:18px var(--gutter, 24px) 30px; min-height:70vh; font-family:var(--font-sans, Inter, system-ui, sans-serif);
+  }
+  .ea[data-theme="dark"]{
+    --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+    --brand:#8a7bff; --brand-bg:#21243f; --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115;
+    --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38; --shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .ea .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5}
+  .ea .pill-green{background:var(--green-bg);color:var(--green)}
+  .ea .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
+  .ea .pill-red{background:var(--red-bg);color:var(--red)}
+  .ea .pill-grey{background:var(--grey-bg);color:var(--grey)}
+  .ea .pill-brand{background:var(--brand-bg);color:var(--brand)}
+
+  .ea-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .ea-input,.ea-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+  .ea-input{min-width:240px}
+  .ea-spacer{flex:1}
+  .ea-count{font-size:12px;color:var(--muted)}
+  .ea-empty{color:var(--muted);font-size:13px;padding:14px 4px}
+  .ea-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .ea-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+  .ea-theme button.is-active{background:var(--brand);color:#fff}
+
+  /* office accordion */
+  .ea-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .ea-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .ea-office>summary::-webkit-details-marker{display:none}
+  .ea-chev{color:var(--muted);transition:transform .15s;font-size:15px}
+  details[open]>summary .ea-chev{transform:rotate(90deg)}
+  .ea-office-name{font-weight:750;font-size:15px;flex:1}
+  .ea-mini{display:flex;gap:16px}
+  .ea-mini div{text-align:center}
+  .ea-mini strong{display:block;font-size:16px;font-weight:750}
+  .ea-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .ea-office-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  /* job accordion */
+  .ea-job{border:1px solid var(--line);border-radius:11px;margin:10px 0;background:var(--panel2)}
+  .ea-job>summary{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .ea-job>summary::-webkit-details-marker{display:none}
+  .ea-job-addr{font-weight:700;font-size:13.5px}
+  .ea-job-sub{color:var(--muted);font-size:11.5px}
+  .ea-job-tags{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center}
+  .ea-job-body{padding:6px 14px 14px}
+
+  .ea-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px 16px;padding:10px 0 14px}
+  .ea-detail-grid dt{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700}
+  .ea-detail-grid dd{margin:1px 0 0;font-size:13px}
+  .ea-detail-grid a{color:var(--brand);text-decoration:none;font-weight:600}
+
+  /* estimate accordion */
+  .ea-est{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel)}
+  .ea-est>summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .ea-est>summary::-webkit-details-marker{display:none}
+  .ea-est-tier{font-weight:700;font-size:13px;min-width:64px}
+  .ea-est-stats{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .ea-est-stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .ea-est-tags{margin-left:auto;display:flex;gap:6px}
+  .ea-est-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  .ea-marginbox{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;background:var(--panel2);border-radius:9px}
+  .ea-marginbox label{font-size:12px;font-weight:700;color:var(--muted)}
+  .ea-marginbox input{width:74px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:6px 8px;font-size:13px;font-family:inherit}
+  .ea-recalc{font-size:12px;color:var(--muted)}
+  .ea-recalc b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .ea-table{width:100%;border-collapse:collapse;margin-top:6px}
+  .ea-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .ea-table td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .ea-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ea-qty,.ea-price{width:78px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:right;font-family:inherit}
+  .ea-del{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--red);border-radius:6px;width:24px;height:24px;cursor:pointer;line-height:1}
+  .ea-del:hover{border-color:var(--red);background:var(--red-bg)}
+  .ea-addrow{display:flex;gap:8px;margin-top:10px}
+  .ea-addbtn{appearance:none;border:1px dashed var(--brand);background:var(--brand-bg);color:var(--brand);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:650;cursor:pointer;font-family:inherit}
+
+  .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .ia-toast.show{opacity:1}
+</style>
+
+<script src="/src/scripts/estimate-audit.ts"></script>

@@ -1,64 +1,17 @@
 ---
+import VendorTerritoryMap from "../components/accounting/VendorTerritoryMap.astro";
 import AppShell from "../layouts/AppShell.astro";
-import LiveMetricGrid from "../components/live/LiveMetricGrid.astro";
-import HumanUnblockerDashboard from "../components/unblocker/HumanUnblockerDashboard.astro";
-import { departments, loadCommandCenterSurface } from "@lib/live-work";
+import { getRuntimeEnv } from "@lib/runtime-env";
+import { loadVendorTerritorySurface } from "@lib/vendor-territories";
 
-const surface = await loadCommandCenterSurface();
-const generatedAt = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  month: "short",
-}).format(new Date(surface.generatedAt));
-const tone = surface.status === "live" ? "ready" : surface.status === "degraded" ? "watch" : "blocked";
+// The territory map is the home of the Command Center — roofing is regional,
+// so the map is the primary navigation surface: color shows where the issues
+// are, and selecting a state / PE office / vendor branch is how you get into
+// the work (popup + matching side card → two paths to the dashboards).
+const territorySurface = await loadVendorTerritorySurface();
+const mapsBrowserKey = getRuntimeEnv().GOOGLE_MAPS_BROWSER_KEY ?? "";
 ---
 
-<AppShell title="Human Approval Queue" eyebrow="Live Command Center" activePage="command" surface={surface}>
-  <section class="live-department-hero" aria-label="Live command center summary">
-    <div class="surface-heading">
-      <div>
-        <p class="eyebrow">Dashboard Source Of Truth</p>
-        <h2>All human decisions routed from live operational source rows.</h2>
-      </div>
-      <div class="surface-meta">
-        <span class="runtime-pill" data-tone={tone}>
-          <span class="signal-dot" aria-hidden="true"></span>
-          {surface.status}
-        </span>
-        <span>{generatedAt}</span>
-      </div>
-    </div>
-
-    {
-      surface.errors.length > 0 && (
-        <div class="accounting-boundary-notice">
-          <strong>Live data issue</strong>
-          <span>{surface.errors.join(" ")}</span>
-        </div>
-      )
-    }
-
-    <LiveMetricGrid metrics={surface.metrics} />
-  </section>
-
-  <section class="department-route-grid" aria-label="Department dashboards">
-    {
-      departments.map((department) => {
-        const count = surface.items.filter((item) => item.department === department.id).length;
-        const blocked = surface.items.filter((item) => item.department === department.id && item.status === "blocked").length;
-        return (
-          <a class="department-route-card" href={`/${department.id}`}>
-            <span>{department.agent}</span>
-            <strong>{department.label}</strong>
-            <small>{count} live items · {blocked} blocked</small>
-          </a>
-        );
-      })
-    }
-  </section>
-
-  <HumanUnblockerDashboard items={surface.items} emptyLabel="No live source-backed human blockers are open across departments." />
-
-  <script src="/src/scripts/command-center.ts"></script>
+<AppShell title="Territory Map" eyebrow="Command Center" activePage="territories" layoutMode="map">
+  <VendorTerritoryMap surface={territorySurface} mapsBrowserKey={mapsBrowserKey} />
 </AppShell>

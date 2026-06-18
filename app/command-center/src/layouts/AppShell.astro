@@ -1,7 +1,8 @@
 ---
 import "../styles/global.css";
 import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
-import { departments, loadCommandCenterSurface, type LiveDepartmentSurface } from "@lib/live-work";
+import { type LiveDepartmentSurface } from "@lib/live-work";
+import { navHome, navDepartments, activeDepartmentId, isLeafActive } from "@lib/nav";
 
 interface Props {
   title: string;
@@ -11,15 +12,31 @@ interface Props {
   surface?: Pick<LiveDepartmentSurface, "items" | "status">;
 }
 
-const { title, eyebrow = "Command Center", activePage = "command", layoutMode = "default", surface } = Astro.props;
+const { title, eyebrow = "Command Center", activePage = "command", layoutMode = "default" } = Astro.props;
 const user = getCommandCenterUser(Astro.locals.actor);
 const workOsReady = isWorkOsConfigured();
 const workOsSession = user.authMode === "workos";
-const commandSurface = surface ? null : await loadCommandCenterSurface();
-const shellItems = surface?.items ?? commandSurface?.items ?? [];
-const needsReviewCount = shellItems.filter((work) => work.status === "needs_review").length;
-const blockedCount = shellItems.filter((work) => work.status === "blocked").length;
-const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
+
+const pathname = Astro.url.pathname;
+const homeActive = isLeafActive(navHome, pathname);
+const openDepartment = activeDepartmentId(pathname);
+
+// Topical line icons (24x24, stroke = currentColor → inherits --accent).
+const icons: Record<string, string> = {
+  map: '<path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"/><path d="M9 4v13M15 6.5v13"/>',
+  accounting:
+    '<path d="M4 3h13l3 3v15H4Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  operations:
+    '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+  sales: '<path d="M4 19V5M4 19h16"/><path d="m7 14 3-4 3 3 5-7"/><path d="M18 6h2v2"/>',
+  executive:
+    '<path d="M4 21V10M10 21V4M16 21v-7M22 21H2"/>',
+  "ai-agents":
+    '<rect x="6" y="8" width="12" height="10" rx="2"/><path d="M12 8V4M9 4h6M9 13h.5M14.5 13h.5"/><path d="M4 12h2M18 12h2"/>',
+};
+const homeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icons.map}</svg>`;
+const deptIcon = (id: string) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icons[id] ?? icons.map}</svg>`;
 ---
 
 <!doctype html>
@@ -35,7 +52,7 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
     <div class="app-frame">
       <aside class="side-rail" aria-label="Department navigation">
         <a class="brand-lockup" href="/">
-          <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="116" height="42" />
+          <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="160" height="58" />
           <span>
             <strong>Open Brain</strong>
             <small>Command Center</small>
@@ -43,49 +60,46 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
         </a>
 
         <nav class="primary-nav" aria-label="Primary">
-          <a class:list={["nav-link", activePage === "command" && "is-active"]} href="/">
-            <span class="nav-icon" aria-hidden="true">□</span>
-            Work Queue
-          </a>
-          <a class:list={["nav-link", activePage === "agents" && "is-active"]} href="/agents">
-            <span class="nav-icon" aria-hidden="true">◇</span>
-            Agent Monitor
-          </a>
-          <a class:list={["nav-link", activePage === "accounting" && "is-active"]} href="/accounting">
-            <span class="nav-icon" aria-hidden="true">$</span>
-            Accounting
-          </a>
-          <a class:list={["nav-link", activePage === "pricing" && "is-active"]} href="/abc-price-agreement-gaps">
-            <span class="nav-icon" aria-hidden="true">△</span>
-            Price Agreement Audit
-          </a>
-          <a class:list={["nav-link", activePage === "data-quality" && "is-active"]} href="/data-quality/price-foundation">
-            <span class="nav-icon" aria-hidden="true">▤</span>
-            Price Foundation
-          </a>
-          <a class:list={["nav-link", activePage === "territories" && "is-active"]} href="/vendor-territories">
-            <span class="nav-icon" aria-hidden="true">M</span>
-            Vendor Map
-          </a>
-          <a class:list={["nav-link", activePage === "snapshot" && "is-active"]} href="/weekly-snapshot">
-            <span class="nav-icon" aria-hidden="true">↗</span>
-            Weekly Snapshot
+          <a class:list={["nav-link", "nav-home", homeActive && "is-active"]} href={navHome.href} aria-current={homeActive ? "page" : undefined}>
+            <span class="nav-icon" aria-hidden="true" set:html={homeIcon} />
+            {navHome.label}
           </a>
         </nav>
 
         <div class="department-stack" aria-label="Departments">
           <p class="rail-label">Departments</p>
           {
-            departments.map((department) => (
-              <a
-                class="department-link"
-                href={`/${department.id === "system" ? "system" : department.id}`}
-                aria-current={activePage === department.id ? "page" : undefined}
-                data-department-shortcut={department.id}
-              >
-                <span>{department.label}</span>
-                <small>{department.agent}</small>
-              </a>
+            navDepartments.map((department) => (
+              <details class="dept" open={openDepartment === department.id} data-department={department.id}>
+                <summary class="dept-summary">
+                  <span class="nav-icon" aria-hidden="true" set:html={deptIcon(department.icon)} />
+                  <span class="dept-label">{department.label}</span>
+                  <span class="dept-chevron" aria-hidden="true">›</span>
+                </summary>
+                <ul class="dept-items">
+                  {department.items.map((item) =>
+                    item.status === "built" && item.href ? (
+                      <li>
+                        <a
+                          class:list={["dept-link", isLeafActive(item, pathname) && "is-active"]}
+                          href={item.href}
+                          aria-current={isLeafActive(item, pathname) ? "page" : undefined}
+                          title={item.note}
+                        >
+                          {item.label}
+                        </a>
+                      </li>
+                    ) : (
+                      <li>
+                        <span class="dept-link is-soon" title={item.note} aria-disabled="true">
+                          {item.label}
+                          <small class="soon-badge">soon</small>
+                        </span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </details>
             ))
           }
         </div>
@@ -117,25 +131,23 @@ const liveStatus = surface?.status ?? commandSurface?.status ?? "unconfigured";
           </div>
         </header>
 
-        <section class="status-strip" aria-label="Queue status">
-          <div>
-            <span>{shellItems.length}</span>
-            <small>{liveStatus === "live" ? "live work items" : "work items"}</small>
-          </div>
-          <div>
-            <span>{needsReviewCount}</span>
-            <small>need review</small>
-          </div>
-          <div>
-            <span>{blockedCount}</span>
-            <small>blocked</small>
-          </div>
-        </section>
-
         <main>
           <slot />
         </main>
       </div>
     </div>
+    <script>
+      // Accordion: open one department at a time. Native <details> allows
+      // multiple open; close the others when a new summary is opened.
+      const groups = Array.from(document.querySelectorAll<HTMLDetailsElement>(".dept"));
+      for (const group of groups) {
+        group.addEventListener("toggle", () => {
+          if (!group.open) return;
+          for (const other of groups) {
+            if (other !== group) other.open = false;
+          }
+        });
+      }
+    </script>
   </body>
 </html>

@@ -57,6 +57,21 @@ if (dataEl && root) {
   const scopeBox = document.getElementById("plc2-scope") as HTMLInputElement;
   scopeBox.addEventListener("input", () => { scopeOnly = scopeBox.checked; render(); });
 
+  // Scoped deep-link: land pre-filtered from the map popup / side card.
+  const params = new URLSearchParams(window.location.search);
+  const dlOffice = params.get("office");
+  const dlBranch = params.get("branch");
+  if (dlOffice) {
+    const want = decodeURIComponent(dlOffice).toLowerCase();
+    const match = uniq(allBranches.map((b) => b.office)).find((o) => o.toLowerCase() === want || o.toLowerCase().includes(want));
+    if (match) {
+      f.office = match;
+      const sel = filtersEl.querySelector<HTMLSelectElement>('select[data-col="office"]');
+      if (sel) sel.value = match;
+    }
+  }
+  if (dlBranch) { search.value = decodeURIComponent(dlBranch); }
+
   /* ---- helpers ---- */
   const fyFactor = () => P.yearFactors[year] ?? 1;
   const reqOf = (b: any) => reqOverride[b.branchNo] || b;
