@@ -164,6 +164,24 @@ if (root && dataEl && mount) {
     } catch { toast("Save failed — network error"); saveBtn.disabled = false; }
   });
 
+  /* ---- prepare draft for internal review (NEVER sends externally) ---- */
+  const handoffBtn = document.getElementById("iv-handoff") as HTMLButtonElement | null;
+  handoffBtn?.addEventListener("click", async () => {
+    if (!branch) return;
+    if (dirty.size > 0) { toast("Save your changes first, then prepare the draft."); return; }
+    handoffBtn.disabled = true;
+    try {
+      const res = await fetch("/api/price-agreement/package/handoff", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ branchNumber: branch.number }),
+      });
+      const r = await res.json();
+      if (!r.ok) { toast("Draft failed: " + (r.error_description || r.error || "error")); handoffBtn.disabled = false; return; }
+      toast(r.alreadyOpen ? "A review draft already exists for this branch." : "Draft created for internal review — nothing sent.");
+    } catch { toast("Draft failed — network error"); }
+    handoffBtn.disabled = false;
+  });
+
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;
   const covSel = document.getElementById("iv-cov") as HTMLSelectElement;

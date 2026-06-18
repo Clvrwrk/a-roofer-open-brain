@@ -38,6 +38,7 @@ const payload = JSON.stringify({
         <>
           <a class="iv-export" href={`/api/price-agreement/package/pdf?branch=${data.branch.number}`} target="_blank" rel="noopener">📄 PDF</a>
           <a class="iv-export" href={`/api/price-agreement/package/csv?branch=${data.branch.number}`}>⬇ CSV</a>
+          <button type="button" class="iv-export iv-handoff" id="iv-handoff">📥 Draft for review</button>
         </>
       )}
       <span class="iv-spacer"></span>
@@ -106,6 +107,9 @@ const payload = JSON.stringify({
   .iv-theme button.is-active{background:var(--brand);color:#fff}
   .iv-export{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
   .iv-export:hover{border-color:var(--brand);background:var(--brand-bg)}
+  .iv-handoff{cursor:pointer;font-family:inherit;background:var(--brand);color:#fff;border-color:var(--brand)}
+  .iv-handoff:hover{filter:brightness(.95);background:var(--brand)}
+  .iv-handoff:disabled{opacity:.5;cursor:default}
 
   .iv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
