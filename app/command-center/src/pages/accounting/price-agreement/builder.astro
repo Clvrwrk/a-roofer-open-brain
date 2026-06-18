@@ -1,0 +1,119 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadAgreementBuilder } from "@lib/agreement-package";
+
+const branchParam = Astro.url.searchParams.get("branch") ?? undefined;
+const data = await loadAgreementBuilder(branchParam);
+const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
+const runtimeTone = data.status === "live" ? "ready" : "watch";
+const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
+const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+const pricedPct = data.totals.items ? Math.round((data.totals.priced / data.totals.items) * 100) : 0;
+
+const payload = JSON.stringify({ families: data.families }).replace(/</g, "\\u003c");
+---
+
+<AppShell title="Agreement Builder" eyebrow="Accounting" activePage="accounting">
+  <section class="iv" data-theme="light" data-pref="system">
+    <div class="iv-toolbar">
+      <input class="iv-input" id="iv-search" type="search" placeholder="Search item, family, description…" autocomplete="off" />
+      <select class="iv-select" id="iv-branch">
+        {data.branches.map((b) => (
+          <option value={b.branchNumber} selected={data.branch?.number === b.branchNumber}>
+            {b.branchName} (#{b.branchNumber}) — {b.pricedItems} priced
+          </option>
+        ))}
+      </select>
+      <select class="iv-select" id="iv-cov">
+        <option value="">All items</option>
+        <option value="priced">Has prior price</option>
+        <option value="noprice">No prior price (→ 0)</option>
+      </select>
+      <span class="iv-spacer"></span>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
+      <span class="iv-count">{generatedAt}</span>
+      <div class="iv-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    <div class="iv-kpis">
+      <div class="iv-kpi"><span class="iv-kpi-lab">Branch</span><span class="iv-kpi-val" style="font-size:16px">{data.branch ? data.branch.name : "—"}</span><span class="iv-kpi-sub">{data.branch ? `#${data.branch.number} · ${data.branch.office}` : "no branch"}</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Negotiable Items</span><span class="iv-kpi-val">{data.totals.families.toLocaleString()}</span><span class="iv-kpi-sub">top-level · {data.totals.items.toLocaleString()} variations</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Already Priced</span><span class="iv-kpi-val">{data.totals.priced.toLocaleString()}</span><span class="iv-kpi-sub">{pricedPct}% have a prior price here</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">To Negotiate</span><span class="iv-kpi-val">{(data.totals.items - data.totals.priced).toLocaleString()}</span><span class="iv-kpi-sub">prefill 0 · never negotiated here</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">36-mo Spend</span><span class="iv-kpi-val">{money(data.totals.spend)}</span><span class="iv-kpi-sub">across the negotiable set</span></div>
+    </div>
+
+    <p class="iv-note">The negotiable worksheet for this branch — ABC review-class <b>A+B</b> items (~87% of 36-mo spend), grouped as top-level families that expand to color/size variations. Each variation is prefilled with this branch's <b>latest negotiated price</b>, or <b>0</b> if it was never negotiated here. Read-only preview; editing, PDF/CSV, and the branch-manager magic link land in the next slices (drafted for approval — nothing sends automatically).</p>
+
+    {data.totals.items === 0 && <p class="iv-empty">No negotiable items found.</p>}
+    <div id="iv-tree"></div>
+  </section>
+
+  <script type="application/json" id="iv-data" set:html={payload}></script>
+</AppShell>
+
+<style is:global>
+  .iv{
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --orange:#a4480d; --orange-bg:#fbe7d6; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; --shadow:0 6px 18px rgba(20,28,40,.08);
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--gutter, 24px)) calc(-1 * var(--space-6, 24px));
+    padding:18px var(--gutter, 24px) 30px; min-height:70vh; font-family:var(--font-sans, Inter, system-ui, sans-serif);
+  }
+  .iv[data-theme="dark"]{
+    --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+    --brand:#8a7bff; --brand-bg:#21243f; --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115;
+    --orange:#f3a766; --orange-bg:#3d2913; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38; --shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .iv .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5}
+  .iv .pill-green{background:var(--green-bg);color:var(--green)}
+  .iv .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
+  .iv .pill-grey{background:var(--grey-bg);color:var(--grey)}
+  .iv .pill-brand{background:var(--brand-bg);color:var(--brand)}
+
+  .iv-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .iv-input,.iv-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+  .iv-input{min-width:240px}
+  .iv-spacer{flex:1}
+  .iv-count{font-size:12px;color:var(--muted)}
+  .iv-empty{color:var(--muted);font-size:13px;padding:14px 4px}
+  .iv-note{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 16px;max-width:980px}
+  .iv-note b{color:var(--ink)}
+  .iv-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .iv-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+  .iv-theme button.is-active{background:var(--brand);color:#fff}
+
+  .iv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .iv-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .iv-kpi-sub{font-size:11px;color:var(--muted)}
+
+  .iv-fam{border:1px solid var(--line);border-radius:11px;margin:8px 0;background:var(--panel)}
+  .iv-fam>summary{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .iv-fam>summary::-webkit-details-marker{display:none}
+  .iv-chev{color:var(--muted);transition:transform .15s;font-size:15px}
+  details[open]>summary .iv-chev{transform:rotate(90deg)}
+  .iv-fam-name{font-weight:700;font-size:13.5px}
+  .iv-fam-sub{color:var(--muted);font-size:11.5px}
+  .iv-fam-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .iv-fam-body{padding:2px 12px 12px;border-top:1px solid var(--line)}
+
+  .iv-table{width:100%;border-collapse:collapse;margin-top:6px}
+  .iv-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .iv-table td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .iv-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .iv-sku{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+  .iv.iv-priced-only .iv-ln.no-prior{display:none}
+  .iv.iv-noprice-only .iv-ln.has-prior{display:none}
+  .iv-prefill{font-weight:650}
+  .iv-prefill.zero{color:var(--muted)}
+  @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} }
+</style>
+
+<script src="/src/scripts/agreement-builder-tree.ts"></script>
