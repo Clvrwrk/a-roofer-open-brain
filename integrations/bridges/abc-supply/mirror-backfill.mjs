@@ -1189,7 +1189,7 @@ function orderDetailRow(orderNumber, payload) {
     run_id: runId,
     order_name: textOrNull(payload?.orderName || salesOrder.name),
     order_date: dateOrNull(payload?.orderDate || dates.orderDate || dates.createdDate),
-    purchase_order_number: textOrNull(payload?.purchaseOrderNumber || salesOrder.purchaseOrderNumber),
+    purchase_order_number: textOrNull(payload?.purchaseOrderNumber || salesOrder.purchaseOrder || salesOrder.purchaseOrderNumber),
     order_type: textOrNull(payload?.orderType || salesOrder.orderType),
     order_status: textOrNull(payload?.orderStatus || salesOrder.status),
     branch_number: textOrNull(branch.number || branch.branchNumber),
