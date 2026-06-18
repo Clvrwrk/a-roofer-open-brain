@@ -9,8 +9,19 @@ the validation layer are baked in below.
 - **Curation rule:** negotiable set = ABC **review-class A+B**, shown as **top-level
   families** (~454) that expand to SKU/color variations (857 SKUs total, ~87% of the
   $6.14M 36-mo spend). `family_id` is the grouping key (fall back to `item_number`).
-- **Package grain:** **per branch** (recipients = branch manager + regional rep).
-- **Prefill:** each variation = the branch's latest negotiated price, else **0**.
+- **Package grain:** **per branch**.
+- **Prefill:** branch negotiated price → else **last invoiced unit price at the PE
+  office if < 60 days old** → else **0**. No region/national fallback.
+- **Recipient:** **Justin Garza** (`Justin.Garza@abcsupply.com`), the ABC **national
+  account manager**, for ALL PE offices.
+- **Magic-link TTL:** **7 working days**, normalized to expire at **06:00** (e.g. email
+  Monday → link expires the following Wednesday 6 AM).
+- **First-deployment comms rule (HARD):** an agent sends **zero email outside the
+  company**. The agent drafts the package + PDF/CSV + magic link and notifies
+  **Lucinda/Roberto** internally (Slack and/or internal AgentMail). The external send
+  to Justin is a **human action from Hermes / Google Workspace** (`agents.proexteriorsus.net`,
+  where all vendor/outside email is directed). Enforce with a code-level outbound
+  allowlist (internal domains only); external recipients are blocked → draft.
 
 ## Validated facts (corrections applied)
 - Negotiable master lives in `abc_product_catalog` (`review_class`, `family_id`,
@@ -35,20 +46,24 @@ the validation layer are baked in below.
 1. **DONE (commit dbafa9a)** — read-only per-branch builder: `v_negotiable_items` (109),
    `lib/agreement-package.ts`, `pages/accounting/price-agreement/builder.astro`,
    `scripts/agreement-builder-tree.ts`, nav. Family tree, branch picker, prefilled prices.
-2. **Editing + persistence** — additive tables `agreement_packages` / `agreement_package_items`
-   (keyed on branch + item_number, with `product_id`/`color_variant_id` link, `proposed_price`,
-   `prior_agreement_price`, `is_inherited`, `is_override`). Top-level edit cascades to
-   non-overridden children; a child edit sets `is_override`. `POST /api/price-agreement/package/[id]/items`.
-3. **PDF + CSV export** — add `pdf-lib`/`pdfkit`; mirror the ABC two-column ledger
-   (reference PDFs in `archive/local-uncommitted-2026-06-04/ProExteriors - Pricing/reabcinvoices/`).
-   CSV: `item_number, description, uom, prior_price, proposed_price, final_price(blank)`.
-4. **Drafted email (human-gated)** — package → `price_refresh_request` draft
-   (`status='awaiting_verification'`, `reason='agreement_package'`), attach PDF/CSV, populate
-   recipients. **No send** — a human approves/sends in the Command Center.
-5. **Magic-link submission (primary validation)** — `agreement_package_submissions` (append-only,
-   `magic_token` NULL until a human approves the send), unauthenticated `/submit-agreement/[token]`
-   page (add to middleware public allowlist) for the branch manager's per-line final prices +
-   approve/revise/reject. AgentMail "approved" reply = documented manual fallback.
+2. **DONE (commit 158d728 + 9f5a71c)** — editing + persistence: schema 110
+   (`agreement_packages` / `agreement_package_items` + `v_recent_invoice_price` for the
+   prefill fallback). Editable price per variation; family-level "Set all" cascades to
+   non-overridden variations; a variation edit sets `is_override`. `POST
+   /api/price-agreement/package/items` (auth-gated) get-or-creates a per-branch draft and
+   upserts changed items. Recipient = Justin Garza. Adversarially reviewed + fixed.
+3. **DONE (commit 85ccba7 + 9f5a71c)** — PDF + CSV export. `pdf-lib` (pure JS); GET
+   `/api/price-agreement/package/{pdf,csv}?branch=` (auth-gated). PDF = header (branch,
+   prepared-for Justin Garza, DRAFT note) + family-grouped Item/Desc/UOM/Prior/Proposed
+   table, paginated (35pp for a full branch). CSV ends with a blank `vendor_final_price`.
+   v1 uses a clean vendor-neutral table (exact ABC ledger fidelity deferred unless Chris needs it).
+4. **TODO — drafted handoff (human-gated, zero external send)** — package →
+   `price_refresh_request` draft (`reason='agreement_package'`, `status='awaiting_verification'`),
+   attach PDF/CSV. Notify **Lucinda/Roberto** internally (Slack + internal AgentMail). The send
+   to Justin is a **human** action from Hermes/Google Workspace. Add the outbound allowlist guard.
+5. **TODO — magic-link submission** — `agreement_package_submissions` (append-only, `magic_token`
+   NULL until a human approves), unauthenticated `/submit-agreement/[token]` (TTL = 7 working days
+   @ 06:00; add to middleware public allowlist) for Justin's per-line final prices + approve/revise/reject.
 
 ## Human-gated boundary (never auto-send)
 Email drafts only (`awaiting_verification` → human sends). Magic-link `magic_token` issued only
