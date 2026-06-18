@@ -8,9 +8,10 @@ const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
 const offices = data.offices.map((o) => o.office);
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
-const matchPct = data.totals.orders ? Math.round((data.totals.matched / data.totals.orders) * 100) : 0;
+const matchPct = data.totals.active ? Math.round((data.totals.matched / data.totals.active) * 100) : 0;
 
 const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c");
+const cutoff = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(Date.now() - 60 * 864e5));
 ---
 
 <AppShell title="Order Audit" eyebrow="Operations" activePage="operations">
@@ -21,15 +22,22 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
         <option value="">All PE offices</option>
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
-      <select class="iv-select" id="iv-match">
+      <select class="iv-select" id="iv-status">
+        <option value="active">Active (last 60 days)</option>
+        <option value="archived">Archived (invoiced / aged)</option>
         <option value="">All orders</option>
+      </select>
+      <select class="iv-select" id="iv-tol">
+        <option value="">All tolerance</option>
+        <option value="0.01">Flagged ≥ Minor</option>
+        <option value="3">Moderate +</option>
+        <option value="6">Major only</option>
+        <option value="noprice">No-agreement lines</option>
+      </select>
+      <select class="iv-select" id="iv-match">
+        <option value="">All matches</option>
         <option value="matched">Matched to job</option>
         <option value="unmatched">Unmatched (no PE job)</option>
-      </select>
-      <select class="iv-select" id="iv-cov">
-        <option value="">All coverage</option>
-        <option value="uncovered">Has uncovered items</option>
-        <option value="covered">Fully covered</option>
       </select>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
@@ -42,14 +50,14 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
     </div>
 
     <div class="iv-kpis">
-      <div class="iv-kpi"><span class="iv-kpi-lab">Orders</span><span class="iv-kpi-val">{data.totals.orders.toLocaleString()}</span><span class="iv-kpi-sub">in current pull</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Active Orders</span><span class="iv-kpi-val">{data.totals.active.toLocaleString()}</span><span class="iv-kpi-sub">last 60 days · {data.totals.archived.toLocaleString()} archived</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">overcharge vs negotiated</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Flagged Lines</span><span class="iv-kpi-val">{data.totals.flaggedLines.toLocaleString()}</span><span class="iv-kpi-sub">priced above agreement</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Matched to Job</span><span class="iv-kpi-val">{data.totals.matched.toLocaleString()}</span><span class="iv-kpi-sub">{matchPct}% verified to AcuLynx</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Unmatched</span><span class="iv-kpi-val">{data.totals.unmatched.toLocaleString()}</span><span class="iv-kpi-sub">no PE job # on PO</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">$ Ordered</span><span class="iv-kpi-val">{money(data.totals.orderTotal)}</span><span class="iv-kpi-sub">order amounts (incl. tax)</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Uncovered Lines</span><span class="iv-kpi-val">{data.totals.uncoveredLines.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated price</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">No-Agreement Lines</span><span class="iv-kpi-val">{data.totals.uncoveredLines.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated price</span></div>
     </div>
 
-    <p class="iv-note">ABC order lines are pre-pricing (no per-line cost), so this is a <b>verification &amp; coverage</b> audit: which orders map to a PE job, and which ordered items are covered by a current negotiated price agreement. Per-line dollar variance lives in <a href="/accounting/invoice-audit">Invoice Audit</a>.</p>
+    <p class="iv-note">Catches vendor pricing issues at the <b>order</b> stage — before they reach <a href="/accounting/invoice-audit">Invoice Audit</a>. Order unit price (ABC API) is compared to the negotiated agreement price; overcharges surface as <b>$ at risk</b>. Orders auto-archive (by <code>system</code>) once invoiced or older than 60 days (before {cutoff}); the view defaults to the active window.</p>
 
     {data.totals.orders === 0 && <p class="iv-empty">No orders found in the live pipeline.</p>}
     <div id="iv-tree"></div>
@@ -132,7 +140,7 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .iv-table td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}
   .iv-table td.num{text-align:right;font-variant-numeric:tabular-nums}
   .iv-sku{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
-  .iv.iv-uncov-only .iv-ln.is-covered{display:none}
+  .iv-note code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--grey-bg);color:var(--grey);padding:1px 5px;border-radius:5px}
 
   .iv-job{color:var(--brand);font-weight:600}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} }

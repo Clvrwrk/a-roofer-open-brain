@@ -1,13 +1,16 @@
 // Operations → Order Audit loader.
 // PE Office → Vendor/Branch → Order → Line drill-down over live ABC orders
-// (v_order_audit_* + v_order_acculynx_match, migration 106). ABC order LINES
-// carry no price (orders are pre-pricing), so this is a VERIFICATION + COVERAGE
-// audit, not a variance audit:
-//   • AcuLynx verification — does the order PO map to a PE job? (matched flag)
-//   • Negotiated coverage — is each ordered item covered by a current price
-//     agreement for that ship-to? Uncovered lines are the audit finding.
-// Paginated reads: orders (~3.2k) and lines (~18.6k) both exceed PostgREST's
-// 1000-row default, so selectAll() ranges through every page.
+// (v_order_audit_* + v_order_acculynx_match, migrations 106/107).
+//
+// ABC order lines ARE priced (source of truth: apidocs.abcsupply.com/get-orders):
+//   qty = raw.orderedQty.value · uom = raw.orderedQty.uom ·
+//   unit price = raw.unitPrice.value · line total = raw.amount ·
+//   description = abc_product_catalog by item_number (lines carry no description).
+// So this is a VARIANCE audit (order unit price vs negotiated) — catching pricing
+// issues BEFORE they reach Invoice Audit. Orders auto-ARCHIVE via 'system' once
+// invoiced or older than 60 days (by salesOrder.createdDate); the dashboard
+// defaults to ACTIVE orders — the still-catchable window.
+// Paginated reads: orders (~3.2k) and lines (~18.6k) exceed PostgREST's 1000 cap.
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
@@ -20,7 +23,11 @@ export interface OrdLine {
   itemDescription: string;
   qty: number;
   uom: string;
+  unitPrice: number;
+  extendedPrice: number;
   negotiatedPrice: number | null;
+  variancePct: number | null;
+  varianceExt: number | null;
   covered: boolean;
 }
 
@@ -32,12 +39,18 @@ export interface Order {
   orderStatus: string;
   orderType: string;
   orderTotal: number;
+  lineTotal: number;
+  disposition: "active" | "archived";
+  archiveReason: string;
   branchCode: string;
   branchName: string;
   office: string;
   lineCount: number;
   coveredLines: number;
   uncoveredLines: number;
+  flaggedLines: number;
+  atRisk: number;
+  worstPct: number;
   matched: boolean;
   jobNumber: string;
   clientName: string;
@@ -50,9 +63,11 @@ export interface OrdBranch {
   branchName: string;
   office: string;
   orderCount: number;
+  activeCount: number;
   matched: number;
   orderTotal: number;
-  coveredLines: number;
+  atRisk: number;
+  flaggedLines: number;
   uncoveredLines: number;
   orders: Order[];
 }
@@ -61,9 +76,11 @@ export interface OrdOffice {
   office: string;
   branchCount: number;
   orderCount: number;
+  activeCount: number;
   matched: number;
   orderTotal: number;
-  coveredLines: number;
+  atRisk: number;
+  flaggedLines: number;
   uncoveredLines: number;
   branches: OrdBranch[];
 }
@@ -74,11 +91,12 @@ export interface OrderAuditData {
   offices: OrdOffice[];
   totals: {
     orders: number;
+    active: number;
+    archived: number;
     matched: number;
-    unmatched: number;
     orderTotal: number;
-    lineCount: number;
-    coveredLines: number;
+    atRisk: number;
+    flaggedLines: number;
     uncoveredLines: number;
   };
 }
@@ -105,7 +123,7 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
     offices: [],
-    totals: { orders: 0, matched: 0, unmatched: 0, orderTotal: 0, lineCount: 0, coveredLines: 0, uncoveredLines: 0 },
+    totals: { orders: 0, active: 0, archived: 0, matched: 0, orderTotal: 0, atRisk: 0, flaggedLines: 0, uncoveredLines: 0 },
   };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
@@ -130,7 +148,11 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       itemDescription: l.item_description ?? "",
       qty: num(l.quantity),
       uom: l.uom ?? "",
+      unitPrice: num(l.unit_price),
+      extendedPrice: num(l.extended_price),
       negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
+      variancePct: l.variance_pct == null ? null : num(l.variance_pct),
+      varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       covered: !!l.covered,
     });
     linesByOrder.set(l.order_number, list);
@@ -147,17 +169,24 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       orderStatus: o.order_status ?? "",
       orderType: o.order_type ?? "",
       orderTotal: num(o.order_total),
+      lineTotal: num(o.line_total),
+      disposition: o.disposition === "archived" ? "archived" : "active",
+      archiveReason: o.archive_reason ?? "",
       branchCode: o.branch_number ?? "",
       branchName: o.branch_name ?? "",
       office: cleanOffice(o.office),
       lineCount: num(o.line_count),
       coveredLines: num(o.covered_lines),
       uncoveredLines: num(o.uncovered_lines),
+      flaggedLines: num(o.flagged_lines),
+      atRisk: num(o.at_risk),
+      worstPct: num(o.worst_pct),
       matched,
       jobNumber: matched ? m?.pe_job_number ?? "" : "",
       clientName: matched ? m?.client_name ?? "" : "",
       jobCategory: matched ? m?.job_category_name ?? "" : "",
-      lines: (linesByOrder.get(o.order_number) ?? []).sort((a, b) => Number(a.covered) - Number(b.covered)),
+      // Worst variance first so the pricing issues surface at the top of the line table.
+      lines: (linesByOrder.get(o.order_number) ?? []).sort((a, b) => Math.abs(b.variancePct ?? -1) - Math.abs(a.variancePct ?? -1)),
     };
   });
 
@@ -167,51 +196,63 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     const key = `${ord.office}|${ord.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
-      br = { branchCode: ord.branchCode, branchName: ord.branchName, office: ord.office, orderCount: 0, matched: 0, orderTotal: 0, coveredLines: 0, uncoveredLines: 0, orders: [] };
+      br = { branchCode: ord.branchCode, branchName: ord.branchName, office: ord.office, orderCount: 0, activeCount: 0, matched: 0, orderTotal: 0, atRisk: 0, flaggedLines: 0, uncoveredLines: 0, orders: [] };
       branchMap.set(key, br);
     }
     br.orders.push(ord);
     br.orderCount++;
+    if (ord.disposition === "active") br.activeCount++;
     if (ord.matched) br.matched++;
     br.orderTotal += ord.orderTotal;
-    br.coveredLines += ord.coveredLines;
+    br.atRisk += ord.atRisk;
+    br.flaggedLines += ord.flaggedLines;
     br.uncoveredLines += ord.uncoveredLines;
   }
 
   const officeMap = new Map<string, OrdOffice>();
   for (const br of branchMap.values()) {
-    br.orders.sort((a, b) => (b.orderedOn || "").localeCompare(a.orderedOn || "") || b.orderTotal - a.orderTotal);
+    // Active first, then worst variance, then newest.
+    br.orders.sort((a, b) =>
+      Number(b.disposition === "active") - Number(a.disposition === "active") ||
+      b.atRisk - a.atRisk ||
+      (b.orderedOn || "").localeCompare(a.orderedOn || ""));
     let off = officeMap.get(br.office);
     if (!off) {
-      off = { office: br.office, branchCount: 0, orderCount: 0, matched: 0, orderTotal: 0, coveredLines: 0, uncoveredLines: 0, branches: [] };
+      off = { office: br.office, branchCount: 0, orderCount: 0, activeCount: 0, matched: 0, orderTotal: 0, atRisk: 0, flaggedLines: 0, uncoveredLines: 0, branches: [] };
       officeMap.set(br.office, off);
     }
     off.branches.push(br);
     off.branchCount++;
     off.orderCount += br.orderCount;
+    off.activeCount += br.activeCount;
     off.matched += br.matched;
     off.orderTotal += br.orderTotal;
-    off.coveredLines += br.coveredLines;
+    off.atRisk += br.atRisk;
+    off.flaggedLines += br.flaggedLines;
     off.uncoveredLines += br.uncoveredLines;
   }
 
   const offices = Array.from(officeMap.values())
-    .map((o) => ({ ...o, orderTotal: Math.round(o.orderTotal), branches: o.branches.sort((a, b) => b.orderTotal - a.orderTotal) }))
-    .sort((a, b) => b.orderTotal - a.orderTotal);
+    .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), orderTotal: Math.round(o.orderTotal), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk || b.activeCount - a.activeCount) }))
+    .sort((a, b) => b.atRisk - a.atRisk || b.activeCount - a.activeCount);
 
-  const matched = orders.filter((o) => o.matched).length;
+  // Headline totals are scoped to the ACTIVE window (the catchable orders, which
+  // is also the page's default filter) so the KPIs match what's shown. Archived
+  // orders have already flowed past toward invoicing.
+  const active = orders.filter((o) => o.disposition === "active");
   return {
     status: "live",
     generatedAt: new Date().toISOString(),
     offices,
     totals: {
       orders: orders.length,
-      matched,
-      unmatched: orders.length - matched,
-      orderTotal: Math.round(orders.reduce((s, o) => s + o.orderTotal, 0)),
-      lineCount: orders.reduce((s, o) => s + o.lineCount, 0),
-      coveredLines: orders.reduce((s, o) => s + o.coveredLines, 0),
-      uncoveredLines: orders.reduce((s, o) => s + o.uncoveredLines, 0),
+      active: active.length,
+      archived: orders.length - active.length,
+      matched: active.filter((o) => o.matched).length,
+      orderTotal: Math.round(active.reduce((s, o) => s + o.orderTotal, 0)),
+      atRisk: Math.round(active.reduce((s, o) => s + o.atRisk, 0)),
+      flaggedLines: active.reduce((s, o) => s + o.flaggedLines, 0),
+      uncoveredLines: active.reduce((s, o) => s + o.uncoveredLines, 0),
     },
   };
 }
