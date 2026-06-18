@@ -52,6 +52,7 @@ export const navDepartments: NavDepartment[] = [
     items: [
       { label: "Overview", href: "/operations", status: "built", note: "HR & Compliance live here" },
       { label: "Estimate Audit", href: "/operations/estimate-audit", status: "built" },
+      { label: "Order Audit", href: "/operations/order-audit", status: "built", note: "ABC orders ↔ AcuLynx job + negotiated coverage" },
       { label: "Proposal Audit", status: "soon", note: "Shares the Estimate Audit tree" },
       { label: "Scheduling", status: "soon" },
       { label: "1099 Employee Mgmt", status: "soon", note: "Tax forms, insurance, 1099" },
