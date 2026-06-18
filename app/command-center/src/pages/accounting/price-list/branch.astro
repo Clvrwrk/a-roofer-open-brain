@@ -1,0 +1,108 @@
+---
+import { loadBranchPriceList } from "@lib/branch-price-list";
+
+const branch = Astro.url.searchParams.get("branch") ?? "";
+const invoice = Astro.url.searchParams.get("invoice") ?? "";
+const pl = await loadBranchPriceList(branch);
+const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hasActive = pl.agreements.some((a) => a.active);
+const fmtDate = (s: string) => s || "—";
+---
+
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Price List · Branch {branch} | Open Brain</title>
+  </head>
+  <body class="pl">
+    <header class="pl-head">
+      <div>
+        <p class="pl-eyebrow">Negotiated Price List{invoice ? ` · for invoice ${invoice}` : ""}</p>
+        <h1>Branch #{branch || "—"}</h1>
+      </div>
+      <div class="pl-status">
+        {pl.status === "live" ? (
+          <span class={`pl-pill ${hasActive ? "ok" : "bad"}`}>{hasActive ? "Active agreement" : "All agreements expired — renewal needed"}</span>
+        ) : (
+          <span class="pl-pill grey">No price list on file</span>
+        )}
+      </div>
+    </header>
+
+    {pl.status === "live" && (
+      <>
+        <section class="pl-agreements">
+          {pl.agreements.map((a) => (
+            <div class={`pl-ag ${a.active ? "ok" : "bad"}`}>
+              <strong>Agreement {a.number || `#${a.id}`}</strong>
+              <span>{a.itemCount} items · {fmtDate(a.effective)} → {fmtDate(a.expiry)} · {a.active ? "active" : "expired"}</span>
+            </div>
+          ))}
+        </section>
+
+        <div class="pl-toolbar">
+          <input id="pl-search" type="search" placeholder="Search item, description, manufacturer…" autocomplete="off" />
+          <span class="pl-count">{pl.items.length} items · {pl.activeItems} active · {pl.expiredItems} expired</span>
+        </div>
+
+        <table class="pl-table">
+          <thead><tr><th>Item</th><th>Description</th><th>Mfr</th><th>UOM</th><th class="num">Unit Price</th><th>Agreement</th></tr></thead>
+          <tbody>
+            {pl.items.map((it) => (
+              <tr data-search={`${it.itemNumber} ${it.description} ${it.manufacturer}`.toLowerCase()}>
+                <td class="mono">{it.itemNumber}</td>
+                <td>{it.description}</td>
+                <td>{it.manufacturer}</td>
+                <td>{it.uom}</td>
+                <td class="num">{money(it.unitPrice)}</td>
+                <td><span class={`pl-pill sm ${it.active ? "ok" : "bad"}`}>#{it.agreementId}{it.active ? "" : " exp"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    )}
+
+    {pl.status !== "live" && (
+      <p class="pl-empty">No negotiated price list is on file for branch #{branch}. The agreement may need to be requested or renewed.</p>
+    )}
+
+    <style is:global>
+      :root{ --bg:#f4f6f9; --panel:#fff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+        --green:#137a4d; --green-bg:#e3f5ec; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; }
+      @media (prefers-color-scheme: dark){ :root{ --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+        --green:#7ee2ad; --green-bg:#123626; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38; } }
+      *{box-sizing:border-box}
+      body.pl{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:18px 22px 40px;font-size:13px}
+      .pl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+      .pl-eyebrow{margin:0;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+      .pl-head h1{margin:2px 0 0;font-size:20px}
+      .pl-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:650;background:var(--grey-bg);color:var(--grey)}
+      .pl-pill.ok{background:var(--green-bg);color:var(--green)} .pl-pill.bad{background:var(--red-bg);color:var(--red)} .pl-pill.grey{background:var(--grey-bg);color:var(--grey)}
+      .pl-pill.sm{padding:1px 7px;font-size:10px;font-weight:600}
+      .pl-agreements{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+      .pl-ag{border:1px solid var(--line);border-left:3px solid var(--grey);border-radius:9px;padding:8px 12px;background:var(--panel)}
+      .pl-ag.ok{border-left-color:var(--green)} .pl-ag.bad{border-left-color:var(--red)}
+      .pl-ag strong{display:block;font-size:12.5px} .pl-ag span{color:var(--muted);font-size:11.5px}
+      .pl-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+      #pl-search{flex:1;max-width:340px;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+      .pl-count{color:var(--muted);font-size:12px}
+      .pl-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+      .pl-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0}
+      .pl-table td{padding:8px 11px;border-bottom:1px solid var(--line)}
+      .pl-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+      .pl-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+      .pl-empty{color:var(--muted);padding:30px 4px}
+    </style>
+    <script>
+      const s = document.getElementById("pl-search");
+      const rows = Array.from(document.querySelectorAll("tbody tr"));
+      s?.addEventListener("input", () => {
+        const q = (s as HTMLInputElement).value.trim().toLowerCase();
+        rows.forEach((r) => { (r as HTMLElement).style.display = !q || (r.getAttribute("data-search") || "").includes(q) ? "" : "none"; });
+      });
+    </script>
+  </body>
+</html>

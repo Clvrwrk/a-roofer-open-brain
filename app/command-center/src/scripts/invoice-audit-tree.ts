@@ -133,10 +133,11 @@ if (root && dataEl && mount) {
     const linesLabel = inv.pendingLines > 0 ? `${inv.pendingLines} of ${inv.lineCount} lines to audit` : `${inv.lineCount} lines · all audited`;
     const pdf = inv.hasPdf ? ` · <a class="iv-pdf" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 PDF</a>` : "";
     return `
-      <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}">
+      <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${pdf}</span></span>
+          <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
           <span class="iv-inv-tags">${invoiceTags(inv)}</span>
         </summary>
         <div class="iv-inv-body" data-inv="${esc(inv.invoiceNumber)}"></div>
@@ -199,11 +200,13 @@ if (root && dataEl && mount) {
   const search = document.getElementById("iv-search") as HTMLInputElement;
   const officeSel = document.getElementById("iv-office") as HTMLSelectElement;
   const tolSel = document.getElementById("iv-tol") as HTMLSelectElement;
+  const statusSel = document.getElementById("iv-status") as HTMLSelectElement;
   const pendingBox = document.getElementById("iv-pending") as HTMLInputElement;
   function applyFilter() {
     const q = search.value.trim().toLowerCase();
     const off = officeSel.value;
     const tol = tolSel.value;
+    const status = statusSel?.value ?? "";
     const pendingOnly = pendingBox?.checked;
     root!.classList.toggle("iv-pending-only", !!pendingOnly); // CSS hides audited line rows
     mount.querySelectorAll<HTMLElement>(".iv-office").forEach((oEl) => {
@@ -215,10 +218,12 @@ if (root && dataEl && mount) {
           const worst = parseFloat(iEl.dataset.worst || "0");
           const noprice = parseInt(iEl.dataset.noprice || "0", 10);
           const pending = parseInt(iEl.dataset.pending || "0", 10);
+          const paid = iEl.dataset.paid === "1";
           const tolOk = !tol ? true : tol === "noprice" ? noprice > 0 : worst >= parseFloat(tol);
+          const statusOk = status === "open" ? !paid : status === "paid" ? paid : true;
           const pendOk = !pendingOnly || pending > 0;
           const qOk = !q || (iEl.dataset.search || "").includes(q) || (bEl.dataset.search || "").includes(q);
-          const ok = officeOk && tolOk && pendOk && qOk;
+          const ok = officeOk && tolOk && statusOk && pendOk && qOk;
           iEl.style.display = ok ? "" : "none";
           if (ok) branchHas = true;
         });
@@ -228,7 +233,7 @@ if (root && dataEl && mount) {
       oEl.style.display = officeHas ? "" : "none";
     });
   }
-  [search, officeSel, tolSel, pendingBox].forEach((el) => el?.addEventListener("input", applyFilter));
+  [search, officeSel, tolSel, statusSel, pendingBox].forEach((el) => el?.addEventListener("input", applyFilter));
   applyFilter();
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */

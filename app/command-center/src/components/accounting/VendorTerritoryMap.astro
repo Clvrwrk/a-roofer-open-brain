@@ -228,9 +228,10 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         return `<div class="vmpop-kpi${tone ? ` tone-${tone}` : ""}"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`;
       }
 
-      function linkRow(href, label, soon) {
+      function linkRow(href, label, soon, blank) {
         if (soon) return `<span class="vmpop-link is-soon">${escapeHtml(label)}<small>soon</small></span>`;
-        return `<a class="vmpop-link" href="${escapeHtml(href)}">${escapeHtml(label)}<span aria-hidden="true">→</span></a>`;
+        const t = blank ? ` target="_blank" rel="noopener"` : "";
+        return `<a class="vmpop-link" href="${escapeHtml(href)}"${t}>${escapeHtml(label)}<span aria-hidden="true">${blank ? "↗" : "→"}</span></a>`;
       }
 
       function branchPopupHtml(branch) {
@@ -247,6 +248,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         ].join("");
 
         const links = [
+          branch.branchNumber ? linkRow(`/accounting/price-list/branch${branchParam}`, "Active Price List", false, true) : "",
           linkRow(`/accounting/invoice-audit${branchParam}`, "Invoice Audit"),
           linkRow(`/abc-price-agreement-gaps`, "Price Agreement Audit"),
           scope ? linkRow(`/accounting/vendor-regions`, "Price List Coverage") : "",
@@ -605,9 +607,32 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       }
 
       function renderBranchDetail(branch) {
-        // Side card mirrors the marker popup — two distinct paths to the same
-        // working dashboards (click the pin, or scan the rail card).
-        detailPanel.innerHTML = branchPopupHtml(branch);
+        // Side card = the popup card + the PE-office assignment picker. The popup
+        // (on the pin) stays compact; the rail card lets you register the
+        // branch↔office choice (persisted with who + when via the assign API).
+        const candidates = (branch.candidateOffices && branch.candidateOffices.length
+          ? branch.candidateOffices
+          : (payload.offices || []).map((o) => ({ id: o.id, name: o.name, driveMinutes: null, isSuggested: o.id === branch.suggestedOfficeId })));
+        const options = candidates
+          .map((c) => {
+            const mins = c.driveMinutes != null ? ` · ${Math.round(c.driveMinutes)} min` : "";
+            const sel = c.id === (branch.assignedOfficeId || branch.suggestedOfficeId) ? " selected" : "";
+            return `<option value="${escapeHtml(c.id)}"${sel}>${escapeHtml(c.name)}${mins}${c.isSuggested ? " · suggested" : ""}</option>`;
+          })
+          .join("");
+        const decided = branch.territoryDecidedAt
+          ? `Set by ${escapeHtml(branch.territoryDecidedBy || "—")} on ${escapeHtml(new Date(branch.territoryDecidedAt).toLocaleDateString())}`
+          : "Not yet assigned";
+        const assignBox = `
+          <div class="vmpop-assign">
+            <p class="vmpop-section">PE office for this branch</p>
+            <p class="vmpop-assign-now">${escapeHtml(branch.assignedOfficeName || "Unassigned")} <span class="vmpop-muted-inline">· ${decided}</span></p>
+            <select class="vmpop-select" data-office-select>${options}</select>
+            <button type="button" class="vmpop-save" data-assign-branch="${escapeHtml(branch.id)}">Save office choice</button>
+            <p class="vmpop-assign-status" data-assignment-status></p>
+          </div>`;
+        detailPanel.innerHTML = branchPopupHtml(branch) + assignBox;
+        detailPanel.querySelector("[data-assign-branch]")?.addEventListener("click", () => saveAssignment(branch));
       }
 
       function renderOfficeDetail(office) {

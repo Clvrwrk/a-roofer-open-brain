@@ -82,14 +82,14 @@ export interface InvoiceAuditData {
   status: "live" | "unconfigured";
   generatedAt: string;
   offices: InvOffice[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; audited: number; pending: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
 
 export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -217,6 +217,8 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       flagged: offices.reduce((s, o) => s + o.flagged, 0),
       audited: invoices.reduce((s, i) => s + i.auditedLines, 0),
       pending: invoices.reduce((s, i) => s + i.pendingLines, 0),
+      openInvoices: invoices.filter((i) => !i.paid).length,
+      paidInvoices: invoices.filter((i) => i.paid).length,
     },
   };
 }

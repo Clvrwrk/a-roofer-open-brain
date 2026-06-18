@@ -30,6 +30,11 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).repl
         <option value="">All PE offices</option>
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
+      <select class="iv-select" id="iv-status">
+        <option value="open">Open invoices</option>
+        <option value="paid">Paid (closed)</option>
+        <option value="">All invoices</option>
+      </select>
       <select class="iv-select" id="iv-tol">
         <option value="">All tolerance</option>
         <option value="0.01">Flagged ≥ Minor</option>
@@ -49,11 +54,11 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).repl
     </div>
 
     <div class="iv-kpis">
+      <div class="iv-kpi"><span class="iv-kpi-lab">Open Invoices</span><span class="iv-kpi-val">{data.totals.openInvoices.toLocaleString()}</span><span class="iv-kpi-sub">active · {data.totals.paidInvoices} paid/closed</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">To Audit</span><span class="iv-kpi-val">{data.totals.pending.toLocaleString()}</span><span class="iv-kpi-sub">lines pending review</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Audited</span><span class="iv-kpi-val">{data.totals.audited.toLocaleString()}</span><span class="iv-kpi-sub">passed (System + Lucinda backfill)</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">overcharge vs negotiated</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Invoices</span><span class="iv-kpi-val">{data.totals.invoices.toLocaleString()}</span><span class="iv-kpi-sub">{data.totals.creditMemos} credit memos</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">in current pull</span></div>
     </div>
 
     {data.totals.invoices === 0 && <p class="iv-empty">No invoices found in the live pipeline.</p>}
@@ -129,6 +134,8 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).repl
   .iv-inv-sub{color:var(--muted);font-size:11.5px}
   .iv-pdf{color:var(--brand);text-decoration:none;font-weight:650}
   .iv-pdf:hover{text-decoration:underline}
+  .iv-pricelist{margin:0 auto;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
+  .iv-pricelist:hover{border-color:var(--brand);background:var(--brand-bg)}
   .iv-inv-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .iv-inv-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
 

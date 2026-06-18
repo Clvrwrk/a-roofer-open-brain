@@ -129,9 +129,7 @@ a {
 }
 
 .brand-lockup {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
   align-items: center;
 }
 
@@ -1607,6 +1605,64 @@ a.vmpop-link:hover {
   font-size: 9px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.vmpop-assign {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.vmpop-assign-now {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vmpop-muted-inline {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.vmpop-select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text-primary);
+}
+
+.vmpop-save {
+  width: 100%;
+  margin-top: 8px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.vmpop-save:hover {
+  filter: brightness(0.95);
+}
+
+.vmpop-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.vmpop-assign-status {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .vendor-map-detail-panel {
