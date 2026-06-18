@@ -1,12 +1,13 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import "../../../styles/audit-queue.css";
-import { loadVendorTerritorySurface } from "@lib/vendor-territories";
-import { branchSlotsFromSurface, buildCatalog } from "@lib/price-list";
+import { loadNegotiatedCatalog } from "@lib/negotiated-catalog";
+import { buildCatalog } from "@lib/price-list";
 
-const surface = await loadVendorTerritorySurface();
-const slots = branchSlotsFromSurface(surface);
-const catalog = buildCatalog(slots);
+// Live: top-200 items by real spend (abc_line_items 2023-2026). Falls back to the
+// sample builder only when Supabase is unconfigured.
+let catalog = await loadNegotiatedCatalog();
+if (catalog.rows.length === 0) catalog = buildCatalog([]);
 ---
 
 <AppShell title="Negotiated Item Catalog" eyebrow="Accounting · Price List Audit" activePage="accounting">

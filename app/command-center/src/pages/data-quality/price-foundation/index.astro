@@ -1,153 +1,139 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
-import PfStatCard from "../../../components/data-quality/PfStatCard.astro";
 import { loadPriceFoundationOverview, type QueueType } from "@lib/price-foundation";
 
 const overview = await loadPriceFoundationOverview();
-
-const numberFormat = new Intl.NumberFormat("en-US");
-const fmt = (value: number) => numberFormat.format(value);
-const pct = (value: number | null) => (value === null ? null : `${value}%`);
-
-function lastUpdatedLabel(iso: string | null) {
+const fmt = (v: number) => new Intl.NumberFormat("en-US").format(v);
+const lastUpdated = (iso: string | null) => {
   if (!iso) return "No completed run yet";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-const statusTone = overview.status === "live" ? "ready" : overview.status === "degraded" ? "blocked" : "watch";
-const statusLabel =
-  overview.status === "live" ? "Completed" : overview.status === "degraded" ? "Degraded" : "Not configured";
-
-const queueHref = (queue: QueueType) => `/data-quality/price-foundation/queues?queue=${queue}`;
-const health = overview.health;
-const leakageClean = health.leakage === 0;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "Unknown" : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+};
+const runtimeTone = overview.status === "live" ? "ready" : overview.status === "degraded" ? "blocked" : "watch";
+const runtimeLabel = overview.status === "live" ? "Supabase live" : overview.status === "degraded" ? "Degraded" : "Not configured";
+const queueHref = (q: QueueType) => `/data-quality/price-foundation/queues?queue=${q}`;
+const toneCls = (t: string) => (t === "ready" || t === "ok" ? "pill-green" : t === "blocked" || t === "critical" ? "pill-red" : t === "watch" || t === "warn" ? "pill-yellow" : "pill-grey");
+const prioCls = (p: string) => (p === "high" ? "pill-red" : p === "medium" ? "pill-yellow" : "pill-grey");
+const h = overview.health;
+const leakageClean = h.leakage === 0;
 ---
 
-<AppShell title="Price Foundation — Migration Review" eyebrow="Data Quality" activePage="data-quality">
-  <section class="pf-overview">
-    <div class="surface-heading pf-heading">
+<AppShell title="Price Foundation" eyebrow="Data Quality" activePage="data-quality">
+  <section class="pf" data-theme="light" data-pref="system">
+    <div class="pf-toolbar">
       <div>
-        <h2>Phase 1 price foundation migration</h2>
-        <p class="pf-run-line">
-          <code>{overview.runLabel}</code>
-          <span class="runtime-pill" data-tone={statusTone}>
-            <span class="signal-dot" aria-hidden="true"></span>
-            {statusLabel}
-          </span>
-          <small>Last updated: {lastUpdatedLabel(overview.lastRunAt)}</small>
-        </p>
+        <p class="pf-eyebrow">Phase 1 migration review · <code>{overview.runLabel}</code></p>
+        <h2 class="pf-h2">Price foundation — what's safe to reuse vs. still gated</h2>
       </div>
-      <button type="button" class="button button-secondary" data-pf-refresh>Refresh data</button>
+      <span class="pf-spacer"></span>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
+      <span class="pf-count">Updated {lastUpdated(overview.lastRunAt)}</span>
+      <div class="pf-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
     </div>
 
-    {
-      overview.errors.length > 0 && (
-        <div class="pf-notice" role="status">
-          <strong>Live data unavailable.</strong>
-          <span>{overview.errors.join(" · ")}</span>
+    {overview.errors.length > 0 && <p class="pf-notice">Live data unavailable · {overview.errors.join(" · ")}</p>}
+
+    <div class="pf-kpis">
+      {overview.cards.map((card) => (
+        <div class="pf-kpi">
+          <span class="pf-kpi-lab">{card.label}</span>
+          <span class="pf-kpi-val">{fmt(card.value)}{card.percent !== null && <small class="pf-kpi-pct"> {card.percent}%</small>}</span>
+          <span class="pf-kpi-sub"><span class={`pill ${toneCls(card.tone)} pf-dot`}></span>{card.detail}</span>
         </div>
-      )
-    }
-
-    <div class="accounting-metric-grid pf-card-grid">
-      {
-        overview.cards.map((card) => (
-          <PfStatCard
-            label={card.label}
-            value={fmt(card.value)}
-            percent={pct(card.percent)}
-            caption={card.detail}
-            tone={card.tone}
-          />
-        ))
-      }
+      ))}
     </div>
 
-    <section class="pf-panel">
-      <header class="pf-panel-head">
-        <h3>Review queues</h3>
-        <small>Diagnostic lenses on the {fmt(overview.totalSourceRecords)} source records. The card partition above is exclusive; queues may overlap by design.</small>
-      </header>
-      <div class="queue-table-wrap">
-        <table class="queue-table pf-queue-table">
-          <thead>
+    <div class="pf-panel">
+      <p class="pf-panel-h">Review queues <small>diagnostic lenses on {fmt(overview.totalSourceRecords)} source records · queues may overlap</small></p>
+      <table class="pf-table">
+        <thead><tr><th>Queue</th><th class="num">Open</th><th class="num">Resolved</th><th class="num">Rejected</th><th class="num">Deferred</th><th class="num">Oldest</th><th>Priority</th><th></th></tr></thead>
+        <tbody>
+          {overview.queues.map((q) => (
             <tr>
-              <th scope="col">Queue</th>
-              <th scope="col">Open</th>
-              <th scope="col">Resolved</th>
-              <th scope="col">Rejected</th>
-              <th scope="col">Deferred</th>
-              <th scope="col">Oldest open</th>
-              <th scope="col">Priority</th>
-              <th scope="col"></th>
+              <td><strong>{q.label}</strong> <span class="pf-muted">{fmt(q.total)} total</span></td>
+              <td class="num"><strong>{fmt(q.open)}</strong></td>
+              <td class="num">{fmt(q.resolved)}</td>
+              <td class="num">{fmt(q.rejected)}</td>
+              <td class="num">{fmt(q.deferred)}</td>
+              <td class="num">{q.oldestOpenDays === null ? "—" : `${q.oldestOpenDays}d`}</td>
+              <td><span class={`pill ${prioCls(q.priority)}`}>{q.priority}</span></td>
+              <td><a class="pf-link" href={queueHref(q.queue)}>View →</a></td>
             </tr>
-          </thead>
-          <tbody>
-            {
-              overview.queues.map((queue) => (
-                <tr>
-                  <td><strong>{queue.label}</strong><span>{fmt(queue.total)} total</span></td>
-                  <td><strong>{fmt(queue.open)}</strong></td>
-                  <td>{fmt(queue.resolved)}</td>
-                  <td>{fmt(queue.rejected)}</td>
-                  <td>{fmt(queue.deferred)}</td>
-                  <td>{queue.oldestOpenDays === null ? "—" : `${queue.oldestOpenDays}d`}</td>
-                  <td><span class={`status-badge pf-priority-${queue.priority}`}>{queue.priority}</span></td>
-                  <td><a class="button button-ghost button-small" href={queueHref(queue.queue)}>View queue</a></td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pf-panel">
+      <p class="pf-panel-h">Reusable pricing health <small>from <code>price_agreement_items</code></small></p>
+      <div class="pf-health">
+        <div class="pf-hcard"><span class="pf-kpi-lab">Immediately reusable</span><span class="pf-kpi-val">{fmt(h.reusableItems)}{h.reusablePct !== null && <small class="pf-kpi-pct"> {h.reusablePct}%</small>}</span><span class="pf-kpi-sub">approved · matched · not flagged</span></div>
+        <div class="pf-hcard"><span class="pf-kpi-lab">Exact matches</span><span class="pf-kpi-val">{fmt(h.exactMatches)}</span><span class="pf-kpi-sub">of {fmt(h.totalAgreementItems)} agreement items</span></div>
+        <div class="pf-hcard"><span class="pf-kpi-lab">Needs review</span><span class="pf-kpi-val">{fmt(h.needsReview)}</span><span class="pf-kpi-sub">{fmt(h.unmatched)} unmatched to catalog</span></div>
+        <div class="pf-hcard"><span class="pf-kpi-lab">One-off leakage</span><span class={`pf-kpi-val ${leakageClean ? "pf-ok" : "pf-bad"}`}>{leakageClean ? "None" : fmt(h.leakage)}</span><span class="pf-kpi-sub">approved but still flagged (must be 0)</span></div>
       </div>
-    </section>
-
-    <section class="pf-panel pf-health">
-      <header class="pf-panel-head">
-        <h3>Reusable pricing health</h3>
-        <small>From <code>price_agreement_items</code> — what is safe to reuse vs. still gated.</small>
-      </header>
-      <dl class="pf-health-grid">
-        <div>
-          <dt>Immediately reusable</dt>
-          <dd>{fmt(health.reusableItems)}<em>{health.reusablePct === null ? "" : ` (${health.reusablePct}%)`}</em></dd>
-          <small>Approved · matched to product · not flagged</small>
-        </div>
-        <div>
-          <dt>Exact matches</dt>
-          <dd>{fmt(health.exactMatches)}</dd>
-          <small>of {fmt(health.totalAgreementItems)} agreement items</small>
-        </div>
-        <div>
-          <dt>Needs review</dt>
-          <dd>{fmt(health.needsReview)}</dd>
-          <small>{fmt(health.unmatched)} unmatched to catalog</small>
-        </div>
-        <div>
-          <dt>One-off leakage</dt>
-          <dd class={leakageClean ? "pf-ok" : "pf-bad"}>{leakageClean ? "None" : fmt(health.leakage)}</dd>
-          <small>Approved rows still flagged for review (must be 0)</small>
-        </div>
-      </dl>
-      {
-        !health.oneOffModeled && (
-          <p class="pf-fineprint">
-            One-off vs. reusable agreement flagging is not yet modeled on <code>price_agreements</code>; leakage is
-            approximated as approved-but-still-flagged items. Add an <code>is_one_off</code> / <code>is_reusable</code>
-            column to make this exact.
-          </p>
-        )
-      }
-    </section>
+      {!h.oneOffModeled && <p class="pf-fine">One-off vs. reusable flagging isn't modeled on <code>price_agreements</code> yet; leakage approximated as approved-but-flagged. Add <code>is_one_off</code> to make exact.</p>}
+    </div>
   </section>
-
-  <script src="/src/scripts/price-foundation-overview.ts"></script>
 </AppShell>
+
+<style is:global>
+  .pf{
+    --bg:#f4f6f9; --panel:#fff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4;
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4,16px)) calc(-1 * var(--gutter,24px)) calc(-1 * var(--space-6,24px));
+    padding:18px var(--gutter,24px) 30px; min-height:70vh; font-family:var(--font-sans,Inter,system-ui,sans-serif);
+  }
+  .pf[data-theme="dark"]{
+    --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+    --brand:#8a7bff; --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38;
+  }
+  .pf .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize}
+  .pf .pill-green{background:var(--green-bg);color:var(--green)} .pf .pill-yellow{background:var(--yellow-bg);color:var(--yellow)} .pf .pill-red{background:var(--red-bg);color:var(--red)} .pf .pill-grey{background:var(--grey-bg);color:var(--grey)}
+  .pf-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .pf-eyebrow{margin:0;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+  .pf-eyebrow code,.pf-panel-h code,.pf-fine code{font-size:11px;background:var(--panel2);padding:1px 5px;border-radius:4px}
+  .pf-h2{margin:3px 0 0;font-size:18px}
+  .pf-spacer{flex:1} .pf-count{font-size:12px;color:var(--muted)}
+  .pf-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .pf-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+  .pf-theme button.is-active{background:var(--brand);color:#fff}
+  .pf-notice{background:var(--red-bg);color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+  .pf-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+  .pf-kpi,.pf-hcard{display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .pf-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .pf-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .pf-kpi-pct{font-size:13px;color:var(--muted);font-weight:600}
+  .pf-kpi-sub{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .pf-dot{width:8px;height:8px;padding:0;border-radius:999px;flex:none}
+  .pf-ok{color:var(--green)} .pf-bad{color:var(--red)}
+  .pf-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:16px}
+  .pf-panel-h{margin:0 0 12px;font-size:14px;font-weight:700} .pf-panel-h small{font-weight:400;color:var(--muted);font-size:12px;margin-left:6px}
+  .pf-table{width:100%;border-collapse:collapse}
+  .pf-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .pf-table td{padding:9px 10px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .pf-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pf-table tr:last-child td{border-bottom:none}
+  .pf-muted{color:var(--muted);font-size:11px} .pf-link{color:var(--brand);text-decoration:none;font-weight:600}
+  .pf-health{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .pf-hcard{border-color:var(--line);background:var(--panel2)}
+  .pf-fine{margin:12px 0 0;font-size:11.5px;color:var(--muted)}
+</style>
+
+<script>
+  const root = document.querySelector(".pf") as HTMLElement | null;
+  if (root) {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = (p: string) => { root.dataset.theme = p === "system" ? (mq.matches ? "dark" : "light") : p; root.dataset.pref = p; root.querySelectorAll<HTMLButtonElement>(".pf-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === p)); };
+    let pref = "system"; try { pref = localStorage.getItem("pfTheme") || "system"; } catch {}
+    apply(pref);
+    root.querySelectorAll<HTMLButtonElement>(".pf-theme button").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem("pfTheme", b.dataset.setTheme!); } catch {} apply(b.dataset.setTheme!); }));
+    mq.addEventListener("change", () => { if (root.dataset.pref === "system") apply("system"); });
+  }
+</script>
