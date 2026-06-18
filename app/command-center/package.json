@@ -23,6 +23,7 @@
     "@supabase/supabase-js": "^2.107.0",
     "@workos-inc/node": "^10.2.0",
     "astro": "^6.4.4",
+    "pdf-lib": "^1.17.1",
     "svix": "^1.95.1"
   }
 }

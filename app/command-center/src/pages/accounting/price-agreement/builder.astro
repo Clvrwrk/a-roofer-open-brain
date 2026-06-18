@@ -34,6 +34,12 @@ const payload = JSON.stringify({
         <option value="priced">Has prior price</option>
         <option value="noprice">No prior price (→ 0)</option>
       </select>
+      {data.branch && (
+        <>
+          <a class="iv-export" href={`/api/price-agreement/package/pdf?branch=${data.branch.number}`} target="_blank" rel="noopener">📄 PDF</a>
+          <a class="iv-export" href={`/api/price-agreement/package/csv?branch=${data.branch.number}`}>⬇ CSV</a>
+        </>
+      )}
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="iv-count">{generatedAt}</span>
@@ -98,6 +104,8 @@ const payload = JSON.stringify({
   .iv-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
   .iv-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
   .iv-theme button.is-active{background:var(--brand);color:#fff}
+  .iv-export{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
+  .iv-export:hover{border-color:var(--brand);background:var(--brand-bg)}
 
   .iv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
