@@ -48,7 +48,7 @@ uncommented; always pass `--env=production`**).
 | Invoice PDF | `invoice_documents.storage_bucket/path` (bucket `invoices`, `abc-supply/2026/...pdf`) | uploaded; served via `/api/invoice-audit/pdf/[invoiceNumber]` (signed URL) |
 | Orders (placed, pre-invoice) | `abc_orders` (+ `_lines`, `_shipments`, `_history`) | `/order/v2/...` |
 | **Order PO / job ref + client** | `raw->'salesOrder'->>'purchaseOrder'` = `"CO-227: Client"` (`{job#}: {client}`) | order API ✓ — but the **`purchase_order_number` column was an empty-extraction bug** until 2026-06-18 (read `purchaseOrder`, not `purchaseOrderNumber`). |
-| **Order LINE qty / UOM / price / total** | read from `abc_order_lines.raw` — see below | order API ✓ — **order lines ARE priced** (earlier "no price" note was wrong). The sync mapped the wrong keys, so the `quantity`/`uom`/`item_description` **columns are 0/empty**; the views read raw instead. |
+| **Order LINE qty / UOM / price / total** | `abc_order_lines.quantity / uom / unit_price / extended_price` (also in `raw`) | order API ✓ — **order lines ARE priced** (earlier "no price" note was wrong). Sync mapping fixed + columns backfilled 2026-06-18; the views still read `raw` for robustness. |
 | **Order date (for the 60-day archive)** | `raw->'salesOrder'->>'createdDate'` (fallback `raw->'dates'->>'orderedOn'`) | order API ✓ |
 | **Order status** | `raw->'salesOrder'->>'status'` (Picked Up / Delivered / Processed / Invoiced / Canceled …) | order API ✓ |
 | **Item description** (orders + general) | `abc_product_catalog.item_description` by `item_number` | catalog — order/invoice **lines carry NO description**, only `links.href` to product detail; join the catalog. |
@@ -57,11 +57,12 @@ uncommented; always pass `--env=production`**).
 | Purchase ledger (item spend by year) | `abc_line_items` (16k, source_year 2023-2026, `ext_price`, `inv_qty`, `branch_state`, `acculynx_job_id` [empty]) | derived |
 | Branch manager contact | `vendor_branches.manager_name/email` (filled via crosswalk, schema 97) | ABC Location API `manager_json` |
 
-## Order LINE fields — exact raw paths (`abc_order_lines.raw`, per get-orders docs)
-The synced `quantity`/`uom`/`item_description` columns are wrong (0/empty) — **read raw**:
+## Order LINE fields — exact paths (`abc_order_lines`, per get-orders docs)
+Columns `quantity`/`uom`/`unit_price`/`extended_price` are now populated (sync fixed +
+backfilled 2026-06-18); `raw` carries the same and the views read it for robustness:
 - `raw->'orderedQty'->>'value'` = quantity · `raw->'orderedQty'->>'uom'` = UOM (e.g. PC, SQ, BD)
 - `raw->'unitPrice'->>'value'` = per-unit price · `raw->>'amount'` = line total
-- `raw->>'itemNumber'` = item code · description ← `abc_product_catalog` by item number
+- `raw->>'itemNumber'` = item code · **description ← `abc_product_catalog` by item number** (lines have none)
 - (invoice lines mirror this shape under `abc_invoice_lines.raw`.)
 
 ## Order auto-archive rule (Order Audit)
@@ -80,7 +81,7 @@ defaults to active orders so it catches over-negotiated pricing *before* it hits
 ## Refresh commands
 - Invoices: `node integrations/bridges/abc-supply/mirror-backfill.mjs --env=production --only=invoices --detail-mode=missing --history-start=2026-01-01`
 - Orders: same with `--only=orders`. Both nightly-safe; `detail-mode=missing` only fetches new records. Run on a real host (not the Cowork VM — it reaps long jobs at ~45s).
-- **Sync bug to fix when touched:** `mirror-backfill.mjs` `orderLineRows()` maps `line.quantity/uom` (don't exist) instead of `orderedQty.value/uom`, and omits `unitPrice.value`/`amount`. Until fixed, the order-line columns stay empty and views must read `raw`. Fix it to populate the columns and add `unit_price`/`extended_price`.
+- **`orderLineRows()` sync — FIXED 2026-06-18:** now maps `orderedQty.value/uom`, `unitPrice.value`, `amount`; `abc_order_lines` gained `unit_price`/`extended_price` columns and existing rows were backfilled. (It had mapped `line.quantity/uom`, which don't exist in the get-orders payload.)
 
 ## Vendor API rule (applies to EVERY vendor, not just ABC)
 When a task involves connecting to or retrieving data from any vendor (ABC, AcuLynx,

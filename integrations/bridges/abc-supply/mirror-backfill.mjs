@@ -1205,14 +1205,20 @@ function orderDetailRow(orderNumber, payload) {
 
 function orderLineRows(orderNumber, payload) {
   const lines = Array.isArray(payload?.lines) ? payload.lines : [];
+  // Field paths per https://apidocs.abcsupply.com/get-orders/: qty/uom under
+  // orderedQty, per-unit price under unitPrice.value, line total under amount.
+  // Order lines carry NO description (only links.href) — the reporting views
+  // resolve it from abc_product_catalog by item_number.
   return lines.map((line, index) => ({
     order_number: orderNumber,
     line_key: textOrNull(line.id || line.lineId || line.lineNumber || index + 1),
     line_number: textOrNull(line.lineNumber || line.id),
     item_number: textOrNull(line.itemNumber || line.item?.number),
     item_description: textOrNull(line.itemDescription || line.description || line.item?.description),
-    quantity: parseNumber(line.quantity || line.orderQuantity),
-    uom: textOrNull(line.uom || line.unitOfMeasure),
+    quantity: parseNumber(line.orderedQty?.value ?? line.quantity ?? line.orderQuantity),
+    uom: textOrNull(line.orderedQty?.uom || line.orderedQty?.uomCode || line.uom || line.unitOfMeasure),
+    unit_price: parseNumber(line.unitPrice?.value ?? line.unitPrice),
+    extended_price: parseNumber(line.amount ?? line.extendedPrice),
     status_code: lineStatusCode(line),
     status_message: lineStatusMessage(line),
     raw: line,
