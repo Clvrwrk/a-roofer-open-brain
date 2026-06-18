@@ -6,9 +6,11 @@
 // expand to SKU/color variations.
 //
 // PREFILL (confirmed w/ Chris): per item, the starting price = (1) the branch's
-// latest negotiated agreement price, else (2) the most recent invoiced unit price
-// for that item at the branch's ship-to IF < 60 days old (v_recent_invoice_price),
-// else (3) 0. No region/national fallback.
+// negotiated agreement price — the lowest across the branch's matched agreements
+// (in practice every branch inherits one central agreement, so this = the current
+// price), else (2) the most recent invoiced unit price for that item at the
+// branch's ship-to IF < 60 days old (v_recent_invoice_price), else (3) 0. No
+// region/national fallback.
 //
 // Persisted edits (proposed prices, overrides, exclusions) live in
 // agreement_package_items (schema 110) and are merged on load. Recipient defaults
@@ -109,18 +111,19 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
 
   const branchName = new Map<string, { name: string; office: string }>();
   for (const b of branchMeta) {
-    branchName.set(b.branch_number, {
+    branchName.set(String(b.branch_number), {
       name: b.branch_name || `Branch ${b.branch_number}`,
       office: [b.city, b.state].filter(Boolean).join(", "),
     });
   }
 
   // branch → its ship-to numbers (for the recent-invoice fallback) and branch →
-  // (item → negotiated price) via that branch's matched agreements.
+  // (item → lowest negotiated price) via that branch's matched agreements. Branch
+  // ids are normalized to strings so number↔string keys never miss across views.
   const branchShipTos = new Map<string, Set<string>>();
   const branchNegPrice = new Map<string, Map<string, number>>();
   for (const m of matches) {
-    const bn = m.branch_number;
+    const bn = m.branch_number == null ? "" : String(m.branch_number);
     if (!bn) continue;
     if (m.ship_to_number) {
       let s = branchShipTos.get(bn); if (!s) { s = new Set(); branchShipTos.set(bn, s); }

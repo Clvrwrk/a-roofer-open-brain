@@ -81,10 +81,10 @@ export const GET: APIRoute = async ({ url, locals }) => {
 
   for (const fam of order) {
     const rows = byFam.get(fam)!;
-    ensure(20);
+    ensure(31); // band + at least one row, so a family header never strands at a page bottom
     // family band
     page.drawRectangle({ x: M, y: y - 4, width: W - 2 * M, height: 15, color: rgb(0.97, 0.97, 0.99) });
-    drawText(fit(fam, bold, 9.5, 420), M + 2, y, 9.5, bold, ink);
+    drawText(fit(fam, bold, 9.5, W - 2 * M - 70), M + 2, y, 9.5, bold, ink);
     drawRight(`${rows.length} item${rows.length === 1 ? "" : "s"}`, W - M - 2, y, 8.5, font, muted);
     y -= 16;
     for (const r of rows) {

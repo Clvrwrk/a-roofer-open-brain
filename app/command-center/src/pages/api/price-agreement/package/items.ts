@@ -48,15 +48,30 @@ export const POST: APIRoute = async ({ request, locals }) => {
       })
       .select("id")
       .single();
-    if (cErr) return jsonApiResponse({ error: "write_failed", error_description: cErr.message }, { status: 500 });
-    packageId = (created as any).id;
+    if (cErr) {
+      // Concurrent create lost the unique-index race — re-fetch the winner.
+      const { data: raced } = await client
+        .from("agreement_packages")
+        .select("id")
+        .eq("branch_number", branchNumber)
+        .eq("vendor", "ABC Supply Co.")
+        .order("package_version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      packageId = (raced as any)?.id ?? null;
+      if (!packageId) return jsonApiResponse({ error: "write_failed", error_description: cErr.message }, { status: 500 });
+    } else {
+      packageId = (created as any).id;
+    }
   }
 
   const nowIso = new Date().toISOString();
+  const PRICE_CEILING = 1_000_000; // a per-unit price above $1M is a fat-finger
   const clampNum = (v: unknown) => {
     if (v === null || v === undefined || v === "") return null;
     const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+    if (!Number.isFinite(n) || n < 0 || n > PRICE_CEILING) return null;
+    return Math.round(n * 100) / 100;
   };
   const rows = items.slice(0, 2000).map((it: any) => ({
     package_id: packageId,

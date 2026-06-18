@@ -62,16 +62,23 @@ if (root && dataEl && mount) {
   }
 
   function bindFamilyBody(det: HTMLElement, fam: NegFamily) {
-    det.querySelectorAll<HTMLInputElement>(".iv-price-in").forEach((inp) => {
+    // Scope to the body so the family-level "Set all" input (in the summary, same
+    // class) is not double-bound with the variation handler.
+    const body = det.querySelector(".iv-fam-body") as HTMLElement;
+    body?.querySelectorAll<HTMLInputElement>(".iv-price-in").forEach((inp) => {
       inp.addEventListener("change", () => {
         const v = byItem.get(inp.dataset.item!);
         if (!v) return;
         const val = inp.value === "" ? null : Math.max(0, Math.round(Number(inp.value) * 100) / 100);
+        const changed = inp.value !== inp.dataset.init;
         v.proposedPrice = val;
-        v.isOverride = true; // a direct variation edit makes its price primary
-        inp.classList.toggle("dirty", inp.value !== inp.dataset.init);
+        // Only a real, non-empty change makes the variation's price primary; a
+        // no-op edit or a clear-to-blank must NOT permanently override (else it
+        // would be excluded from later family "Set all" cascades).
+        v.isOverride = changed && val != null;
+        inp.classList.toggle("dirty", changed);
         const ovr = det.querySelector(`[data-ovr="${CSS.escape(v.itemNumber)}"]`) as HTMLElement | null;
-        if (ovr) ovr.hidden = false;
+        if (ovr) ovr.hidden = !v.isOverride;
         markDirty(v.itemNumber);
       });
     });

@@ -15,7 +15,9 @@ export const GET: APIRoute = async ({ url, locals }) => {
     return new Response("No branch / negotiable items found.", { status: 404 });
   }
 
-  const header = ["item_number", "family", "description", "uom", "review_class", "prior_price", "prior_source", "proposed_price", "vendor_final_price"];
+  // final_price = the computed proposed/agreement price; vendor_final_price is left
+  // blank for the vendor to confirm on the returned sheet.
+  const header = ["item_number", "family", "description", "uom", "review_class", "prior_price", "prior_source", "final_price", "vendor_final_price"];
   const lines = [header.join(",")];
   for (const r of exp.rows) {
     lines.push([
