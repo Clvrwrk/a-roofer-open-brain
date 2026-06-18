@@ -1,20 +1,23 @@
 <!-- Cap: 2,500 chars. Curated working snapshot; update sparingly. -->
 # Working Memory
 
-## Active Threads
-- **Price Agreement Audit suite** (2026-06-17, on `main`): Invoice Audit + 6 KPI drill-downs, Negotiated Item Catalog, Price List Audit vendor→branch coverage tree (LIVE Supabase loader), `/abc-price-agreement-gaps` = workflow home. Kept the deployed Google-Maps **Vendor Map** at `/vendor-territories`.
-- **DEV ⇄ LIVE UNIFIED + deployed**: `origin/main` = `9b0a882` (had diverged: stale local main vs the deployed map/WorkOS branch). Coolify auto-deploys on main push — VERIFY the build landed on cc.proexteriorsus.net.
-- **NEXT — pick up here:** interview Chris on the new **menu bar** + **page schema**, then redesign. He was about to open http://127.0.0.1:4321/ and say "go". Detail in `docs/handoffs/current.md`.
-- DB live: migrations 95 (price_refresh_request branch grain) / 96 (abc_change_log RLS) / 97 (vendor_branches contact projection — 54/54 in-scope branches now have ABC manager email) + views v_price_list_branch/_item, v_vendor_branch_abc_xref. Plan: `docs/39`.
-- Estimate pipeline (docs/33) BUILT thru Phase 6; awaits Roberto labor-rate approval.
+## ▶ Pick up here
+**Full handoff: `docs/handoffs/current.md`.** Mid-sequence: Item 1 (AR feed) → **Item 2 (Order Audit + AcuLynx verify) — IN PROGRESS, build the dashboard next** → Item 3 (price-agreement builder, locked).
 
-## Environment / Deploy contract
-- **CLAUDE.md rule 11 / AGENTS.md:** source of truth = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE branch = `origin/main`**; Coolify builds `app/command-center/Dockerfile` → `https://cc.proexteriorsus.net` (WorkOS auth). Branch FROM live, commit early, merge back — never diverge.
-- Local dev: `http://127.0.0.1:4321/` (Local Operator, no WorkOS gate).
-- Supabase `rnhmvcpsvtqjlffpsayu`. `.env` = real secrets (incl. Coolify/Maps/WorkOS); `config/.env.example` names-only.
+## Standing instruction (Chris, 2026-06-18)
+**Vendor API skills — stop re-researching schemas (wastes tokens).** For any vendor with a documented API, read its data-map skill FIRST: where each datum lives (table.column), which endpoint feeds it, what's human-in-the-loop only. Built: `skills/cleverwork-roofer/abc-supply-api/` + acculynx-api (Brain data-map section). TODO: EagleView/GAF/Roofr.
 
-## Open threads
-- Redesign menu + page schema (interview pending).
-- Sales-rep EMAIL still a gap (not on ABC site/Location API; rep NAME from price_agreements). Branch-manager contacts now filled from ABC API.
-- Price List Audit v1 honest gaps: item $ partial (no invoice-price join), item-match ~12% → most branches read "partial", year factors synthetic, Request write-path client-mock. Invoice audit / drill-downs / catalog still SAMPLE data.
-- `outputs/` HTML mockups NOT committed (dev artifacts).
+## Command Center — LIVE state (all on `main`, design-system)
+- **Home = territory map** (color lens, branch/office KPI popups + side card w/ PE-office assignment + Active Price List link, default Richardson TX).
+- **Invoice Audit**: Office→Branch→Invoice→Line, live, defaults to Open invoices; line-level Audited Y/N (auto-pass + Lucinda paid-backfill + mark API); PDF + Price List links; AcuLynx job#/client/type on matched.
+- **Estimate Audit** (`/operations/estimate-audit`): live editable Office→Job→Estimate→Line tree.
+- **Price Agreement Audit**: agreement-lifecycle dashboard + Request Renewal (persists, drafted). **Price List Coverage / Negotiated Catalog (real spend) / Price Foundation**: live + design-system.
+
+## Key data findings (business actions)
+- **All item-bearing ABC price agreements are EXPIRED** → renewals.
+- **PE job number is in `acculynx_jobs.job_name`** ("KS-157: Client"), not `job_number` (179/1240) → job-matching caps ~33%.
+- **ABC API has NO AR/paid/due endpoint** → open/paid/due (the "169 active") come only from the ABC portal CSV (HIL). Paid status is in `invoice_documents.payment_status`. PENDING Q: how is it fed?
+
+## Environment / Deploy
+- Source of truth = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE = `origin/main`** = dev `cleverwork/price-agreement-audit` (mirrors). `git push origin main` **auto-deploys** (GitHub→Coolify webhook FIXED). Verify: `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. SOP `docs/27`.
+- Local dev `http://127.0.0.1:4321/` (Local Operator, no WorkOS). Supabase `rnhmvcpsvtqjlffpsayu`. Schemas mirrored `98–105`. ABC sync: `mirror-backfill.mjs --env=production --only=invoices|orders --detail-mode=missing` (nightly-safe; real host).

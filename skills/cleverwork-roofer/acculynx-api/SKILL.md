@@ -54,6 +54,27 @@ Use this skill to turn AccuLynx API tasks into grounded endpoint plans and safe 
 
 ---
 
+## Brain data map (where AcuLynx data lives in OUR tables) — read before re-searching
+
+| Data | Table | Notes (verified 2026-06-18) |
+|---|---|---|
+| Jobs/leads | `acculynx_jobs` (1,240) | `id` (uuid) = **immutable join key, assigned at lead creation, never changes — use it as the permanent link.** Has `job_name`, `job_category_name` (Residential/Commercial = job type), `trade_types`, `current_milestone`, `lead_source_name`, `location_street1/city/state`. |
+| **PE job number + client name** | `acculynx_jobs.job_name` = `"KS-157: Kathy Mcmillen"` (`{job#}: {client}`) | The PE job number is in **`job_name`**, NOT the `job_number` column (mostly empty, 179/1240). Extract `split_part(job_name,':',1)` = job#, suffix = client. |
+| Customer AR invoices (PE→customer) | `acculynx_invoices` | Schema exists (`job_id, invoice_number, due_date, current_invoice_state, total_price, balance_due`) but **EMPTY — pull not run.** This is PE's receivables, distinct from `abc_invoices` (PE's payables to ABC). |
+
+**Matching rule (ABC order/invoice ↔ AcuLynx job):** match the normalized ABC PO
+to the `job_name` prefix (`upper`, strip non-alnum, drop leading `PO`); store the
+link on `acculynx_jobs.id`. See `v_invoice_acculynx_match` (schema 104). Coverage:
+invoices 183/560, orders 349/3146 — ceiling = only 179 jobs carry a PE number.
+
+**Job-number lifecycle (Chris's TEMP design):** lead/prospect has no sequence
+number until Approved. Permanent key = AcuLynx `id`; pre-approval display label =
+`{Region}-TEMP-{short id}`; on Approved, swap to real `{Region}-{Sequence}`. Links
+ride on `id` so nothing breaks. Don't match estimates by address (~1/5);
+`estimate_runs` aren't linked to AcuLynx (only `metadata.source_csv` address).
+
+---
+
 ## Required Local References
 
 Load these before choosing endpoints:
