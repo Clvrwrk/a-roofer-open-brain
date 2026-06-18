@@ -99,15 +99,25 @@ Use one of these modes:
 - Backup target: provider/bucket/region for off-box encrypted host and config backups.
 - Memory decision: local bootstrap now, Zilliz Cloud shared memory now, or on-box Milvus Server later.
 
-## Deploying the Command Center (manual trigger — auto-deploy webhook is broken)
+## Deploying the Command Center
 
-⚠️ **GitHub → Coolify auto-deploy on push is NOT firing** (confirmed 2026-06-18: pushes
-`9b0a882` then `eed6647` to `main` did not deploy; live stayed on `852bcfa`). Until the
-GitHub webhook is fixed, **trigger the build manually** after pushing `main`.
+✅ **`main` pushes auto-deploy** via a GitHub webhook → Coolify (fixed 2026-06-18).
+Just `git push origin main`; Coolify builds `app/command-center/Dockerfile` and ships to
+`cc.proexteriorsus.net`. Verify with `/healthz` (below).
 
-- **Coolify**: `http://5.78.124.10:8000` · API key in `.env` `COOLIFY_PE_OPEN_BRAIN_API_KEY` (works).
+- **Coolify dashboard/API**: `https://coolify.proexteriorsus.net` (public, HTTPS) or
+  `http://5.78.124.10:8000` (admin port, firewalled to our IPs). API key in `.env`
+  `COOLIFY_PE_OPEN_BRAIN_API_KEY`.
 - **App**: `command-center`, resource uuid `og0rmt02rff8qti9nlfk3nr7`, deploys from `main`,
   fqdn `https://cc.proexteriorsus.net`.
+- **Webhook** (GitHub repo `Clvrwrk/a-roofer-open-brain`): push events →
+  `https://coolify.proexteriorsus.net/webhooks/source/github/events/manual`, secret =
+  Coolify app `manual_webhook_secret_github`. GitHub can only reach Coolify via the public
+  `coolify.` HTTPS domain (the raw IP:8000 is firewalled) — the domain's instance FQDN is
+  set in Coolify Settings → Configuration → General → URL, served through the proxy
+  (restart the proxy if a new instance domain isn't routed).
+
+**Manual deploy** (if ever needed — webhook down, or deploy a non-`main` ref):
 
 ```bash
 KEY=$(grep -E '^#? *COOLIFY_PE_OPEN_BRAIN_API_KEY=' .env | sed -E 's/^#? *[^=]+=//' | tr -d "\"'" | xargs)
@@ -119,8 +129,6 @@ BASE=http://5.78.124.10:8000; UUID=og0rmt02rff8qti9nlfk3nr7
 
 **Verify the live commit** (public, no WorkOS gate): `curl -s https://cc.proexteriorsus.net/healthz`
 → `buildCommit` should equal the pushed SHA; `liveSurfaceStatus` should be `live`.
-
-**TODO**: fix the GitHub→Coolify deploy webhook so `main` pushes auto-build.
 
 ## Upgrade Trigger
 
