@@ -50,6 +50,9 @@ export interface Invoice {
   paid: boolean;
   paidAt: string;
   hasPdf: boolean;
+  jobNumber: string;
+  clientName: string;
+  jobCategory: string;
   lines: InvLine[];
 }
 
@@ -93,11 +96,12 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [invRes, lineRes, auditRes, docRes] = await Promise.all([
+  const [invRes, lineRes, auditRes, docRes, acculynxRes] = await Promise.all([
     client.from("v_invoice_audit_invoice").select("*"),
     client.from("v_invoice_audit_line").select("*"),
     client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date"),
     client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path"),
+    client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true),
   ]);
   const invRows = (invRes.data as any[] | null) ?? [];
   if (invRows.length === 0) return empty;
@@ -107,6 +111,9 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
 
   const docByInvoice = new Map<string, any>();
   for (const d of (docRes.data as any[] | null) ?? []) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
+
+  const acculynxByInvoice = new Map<string, any>();
+  for (const a of (acculynxRes.data as any[] | null) ?? []) acculynxByInvoice.set(a.invoice_number, a);
 
   const linesByInvoice = new Map<string, InvLine[]>();
   for (const l of (lineRes.data as any[] | null) ?? []) {
@@ -158,6 +165,9 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     paid: docByInvoice.get(i.invoice_number)?.payment_status === "paid",
     paidAt: docByInvoice.get(i.invoice_number)?.paid_at ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10) : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
+    jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
+    clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
+    jobCategory: acculynxByInvoice.get(i.invoice_number)?.job_category_name ?? "",
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;

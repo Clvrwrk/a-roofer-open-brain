@@ -3,7 +3,7 @@
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; lines: InvLine[]; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -132,11 +132,12 @@ if (root && dataEl && mount) {
   function invoiceNode(inv: Invoice): string {
     const linesLabel = inv.pendingLines > 0 ? `${inv.pendingLines} of ${inv.lineCount} lines to audit` : `${inv.lineCount} lines · all audited`;
     const pdf = inv.hasPdf ? ` · <a class="iv-pdf" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 PDF</a>` : "";
+    const job = inv.jobNumber ? ` · <span class="iv-job">${esc(inv.jobNumber)}${inv.clientName ? " · " + esc(inv.clientName) : ""}${inv.jobCategory ? " · " + esc(inv.jobCategory) : ""}</span>` : "";
     return `
       <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
-          <span><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${pdf}</span></span>
+          <span><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${job}${pdf}</span></span>
           <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
           <span class="iv-inv-tags">${invoiceTags(inv)}</span>
         </summary>
