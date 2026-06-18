@@ -122,7 +122,11 @@ const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
         <td class="num">${a.itemCount.toLocaleString()}</td>
         <td class="num">${a.branchCount}</td>
         <td>${esc(a.salesRep) || "—"}</td>
-        <td>${a.needsAction || a.lifecycle === "expiring" ? `<button class="pa-renew" data-renew="${a.agreementId}">Request renewal</button>` : ""}</td>
+        <td>${a.renewalRequested
+          ? `<span class="pill pill-yellow">Renewal requested${a.renewalRequestedAt ? " · " + a.renewalRequestedAt : ""}</span>`
+          : (a.needsAction || a.lifecycle === "expiring")
+            ? `<button class="pa-renew" data-renew="${a.agreementId}">Request renewal</button>`
+            : ""}</td>
       </tr>`;
     }
 
@@ -141,7 +145,20 @@ const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
       tbody!.innerHTML = list.map(row).join("") || `<tr><td colspan="9" style="color:var(--muted);padding:16px">No agreements match.</td></tr>`;
       countEl.textContent = `${list.length} of ${ags.length} agreements`;
       tbody!.querySelectorAll<HTMLButtonElement>("[data-renew]").forEach((b) =>
-        b.addEventListener("click", () => toast("Renewal request drafted for agreement " + b.dataset.renew + " — queued for approval (no auto-send)")));
+        b.addEventListener("click", async () => {
+          const id = Number(b.dataset.renew);
+          const a = ags.find((x: any) => x.agreementId === id);
+          b.disabled = true; b.textContent = "Requesting…";
+          try {
+            const res = await fetch("/api/price-agreement/request-renewal", {
+              method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ agreementId: id, agreementNumber: a?.agreementNumber, scope: a?.scope, salesRep: a?.salesRep, expiry: a?.expiry }),
+            });
+            const r = await res.json();
+            if (r.ok) { if (a) { a.renewalRequested = true; a.renewalRequestedAt = (r.record?.created_at || "").slice(0, 10); } render(); toast("Renewal request drafted for " + (a?.agreementNumber || id) + " — queued for approval (no auto-send)"); }
+            else { b.disabled = false; b.textContent = "Request renewal"; toast("Failed: " + (r.error_description || r.error || "error")); }
+          } catch { b.disabled = false; b.textContent = "Request renewal"; toast("Network error"); }
+        }));
     }
     [search, filter].forEach((el) => el.addEventListener("input", render));
     render();

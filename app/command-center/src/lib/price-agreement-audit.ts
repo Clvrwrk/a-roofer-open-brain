@@ -25,6 +25,8 @@ export interface PaAgreement {
   ceoVerified: boolean;
   salesRep: string;
   needsAction: boolean;
+  renewalRequested: boolean;
+  renewalRequestedAt: string;
 }
 
 export interface PriceAgreementAudit {
@@ -42,9 +44,15 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const { data } = await client.from("v_price_agreement_audit").select("*");
-  const rows = (data as any[] | null) ?? [];
+  const [agRes, reqRes] = await Promise.all([
+    client.from("v_price_agreement_audit").select("*"),
+    client.from("price_refresh_request").select("agreement_id,status,created_at").eq("reason", "agreement_renewal").in("status", ["awaiting_verification", "approved", "ready_to_send", "sent"]),
+  ]);
+  const rows = (agRes.data as any[] | null) ?? [];
   if (rows.length === 0) return empty;
+
+  const reqByAgreement = new Map<number, any>();
+  for (const r of (reqRes.data as any[] | null) ?? []) if (r.agreement_id != null) reqByAgreement.set(Number(r.agreement_id), r);
 
   const agreements: PaAgreement[] = rows.map((r) => {
     const itemCount = num(r.item_count);
@@ -65,6 +73,8 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       ceoVerified: !!r.ceo_verified,
       salesRep: r.sales_rep || "",
       needsAction,
+      renewalRequested: reqByAgreement.has(num(r.agreement_id)),
+      renewalRequestedAt: reqByAgreement.get(num(r.agreement_id))?.created_at ? String(reqByAgreement.get(num(r.agreement_id)).created_at).slice(0, 10) : "",
     };
   });
 
