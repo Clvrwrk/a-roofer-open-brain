@@ -623,9 +623,14 @@ async function syncInvoices(context) {
         if (invoiceNumber) invoices.set(invoiceNumber, { row, billToNumber });
       }
       if (!dryRun) {
+        // ABC's history endpoint can return the same invoice_number more than
+        // once in a batch; dedupe by the conflict key (keep last) so the upsert
+        // doesn't try to affect the same row twice in one statement.
+        const historyRows = rows.map((row) => invoiceHistoryRow(row, billToNumber, window));
+        const dedupedHistory = [...new Map(historyRows.map((r) => [r.invoice_number, r])).values()];
         sync.historyRowsUpserted += await supabaseUpsertCount(
           "abc_invoice_history",
-          rows.map((row) => invoiceHistoryRow(row, billToNumber, window)),
+          dedupedHistory,
           "invoice_number"
         );
       }
@@ -664,7 +669,9 @@ async function syncInvoices(context) {
     progress(`invoice detail ${completed}/${candidates.length}`);
     if (!dryRun) {
       sync.detailRowsUpserted += await supabaseUpsertCount("abc_invoices", invoiceRows, "invoice_number");
-      sync.lineRowsUpserted += await supabaseUpsertCount("abc_invoice_lines", lineRows, "invoice_number,line_key");
+      // Dedupe lines by the (invoice_number, line_key) conflict target.
+      const dedupedLines = [...new Map(lineRows.map((r) => [`${r.invoice_number}|${r.line_key}`, r])).values()];
+      sync.lineRowsUpserted += await supabaseUpsertCount("abc_invoice_lines", dedupedLines, "invoice_number,line_key");
     }
   }
 }
