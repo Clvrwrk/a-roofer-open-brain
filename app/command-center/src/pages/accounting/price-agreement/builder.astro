@@ -10,7 +10,12 @@ const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pendin
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 const pricedPct = data.totals.items ? Math.round((data.totals.priced / data.totals.items) * 100) : 0;
 
-const payload = JSON.stringify({ families: data.families }).replace(/</g, "\\u003c");
+const payload = JSON.stringify({
+  families: data.families,
+  branch: data.branch,
+  packageId: data.packageId,
+  recipient: data.recipient,
+}).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Agreement Builder" eyebrow="Accounting" activePage="accounting">
@@ -44,16 +49,22 @@ const payload = JSON.stringify({ families: data.families }).replace(/</g, "\\u00
       <div class="iv-kpi"><span class="iv-kpi-lab">Negotiable Items</span><span class="iv-kpi-val">{data.totals.families.toLocaleString()}</span><span class="iv-kpi-sub">top-level · {data.totals.items.toLocaleString()} variations</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Already Priced</span><span class="iv-kpi-val">{data.totals.priced.toLocaleString()}</span><span class="iv-kpi-sub">{pricedPct}% have a prior price here</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">To Negotiate</span><span class="iv-kpi-val">{(data.totals.items - data.totals.priced).toLocaleString()}</span><span class="iv-kpi-sub">prefill 0 · never negotiated here</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">36-mo Spend</span><span class="iv-kpi-val">{money(data.totals.spend)}</span><span class="iv-kpi-sub">across the negotiable set</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Proposed Set</span><span class="iv-kpi-val" id="iv-proposed">{data.totals.proposed.toLocaleString()}</span><span class="iv-kpi-sub">items with a negotiated target</span></div>
     </div>
 
-    <p class="iv-note">The negotiable worksheet for this branch — ABC review-class <b>A+B</b> items (~87% of 36-mo spend), grouped as top-level families that expand to color/size variations. Each variation is prefilled with this branch's <b>latest negotiated price</b>, or <b>0</b> if it was never negotiated here. Read-only preview; editing, PDF/CSV, and the branch-manager magic link land in the next slices (drafted for approval — nothing sends automatically).</p>
+    <p class="iv-note">Negotiable worksheet for this branch — ABC review-class <b>A+B</b> items (~87% of 36-mo spend), grouped as top-level families that expand to color/size variations. Each variation is prefilled with the branch's <b>latest negotiated price</b>, else the <b>last invoiced price if &lt; 60 days old</b>, else <b>0</b>. Set a price at the family level to apply it to every variation; override a single variation to make its price primary. Recipient on send = <b>{data.recipient.name}</b> ({data.recipient.email}), the ABC national account manager — but nothing sends from here: edits save as a <b>draft</b> for internal review.</p>
 
     {data.totals.items === 0 && <p class="iv-empty">No negotiable items found.</p>}
     <div id="iv-tree"></div>
   </section>
 
+  <div class="iv-savebar" id="iv-savebar" hidden>
+    <span class="iv-savebar-msg" id="iv-savebar-msg">0 unsaved changes</span>
+    <button type="button" class="iv-save-btn" id="iv-save">Save draft</button>
+  </div>
+
   <script type="application/json" id="iv-data" set:html={payload}></script>
+  <div class="ia-toast" id="iv-toast" role="status" aria-live="polite"></div>
 </AppShell>
 
 <style is:global>
@@ -113,6 +124,21 @@ const payload = JSON.stringify({ families: data.families }).replace(/</g, "\\u00
   .iv.iv-noprice-only .iv-ln.has-prior{display:none}
   .iv-prefill{font-weight:650}
   .iv-prefill.zero{color:var(--muted)}
+  .iv-prefill-src{font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);display:block;margin-top:1px}
+
+  .iv-price-in{width:92px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:inherit;font-variant-numeric:tabular-nums}
+  .iv-price-in:focus{outline:none;border-color:var(--brand);background:var(--brand-bg)}
+  .iv-price-in.dirty{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-bg)}
+  .iv-fam-set{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+  .iv-fam-set input{width:84px}
+  .iv-ovr{font-size:9.5px;color:var(--brand);font-weight:650;margin-left:5px}
+
+  .iv-savebar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--brand);box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:12px;padding:10px 14px;z-index:55}
+  .iv-savebar-msg{font-size:12.5px;color:var(--ink);font-weight:600}
+  .iv-save-btn{appearance:none;border:none;background:var(--brand);color:#fff;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:650;cursor:pointer;font-family:inherit}
+  .iv-save-btn:disabled{opacity:.5;cursor:default}
+  .ia-toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .ia-toast.show{opacity:1}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} }
 </style>
 
