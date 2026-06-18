@@ -99,6 +99,29 @@ Use one of these modes:
 - Backup target: provider/bucket/region for off-box encrypted host and config backups.
 - Memory decision: local bootstrap now, Zilliz Cloud shared memory now, or on-box Milvus Server later.
 
+## Deploying the Command Center (manual trigger — auto-deploy webhook is broken)
+
+⚠️ **GitHub → Coolify auto-deploy on push is NOT firing** (confirmed 2026-06-18: pushes
+`9b0a882` then `eed6647` to `main` did not deploy; live stayed on `852bcfa`). Until the
+GitHub webhook is fixed, **trigger the build manually** after pushing `main`.
+
+- **Coolify**: `http://5.78.124.10:8000` · API key in `.env` `COOLIFY_PE_OPEN_BRAIN_API_KEY` (works).
+- **App**: `command-center`, resource uuid `og0rmt02rff8qti9nlfk3nr7`, deploys from `main`,
+  fqdn `https://cc.proexteriorsus.net`.
+
+```bash
+KEY=$(grep -E '^#? *COOLIFY_PE_OPEN_BRAIN_API_KEY=' .env | sed -E 's/^#? *[^=]+=//' | tr -d "\"'" | xargs)
+BASE=http://5.78.124.10:8000; UUID=og0rmt02rff8qti9nlfk3nr7
+# list apps:    curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/applications"
+# deploy:       curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/deploy?uuid=$UUID"
+# watch status: curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/deployments/<deployment_uuid>"
+```
+
+**Verify the live commit** (public, no WorkOS gate): `curl -s https://cc.proexteriorsus.net/healthz`
+→ `buildCommit` should equal the pushed SHA; `liveSurfaceStatus` should be `live`.
+
+**TODO**: fix the GitHub→Coolify deploy webhook so `main` pushes auto-build.
+
 ## Upgrade Trigger
 
 Move beyond CPX41 when any two are true:
