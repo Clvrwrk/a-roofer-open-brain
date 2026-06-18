@@ -2,25 +2,19 @@
 # Working Memory
 
 ## Active Threads
+- **Price Agreement Audit suite** (2026-06-17, on `main`): Invoice Audit + 6 KPI drill-downs, Negotiated Item Catalog, Price List Audit vendor→branch coverage tree (LIVE Supabase loader), `/abc-price-agreement-gaps` = workflow home. Kept the deployed Google-Maps **Vendor Map** at `/vendor-territories`.
+- **DEV ⇄ LIVE UNIFIED + deployed**: `origin/main` = `9b0a882` (had diverged: stale local main vs the deployed map/WorkOS branch). Coolify auto-deploys on main push — VERIFY the build landed on cc.proexteriorsus.net.
+- **NEXT — pick up here:** interview Chris on the new **menu bar** + **page schema**, then redesign. He was about to open http://127.0.0.1:4321/ and say "go". Detail in `docs/handoffs/current.md`.
+- DB live: migrations 95 (price_refresh_request branch grain) / 96 (abc_change_log RLS) / 97 (vendor_branches contact projection — 54/54 in-scope branches now have ABC manager email) + views v_price_list_branch/_item, v_vendor_branch_abc_xref. Plan: `docs/39`.
+- Estimate pipeline (docs/33) BUILT thru Phase 6; awaits Roberto labor-rate approval.
 
-- Command Center runs from `app/command-center` with Supabase product surface and WorkOS/auth.md discovery skeleton merged on `main`.
-- Estimate pipeline (docs/33) BUILT through Phase 6 (2026-06-10): 36 schema tables live, 5 sample runs end-to-end (measurement→GBB scenarios→proposal/internal-estimate PDFs→handoff→order/schedule drafts). Now waits on humans: Roberto's `labor-rates-wichita-v1` approval (observed $80/sq vs $165 placeholder), tier labels, live ABC pull. See `docs/handoffs/current.md`.
-- Pricing waterfall (Chris): PDF price list → live API w/ Ops+Acct approval → invoice ≤90d → flag. AccuLynx V2 has NO milestone/invoice/order/schedule writes (docs/37) — fallback permanent.
-- Raw imports are parked in `archive/local-uncommitted-2026-06-04/` pending Maintenance sanitize/extract manifest.
-- Supabase/Ghost/Dolt infrastructure KBs are complete on `main` at `d51d80a`; use `/supabase-change-preflight` and the new preflight scripts before schema, lab, or data-diff work.
+## Environment / Deploy contract
+- **CLAUDE.md rule 11 / AGENTS.md:** source of truth = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE branch = `origin/main`**; Coolify builds `app/command-center/Dockerfile` → `https://cc.proexteriorsus.net` (WorkOS auth). Branch FROM live, commit early, merge back — never diverge.
+- Local dev: `http://127.0.0.1:4321/` (Local Operator, no WorkOS gate).
+- Supabase `rnhmvcpsvtqjlffpsayu`. `.env` = real secrets (incl. Coolify/Maps/WorkOS); `config/.env.example` names-only.
 
-## Environment Notes
-
-- Command Center local URL: `http://127.0.0.1:4326/`.
-- Supabase project: `rnhmvcpsvtqjlffpsayu` (`https://rnhmvcpsvtqjlffpsayu.supabase.co`).
-- Public Command Center origin: `https://cc.proexteriorsus.net` (Coolify configured; DNS cutover pending).
-- `memsearch` 0.4.6 at `/Users/chussey/.local/bin/memsearch`. Mac index is stale — rebuild with `bash scripts/memsearch-index-open-brain.sh` (110 chunks verified from markdown 2026-06-10).
-- `.env` holds real local secrets; `config/.env.example` is names-only. Never copy `.env` into the template.
-- ABC Supply sandbox credentials are present locally under generic portal labels; add/use namespaced aliases `ABC_SUPPLY_CLIENT_ID`, `ABC_SUPPLY_CLIENT_SECRET`, and `ABC_SUPPLY_ENV=sandbox`.
-
-## Pending Decisions
-
-- Add WorkOS env vars before enabling real human auth: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, `WORKOS_REDIRECT_URI`, `COMMAND_CENTER_AUTH_MODE=workos`.
-- Add Sentry env names before MCP/CLI auth: `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`.
-- Define the sanitizer for archived website, pricing/accounting, and property-enrichment imports before indexing or committing extracted knowledge.
-- Confirm ABC sandbox credential track/scopes before read-only bridge tests; no order/webhook writes until human review.
+## Open threads
+- Redesign menu + page schema (interview pending).
+- Sales-rep EMAIL still a gap (not on ABC site/Location API; rep NAME from price_agreements). Branch-manager contacts now filled from ABC API.
+- Price List Audit v1 honest gaps: item $ partial (no invoice-price join), item-match ~12% → most branches read "partial", year factors synthetic, Request write-path client-mock. Invoice audit / drill-downs / catalog still SAMPLE data.
+- `outputs/` HTML mockups NOT committed (dev artifacts).

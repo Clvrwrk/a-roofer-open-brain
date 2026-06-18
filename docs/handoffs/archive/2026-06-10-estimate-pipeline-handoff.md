@@ -1,0 +1,313 @@
+# Project Handoff - A Roofer's Open Brain
+> Prior handoffs: `docs/handoffs/archive/` (2026-06-10-1322 = memory-system session; 2026-06-04 baseline) and `docs/handoffs/2026-06-06-kasm-hermes-agent-desktops.md`.
+
+**Project:** A Roofer's Open Brain / Pro Exteriors Open Brain Command Center
+**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain.git
+**Production URL:** `https://cc.proexteriorsus.net` (Coolify configured; DNS cutover pending)
+**Date:** 2026-06-10 21:07 UTC
+**Agent:** Claude (Cowork) — Estimate-to-Proposal pipeline build (docs/33 Phases 1–6 + labor intelligence)
+**Reason:** Wrap-up of the estimate-pipeline aspect of the project
+
+---
+
+## Accomplished This Session (Sessions 6–13 in today's daily log)
+
+The docs/33 estimate-to-proposal pipeline went from spec to a working end-to-end
+demo against 5 sample properties, with all artifacts in the live brain
+(`rnhmvcpsvtqjlffpsayu`) and every external action fail-closed behind human
+approval. One commit per phase; clean history `0c0756f..012dd1c`.
+
+### Phase 1 — Data Foundation (`1b20507`, `b023aa5`, `20b54da`)
+- Schemas 89/90/91 applied live: jurisdiction + regulatory_snapshot, 24
+  `estimate_*` tables, 10 `kb_*` research-loop tables (36 total, RLS,
+  service-role-only, cw_set_updated_at triggers).
+- **Live-DB binding decision (docs/36):** FKs target `public.properties`
+  (uuid) + `public.acculynx_jobs` (text GUIDs); the OB1 property/job/crew core
+  was never applied to this brain. Template files 10–30 remain for fresh brains.
+- 4 captured package templates (T1 Vista / T2 Highlander / T3 OC / T4 GAF+Tamko),
+  102 template lines, 102 ABC mappings (52 mapped / 42 needs_human / 8
+  unavailable) seeded from the screenshot→xlsx capture. Tier labels = candidates;
+  GBB-per-zone is Roberto's call.
+
+### Phase 2 — Measurement Extraction (`bc774d4`)
+- `scripts/extract-roofr-measurements.mjs`: Roofr CSV+PDF → §4.2 fields with
+  per-field provenance/confidence. Handles multi-structure waste tables,
+  pitched-only tables (flat added back unwasted), flat-roof no-table fallback.
+  Waste-adjusted squares are Roofr's own recommended-column value, never recomputed.
+- 5 runs / 10 hashed source docs / 127 measurement fields / 5 open dashboard
+  tasks (penetrations-vents are structurally absent from Roofr) / 5 §5.2
+  verification rows.
+
+### Phase 3 — Pricing Engine (`6974522`)
+- `scripts/evaluate-abc-branches.mjs`: Google Geocoding+Routes (server key) with
+  Census+haversine fallback; ship-to eligibility.
+- `scripts/build-estimate-scenarios.mjs`: §4.6 qty rules per qty_basis, SQ↔BD
+  conversion, alternate shingle/ridge de-dup, §4.7 cost components, price =
+  cost/(1−gm−comm−fees) to 40% retail target.
+- Live: 25 branch evals (drive times backfilled; drive-time ranking flipped 3
+  selections), 5 pricing requests, 73 pricing lines, 20 GBB options, 510
+  scenario lines (full §4.6 trail), 180 cost components, 20 margin checks, 25
+  verification rows. Materials reconcile to line sums (verified).
+
+### Phase 4 — Proposal + Invoice (`419c5fa`)
+- **Pricing waterfall decision (Chris, in docs/33 §4.5 + engine):** ingested PDF
+  price list → live ABC API (pulled price → Ops+Accounting dashboard approval) →
+  invoice history ≤90 days → no-price flag. All-time order-history fallback removed.
+- `scripts/build-proposal-pdf.py`: client GBB proposal — roof summary,
+  side-by-side options, 7 §4.8 initials blocks, signature page, decking
+  allowance + $45/sheet change order, 3-day cancel, DRAFT watermark (approval
+  flow owns removal). 5 PDFs in `outputs/proposal-drafts-2026-06-10/`.
+- Live: 5 proposals (sha256 in metadata), 5 deposit invoice drafts (amount null
+  until selection; 30% placeholder), 5 Ops approval tasks + work items, 10
+  §5.5/§5.6 verification rows.
+
+### Phase 5 — AccuLynx + Handoff (`7e76464`)
+- **docs/37 capability matrix (structural):** API V2 has NO writes for
+  milestones/statuses, invoices, material orders, crew schedules — fallback is
+  permanent for those, regardless of the API team ever replying. Automatable
+  once a write-scoped key lands: contact+job create, custom fields,
+  proposal/measurement uploads, worksheet items, messages (write-only), reps,
+  external references (`open-brain-estimate=run_id` = idempotency anchor).
+- `scripts/build-acculynx-handoff.mjs`: copy-into-AccuLynx packet + Slack
+  mrkdwn draft. 5 handoffs (dashboard_fallback) + work items + §5.9 rows live.
+
+### Labor Intelligence + Internal Estimates + Phase 6 (`012dd1c`)
+- **`labor_observations` + `labor_rates` tables (schema 92, applied live).**
+  30 observations from the 7 completed Wichita job packages (KS-72/91/109/111/
+  113/136/139; scanned crew invoices read visually, handwritten corrections
+  included). 10 proposed Wichita rates: **base install median $80/sq (n=7,
+  80–85)**, decking $10–15/sheet, extra layer $5–10/sq, 8/12 adder $5/sq,
+  soffit vent $15/ea, ridge vent $2/lf, cricket $250, pickup $150.
+- **Observed labor ≈ HALF the $165/sq engine placeholder** (~$1.4K margin
+  upside on a 17.7 sq job). Engine keeps the placeholder until Roberto approves
+  work item `labor-rates-wichita-v1` (HIGH priority); learning event records
+  the variance (pricing_rule_candidate).
+- `scripts/build-internal-estimate.py`: Ops-only landscape estimate — GBB
+  margin matrix (Material/Labor/Fees), full line detail with NEEDS-HUMAN
+  highlighting, placeholder-vs-observed labor comparison. 5 in
+  `outputs/internal-estimates-2026-06-10/`, linked into proposal approval items.
+- `scripts/build-order-schedule-drafts.mjs`: 5 §4.11 order drafts
+  (pre-selection, fail-closed) + 5 §4.12 schedule recommendations
+  (complexity crew-days, observed crew candidates, crew_ref null) + 10
+  verification rows.
+
+### Keys wired this session (both gitignored `.env`)
+- `GOOGLE_MAPS_BROWSER_KEY` (referrer-restricted — rejected by Google for
+  server APIs, kept for future Command Center frontend).
+- `GOOGLE_MAPS_SERVER_KEY` (IP-restricted, Geocoding+Routes) — **Chris will
+  rotate after testing**; evaluator reads env, rotation is config-only.
+
+## Git State
+
+- **Branch:** main; **HEAD:** `012dd1c` (this wrap-up commit adds handoff+memory).
+- Session commits: `0c0756f` spec+graphify docs → `2ac0dee` memory layer →
+  `dc30c95` memory content → `bc78893` handoffs → `1b20507` Phase 1 schemas →
+  `b023aa5` live-DB binding + applied → `20b54da` template seed → `bc774d4`
+  Phase 2 → `6974522` Phase 3 → `419c5fa` Phase 4 → `7e76464` Phase 5 →
+  `012dd1c` labor + Phase 6.
+- Pre-existing untracked noise (review separately, unchanged): ABC bridge
+  files, reference assets, `outputs/`, `Estimate Tool - Working Files/`,
+  `supabase/Accounting Files/`, `.playwright-mcp/`, `.test-unlink`,
+  `excalidraw.log`, `context/memory/2026-06-04.md` edit, SANDBOX-TEST-PLAN edit.
+
+## Task Cut Off
+
+None — clean boundary. All five sample runs sit at status `packaging` with
+every downstream artifact drafted and gated.
+
+## Next Task - Start Here
+
+**The pipeline now waits on humans, not code.** In order of leverage:
+
+1. **Roberto approves `labor-rates-wichita-v1`** (dashboard work item, HIGH) —
+   then switch the engine labor model from placeholder to `labor_rates` and
+   reprice the 20 scenarios (expect GM well above 40% at current sell prices).
+2. **Ops confirms estimating placeholders** in `config/roofer.config.yaml`
+   `estimating:` (deposit %, disposal, commission formula, contingency).
+3. **Tier labels** (Good/Better/Best per zone) + the 42 needs_human mappings
+   (mostly color/profile) + penetration/vent counts (5 open tasks).
+4. **Live ABC pricing pull** (waterfall tier 2) — wire the bridge with the
+   namespaced sandbox creds (docs/29), then re-run scenarios; this clears the
+   biggest verification exception.
+5. Then **Phase 7 formal pass** (verification + learning loop wiring is largely
+   live organically) and **Phase 8** (research loop charter v1).
+
+**Prompt to use:** "Read docs/handoffs/current.md. Roberto approved the Wichita
+labor rates — switch build-estimate-scenarios.mjs to the labor_rates model,
+reprice the 5 sample runs, regenerate internal estimates, and show the GM
+movement."
+
+## Decisions Made This Session
+
+- **Live-DB binding** (docs/36): estimate/kb schemas bind to `properties` +
+  `acculynx_jobs`, not the OB1 template core.
+- **Pricing waterfall** (Chris; docs/33 §4.5): PDF price list → live API w/
+  Ops+Accounting approval → invoice ≤90d → no-price flag.
+- **AccuLynx fallback is permanent** for milestones/invoices/orders/schedules
+  (docs/37) — structural, not access-related.
+- **Labor rates derive as medians, activate only via Ops approval**; rate rows
+  close with `effective_to` so history = per-office pricing-change track.
+- **Proposals are watermarked DRAFT**; watermark removal belongs to the
+  approval flow, never generation.
+- **Tier labels are price-ordered candidates** pending zone brand-priority.
+- **VM→Supabase REST loading pattern** (service key from mounted `.env`)
+  replaces SQL-pasting through the MCP for bulk data.
+
+## Blockers Requiring Human Action
+
+1. Roberto: approve/adjust `labor-rates-wichita-v1` + estimating placeholders.
+2. Chris: rotate `GOOGLE_MAPS_SERVER_KEY` after testing (env-only change).
+3. AccuLynx write-scoped API key (when their team replies) → POST probe batch
+   against a TEST job, update docs/37.
+4. ABC live pricing bridge activation (sandbox creds exist per docs/29).
+5. Deposit % policy + warranty tiers + full T&C packet (proposal approval gates).
+6. Carried: Hetzner SSH, DNS cutover, WorkOS creds, Sentry naming, archive
+   sanitizer, backup target, ICC licensing (research loop).
+
+## Verification Commands
+
+1. `git log --oneline 0c0756f..HEAD` — phase commits as listed above.
+2. Supabase (service role): `SELECT count(*) FROM estimate_runs;` → 5;
+   `estimate_scenario_lines` → 510; `labor_observations` → 30; `labor_rates` → 10 proposed.
+3. `node scripts/extract-roofr-measurements.mjs --dir "Estimate Tool - Working Files"` — 5 runs, waste_sq 17.7/33.77/19.65/20.0/55.1.
+4. `SELECT work_key,status FROM dashboard_work_items WHERE created_by LIKE 'claude-cowork%';` — 16 open items (5 missing-measurement, 5 proposal-approval, 5 acculynx-handoff, 1 labor-rates).
+5. Open any PDF in `outputs/proposal-drafts-2026-06-10/` (DRAFT watermark) and
+   `outputs/internal-estimates-2026-06-10/` (INTERNAL footer, margin matrix).
+
+## Full Context
+
+### Estimate pipeline component map (all in repo `scripts/` unless noted)
+
+| Stage | Component | Status |
+|-------|-----------|--------|
+| Schema | `schemas/cleverwork-roofer/89..92*.sql` | applied live |
+| Measurement | `extract-roofr-measurements.mjs` | 5 sample runs loaded |
+| Branch | `evaluate-abc-branches.mjs` | Google Routes live |
+| Scenarios | `build-estimate-scenarios.mjs` | waterfall tiers 1+3; tier 2 (live API) pending |
+| Proposal | `build-proposal-pdf.py` | DRAFT-watermarked client doc |
+| Internal estimate | `build-internal-estimate.py` | Ops margin/line detail doc |
+| Handoff | `build-acculynx-handoff.mjs` | dashboard_fallback packets |
+| Order/Schedule | `build-order-schedule-drafts.mjs` | pre-selection drafts |
+| Templates seed | `seed-package-templates-2026-06-10.sql` | idempotent repro |
+| Labor | `labor_observations` / `labor_rates` tables | 30 obs / 10 proposed rates |
+
+### Key invariants (unchanged, plus today's additions)
+
+- All prior invariants from the 2026-06-10-1322 handoff hold.
+- No engine repricing from observed labor rates until Ops approves the rate table.
+- Every priced line carries its waterfall tier; live ABC pull is a hard gate
+  before proposal approval.
+- Proposals: DRAFT watermark until approval; internal estimates never go to clients.
+
+### Service / deployment map (delta from prior handoff)
+
+| Service | Detail |
+|---------|--------|
+| Spec of record | docs/33 v1.2 (waterfall added) + docs/36 + docs/37 decisions |
+| Sample data | 5 Roofr packages + 7 completed-job doc packages in `Estimate Tool - Working Files/` |
+| Google Maps | browser + server keys in `.env` (server key rotation pending) |
+| Supabase loads | VM REST pattern (service key from mounted .env) — see memory `supabase-rest-from-vm` |
+| Pipeline outputs | `outputs/proposal-drafts-2026-06-10/`, `outputs/internal-estimates-2026-06-10/` |
+
+---
+
+## Final Addendum - Vendor Map, Supabase Infrastructure, Ghost, And Dolt
+
+**Date:** 2026-06-10 17:25 PDT
+**Agent:** Codex
+**Worktree:** `/private/tmp/a-roofers-open-brain-supabase-ops-knowledge-live-worktree`
+**Branch:** `contrib/cleverwork/supabase-ops-knowledge-live`
+
+### Completed After The Estimate Pipeline Handoff
+
+- Vendor Territory Map pricing-waterfall work is on `origin/main` at `911564d`.
+- Supabase/Ghost/Dolt infrastructure KB work landed as:
+  - `bcb24ed Add Supabase infrastructure preflight resources`
+  - `d51d80a Complete Supabase lab infrastructure knowledge bases`
+- Final handoff and memory verification landed as:
+  - `0dea04f Record infrastructure handoff and memory verification`
+
+### Supabase Infrastructure KB
+
+- Full resource pack exists under `integrations/bridges/supabase-infrastructure/`.
+- `docs/36-supabase-infrastructure-ops.md` is active KB v1.
+- `scripts/supabase-preflight.mjs` now flags changed SQL that creates `public` tables without Data API grant/RLS review.
+- `.codex/skills/supabase-change-preflight/SKILL.md` now routes Supabase, Ghost, and Dolt lab checks before infrastructure/schema work.
+
+### Ghost Lab KB
+
+- Full resource pack exists under `integrations/bridges/ghost/`.
+- `scripts/ghost-lab-preflight.mjs` verifies CLI, Codex MCP entry, auth, database list, target lab DB status, and schema inspection.
+- Lab DB verified: `pro-exteriors-open-brain-lab`.
+- No Ghost connection string or password is committed.
+
+### Dolt Lab KB
+
+- Full resource pack exists under `integrations/bridges/dolt/`.
+- `scripts/dolt-lab-preflight.mjs` verifies CLI, author identity, credential keypairs, optional DoltHub auth, and whether a target path is a Dolt repo.
+- DoltHub credential auth verified.
+- Dolt remains a non-sensitive data-diff lab, not a production backup or source of truth.
+
+### Verification Added
+
+- Ghost lab preflight: passed with user-level config access.
+- Dolt lab preflight: passed credential auth; expected warning only when run from this app repo because it is not itself a Dolt repo.
+- Supabase preflight: passed offline branch check with expected non-production warnings.
+- `node --check` passed for all three preflight scripts.
+- Metadata JSON parse passed for Supabase/Ghost/Dolt resources.
+- Diff whitespace checks passed.
+- Changed KB/script paths scanned clean for the secret-shaped patterns checked.
+- Global Web Intel documentation extraction was graded complete.
+
+### Git Reconciliation Note
+
+Two completed lines existed:
+
+- Estimate pipeline line ending at `ed37328`.
+- Vendor-map/Supabase-infrastructure line ending at `0dea04f`.
+
+They were merged so `origin/main` can carry both completed histories.
+
+Two additional AccuLynx worktree commits were then completed and merged into the main integration line:
+
+- `b148b20 Draft AccuLynx API blocker email`
+- `438f958 Add AccuLynx API docs skill resources`
+
+Remote branch heads verified on GitHub:
+
+- `origin/main`
+- `origin/contrib/cleverwork/supabase-ops-knowledge-live`
+- `origin/contrib/cleverwork/supabase-ops-knowledge`
+- `origin/contrib/cleverwork/acculynx-api-blockers-email`
+- `origin/contrib/cleverwork/acculynx-api-docs-skill`
+- `origin/contrib/cleverwork/vendor-territory-map-live`
+- `origin/contrib/cleverwork/vendor-territory-map`
+- `origin/contrib/cleverwork/ai-agent-workspace-app`
+- `origin/contrib/cleverwork/maintenance-agent-app-transition`
+- `origin/contrib/cleverwork/product-data-auth-integration`
+
+The canonical checkout at `/Users/chussey/Documents/a-roofers-open-brain` still has local dirty/raw/generated files. Those were not bulk-committed because they include local logs, screenshots, raw estimate/accounting material, generated outputs, and unreviewed ABC bridge files that need a separate safety review before promotion.
+
+### Current Safety Notes
+
+- Do not repeat or store secrets pasted in chat.
+- Rotate any exposed production secrets before relying on them for durable automation.
+- Destructive production Supabase work requires named target, backup/clone proof, migration or SQL artifact, rollback path, and exact approval.
+- Ghost and Dolt are lab resources only.
+
+### Next Start Addendum
+
+Before additional Supabase, Ghost, or Dolt work:
+
+```bash
+node scripts/supabase-preflight.mjs --target branch
+node scripts/ghost-lab-preflight.mjs --database pro-exteriors-open-brain-lab
+node scripts/dolt-lab-preflight.mjs --offline
+```
+
+Resume vendor territory map data audits:
+
+- Pro Exteriors office/region verification.
+- ABC branch API-to-vendor table matching.
+- Weekly vendor API pull and null-field backfill.
+- Price-agreement item completeness audit for 200-300+ SKU/colorway lines per agreement.
