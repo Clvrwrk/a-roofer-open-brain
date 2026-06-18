@@ -1,297 +1,159 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
-import MetricLinkCard from "../components/accounting/MetricLinkCard.astro";
-import { formatCurrency, formatNumber, loadAgreementGapSurface } from "@lib/abc-price-gaps";
-import { loadPriceListCoverage } from "@lib/price-list-coverage";
+import { loadPriceAgreementAudit } from "@lib/price-agreement-audit";
 
-const gapSurface = await loadAgreementGapSurface();
+const data = await loadPriceAgreementAudit();
+const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
+const runtimeTone = data.status === "live" ? "ready" : "watch";
+const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
 
-// live price-list coverage (the workflow's headline metric)
-const coverage = await loadPriceListCoverage();
-const covBranches = coverage.vendors.flatMap((v) => v.branches);
-const covInScope = covBranches.filter((b) => b.inScope);
-const covCovered = covInScope.filter((b) => b.listStatus !== "none" || b.requestStatus === "requested").length;
-const coveragePct = covInScope.length ? Math.round((covCovered / covInScope.length) * 100) : 0;
-const covNoList = covInScope.filter((b) => b.listStatus === "none").length;
-const generatedAt = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-}).format(new Date(gapSurface.generatedAt));
-const runtimeTone = gapSurface.status === "live" ? "ready" : "watch";
-const runtimeLabel =
-  gapSurface.status === "live" ? "Supabase live" : gapSurface.status === "degraded" ? "Supabase degraded" : "Supabase pending";
-const firstRow = gapSurface.rows[0];
-const branchOptions = gapSurface.branches.slice().sort((a, b) => a.branchNumber.localeCompare(b.branchNumber));
+const lifeCls = (l: string) => (l === "expired" ? "pill-red" : l === "expiring" ? "pill-orange" : l === "active" ? "pill-green" : "pill-grey");
+const lifeLab = (l: string) => (l === "expired" ? "Expired" : l === "expiring" ? "Expiring" : l === "active" ? "Active" : "No expiry");
+const daysLabel = (a: { lifecycle: string; daysToExpiry: number | null }) =>
+  a.daysToExpiry == null ? "—" : a.lifecycle === "expired" ? `${Math.abs(a.daysToExpiry)}d ago` : `${a.daysToExpiry}d left`;
+const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Price Agreement Audit" eyebrow="Accounting" activePage="pricing">
-  <section class="surface-heading" aria-label="Price Agreement Audit workflow home">
-    <div>
-      <p class="eyebrow">Workflow Home</p>
-      <h2>Price Agreement Audit — negotiate, track, and protect vendor pricing before it hits an invoice</h2>
+  <section class="pa" data-theme="light" data-pref="system">
+    <div class="pa-toolbar">
+      <input class="pa-input" id="pa-search" type="search" placeholder="Search agreement, scope, rep…" autocomplete="off" />
+      <select class="pa-select" id="pa-filter">
+        <option value="needs">Needs renewal</option>
+        <option value="expired">Expired (priced)</option>
+        <option value="expiring">Expiring ≤30d</option>
+        <option value="active">Active (priced)</option>
+        <option value="empty">Empty shells</option>
+        <option value="">All agreements</option>
+      </select>
+      <span class="pa-spacer"></span>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
+      <span class="pa-count" id="pa-count">{generatedAt}</span>
+      <div class="pa-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
     </div>
-    <div class="surface-meta">
-      <span class="runtime-pill" data-tone={runtimeTone}>
-        <span class="signal-dot" aria-hidden="true"></span>
-        {runtimeLabel}
-      </span>
-      <span>{generatedAt}</span>
+
+    <div class="pa-kpis">
+      <div class="pa-kpi"><span class="pa-kpi-lab">Needs Renewal</span><span class="pa-kpi-val">{data.totals.needsAction}</span><span class="pa-kpi-sub">priced + expired/expiring</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Expired (priced)</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">item-bearing, past expiry</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Expiring ≤30d</span><span class="pa-kpi-val">{data.totals.expiring}</span><span class="pa-kpi-sub">renew before lapse</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Active (priced)</span><span class="pa-kpi-val">{data.totals.active}</span><span class="pa-kpi-sub">in effect with items</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Priced Items</span><span class="pa-kpi-val">{data.totals.pricedItems.toLocaleString()}</span><span class="pa-kpi-sub">{data.totals.empty} empty agreements</span></div>
     </div>
+
+    {data.agreements.length === 0 && <p class="pa-empty">No price agreements found.</p>}
+
+    <table class="pa-table" id="pa-table">
+      <thead><tr><th>Agreement</th><th>Scope</th><th>Status</th><th>Effective → Expiry</th><th class="num">Days</th><th class="num">Items</th><th class="num">Branches</th><th>Sales Rep</th><th></th></tr></thead>
+      <tbody id="pa-rows"></tbody>
+    </table>
   </section>
 
-  <div class="accounting-metric-grid">
-    <MetricLinkCard
-      label="Price List Coverage"
-      value={`${coveragePct}%`}
-      caption={`${covInScope.length} in-scope branches · ${covNoList} with no list · target 100%`}
-      href="/accounting/vendor-regions"
-      tone={coveragePct < 80 ? "critical" : "ready"}
-    />
-    <MetricLinkCard
-      label="Negotiated Item Catalog"
-      value="Top 200"
-      caption="Highest-spend items · monthly / quarterly / annual"
-      href="/accounting/price-list/catalog"
-      tone="info"
-    />
-    <MetricLinkCard
-      label="Agreement Gaps"
-      value={formatNumber(gapSurface.totals.gapRows)}
-      caption={`${formatCurrency(gapSurface.totals.absoluteVariance)} variance · review queue below`}
-      href="#gap-queue"
-      tone="critical"
-    />
-    <MetricLinkCard
-      label="Invoice Audit (downstream)"
-      value="Per-invoice"
-      caption="Line-level pricing audit after agreements"
-      href="/accounting/invoice-audit"
-      tone="info"
-    />
-  </div>
-
-  <section class="gap-hero" aria-label="Agreement gap queue" id="gap-queue">
-    <div class="surface-heading">
-      <div>
-        <p class="eyebrow">Human Review Queue</p>
-        <h2>Agreement gap queue — invoice lines vs negotiated agreements</h2>
-      </div>
-      <div class="surface-meta">
-        <span class="runtime-pill" data-tone={runtimeTone}>
-          <span class="signal-dot" aria-hidden="true"></span>
-          {runtimeLabel}
-        </span>
-        <span>{generatedAt}</span>
-      </div>
-    </div>
-
-    {
-      gapSurface.errors.length > 0 && (
-        <div class="gap-alert" role="status">
-          {gapSurface.errors.join(" ")}
-        </div>
-      )
-    }
-
-    <div class="gap-summary-grid">
-      <article class="gap-metric-card metric-critical">
-        <span>{formatNumber(gapSurface.totals.gapRows)}</span>
-        <strong>gap rows</strong>
-        <small>{formatNumber(gapSurface.totals.invoiceLines)} invoice lines checked</small>
-      </article>
-      <article class="gap-metric-card">
-        <span>{formatNumber(gapSurface.totals.missingPriceListItems)}</span>
-        <strong>missing SKU price lines</strong>
-        <small>{formatNumber(gapSurface.totals.missingBranchAgreements)} missing branch mappings</small>
-      </article>
-      <article class="gap-metric-card">
-        <span>{formatNumber(gapSurface.totals.unverifiedAgreements)}</span>
-        <strong>unverified agreements</strong>
-        <small>{formatNumber(gapSurface.totals.expiredAgreements)} expired agreement rows</small>
-      </article>
-      <article class="gap-metric-card">
-        <span>{formatCurrency(gapSurface.totals.absoluteVariance)}</span>
-        <strong>absolute variance</strong>
-        <small>{formatNumber(gapSurface.totals.varianceRows)} rows with price delta</small>
-      </article>
-    </div>
-  </section>
-
-  <section class="branch-gap-strip" aria-label="Branch gap workload">
-    {
-      gapSurface.branches.slice(0, 8).map((branch) => (
-        <article>
-          <strong>{branch.branchNumber}</strong>
-          <span>{branch.branchName}</span>
-          <small>
-            {formatNumber(branch.gapRows)} rows · {formatCurrency(branch.absoluteVariance)}
-          </small>
-        </article>
-      ))
-    }
-  </section>
-
-  <section class="gap-workbench" aria-label="Price agreement gap workbench">
-    <div class="gap-table-panel">
-      <div class="gap-filter-bar" aria-label="Gap filters">
-        <label class="search-label">
-          <span>Search</span>
-          <input type="search" placeholder="Invoice, SKU, PO, order, branch" data-gap-search />
-        </label>
-
-        <label class="select-label">
-          <span>Severity</span>
-          <select data-gap-severity>
-            <option value="all">All severities</option>
-            <option value="critical">Critical</option>
-            <option value="blocked">Blocked</option>
-            <option value="review">Review</option>
-          </select>
-        </label>
-
-        <label class="select-label">
-          <span>Branch</span>
-          <select data-gap-branch>
-            <option value="all">All branches</option>
-            {branchOptions.map((branch) => <option value={branch.branchNumber}>{branch.branchNumber}</option>)}
-          </select>
-        </label>
-
-        <label class="select-label">
-          <span>Status</span>
-          <select data-gap-payment>
-            <option value="all">All invoices</option>
-            <option value="unpaid">Unpaid/open</option>
-            <option value="paid">Paid</option>
-            <option value="not linked">Not linked</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="gap-count-row">
-        <strong data-gap-visible-count>{formatNumber(gapSurface.rows.length)}</strong>
-        <span>visible rows in the escalation queue</span>
-      </div>
-
-      <div class="queue-table-wrap">
-        <table class="queue-table gap-table">
-          <thead>
-            <tr>
-              <th scope="col">Gap</th>
-              <th scope="col">Branch</th>
-              <th scope="col">Invoice Line</th>
-              <th scope="col">Past Price Agreement</th>
-              <th scope="col">Current Price Agreement</th>
-              <th scope="col">Invoiced Price</th>
-              <th scope="col">Delta</th>
-              <th scope="col">Order / PO</th>
-            </tr>
-          </thead>
-          <tbody>
-            {
-              gapSurface.rows.map((row, index) => (
-                <tr
-                  class:list={["gap-row", index === 0 && "is-selected"]}
-                  data-gap-row
-                  data-severity={row.severity}
-                  data-branch={row.branchNumber}
-                  data-payment={row.paymentStatus}
-                  data-search={`${row.invoiceNumber} ${row.itemNumber} ${row.itemDescription} ${row.branchNumber} ${row.branchName} ${row.orderName} ${row.purchaseOrderNumber}`.toLowerCase()}
-                  data-title={`${row.invoiceNumber} / ${row.itemNumber}`}
-                  data-branch-label={row.branchName}
-                  data-gap-reasons={row.gapReasons.map((reason) => reason.label).join("|")}
-                  data-action={row.humanAction}
-                  data-escalation={row.escalationPayload}
-                  data-past={row.pastAgreement}
-                  data-current={row.currentAgreement}
-                  data-reference={row.referenceAgreement}
-                  data-price={formatCurrency(row.invoicePrice)}
-                  data-delta={formatCurrency(row.variance)}
-                  tabindex="0"
-                >
-                  <td>
-                    <span class={`status-badge gap-${row.severity}`}>{row.severity}</span>
-                    <span>{row.gapReasons.map((reason) => reason.label).join(", ")}</span>
-                  </td>
-                  <td>
-                    <strong>{row.branchNumber}</strong>
-                    <span>{row.branchName}</span>
-                  </td>
-                  <td>
-                    <strong>{row.invoiceNumber}</strong>
-                    <span>{row.itemNumber} · {row.itemDescription}</span>
-                  </td>
-                  <td><span>{row.pastAgreement}</span></td>
-                  <td><span>{row.currentAgreement}</span></td>
-                  <td>
-                    <strong>{formatCurrency(row.invoicePrice)}</strong>
-                    <span>{row.quantity === null ? "Qty missing" : `${row.quantity} ${row.invoiceUom}`}</span>
-                  </td>
-                  <td>
-                    <strong class:list={[row.variance !== null && Math.abs(row.variance) > 0.005 && "variance-hot"]}>
-                      {formatCurrency(row.variance)}
-                    </strong>
-                    <span>{row.variancePct === null ? "No reference" : `${(row.variancePct * 100).toFixed(1)}%`}</span>
-                  </td>
-                  <td>
-                    <strong>{row.orderName}</strong>
-                    <span>{row.purchaseOrderNumber}</span>
-                  </td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <aside class="gap-detail-panel" aria-label="Selected price agreement gap">
-      <div class="detail-heading">
-        <p class="eyebrow">Escalation Packet</p>
-        <h2 data-gap-detail-title>{firstRow?.invoiceNumber ?? "No gap selected"}</h2>
-        <span class={`status-badge gap-${firstRow?.severity ?? "review"}`} data-gap-detail-severity>{firstRow?.severity ?? "review"}</span>
-      </div>
-
-      <dl class="detail-list">
-        <div>
-          <dt>Branch</dt>
-          <dd data-gap-detail-branch>{firstRow?.branchName ?? "None"}</dd>
-        </div>
-        <div>
-          <dt>Invoiced Price</dt>
-          <dd data-gap-detail-price>{formatCurrency(firstRow?.invoicePrice)}</dd>
-        </div>
-        <div>
-          <dt>Delta / Variance</dt>
-          <dd data-gap-detail-delta>{formatCurrency(firstRow?.variance)}</dd>
-        </div>
-      </dl>
-
-      <div class="reasoning-block">
-        <h3>Missing Guardrails</h3>
-        <ul class="gap-reason-list" data-gap-detail-reasons>
-          {firstRow?.gapReasons.map((reason) => <li>{reason.label}</li>)}
-        </ul>
-      </div>
-
-      <div class="reasoning-block">
-        <h3>Past Agreement</h3>
-        <p data-gap-detail-past>{firstRow?.pastAgreement ?? "None found"}</p>
-      </div>
-
-      <div class="reasoning-block">
-        <h3>Current Agreement</h3>
-        <p data-gap-detail-current>{firstRow?.currentAgreement ?? "None found"}</p>
-      </div>
-
-      <div class="action-note">
-        <strong data-gap-detail-action>{firstRow?.humanAction ?? "Review guardrail."}</strong>
-        <span data-gap-detail-escalation>{firstRow?.escalationPayload ?? "No escalation payload."}</span>
-      </div>
-    </aside>
-  </section>
-
-  <script src="/src/scripts/abc-price-gaps.ts"></script>
+  <script type="application/json" id="pa-data" set:html={payload}></script>
+  <div class="ia-toast" id="pa-toast" role="status" aria-live="polite"></div>
 </AppShell>
+
+<style is:global>
+  .pa{
+    --bg:#f4f6f9; --panel:#fff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --orange:#a4480d; --orange-bg:#fbe7d6; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; --shadow:0 6px 18px rgba(20,28,40,.08);
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4,16px)) calc(-1 * var(--gutter,24px)) calc(-1 * var(--space-6,24px));
+    padding:18px var(--gutter,24px) 30px; min-height:70vh; font-family:var(--font-sans,Inter,system-ui,sans-serif);
+  }
+  .pa[data-theme="dark"]{
+    --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
+    --brand:#8a7bff; --brand-bg:#21243f; --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115;
+    --orange:#f3a766; --orange-bg:#3d2913; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38; --shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .pa .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+  .pa .pill-green{background:var(--green-bg);color:var(--green)} .pa .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
+  .pa .pill-orange{background:var(--orange-bg);color:var(--orange)} .pa .pill-red{background:var(--red-bg);color:var(--red)} .pa .pill-grey{background:var(--grey-bg);color:var(--grey)}
+  .pa-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .pa-input,.pa-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+  .pa-input{min-width:240px} .pa-spacer{flex:1} .pa-count{font-size:12px;color:var(--muted)} .pa-empty{color:var(--muted);padding:14px 4px}
+  .pa-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .pa-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
+  .pa-theme button.is-active{background:var(--brand);color:#fff}
+  .pa-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  .pa-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .pa-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .pa-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .pa-kpi-sub{font-size:11px;color:var(--muted)}
+  .pa-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .pa-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .pa-table td{padding:9px 11px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .pa-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pa-ag{font-weight:650} .pa-ver{color:var(--muted);font-size:11px}
+  .pa-renew{appearance:none;border:1px solid var(--brand);background:var(--brand-bg);color:var(--brand);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:650;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .pa-renew:hover{filter:brightness(.97)}
+  .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .ia-toast.show{opacity:1}
+  @media (max-width:1100px){ .pa-kpis{grid-template-columns:repeat(2,1fr)} }
+</style>
+
+<script>
+  const root = document.querySelector(".pa") as HTMLElement | null;
+  const dataEl = document.getElementById("pa-data");
+  const tbody = document.getElementById("pa-rows");
+  if (root && dataEl && tbody) {
+    const ags = JSON.parse(dataEl.textContent || "[]");
+    const esc = (s: string) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
+    const lifeCls = (l: string) => (l === "expired" ? "pill-red" : l === "expiring" ? "pill-orange" : l === "active" ? "pill-green" : "pill-grey");
+    const lifeLab = (l: string) => (l === "expired" ? "Expired" : l === "expiring" ? "Expiring" : l === "active" ? "Active" : "No expiry");
+    const days = (a: any) => (a.daysToExpiry == null ? "—" : a.lifecycle === "expired" ? `${Math.abs(a.daysToExpiry)}d ago` : `${a.daysToExpiry}d left`);
+    const stale = (s: string) => (s ? `<span class="pill ${s === "critical" ? "pill-red" : s === "serious" ? "pill-orange" : s === "problem" ? "pill-yellow" : "pill-grey"}">${esc(s)}</span>` : "");
+
+    const search = document.getElementById("pa-search") as HTMLInputElement;
+    const filter = document.getElementById("pa-filter") as HTMLSelectElement;
+    const countEl = document.getElementById("pa-count")!;
+
+    function row(a: any): string {
+      return `<tr data-search="${esc((a.agreementNumber + " " + a.scope + " " + a.salesRep).toLowerCase())}">
+        <td><span class="pa-ag">${esc(a.agreementNumber)}</span>${a.ceoVerified ? ' <span class="pill pill-green">CEO ✓</span>' : ""}<br><span class="pa-ver">${esc(a.versionLabel)}</span></td>
+        <td>${esc(a.scope)}</td>
+        <td><span class="pill ${lifeCls(a.lifecycle)}">${lifeLab(a.lifecycle)}</span> ${stale(a.staleness)}</td>
+        <td>${a.effective || "—"} → ${a.expiry || "∞"}</td>
+        <td class="num">${days(a)}</td>
+        <td class="num">${a.itemCount.toLocaleString()}</td>
+        <td class="num">${a.branchCount}</td>
+        <td>${esc(a.salesRep) || "—"}</td>
+        <td>${a.needsAction || a.lifecycle === "expiring" ? `<button class="pa-renew" data-renew="${a.agreementId}">Request renewal</button>` : ""}</td>
+      </tr>`;
+    }
+
+    function visible(a: any): boolean {
+      const f = filter.value;
+      if (f === "needs") return a.needsAction;
+      if (f === "expired") return a.itemCount > 0 && a.lifecycle === "expired";
+      if (f === "expiring") return a.lifecycle === "expiring";
+      if (f === "active") return a.itemCount > 0 && (a.lifecycle === "active" || a.lifecycle === "no_expiry");
+      if (f === "empty") return a.itemCount === 0;
+      return true;
+    }
+    function render() {
+      const q = search.value.trim().toLowerCase();
+      const list = ags.filter((a: any) => visible(a) && (!q || (a.agreementNumber + " " + a.scope + " " + a.salesRep).toLowerCase().includes(q)));
+      tbody!.innerHTML = list.map(row).join("") || `<tr><td colspan="9" style="color:var(--muted);padding:16px">No agreements match.</td></tr>`;
+      countEl.textContent = `${list.length} of ${ags.length} agreements`;
+      tbody!.querySelectorAll<HTMLButtonElement>("[data-renew]").forEach((b) =>
+        b.addEventListener("click", () => toast("Renewal request drafted for agreement " + b.dataset.renew + " — queued for approval (no auto-send)")));
+    }
+    [search, filter].forEach((el) => el.addEventListener("input", render));
+    render();
+
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function applyTheme(p: string) { root!.dataset.theme = p === "system" ? (mq.matches ? "dark" : "light") : p; root!.dataset.pref = p; root!.querySelectorAll<HTMLButtonElement>(".pa-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === p)); }
+    let pref = "system"; try { pref = localStorage.getItem("paTheme") || "system"; } catch {}
+    applyTheme(pref);
+    root.querySelectorAll<HTMLButtonElement>(".pa-theme button").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem("paTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
+    mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+
+    let timer: number | undefined; const toastEl = document.getElementById("pa-toast")!;
+    function toast(m: string) { toastEl.textContent = m; toastEl.classList.add("show"); window.clearTimeout(timer); timer = window.setTimeout(() => toastEl.classList.remove("show"), 2600); }
+  }
+</script>
