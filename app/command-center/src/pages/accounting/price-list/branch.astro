@@ -7,6 +7,14 @@ const pl = await loadBranchPriceList(branch, invoice);
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hasActive = pl.agreements.some((a) => a.active);
 const fmtDate = (s: string) => s || "—";
+
+// Group price-list items into roof-system category sections (schema 114), ordered by the
+// category sort order; any unmapped keys fall to the end. Mirrors the Invoice Audit pattern.
+const known = new Set(pl.categories.map((c) => c.key));
+const sections = [
+  ...pl.categories.map((c) => ({ key: c.key, label: c.label, items: pl.items.filter((it) => it.categoryKey === c.key) })),
+  ...[...new Set(pl.items.filter((it) => !known.has(it.categoryKey)).map((it) => it.categoryKey))].map((k) => ({ key: k, label: k, items: pl.items.filter((it) => it.categoryKey === k) })),
+].filter((g) => g.items.length);
 ---
 
 <!doctype html>
@@ -48,21 +56,30 @@ const fmtDate = (s: string) => s || "—";
           <span class="pl-count">{pl.items.length} items · {pl.activeItems} active · {pl.expiredItems} expired</span>
         </div>
 
-        <table class="pl-table">
-          <thead><tr><th>Item</th><th>Description</th><th>Mfr</th><th>UOM</th><th class="num">Unit Price</th><th>Agreement</th></tr></thead>
-          <tbody>
-            {pl.items.map((it) => (
-              <tr data-search={`${it.itemNumber} ${it.description} ${it.manufacturer}`.toLowerCase()}>
-                <td class="mono">{it.itemNumber}</td>
-                <td>{it.description}</td>
-                <td>{it.manufacturer}</td>
-                <td>{it.uom}</td>
-                <td class="num">{money(it.unitPrice)}</td>
-                <td><span class={`pl-pill sm ${it.active ? "ok" : "bad"}`}>{it.agreementNumber || `#${it.agreementId}`}{it.active ? "" : " exp"}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {sections.map((g) => (
+          <details class="pl-cat" data-cat={g.key}>
+            <summary>
+              <span class="pl-chev" aria-hidden="true">›</span>
+              <b>{g.label}</b>
+              <span class="pl-cat-tags"><span class="pl-pill grey sm">{g.items.length} items</span></span>
+            </summary>
+            <table class="pl-table">
+              <thead><tr><th>Item</th><th>Description</th><th>Mfr</th><th>UOM</th><th class="num">Unit Price</th><th>Agreement</th></tr></thead>
+              <tbody>
+                {g.items.map((it) => (
+                  <tr data-search={`${it.itemNumber} ${it.description} ${it.manufacturer}`.toLowerCase()}>
+                    <td class="mono">{it.itemNumber}</td>
+                    <td>{it.description}</td>
+                    <td>{it.manufacturer}</td>
+                    <td>{it.uom}</td>
+                    <td class="num">{money(it.unitPrice)}</td>
+                    <td><span class={`pl-pill sm ${it.active ? "ok" : "bad"}`}>{it.agreementNumber || `#${it.agreementId}`}{it.active ? "" : " exp"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        ))}
       </>
     )}
 
@@ -84,6 +101,14 @@ const fmtDate = (s: string) => s || "—";
       .pl-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:650;background:var(--grey-bg);color:var(--grey)}
       .pl-pill.ok{background:var(--green-bg);color:var(--green)} .pl-pill.bad{background:var(--red-bg);color:var(--red)} .pl-pill.grey{background:var(--grey-bg);color:var(--grey)}
       .pl-pill.sm{padding:1px 7px;font-size:10px;font-weight:600}
+      .pl-cat{border:1px solid var(--line);border-radius:9px;margin:8px 0;background:var(--panel)}
+      .pl-cat>summary{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;list-style:none}
+      .pl-cat>summary::-webkit-details-marker{display:none}
+      .pl-cat>summary b{font-size:13px}
+      .pl-cat-tags{margin-left:auto;display:flex;gap:6px;align-items:center}
+      .pl-chev{color:var(--muted);transition:transform .15s;font-size:15px}
+      .pl-cat[open]>summary .pl-chev{transform:rotate(90deg)}
+      .pl-cat .pl-table{border:0;border-top:1px solid var(--line);border-radius:0}
       .pl-agreements{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
       .pl-ag{border:1px solid var(--line);border-left:3px solid var(--grey);border-radius:9px;padding:8px 12px;background:var(--panel)}
       .pl-ag.ok{border-left-color:var(--green)} .pl-ag.bad{border-left-color:var(--red)}
@@ -99,11 +124,18 @@ const fmtDate = (s: string) => s || "—";
       .pl-empty{color:var(--muted);padding:30px 4px}
     </style>
     <script>
-      const s = document.getElementById("pl-search");
-      const rows = Array.from(document.querySelectorAll("tbody tr"));
+      const s = document.getElementById("pl-search") as HTMLInputElement | null;
+      const rows = Array.from(document.querySelectorAll<HTMLElement>("tbody tr"));
+      const cats = Array.from(document.querySelectorAll<HTMLDetailsElement>(".pl-cat"));
       s?.addEventListener("input", () => {
-        const q = (s as HTMLInputElement).value.trim().toLowerCase();
-        rows.forEach((r) => { (r as HTMLElement).style.display = !q || (r.getAttribute("data-search") || "").includes(q) ? "" : "none"; });
+        const q = s.value.trim().toLowerCase();
+        rows.forEach((r) => { r.style.display = !q || (r.getAttribute("data-search") || "").includes(q) ? "" : "none"; });
+        // Auto-expand category sections that contain a match; collapse + hide the rest.
+        cats.forEach((c) => {
+          const anyVisible = Array.from(c.querySelectorAll<HTMLElement>("tbody tr")).some((r) => r.style.display !== "none");
+          c.style.display = anyVisible ? "" : "none";
+          c.open = q ? anyVisible : false;
+        });
       });
     </script>
   </body>

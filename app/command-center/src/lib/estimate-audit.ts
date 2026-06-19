@@ -23,6 +23,7 @@ export interface EstimateLine {
   unitCost: number;
   lineCost: number;
   linePrice: number;
+  categoryKey: string; // roof-system segment (schema 114)
 }
 
 export interface EstimateOption {
@@ -87,6 +88,7 @@ export interface EstimateAuditData {
   status: "live" | "sample" | "unconfigured";
   generatedAt: string;
   offices: EstimateOffice[];
+  categories: { key: string; label: string; sortOrder: number }[];
   totals: { jobs: number; estimates: number; lines: number; proposals: number };
 }
 
@@ -108,14 +110,32 @@ function tierLabels(options: EstimateOption[]): void {
 
 export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<EstimateAuditData> {
   const { client } = createServerSupabaseClient(env);
-  if (!client) return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
+  if (!client) return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
 
-  const [jobRes, estRes, lineRes, editRes] = await Promise.all([
-    client.from("v_estimate_audit_job").select("*"),
-    client.from("v_estimate_audit_estimate").select("*"),
-    client.from("v_estimate_audit_line").select("*"),
-    client.from("estimate_audit_edits").select("*"),
+  // PostgREST caps a single response at 1000 rows; the line view alone can exceed
+  // that, so page through every list query or lines silently drop past row 1000.
+  const fetchAll = async (make: () => any): Promise<any[]> => {
+    const PAGE = 1000;
+    let from = 0;
+    const rows: any[] = [];
+    for (;;) {
+      const { data } = await make().range(from, from + PAGE - 1);
+      const batch = (data as any[] | null) ?? [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+    return rows;
+  };
+
+  const [jobRows, estRows, lineRows, editRows, catRows] = await Promise.all([
+    fetchAll(() => client.from("v_estimate_audit_job").select("*")),
+    fetchAll(() => client.from("v_estimate_audit_estimate").select("*")),
+    fetchAll(() => client.from("v_estimate_audit_line").select("*")),
+    fetchAll(() => client.from("estimate_audit_edits").select("*")),
+    fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
   ]);
+  const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
 
   // Operator edit overlay (schema 112): estimate-level margin + line edits/adds/deletes.
   const marginEdit = new Map<string, number>();
@@ -123,7 +143,7 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
   const deletedLines = new Map<string, Set<string>>();   // estimate_id → deleted line_ids
   const addedLines = new Map<string, any[]>();           // estimate_id → added line edits
   const editedEstimates = new Set<string>();
-  for (const ed of (editRes.data as any[] | null) ?? []) {
+  for (const ed of editRows) {
     editedEstimates.add(ed.estimate_id);
     if (ed.scope === "estimate") { if (ed.margin_pct != null) marginEdit.set(ed.estimate_id, num(ed.margin_pct)); continue; }
     if (ed.line_action === "deleted") {
@@ -145,13 +165,12 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     opt.lineCount = opt.lines.length;
   }
 
-  const jobRows = (jobRes.data as any[] | null) ?? [];
   if (jobRows.length === 0) {
-    return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
+    return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories, totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
   }
 
   const linesByOption = new Map<string, EstimateLine[]>();
-  for (const l of (lineRes.data as any[] | null) ?? []) {
+  for (const l of lineRows) {
     const list = linesByOption.get(l.option_id) ?? [];
     list.push({
       lineId: l.line_id,
@@ -161,12 +180,13 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
       unitCost: num(l.unit_cost),
       lineCost: num(l.line_cost),
       linePrice: num(l.line_price),
+      categoryKey: l.category_key ?? "uncategorized",
     });
     linesByOption.set(l.option_id, list);
   }
 
   const estByRun = new Map<string, EstimateOption[]>();
-  for (const e of (estRes.data as any[] | null) ?? []) {
+  for (const e of estRows) {
     const opt: EstimateOption = {
       estimateId: e.estimate_id,
       tier: e.package_tier ?? "custom",
@@ -197,7 +217,7 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
           return { ...l, qty: ed.qty != null ? num(ed.qty) : l.qty, unitCost: ed.unit_cost != null ? num(ed.unit_cost) : l.unitCost };
         });
       for (const ad of addedLines.get(opt.estimateId) ?? []) {
-        opt.lines.push({ lineId: ad.line_id, description: ad.description ?? "", qty: num(ad.qty), uom: ad.uom ?? "EA", unitCost: num(ad.unit_cost), lineCost: 0, linePrice: 0 });
+        opt.lines.push({ lineId: ad.line_id, description: ad.description ?? "", qty: num(ad.qty), uom: ad.uom ?? "EA", unitCost: num(ad.unit_cost), lineCost: 0, linePrice: 0, categoryKey: "uncategorized" });
       }
       if (marginEdit.has(opt.estimateId)) opt.marginPct = marginEdit.get(opt.estimateId)!;
       recompute(opt);
@@ -262,6 +282,7 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     status: "live",
     generatedAt: new Date().toISOString(),
     offices,
+    categories,
     totals: {
       jobs: jobs.length,
       estimates: jobs.reduce((s, j) => s + j.estimates.length, 0),

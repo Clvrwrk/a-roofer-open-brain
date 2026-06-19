@@ -4,7 +4,8 @@
 // expand. Defaults to ACTIVE orders (archived = invoiced or >60d). Reads
 // ?office=/?branch= to land pre-filtered.
 
-interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; }
+interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; categoryKey: string; }
+interface Category { key: string; label: string; sortOrder: number; }
 interface Order { orderNumber: string; po: string; orderedOn: string; deliveryRequestedFor: string; orderStatus: string; orderType: string; orderTotal: number; lineTotal: number; disposition: "active" | "archived"; archiveReason: string; branchCode: string; branchName: string; office: string; lineCount: number; coveredLines: number; uncoveredLines: number; flaggedLines: number; atRisk: number; worstPct: number; matched: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: OrdLine[]; }
 interface Branch { branchCode: string; branchName: string; office: string; orderCount: number; activeCount: number; matched: number; orderTotal: number; atRisk: number; flaggedLines: number; uncoveredLines: number; orders: Order[]; }
 interface Office { office: string; branchCount: number; orderCount: number; activeCount: number; matched: number; orderTotal: number; atRisk: number; flaggedLines: number; uncoveredLines: number; branches: Branch[]; }
@@ -14,7 +15,9 @@ const dataEl = document.getElementById("iv-data");
 const mount = document.getElementById("iv-tree");
 
 if (root && dataEl && mount) {
-  const { offices } = JSON.parse(dataEl.textContent || "{}") as { offices: Office[] };
+  const { offices, categories } = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; categories: Category[] };
+  const catList: Category[] = (categories ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const catLabel = new Map(catList.map((c) => [c.key, c.label]));
 
   const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
   const money2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -32,8 +35,9 @@ if (root && dataEl && mount) {
   };
 
   /* ---- line table (lazy) ---- */
-  function orderBody(ord: Order): string {
-    const rows = ord.lines.map((l) => `
+  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Order Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>';
+  function lineRow(l: OrdLine): string {
+    return `
       <tr class="iv-ln${l.covered ? " is-covered" : ""}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
         <td>${esc(l.itemDescription) || '<span class="iv-inv-sub">—</span>'}</td>
@@ -44,12 +48,39 @@ if (root && dataEl && mount) {
         <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
         <td><span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span></td>
-      </tr>`).join("");
-    return `
-      <table class="iv-table">
-        <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Order Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="9">No lines.</td></tr>'}</tbody>
-      </table>`;
+      </tr>`;
+  }
+  // Group lines into collapsible roof-system category sections (default-collapsed),
+  // ordered by category sort_order. Mirrors invoiceBody() on the Invoice Audit screen.
+  function orderBody(ord: Order): string {
+    if (ord.lines.length === 0) return '<p class="iv-disp-lead">No lines.</p>';
+    const groups = new Map<string, OrdLine[]>();
+    ord.lines.forEach((l) => {
+      const k = l.categoryKey || "uncategorized";
+      (groups.get(k) ?? (groups.set(k, []), groups.get(k)!)).push(l);
+    });
+    const orderedKeys = catList.map((c) => c.key).filter((k) => groups.has(k));
+    for (const k of groups.keys()) if (!orderedKeys.includes(k)) orderedKeys.push(k);
+
+    const sections = orderedKeys.map((k) => {
+      const lines = groups.get(k)!;
+      const subtotal = lines.reduce((s, l) => s + (l.extendedPrice || 0), 0);
+      const atRisk = lines.reduce((s, l) => s + ((l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
+      const flagged = lines.filter((l) => l.variancePct != null && Math.abs(l.variancePct) >= 0.01).length;
+      const tags = [
+        `<span class="pill pill-grey">${lines.length} lines</span>`,
+        flagged > 0 ? `<span class="pill pill-brand">${flagged} flagged</span>` : '<span class="pill pill-green">✓</span>',
+        `<span class="iv-cat-sub">${money(subtotal)}</span>`,
+        atRisk > 0 ? `<span class="pill pill-red">${money(atRisk)} at risk</span>` : "",
+      ].filter(Boolean).join("");
+      return `
+        <details class="iv-cat" data-cat="${esc(k)}">
+          <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span></summary>
+          <table class="iv-table">${THEAD}<tbody>${lines.map(lineRow).join("")}</tbody></table>
+        </details>`;
+    }).join("");
+
+    return `<div class="iv-cats">${sections}</div>`;
   }
 
   /* ---- tree render ---- */

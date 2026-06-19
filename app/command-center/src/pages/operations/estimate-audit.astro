@@ -111,6 +111,16 @@ const payload = JSON.stringify(data).replace(/</g, "\\u003c");
   .ea-recalc{font-size:12px;color:var(--muted)}
   .ea-recalc b{color:var(--ink);font-variant-numeric:tabular-nums}
 
+  /* roof-system category sections (schema 114) — collapsible, default-collapsed */
+  .ea-cats{margin-top:6px}
+  .ea-cat{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel2)}
+  .ea-cat>summary{display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;list-style:none}
+  .ea-cat>summary::-webkit-details-marker{display:none}
+  .ea-cat>summary b{font-size:12.5px}
+  .ea-cat-tags{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .ea-cat-sub{font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;color:var(--muted)}
+  .ea-cat .ea-table{margin:0 8px 8px}
+
   .ea-table{width:100%;border-collapse:collapse;margin-top:6px}
   .ea-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
   .ea-table td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}

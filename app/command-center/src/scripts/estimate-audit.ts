@@ -5,7 +5,8 @@
 // Nothing persists yet (write-back to Supabase is the follow-up); edits toast
 // "recalculated locally — not saved".
 
-interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; }
+interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; categoryKey: string; }
+interface Category { key: string; label: string; sortOrder: number; }
 interface EstOption {
   estimateId: string; tier: string; tierLabel: string; customName: string | null;
   productCost: number; laborCost: number; feeCost: number; totalCost: number; totalPrice: number;
@@ -21,7 +22,7 @@ interface Job {
   scenarioCount: number; selectedCount: number; estimates: EstOption[];
 }
 interface Office { office: string; jobCount: number; jobsProspecting: number; estimateYes: number; proposalYes: number; measurementYes: number; jobs: Job[]; }
-interface Payload { status: string; offices: Office[]; }
+interface Payload { status: string; offices: Office[]; categories: Category[]; }
 
 const root = document.querySelector(".ea") as HTMLElement | null;
 const dataEl = document.getElementById("ea-data");
@@ -29,6 +30,8 @@ const mount = document.getElementById("ea-offices");
 
 if (root && dataEl && mount) {
   const data = JSON.parse(dataEl.textContent || "{}") as Payload;
+  const catList: Category[] = (data.categories ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const catLabel = new Map(catList.map((c) => [c.key, c.label]));
 
   const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
   const money2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,10 +51,10 @@ if (root && dataEl && mount) {
     est.lines.forEach((l) => (l.linePrice = Math.round((l.lineCost / (1 - m)) * 100) / 100));
   }
 
-  /* ---- render: line table for one estimate ---- */
-  function lineRows(est: EstOption, oi: number, ji: number, ei: number): string {
-    return est.lines
-      .map((l, li) => `
+  /* ---- render: one editable line row (keeps its original est.lines index) ---- */
+  const THEAD = '<thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>';
+  function lineRow(l: Line, li: number, oi: number, ji: number, ei: number): string {
+    return `
         <tr>
           <td>${esc(l.description) || "<em>New line</em>"}</td>
           <td class="num"><input class="ea-qty" type="number" step="any" value="${l.qty}" data-edit="qty" data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" /></td>
@@ -60,8 +63,36 @@ if (root && dataEl && mount) {
           <td class="num" data-cell="linecost">${money2(l.lineCost)}</td>
           <td class="num" data-cell="lineprice">${money2(l.linePrice)}</td>
           <td><button class="ea-del" data-del data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" title="Delete line">×</button></td>
-        </tr>`)
-      .join("");
+        </tr>`;
+  }
+
+  // Group lines into collapsible roof-system category sections (preserving each
+  // line's original est.lines index so qty/price edits + delete still map back).
+  // Ordered by category sort_order; default-collapsed.
+  function lineSections(est: EstOption, oi: number, ji: number, ei: number): string {
+    const groups = new Map<string, number[]>();
+    est.lines.forEach((l, li) => {
+      const k = l.categoryKey || "uncategorized";
+      (groups.get(k) ?? (groups.set(k, []), groups.get(k)!)).push(li);
+    });
+    const orderedKeys = catList.map((c) => c.key).filter((k) => groups.has(k));
+    for (const k of groups.keys()) if (!orderedKeys.includes(k)) orderedKeys.push(k);
+
+    return orderedKeys.map((k) => {
+      const idxs = groups.get(k)!;
+      const lines = idxs.map((li) => est.lines[li]);
+      const cost = lines.reduce((s, l) => s + (l.lineCost || 0), 0);
+      const price = lines.reduce((s, l) => s + (l.linePrice || 0), 0);
+      const tags = [
+        `<span class="pill pill-grey">${lines.length} lines</span>`,
+        `<span class="ea-cat-sub">Cost ${money(cost)} · Price ${money(price)}</span>`,
+      ].join("");
+      return `
+        <details class="ea-cat" data-cat="${esc(k)}">
+          <summary><span class="ea-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="ea-cat-tags">${tags}</span></summary>
+          <table class="ea-table">${THEAD}<tbody>${idxs.map((li) => lineRow(est.lines[li], li, oi, ji, ei)).join("")}</tbody></table>
+        </details>`;
+    }).join("");
   }
 
   function estBody(est: EstOption, oi: number, ji: number, ei: number): string {
@@ -71,10 +102,7 @@ if (root && dataEl && mount) {
         <input id="m-${oi}-${ji}-${ei}" type="number" step="0.5" value="${est.marginPct}" data-edit="margin" data-o="${oi}" data-j="${ji}" data-e="${ei}" />
         <span class="ea-recalc">Cost <b data-recalc="cost">${money(est.totalCost)}</b> · Price <b data-recalc="price">${money(est.totalPrice)}</b> · Margin $ <b data-recalc="rev">${money(est.marginRevenue)}</b></span>
       </div>
-      <table class="ea-table">
-        <thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>
-        <tbody data-lines="${oi}-${ji}-${ei}">${lineRows(est, oi, ji, ei)}</tbody>
-      </table>
+      <div class="ea-cats" data-lines="${oi}-${ji}-${ei}">${lineSections(est, oi, ji, ei) || '<p class="ea-job-sub">No lines.</p>'}</div>
       <div class="ea-addrow"><button class="ea-addbtn" data-add data-o="${oi}" data-j="${ji}" data-e="${ei}">+ Add line</button><button class="ea-savebtn" data-save data-o="${oi}" data-j="${ji}" data-e="${ei}">Save estimate</button></div>`;
   }
 
@@ -225,7 +253,7 @@ if (root && dataEl && mount) {
       est.lines.splice(+el.dataset.l!, 1);
       toast("Line deleted (local)");
     } else {
-      est.lines.push({ lineId: "new-" + est.lines.length, description: "", qty: 1, uom: "EA", unitCost: 0, lineCost: 0, linePrice: 0 });
+      est.lines.push({ lineId: "new-" + est.lines.length, description: "", qty: 1, uom: "EA", unitCost: 0, lineCost: 0, linePrice: 0, categoryKey: "uncategorized" });
       toast("Line added — set description, qty, and one-off price");
     }
     recalc(est);

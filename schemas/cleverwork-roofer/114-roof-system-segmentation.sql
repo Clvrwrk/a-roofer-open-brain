@@ -64,3 +64,9 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $$
     ELSE 'uncategorized'
   END;
 $$;
+
+-- Generated category on price-list items so the branch price-list (agreements) view and the
+-- invoice-scoped direct query both segment without re-deriving. Classifier-only (overrides
+-- apply at the view layer). Idempotent.
+ALTER TABLE public.abc_price_list_items
+  ADD COLUMN IF NOT EXISTS category_key text GENERATED ALWAYS AS (public.classify_roof_system(description, item_number)) STORED;

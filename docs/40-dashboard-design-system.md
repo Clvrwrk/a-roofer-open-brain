@@ -94,6 +94,32 @@ Native `<details>/<summary>` nesting, progressive disclosure, mostly no-JS:
   mount; recalc locally and toast "recalculated locally — not saved". **No
   external writes without human approval** (SOUL boundary).
 
+## 5a. Line-item segmentation (roof-system categories) — site-wide standard
+
+Any surface that lists material/product line items (invoice, order, agreement, estimate
+lines) **must group lines into collapsible roof-system category sections** instead of one
+overwhelming flat table. Chris approved this on Invoice Audit (2026-06-19): "the screens are
+a bit overwhelming." Every line-list dashboard should function the same way.
+
+- **Source of truth:** `public.roof_system_category` — 12 categories + `uncategorized`
+  (Decking, Underlayment, Shingles, Flashing, Vents, Skylights, Low-Slope/Membrane,
+  Gutters & Downspouts, Accessories, Tools & Consumables, Labor, Service Fees). Per-item
+  resolution = `public.classify_roof_system(description, item_number)` (keyword classifier),
+  overridden by `public.item_roof_system_category` when a row exists. Surface `category_key`
+  on the line `v_*` view (`coalesce(override, classify_roof_system(...))`) and pass the
+  ordered category list to the client in the payload.
+- **Section UX:** each category is a `<details class="…-cat">` (**default-collapsed**, so a
+  drill-down opens compact) ordered by `roof_system_category.sort_order`. Summary shows
+  pills: line count · `$` subtotal · "N to audit" · at-risk rollup. One chevron, rotates on
+  `[open]` (consistent with §5).
+- **Filtering preference:** sections default-collapsed; in "to-audit only" mode hide
+  fully-audited sections — `.<root>-pending-only .…-cat[data-pend="0"]{display:none}`.
+- **Uncategorized is visible, never hidden** — it is the honest bucket for not-yet-mapped
+  items (today: metal/tile roofing, siding). Refine via `item_roof_system_category`.
+
+Reference implementation: `src/scripts/invoice-audit-tree.ts` (`invoiceBody` → category
+sections) + `99-invoice-audit-views.sql` (`category_key`) + schema `114`.
+
 ## 6. Drill-down link behavior (scoped, never dump to entry page)
 
 When a card/popup links into a dashboard, **carry the scope** (PE Office,
@@ -116,4 +142,6 @@ pending. Count line states the denominator ("5 of 12").
 - [ ] KPIs navigate or inform — nothing decorative
 - [ ] Scoped deep-links in/out (carry office/branch, pre-filter on land)
 - [ ] Honest TBD pills for unwired fields; tabular numbers on all figures
+- [ ] Line lists grouped into `roof_system_category` sections (default-collapsed) via `classify_roof_system` (§5a)
+- [ ] List loaders paginate (`.range()`) — PostgREST caps a plain `.select()` at 1000 rows
 - [ ] `npm run build` passes; verified on dev (reads prod DB)

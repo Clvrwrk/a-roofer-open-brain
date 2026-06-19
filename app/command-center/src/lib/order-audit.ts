@@ -29,6 +29,7 @@ export interface OrdLine {
   variancePct: number | null;
   varianceExt: number | null;
   covered: boolean;
+  categoryKey: string; // roof-system segment (schema 114)
 }
 
 export interface Order {
@@ -89,6 +90,7 @@ export interface OrderAuditData {
   status: "live" | "unconfigured";
   generatedAt: string;
   offices: OrdOffice[];
+  categories: { key: string; label: string; sortOrder: number }[];
   totals: {
     orders: number;
     active: number;
@@ -123,16 +125,21 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
     offices: [],
+    categories: [],
     totals: { orders: 0, active: 0, archived: 0, matched: 0, orderTotal: 0, atRisk: 0, flaggedLines: 0, uncoveredLines: 0 },
   };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [ordRows, lineRows, matchRows] = await Promise.all([
+  const [ordRows, lineRows, matchRows, catRows] = await Promise.all([
     selectAll<any>(client, "v_order_audit_order", "*"),
     selectAll<any>(client, "v_order_audit_line", "*"),
     selectAll<any>(client, "v_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched"),
+    selectAll<any>(client, "roof_system_category", "key,label,sort_order"),
   ]);
+  const categories = catRows
+    .map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
   if (ordRows.length === 0) return empty;
 
   const matchByOrder = new Map<string, any>();
@@ -154,6 +161,7 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       covered: !!l.covered,
+      categoryKey: l.category_key ?? "uncategorized",
     });
     linesByOrder.set(l.order_number, list);
   }
@@ -244,6 +252,7 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     status: "live",
     generatedAt: new Date().toISOString(),
     offices,
+    categories,
     totals: {
       orders: orders.length,
       active: active.length,

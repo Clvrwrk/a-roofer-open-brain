@@ -32,11 +32,13 @@ SELECT DISTINCT ON (m.ship_to_number, pli.item_number)
   pa.version_label,
   pa.effective_date,
   pa.expiry_date,
-  (current_date BETWEEN pa.effective_date AND coalesce(pa.expiry_date, '2999-01-01')) AS agreement_active
+  (current_date BETWEEN pa.effective_date AND coalesce(pa.expiry_date, '2999-01-01')) AS agreement_active,
+  coalesce(o.category_key, pli.category_key) AS category_key  -- roof-system segment (schema 114)
 FROM public.abc_price_agreement_branch_matches m
 JOIN bm ON bm.ship_to_number = m.ship_to_number
 JOIN public.abc_price_agreements pa ON pa.id = m.abc_price_agreement_id
 JOIN public.abc_price_list_items pli ON pli.agreement_id = pa.id
+LEFT JOIN public.item_roof_system_category o ON o.item_number = pli.item_number
 ORDER BY m.ship_to_number, pli.item_number,
   m.confidence_score DESC NULLS LAST,
   (current_date BETWEEN pa.effective_date AND coalesce(pa.expiry_date, '2999-01-01')) DESC,

@@ -85,6 +85,10 @@ SELECT
 FROM public.estimate_scenario_options o;
 
 -- Line item level -----------------------------------------------------------
+-- category_key (schema 114): roof-system segmentation, mirroring the Invoice
+-- Audit line view. Estimate lines carry no vendor item_number (only UUID FKs),
+-- so we classify on description alone and there is no item-keyed override join;
+-- the column is appended LAST so CREATE OR REPLACE stays additive.
 CREATE OR REPLACE VIEW public.v_estimate_audit_line AS
 SELECT
   l.id AS line_id,
@@ -96,5 +100,7 @@ SELECT
   l.unit_cost,
   l.line_cost,
   l.line_price,
-  l.created_at
+  l.created_at,
+  -- appended last so CREATE OR REPLACE stays additive
+  public.classify_roof_system(l.description, NULL) AS category_key
 FROM public.estimate_scenario_lines l;

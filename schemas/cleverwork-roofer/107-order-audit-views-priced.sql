@@ -44,11 +44,16 @@ SELECT
        THEN round(((nullif(l.raw->'unitPrice'->>'value', '')::numeric - n.negotiated_price) / n.negotiated_price * 100)::numeric, 2) END AS variance_pct,
   CASE WHEN n.negotiated_price IS NOT NULL
        THEN round(((nullif(l.raw->'unitPrice'->>'value', '')::numeric - n.negotiated_price) * nullif(l.raw->'orderedQty'->>'value', '')::numeric)::numeric, 2) END AS variance_ext,
-  (n.negotiated_price IS NOT NULL) AS covered
+  (n.negotiated_price IS NOT NULL) AS covered,
+  -- roof-system segmentation (schema 114): curated override else the catalog's PRECOMPUTED
+  -- category_key (generated column) — reading it instead of running classify_roof_system()
+  -- per row keeps this 18.5k-line view fast under the loader's paginated reads.
+  coalesce(ovr.category_key, c.category_key) AS category_key
 FROM public.abc_order_lines l
 JOIN public.abc_orders o ON o.order_number = l.order_number
 LEFT JOIN public.abc_product_catalog c ON c.item_number = l.item_number
-LEFT JOIN neg n ON n.ship_to_number = o.ship_to_number AND n.item_number = l.item_number;
+LEFT JOIN neg n ON n.ship_to_number = o.ship_to_number AND n.item_number = l.item_number
+LEFT JOIN public.item_roof_system_category ovr ON ovr.item_number = l.item_number;
 
 DROP VIEW IF EXISTS public.v_order_audit_order;
 CREATE VIEW public.v_order_audit_order AS

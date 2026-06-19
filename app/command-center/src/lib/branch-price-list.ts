@@ -17,6 +17,7 @@ export interface BranchPriceItem {
   effective: string;
   expiry: string;
   active: boolean;
+  categoryKey: string;
 }
 
 export interface BranchPriceList {
@@ -33,6 +34,7 @@ export interface BranchPriceList {
   activeItems: number;
   expiredItems: number;
   agreements: { id: number; number: string; effective: string; expiry: string; active: boolean; itemCount: number }[];
+  categories: { key: string; label: string; sortOrder: number }[];
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -48,9 +50,12 @@ function formatBranchAddress(br: any): string {
 }
 
 export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
-  const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", items: [], activeItems: 0, expiredItems: 0, agreements: [] };
+  const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", items: [], activeItems: 0, expiredItems: 0, agreements: [], categories: [] };
   const { client } = createServerSupabaseClient(env);
   if (!client || !branchNumber) return base;
+
+  const { data: catData } = await client.from("roof_system_category").select("key,label,sort_order").order("sort_order");
+  const categories = ((catData as any[] | null) ?? []).map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
 
   // Branch name + address (lives in abc_vendor_branches, not vendor_branches).
   const { data: brRows } = await client.from("abc_vendor_branches").select("branch_name,address_json,city,state,postal").eq("branch_number", branchNumber).limit(1);
@@ -94,10 +99,10 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
   // Scoped path: the chosen agreement's full price list straight from abc_price_list_items.
   if (scopedAgreementId != null) {
     const { data: pliRows } = await client.from("abc_price_list_items")
-      .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id")
+      .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id,category_key")
       .eq("agreement_id", scopedAgreementId).order("description");
     const rows = (pliRows as any[] | null) ?? [];
-    if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber };
+    if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, categories };
     const items: BranchPriceItem[] = rows.map((r) => ({
       itemNumber: r.item_number ?? "",
       description: r.description ?? "",
@@ -110,18 +115,20 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
       effective: scopedAgreementEffective,
       expiry: scopedAgreementExpiry,
       active: true, // active as of the invoice date, by construction
+      categoryKey: r.category_key ?? "uncategorized",
     }));
     return {
       status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber,
       items, activeItems: items.length, expiredItems: 0,
       agreements: [{ id: scopedAgreementId, number: scopedAgreementNumber, effective: scopedAgreementEffective, expiry: scopedAgreementExpiry, active: true, itemCount: items.length }],
+      categories,
     };
   }
 
   // Unscoped path: all agreements for the branch (v_branch_price_list).
   const { data } = await client.from("v_branch_price_list").select("*").eq("branch_number", branchNumber).order("description");
   const rows = (data as any[] | null) ?? [];
-  if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber };
+  if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, categories };
 
   const items: BranchPriceItem[] = rows.map((r) => ({
     itemNumber: r.item_number ?? "",
@@ -135,6 +142,7 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     effective: d10(r.effective_date),
     expiry: d10(r.expiry_date),
     active: !!r.agreement_active,
+    categoryKey: r.category_key ?? "uncategorized",
   }));
 
   const agMap = new Map<number, { id: number; number: string; effective: string; expiry: string; active: boolean; itemCount: number }>();
@@ -157,5 +165,6 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     activeItems: items.filter((i) => i.active).length,
     expiredItems: items.filter((i) => !i.active).length,
     agreements: Array.from(agMap.values()).sort((a, b) => b.itemCount - a.itemCount),
+    categories,
   };
 }
