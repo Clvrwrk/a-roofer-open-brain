@@ -1,59 +1,41 @@
-# Handoff — Command Center: vendor audits, Agreement Builder, full-site action audit
+# Handoff — Invoice Audit walkthrough fixes · segmentation · site speed · credit memos
 
-**Date:** 2026-06-18 (late) · **Branch:** `cleverwork/price-agreement-audit` = `origin/main` = deployed (Coolify). **Confirm before app work:** `git fetch origin` → both refs equal → branch from there. · **Full logs:** `context/memory/2026-06-17.md` + `context/memory/2026-06-18.md`.
+**Date:** 2026-06-19 · **Branch:** `cleverwork/price-agreement-audit` = `origin/main` = deployed (Coolify), all at commit **`dffc50d`** (verified equal this session). **Confirm before app work:** `git fetch origin` → all three refs equal → branch from there. · **Full logs:** `context/memory/2026-06-19.md` (this session, blocks through 10:31) + `context/memory/2026-06-18.md`. · **Prior handoff:** `docs/handoffs/archive/2026-06-18-2017.md`.
 
-## ▶ WHERE WE LEFT OFF (end of 2026-06-18)
-**The 3-item sequence is through Item 3; a full-site action audit ran and all its findings are fixed + deployed.**
+## ▶ WHERE WE LEFT OFF (end of 2026-06-19)
+Chris did a human walkthrough of the Invoice Audit and gave **6 findings + a segmentation ask**. **All 6 + segmentation + a client-blocking speed fix are DONE and deployed.** Three follow-ups remain, each gated on something outside the session (a host, a Chris decision, or a scheduled pass).
 
-- **Item 1 (AR feed)** — STILL THE ONLY OPEN BUSINESS Q. How is `invoice_documents.payment_status` populated today (Make flow off the ABC portal CSV, or manual)? If a process refreshes it, the audit converges to ~169 on its own; if not, build the AR-CSV ingestion. No ABC API for AR/paid/due — portal CSV only.
-- **Item 2 (Order Audit)** — DONE & deployed. `/operations/order-audit` — priced variance audit (order unit price vs negotiated), 60-day/invoiced auto-archive. Schemas 106-108.
-- **Item 3 (Price Agreement Builder)** — DONE & deployed (all 5 slices, schemas 109-111). `/accounting/price-agreement/builder`: per-branch A+B worksheet → editable+persisted → PDF/CSV → drafted handoff (outbound guard) → single-claim magic link. Recipient = Justin Garza. Plan/status: `docs/40`.
-- **Full-site action audit** — DONE (`docs/41`). ~220 triggers, 13 surfaces, 26-agent workflow + dynamic/data pass. Found + FIXED: estimate edits now persist (schema 112), "Request Price List" now persists, marketing nav added, reopen-preserve, KPI filter pass-through. 3 static "dead" findings were false positives (verify against the LIVE DB, not migration files).
+### DONE & deployed this session
+- **Item 2 — At Risk KPI** now counts only *un-audited* overcharge (a `passed` audit, incl. the historical backfill, clears exposure) + new **"Credit Memo Requested"** KPI. Headline dropped **$877K → ~$6.2K** (≈99% was a UOM artifact).
+- **Item 3 — UOM pricing** fixed for all ×3/×4/×5 bundled SKUs: audit views compare/display **`effective_unit_price` (extended÷qty)**, never raw `unit_price` (e.g. `02MLHLXABB` $387→$129/SQ). Schema 99 + 113.
+- **Item 5 — branch price list** (`/accounting/price-list/branch`): branch name+address, agreement **number** pill (was internal id "#7"), scoped to the agreement active on the invoice date. Schema 101.
+- **Item 6 — blank auditable lines**: root cause was `invoiceLineRows()` reading flat keys; ABC invoice payload nests qty/uom under `shippedQty|priceQty`, price under `pricePerUnitAmount|extendedPriceAmount`. Fixed parser + backfilled 171 lines + raw-fallback in views + post-sync canary. Schema 113.
+- **Segmentation (12 categories)** — `roof_system_category` + `classify_roof_system()` + `item_roof_system_category` overrides (schema 114). Collapsible, default-collapsed category sections **site-wide**: Invoice Audit, Order Audit, Estimate Audit, branch price list. Documented as the standard in **`docs/40` §5a**.
+- **Site speed (client-blocking)** — Order Audit **22s → 0.45s**: scope to the active window + lazy-load lines per order via `/api/order-audit/lines`. Also fixed a pre-existing **PostgREST 1000-row cap** that was hiding >half of invoice-audit lines.
+- **Item 1 — credit memos (COMPLETE)** — `/accounting/audit/credit-memos` is live (was mock):
+  - **Received CMs** (vendor issued): `v_credit_memo_audit` (schema 115) resolves the original invoice + line-by-line unit-price match (Matches/Mismatch/Partial/No-reference). Packet page (`/accounting/credit-memos/[invoice]`) → **Approve / Needs-review / Reject** writes `credit_memo_requests`.
+  - **Requested CMs** (we claim a credit): Invoice-Audit `credit-flag`/`credit-noflag` dispositions **auto-create** a tracked `requested` request; lifecycle **draft → sent (+14d follow-up) → received → close** via the packet page. Queue merges both with a **Type** filter + `$ Requested`/`Awaiting Vendor` KPIs. Schema 116 (`request_kind`).
 
-**Next options:** Item 1 AR-CSV ingestion (needs Chris's answer first); EagleView/GAF/Roofr vendor API-data-map skills; or whatever Chris prioritizes.
+### ▶ OPEN — pick up here (all gated)
+1. **Item 4 — daily invoice-PDF auto-pull.** 45 invoices lack a PDF; all have `invoice_id`. Plan: a `syncInvoicePdfs()` pass in `integrations/bridges/abc-supply/mirror-backfill.mjs` (call ABC `GET /api/invoice/v1/invoices/pdf/{invoiceId}` — needs a binary fetch, the JSON helper won't do; upload to the private `invoices` bucket; upsert `invoice_documents` source=`portal_sync`). **Code only — runs/verifies on the Hetzner/Coolify agent host, NOT in this sandbox** (the ABC sync can't run here).
+2. **Metal / Tile / Siding categories** — the bulk of the ~19% "Uncategorized". **Chris decision**: add as categories (→15) or leave. Refine any item via `item_roof_system_category`.
+3. **RLS on 7 exposed tables** (`agreement_packages`, `agreement_package_items`, `agreement_package_submissions`, `estimate_audit_edits`, `spatial_ref_sys`, 2× `_backup_*`) — Chris's scheduled **DB-health agent pass**.
+- Optional: auto-approve-all-matching received CMs; apply the lazy-line pattern to Invoice Audit (1.2s).
 
-## ▶ STANDING INSTRUCTION (Chris, 2026-06-18) — vendor API skills + docs-first
-**Stop re-researching vendor schemas every session — it wastes tokens.** For any
-vendor we have a documented API for, there must be an **API data-map skill** that
-says exactly where each kind of data is stored (table.column), which endpoint
-populates it, and — critically — **what is NOT available via the API and must be
-human-in-the-loop ingested** (e.g. ABC AR/paid status). Before searching vendor
-tables or wondering if an endpoint exists, **read the skill first.**
-- ✅ Created this session: `skills/cleverwork-roofer/abc-supply-api/SKILL.md` (full ABC API↔table map + HIL notes) and a Brain-data-map section added to `skills/cleverwork-roofer/acculynx-api/SKILL.md`.
-- TODO: same treatment for EagleView, GAF, Roofr, and any other documented vendor API as we touch them. Keep these skills updated when schema/endpoints change.
+## ▶ REPEATING-ISSUE PLAYBOOKS — read `docs/42` before touching ABC data
+1. **ABC ingestion mapping drift** — the mapper has twice (orders schema 108, invoices schema 113) read flat keys that don't exist while `raw` held the values → null columns. Always check `raw` shape first; COALESCE from `raw` in views; the post-sync canary warns on recurrence.
+2. **UOM normalization** — invoice `unit_price` is per-pack for bundled SKUs; the only correct per-UOM price is `effective_unit_price = extended/qty`. Never compare raw `unit_price`.
+3. **PostgREST 1000-row cap** — any `.select()` over a table that can exceed ~1000 rows must paginate (`.range()`).
 
-## ▶ PICK UP HERE — the three-item sequence (Item 3 next)
-Chris's sequence: **Item 1 (AR feed) → Item 2 (Orders audit + AcuLynx verify) → Item 3 (price-agreement builder).** Item 2 is DONE & deployed; Item 3 is the next build (requirements locked, below). Item 1 still waits on Chris's answer about the `payment_status` feed.
+## ▶ STANDING INSTRUCTIONS (Chris)
+- **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill** — don't re-research schemas. Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
+- **Verify against the LIVE DB, not migration files.**
+- **Validation layer on every agent** (pair builds/audits with an adversarial verifier).
+- **Zero external agent sends (v1)** — agents draft/notify internally; humans send externally. Credit-memo "Mark sent" only *logs* that a human sent it.
+- **All dashboards function the same** — new line-list surfaces follow `docs/40` (category sections, `.range()` pagination, scoped deep-links, both themes).
 
-### Item 1 — AR feed / "169 active invoices" — VERIFIED, 1 question pending
-- Paid/unpaid data lives in **`invoice_documents.payment_status` / `paid_at`** (the audit uses it). **The ABC API has NO AR/paid/balance/due endpoint** (entire catalog verified). So open/paid/due-date/total-due (the "169 active" + due dates from ABC's portal) come ONLY from the **ABC portal CSV export** (`ABCSUPPLY_*.csv`), human-in-the-loop. No API substitute.
-- **PENDING Q for Chris:** how does `invoice_documents.payment_status` get populated today (Make flow off the CSV? manual import?). If a process already refreshes it → audit converges to ~169 on its own. If not → **build the AR-CSV ingestion** (table cols for total_due/due_date/terms + a loader that flips open/paid + adds due dates).
+## Environment / deploy
+Source = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE = `origin/main`** = dev `cleverwork/price-agreement-audit`. `git push origin main` auto-deploys (Coolify); verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. Local dev `127.0.0.1:4321` (Local Operator). Supabase `rnhmvcpsvtqjlffpsayu`; schemas mirrored through **116** (all additive/idempotent, applied live). ABC sync `mirror-backfill.mjs --env=production` on the real host (not this sandbox). Build gate: `cd app/command-center && npm run build`.
 
-### Item 2 — Orders audit under Operations + Order↔AcuLynx verification — DONE (commit 7d20eeb, deployed)
-- **Built:** Schema 106 (`v_order_audit_order`, `v_order_audit_line`, `v_order_acculynx_match`, applied to prod) + `lib/order-audit.ts` (paginated) + `pages/operations/order-audit.astro` + `scripts/order-audit-tree.ts` + nav "Order Audit" under Operations. Mirrors the Invoice Audit design system (Office→Branch→Order→Line, theme toggle, deep-link, lazy line render).
-- **Verification + coverage view** (order lines are pre-pricing → no variance). PO read from `raw->'salesOrder'->>'purchaseOrder'` (the column is empty 0/3178 — sync fix is new-pulls-only), date from `raw.dates.orderedOn`, $ total from `raw.orderAmounts.total`, status from `raw.salesOrder.status`.
-- **Live:** 3,178 orders · 354 matched to a PE job (11%) · $7.32M ordered · 16,116/18,593 lines (87%) uncovered by a current agreement. Same upstream caps as invoices (AcuLynx PE# coverage; expired/empty agreements).
-- **Deferred:** the `{Region}-TEMP-{short id}` prospect-stage labeling (AcuLynx `id` as permanent key) is not yet surfaced here — orders match on PO→job_name prefix only. Add when wiring prospect-stage orders.
-
-### Item 3 — vendor-agnostic price-agreement builder (PDF + CSV + magic link) — REQUIREMENTS LOCKED, build after Item 2
-- Send branch mgr + regional rep an email with **PDF + attached CSV + magic link** for every negotiated item when opening/renewing a branch.
-- **Item list:** purchased-in-36mo set (~1,473) curated to **~500** (the negotiate/don't-negotiate rules). **Validation:** magic-link submission is primary (email "approved" reply = fallback signal, via AgentMail reply-to).
-- **Digital view:** top-level items with expand to colors/variations; **price entered at top level inherits to all down-levels; a down-level override becomes primary.** Prefill = latest agreement price per item, **0 if no agreement ever existed.** Vendor-agnostic data model. The 5 ABC branch PDFs in `…/reabcinvoices/` show the agreement format to mirror.
-
-## What's LIVE now (all on `main`, deployed, design-system consistent)
-- **Home = territory map** (color lens, branch/office KPI popups + matching side card w/ PE-office assignment persistence + Active Price List link, state auto-fit, default = Richardson TX). Logo text removed.
-- **Invoice Audit** (`/accounting/invoice-audit`): Office→Branch→Invoice→Line drill-down, live; **defaults to Open invoices** (Open/Paid/All); line-level **audit (Audited Y/N)** with auto-pass (Matched Negotiated Price) + Lucinda paid-backfill + mark-passed API; PDF link (signed URL); per-invoice **Price List** new-window link; **AcuLynx job#/client/type** on matched invoices.
-- **Estimate Audit** (`/operations/estimate-audit`): live Office→Job→Estimate→Line editable tree.
-- **Order Audit** (`/operations/order-audit`): live Office→Branch→Order→Line verification + coverage tree (AcuLynx job match + negotiated coverage; orders are pre-pricing so no $ variance).
-- **Price Agreement Audit** (`/abc-price-agreement-gaps`): agreement-lifecycle dashboard (all 5 item-bearing agreements EXPIRED) + **Request Renewal** persists to `price_refresh_request` (drafted, no auto-send).
-- **Price List Coverage / Negotiated Catalog / Price Foundation**: live + design-system (catalog now real spend 2023-26).
-- **Branch price list** standalone page (`/accounting/price-list/branch?branch=`).
-
-## Infra / deploy (working)
-- `git push origin main` **auto-deploys** via GitHub→Coolify webhook (fixed this session). Verify: `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. Manual fallback + full SOP in `docs/27`.
-- Schemas mirrored: `schemas/cleverwork-roofer/98–105`. Migrations applied live to `rnhmvcpsvtqjlffpsayu`.
-
-## Known data-quality findings (business actions for Chris)
-1. **All item-bearing ABC price agreements are expired** → renewals (Item 3 / Request Renewal).
-2. **AcuLynx job-number coverage is low** (179/1240 jobs have a PE number) → caps job-matching at ~33%; the TEMP-number scheme + populating numbers upstream is the fix.
-3. **Invoice/order paid status + due dates are portal-only** (no ABC API) → the AR-CSV feed (Item 1).
+## Note
+`excalidraw.log` shows as modified in `git status` — a stray tracked log, unrelated to this work; left untouched.
