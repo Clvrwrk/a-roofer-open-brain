@@ -8,7 +8,7 @@ Chris reviewed four dashboards in turn and gave punch-lists. Three are **built, 
 ### Commit `fafa2c3` — Territory Map + Invoice Audit punch-list (7 items)
 - **IA-1** branch/office now from each invoice's real selling branch (`abc_invoices.raw->'branch'`), not the ship-to price-agreement match (which wrongly collapsed every invoice to "152 Edmond OK"). Groups Wichita/Richardson/Denver/KC correctly.
 - **IA-3** UOM variance fix: negotiated price (per-SQ) normalized into the line's ordered UOM via `raw->priceQty.priceConversionFactor`. `02TKTXTRB` was −59.6% ("saving") → really +21% overcharge. **Migration 117** (both invoice-audit views).
-- **IA-2** PDFs: backfilled all 45 missing (560/560 now) via `integrations/bridges/abc-supply/backfill-invoice-pdfs.mjs`; on-demand fetch added in `pdf/[invoiceNumber].ts` (`lib/abc-invoice-pdf.server.ts`, source must be `portal_sync`). **Needs `ABC_SUPPLY_CLIENT_ID/_SECRET` in command-center Coolify env to fire in prod** (web tier had no ABC client before).
+- **IA-2** PDFs: backfilled all 45 missing (560/560 now) via `integrations/bridges/abc-supply/backfill-invoice-pdfs.mjs`; on-demand fetch added in `pdf/[invoiceNumber].ts` (`lib/abc-invoice-pdf.server.ts`, source must be `portal_sync`). ✅ `ABC_SUPPLY_CLIENT_ID/_SECRET` now set in the command-center Coolify env (2026-06-19 PM) — on-demand fetch is enabled in prod.
 - **IA-4/5** Price List greys out when no list; Price List + Invoice as matching left-justified pills; "PDF"→"Invoice".
 - **TM-1** logo spans rail width. **TM-2** popup/side-card show `[PA <number>] [Expired <date>]` (added `agreementOnFile` incl. lapsed agreements; all 5 verified agreements are expired).
 
@@ -32,7 +32,7 @@ Chris reviewed four dashboards in turn and gave punch-lists. Three are **built, 
 - Chris authorized the deploy. Pushed `cleverwork/price-agreement-audit` → `origin`, then `HEAD:main`; Coolify rebuilt and `/healthz` `buildCommit` flipped to the deployed commit (confirmed). dev = origin branch = `origin/main` = live, 0 commits apart.
 - Local `main` (`a85202f`) is still STALE — only the local ref; ignore / reset to `origin/main`.
 - Migrations **117 + 118** + the PDF backfill were already live on the shared prod DB; the UI is now deployed too, so the full session is live on cc.proexteriorsus.net.
-- ⚠️ **For Phase B / on-demand PDF in prod:** add `ABC_SUPPLY_CLIENT_ID` / `ABC_SUPPLY_CLIENT_SECRET` to the command-center **Coolify env** (web tier has no ABC client yet).
+- ✅ **On-demand PDF prod enablement DONE (2026-06-19 PM):** `ABC_SUPPLY_CLIENT_ID` + `ABC_SUPPLY_CLIENT_SECRET` set on the `command-center` Coolify app (via API, app uuid `og0rmt02rff8qti9nlfk3nr7`) + redeployed (deployment finished, `/healthz` ok). Coolify API key lives in `.env.agent-passwords` (not root `.env`) — that's why it wasn't found at first.
 
 ## ▶ STANDING INSTRUCTIONS (Chris)
 - **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill.** Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
