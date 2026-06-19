@@ -133,10 +133,12 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, catego
   .iv-inv>summary::-webkit-details-marker{display:none}
   .iv-inv-no{font-weight:700;font-size:13px}
   .iv-inv-sub{color:var(--muted);font-size:11.5px}
-  .iv-pdf{color:var(--brand);text-decoration:none;font-weight:650}
-  .iv-pdf:hover{text-decoration:underline}
-  .iv-pricelist{margin:0 auto;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
-  .iv-pricelist:hover{border-color:var(--brand);background:var(--brand-bg)}
+  .iv-inv-id{display:inline-flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+  /* Row action buttons (Price List + Invoice) — left-justified, identical pill formatting */
+  .iv-rowbtns{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .iv-rowbtn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
+  .iv-rowbtn:hover{border-color:var(--brand);background:var(--brand-bg)}
+  .iv-rowbtn.is-disabled{color:var(--muted);background:var(--panel2);border-color:var(--line);opacity:.55;cursor:not-allowed;pointer-events:none}
   .iv-inv-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .iv-inv-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
 

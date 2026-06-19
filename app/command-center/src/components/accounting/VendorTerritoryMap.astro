@@ -238,6 +238,21 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         const scope = inDriveTime(branch);
         const negotiated = isNegotiated(branch);
         const gateApproved = branch.invoiceGateStatus === "approved";
+        // When a price agreement is on file, the second chip becomes the PA number and a
+        // third chip carries its expiry date (flagged red when lapsed) — replacing the
+        // generic "covered" status chip. Includes expired agreements on purpose.
+        const agreement = branch.agreementOnFile || branch.currentAgreement;
+        let agreementChips;
+        if (agreement && agreement.agreementNumber) {
+          let expiryChip = "";
+          if (agreement.expiryDate) {
+            const expired = new Date(`${agreement.expiryDate}T00:00:00`) < new Date(new Date().toDateString());
+            expiryChip = `<span class="vmpop-chip ${expired ? "chip-expired" : "chip-muted"}">${expired ? "Expired" : "Expires"} ${escapeHtml(agreement.expiryDate)}</span>`;
+          }
+          agreementChips = `<span class="vmpop-chip chip-pa">PA ${escapeHtml(agreement.agreementNumber)}</span>${expiryChip}`;
+        } else {
+          agreementChips = `<span class="vmpop-chip chip-status">${escapeHtml(statusText(branch.pricingStatus))}</span>`;
+        }
         const branchParam = branch.branchNumber ? `?branch=${encodeURIComponent(branch.branchNumber)}` : "";
         const waterfall = branch.pricingWaterfall || { itemCount: 0, uniqueSkuCount: 0 };
 
@@ -285,7 +300,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
             <h4 class="vmpop-title">${escapeHtml(branch.branchNumber ? `${branch.branchNumber} · ${branch.branchName}` : branch.branchName)}</h4>
             <div class="vmpop-chips">
               <span class="vmpop-chip ${scope ? "chip-ok" : "chip-muted"}">${scope ? "In drive time" : "Out of scope"}</span>
-              <span class="vmpop-chip chip-status">${escapeHtml(statusText(branch.pricingStatus))}</span>
+              ${agreementChips}
             </div>
             <div class="vmpop-kpis">${kpis}</div>
             ${contact}

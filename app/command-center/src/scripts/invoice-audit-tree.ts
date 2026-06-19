@@ -161,16 +161,22 @@ if (root && dataEl && mount) {
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
     ].filter(Boolean).join("");
   }
-  function invoiceNode(inv: Invoice): string {
-    const linesLabel = inv.pendingLines > 0 ? `${inv.pendingLines} of ${inv.lineCount} lines to audit` : `${inv.lineCount} lines · all audited`;
-    const pdf = inv.hasPdf ? ` · <a class="iv-pdf" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 PDF</a>` : "";
+  function invoiceNode(inv: Invoice, hasPriceList: boolean): string {
     const job = inv.jobNumber ? ` · <span class="iv-job">${esc(inv.jobNumber)}${inv.clientName ? " · " + esc(inv.clientName) : ""}${inv.jobCategory ? " · " + esc(inv.jobCategory) : ""}</span>` : "";
+    // Invoice PDF: always an active link — the endpoint fetches it on demand from ABC
+    // and stores it if no PDF is on file yet (so every invoice resolves to a document).
+    const invoiceBtn = `<a class="iv-rowbtn" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Invoice</a>`;
+    // Price List: greyed + non-navigating when this branch has no negotiated price list
+    // (otherwise the link lands on a blank price-list screen).
+    const priceListBtn = hasPriceList
+      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
+      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
     return `
       <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
-          <span><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${job}${pdf}</span></span>
-          <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
+          <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${job}</span></span>
+          <span class="iv-rowbtns">${priceListBtn}${invoiceBtn}</span>
           <span class="iv-inv-tags">${invoiceTags(inv)}</span>
         </summary>
         <div class="iv-inv-body" data-inv="${esc(inv.invoiceNumber)}"></div>
@@ -178,6 +184,8 @@ if (root && dataEl && mount) {
   }
 
   function branchNode(br: Branch): string {
+    // A branch has a price list iff at least one of its lines resolved a negotiated price.
+    const branchHasPriceList = br.invoices.some((i) => i.lines.some((l) => l.negotiatedPrice != null));
     return `
       <details class="iv-branch" data-branch="${esc(br.branchCode)}" data-search="${esc((br.branchName + " " + br.branchCode).toLowerCase())}">
         <summary>
@@ -190,7 +198,7 @@ if (root && dataEl && mount) {
             ${br.noPrice ? `<span class="pill pill-yellow">${br.noPrice} no-price</span>` : ""}
           </span>
         </summary>
-        <div class="iv-branch-body">${br.invoices.map(invoiceNode).join("")}</div>
+        <div class="iv-branch-body">${br.invoices.map((inv) => invoiceNode(inv, branchHasPriceList)).join("")}</div>
       </details>`;
   }
 

@@ -2,12 +2,14 @@ import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { fetchAndStoreInvoicePdf } from "@lib/abc-invoice-pdf.server";
 
 export const prerender = false;
 
 // Resolves the stored invoice PDF (invoice_documents.storage_bucket/path) into a
 // short-lived signed URL and redirects the browser to it, so the user can view
-// the actual ABC invoice from the Invoice Audit dashboard.
+// the actual ABC invoice from the Invoice Audit dashboard. When no PDF is stored
+// yet, fetches it on demand from ABC (if creds are configured) and stores it.
 export const GET: APIRoute = async ({ params, locals }) => {
   if (!locals.actor) return buildUnauthorizedResponse();
   const invoiceNumber = String(params.invoiceNumber ?? "").trim();
@@ -16,16 +18,22 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const { client } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured" }, { status: 503 });
 
-  const { data: doc } = await client
+  let doc = (await client
     .from("invoice_documents")
     .select("storage_bucket,storage_path")
     .eq("invoice_number", invoiceNumber)
     .not("storage_path", "is", null)
     .limit(1)
-    .maybeSingle();
+    .maybeSingle()).data as { storage_bucket: string | null; storage_path: string | null } | null;
+
+  // On-demand: no PDF on file → fetch live from ABC, store, and serve it.
+  if (!doc?.storage_path) {
+    const fetched = await fetchAndStoreInvoicePdf(client, invoiceNumber).catch(() => null);
+    if (fetched) doc = { storage_bucket: fetched.bucket, storage_path: fetched.path };
+  }
 
   if (!doc?.storage_path) {
-    return jsonApiResponse({ error: "not_found", error_description: "No stored PDF for this invoice." }, { status: 404 });
+    return jsonApiResponse({ error: "not_found", error_description: "No stored PDF for this invoice, and on-demand fetch is unavailable." }, { status: 404 });
   }
 
   const { data: signed, error } = await client.storage

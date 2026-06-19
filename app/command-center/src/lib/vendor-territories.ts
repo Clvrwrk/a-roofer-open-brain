@@ -326,6 +326,9 @@ export interface VendorBranchMapNode {
   suggestedOfficeName: string | null;
   candidateOffices: CandidateOffice[];
   currentAgreement: PriceAgreementSummary | null;
+  // Best CEO-verified agreement on file for this branch regardless of expiry — drives the
+  // PA-number + expiry pills on the map (currentAgreement excludes lapsed agreements).
+  agreementOnFile: PriceAgreementSummary | null;
   pricingWaterfall: PriceWaterfallSummary;
   priceEvidenceStatus: BranchPriceEvidenceStatus;
   priceEvidenceLabel: string;
@@ -957,6 +960,36 @@ function findCurrentAgreement(
   return regionAgreement ? agreementSummary(regionAgreement, vendorById, regionById, "region") : null;
 }
 
+// Display-only: the best CEO-verified agreement on file, INCLUDING lapsed ones, so the map
+// can show the PA number and (expired) date. Unlike findCurrentAgreement it ignores expiry.
+function isAgreementOnFile(agreement: PriceAgreementRow) {
+  return agreement.ceo_verified === true && agreement.is_active !== false;
+}
+
+function findAgreementOnFile(
+  branch: BranchTerritoryRow,
+  branchRaw: VendorBranchRow | null,
+  assignedOffice: OfficeRow | null,
+  agreements: PriceAgreementRow[],
+  vendorById: Map<string, VendorMapVendor>,
+  regionById: Map<string, RegionRow>,
+): PriceAgreementSummary | null {
+  const branchAgreement = agreements
+    .filter((agreement) => agreement.vendor_branch_id === branch.vendor_branch_id && isAgreementOnFile(agreement))
+    .sort(compareAgreements)[0];
+
+  if (branchAgreement) return agreementSummary(branchAgreement, vendorById, regionById, "branch");
+
+  const regionId = assignedOffice?.region_id ?? branchRaw?.region_id ?? null;
+  if (!branch.vendor_id || !regionId) return null;
+
+  const regionAgreement = agreements
+    .filter((agreement) => agreement.vendor_id === branch.vendor_id && agreement.region_id === regionId && isAgreementOnFile(agreement))
+    .sort(compareAgreements)[0];
+
+  return regionAgreement ? agreementSummary(regionAgreement, vendorById, regionById, "region") : null;
+}
+
 function compareAgreements(a: PriceAgreementRow, b: PriceAgreementRow) {
   return String(b.effective_date ?? "").localeCompare(String(a.effective_date ?? ""));
 }
@@ -1140,6 +1173,7 @@ function surfaceFromSnapshot(reason: string, missingConfig: string[] = []): Vend
       suggestedOfficeName: branch.suggested ? (officeById.get(branch.suggested)?.name ?? branch.suggested) : null,
       candidateOffices,
       currentAgreement,
+      agreementOnFile: currentAgreement,
       pricingWaterfall,
       priceEvidenceStatus: pricingWaterfall.status,
       priceEvidenceLabel: branch.approved ? "Snapshot pricing approved" : pricingWaterfall.label,
@@ -1413,6 +1447,7 @@ export async function loadVendorTerritoryMapPayload(
         const candidateOffices = candidateByBranch.get(branch.vendor_branch_id) ?? [];
         const pricingStatus = normalizeStatus(branch.pricing_status);
         const currentAgreement = findCurrentAgreement(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
+        const agreementOnFile = currentAgreement ?? findAgreementOnFile(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
         const branchNumber = nullableText(abcApiBranch?.branch_number ?? branch.branch_number ?? rawBranch?.branch_number);
         const branchNumberKey = normalizeBranchNumber(branchNumber);
         const currentAgreementStats = currentAgreement
@@ -1462,6 +1497,7 @@ export async function loadVendorTerritoryMapPayload(
           suggestedOfficeName: branch.suggested_office_name,
           candidateOffices,
           currentAgreement,
+          agreementOnFile,
           pricingWaterfall,
           priceEvidenceStatus: pricingWaterfall.status,
           priceEvidenceLabel: pricingWaterfall.label,
