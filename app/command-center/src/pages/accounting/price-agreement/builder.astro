@@ -39,6 +39,7 @@ const payload = JSON.stringify({
           <a class="iv-export" href={`/api/price-agreement/package/pdf?branch=${data.branch.number}`} target="_blank" rel="noopener">📄 PDF</a>
           <a class="iv-export" href={`/api/price-agreement/package/csv?branch=${data.branch.number}`}>⬇ CSV</a>
           <button type="button" class="iv-export iv-handoff" id="iv-handoff">📥 Draft for review</button>
+          <button type="button" class="iv-export iv-handoff" id="iv-issue">🔗 Issue link</button>
         </>
       )}
       <span class="iv-spacer"></span>

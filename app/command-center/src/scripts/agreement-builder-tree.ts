@@ -182,6 +182,26 @@ if (root && dataEl && mount) {
     handoffBtn.disabled = false;
   });
 
+  /* ---- issue magic link (human-gated; agent does NOT email it) ---- */
+  const issueBtn = document.getElementById("iv-issue") as HTMLButtonElement | null;
+  issueBtn?.addEventListener("click", async () => {
+    if (!branch) return;
+    if (dirty.size > 0) { toast("Save your changes first, then issue the link."); return; }
+    issueBtn.disabled = true;
+    try {
+      const res = await fetch("/api/price-agreement/package/issue-link", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ branchNumber: branch.number }),
+      });
+      const r = await res.json();
+      if (!r.ok) { toast("Issue failed: " + (r.error_description || r.error || "error")); issueBtn.disabled = false; return; }
+      try { await navigator.clipboard.writeText(r.url); } catch {}
+      window.prompt("Magic link copied — send it to the account manager yourself (the agent does not email it). Expires " + new Date(r.expiresAt).toLocaleString() + ":", r.url);
+      toast(r.reused ? "Existing link reused + copied." : "Link issued + copied to clipboard.");
+    } catch { toast("Issue failed — network error"); }
+    issueBtn.disabled = false;
+  });
+
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;
   const covSel = document.getElementById("iv-cov") as HTMLSelectElement;

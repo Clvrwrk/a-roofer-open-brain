@@ -1,0 +1,165 @@
+---
+// PUBLIC magic-link page for the vendor (Justin Garza) to enter final prices.
+// Token-gated (no auth). Allowlisted in middleware.ts. Standalone — not the
+// internal AppShell. Submits to the public token-gated endpoint; sends nothing.
+import { createServerSupabaseClient } from "@lib/supabase.server";
+import { resolveSubmission } from "@lib/agreement-submission";
+
+export const prerender = false;
+
+const token = Astro.params.token ?? "";
+const { client } = createServerSupabaseClient();
+
+let state: string = "not_found";
+let pkg: any = null;
+let items: any[] = [];
+if (client) {
+  const resolved = await resolveSubmission(client, token);
+  state = resolved.state;
+  if (state === "valid" && resolved.submission) {
+    const { data: p } = await client
+      .from("agreement_packages")
+      .select("id,branch_number,branch_name,office,national_account_manager_name")
+      .eq("id", resolved.submission.package_id)
+      .maybeSingle();
+    pkg = p;
+    const { data: it } = await client
+      .from("agreement_package_items")
+      .select("item_number,family_name,description,uom,proposed_price,prior_price")
+      .eq("package_id", resolved.submission.package_id)
+      .order("family_name", { ascending: true })
+      .order("item_number", { ascending: true });
+    items = (it as any[]) ?? [];
+  }
+}
+
+const money = (n: number | null) => (n == null ? "" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const title = state === "valid" ? "Confirm Negotiated Pricing" : "Price Agreement Link";
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>{title} · ProExteriors</title>
+  <style>
+    :root{--bg:#f4f6f9;--panel:#fff;--panel2:#f7f8fb;--ink:#1c2733;--muted:#6b7886;--line:#e3e8ef;--brand:#5b46d8;--brand-bg:#efecfd;--green:#137a4d;--green-bg:#e3f5ec;--red:#a51f1f}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5}
+    .wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;box-shadow:0 6px 18px rgba(20,28,40,.06)}
+    h1{font-size:20px;margin:0 0 4px}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+    .msg{padding:40px 20px;text-align:center}
+    .msg h1{font-size:22px}
+    .msg p{color:var(--muted)}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    thead th{position:sticky;top:0;background:var(--panel2);font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+    td{padding:8px;border-bottom:1px solid var(--line);font-size:13px}
+    td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .sku{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+    .fam{font-size:11px;color:var(--muted)}
+    input.price{width:104px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;font-family:inherit}
+    input.price:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-bg)}
+    .actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:18px 0 4px}
+    .who{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .who input{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:13px;font-family:inherit;flex:1;min-width:200px}
+    label.opt{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+    .submit{appearance:none;border:none;background:var(--brand);color:#fff;border-radius:9px;padding:11px 22px;font-size:14px;font-weight:650;cursor:pointer;font-family:inherit}
+    .submit:disabled{opacity:.5;cursor:default}
+    .note{color:var(--muted);font-size:12px;margin-top:10px}
+    .ok{display:none;text-align:center;padding:40px 20px}
+    .ok h1{color:var(--green)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {state !== "valid" && (
+      <div class="card msg">
+        <h1>{state === "expired" ? "This link has expired" : state === "claimed" ? "Already submitted" : state === "revoked" ? "This link was withdrawn" : "Link not found"}</h1>
+        <p>
+          {state === "expired" ? "The pricing link is past its 7-business-day window. Please contact ProExteriors for a new link." :
+           state === "claimed" ? "Pricing for this agreement has already been submitted. Thank you." :
+           state === "revoked" ? "This pricing link is no longer active. Please contact ProExteriors." :
+           "We couldn't find this pricing link. Please check the URL or contact ProExteriors."}
+        </p>
+      </div>
+    )}
+
+    {state === "valid" && (
+      <div class="card" id="form-card">
+        <h1>Confirm Negotiated Pricing</h1>
+        <p class="sub">
+          ProExteriors — {pkg?.branch_name ?? "ABC Supply"} (#{pkg?.branch_number}){pkg?.office ? ` · ${pkg.office}` : ""}.
+          Please confirm or adjust your unit price for each item, then submit. {items.length} items.
+        </p>
+
+        <div class="who">
+          <input id="who-name" type="text" placeholder="Your name" autocomplete="name" />
+        </div>
+
+        <div style="max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:10px">
+          <table>
+            <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Our Proposed</th><th class="num">Your Price</th></tr></thead>
+            <tbody>
+              {items.map((i) => (
+                <tr>
+                  <td class="sku">{i.item_number}<div class="fam">{i.family_name}</div></td>
+                  <td>{i.description}</td>
+                  <td>{i.uom}</td>
+                  <td class="num">{money(i.proposed_price)}</td>
+                  <td class="num"><input class="price" type="number" min="0" step="0.01" inputmode="decimal" data-item={i.item_number} value={i.proposed_price == null ? "" : Number(i.proposed_price).toFixed(2)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="actions">
+          <label class="opt"><input type="radio" name="action" value="approved" checked /> Accept as priced</label>
+          <label class="opt"><input type="radio" name="action" value="revise" /> Submit with my changes</label>
+          <label class="opt"><input type="radio" name="action" value="rejected" /> Decline</label>
+        </div>
+        <div class="who"><input id="resp-note" type="text" placeholder="Note (optional)" /></div>
+        <button class="submit" id="submit-btn">Submit pricing</button>
+        <p class="note">Submitting records your prices with ProExteriors. This page does not send email.</p>
+      </div>
+    )}
+
+    {state === "valid" && (
+      <div class="card ok" id="ok-card">
+        <h1>Thank you</h1>
+        <p>Your pricing has been submitted to ProExteriors. You can close this page.</p>
+      </div>
+    )}
+  </div>
+
+  {state === "valid" && (
+    <script define:vars={{ token }}>
+      const btn = document.getElementById("submit-btn");
+      btn?.addEventListener("click", async () => {
+        btn.disabled = true;
+        const action = (document.querySelector('input[name="action"]:checked')||{}).value || "approved";
+        const claimedBy = (document.getElementById("who-name")||{}).value || "";
+        const note = (document.getElementById("resp-note")||{}).value || "";
+        const items = Array.from(document.querySelectorAll("input.price")).map((el) => ({
+          itemNumber: el.dataset.item,
+          vendorFinalPrice: el.value === "" ? null : Number(el.value),
+        }));
+        try {
+          const res = await fetch(`/api/price-agreement/submit/${token}`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action, claimedBy, note, items }),
+          });
+          const r = await res.json();
+          if (!r.ok) { alert(r.error_description || "Submission failed. Please try again or contact ProExteriors."); btn.disabled = false; return; }
+          document.getElementById("form-card").style.display = "none";
+          document.getElementById("ok-card").style.display = "block";
+        } catch { alert("Network error. Please try again."); btn.disabled = false; }
+      });
+    </script>
+  )}
+</body>
+</html>
