@@ -70,6 +70,16 @@ export const navDepartments: NavDepartment[] = [
     ],
   },
   {
+    id: "marketing",
+    label: "Marketing",
+    icon: "marketing",
+    items: [
+      { label: "Overview", href: "/marketing", status: "built" },
+      { label: "Hail Zones", href: "/marketing/hail-zones", status: "built" },
+      { label: "Market Proof", href: "/marketing/markets", status: "built" },
+    ],
+  },
+  {
     id: "executive",
     label: "Executive",
     icon: "executive",
