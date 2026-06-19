@@ -75,7 +75,7 @@ if (root && dataEl && mount) {
         <thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>
         <tbody data-lines="${oi}-${ji}-${ei}">${lineRows(est, oi, ji, ei)}</tbody>
       </table>
-      <div class="ea-addrow"><button class="ea-addbtn" data-add data-o="${oi}" data-j="${ji}" data-e="${ei}">+ Add line</button></div>`;
+      <div class="ea-addrow"><button class="ea-addbtn" data-add data-o="${oi}" data-j="${ji}" data-e="${ei}">+ Add line</button><button class="ea-savebtn" data-save data-o="${oi}" data-j="${ji}" data-e="${ei}">Save estimate</button></div>`;
   }
 
   function estimateNode(est: EstOption, oi: number, ji: number, ei: number): string {
@@ -192,10 +192,31 @@ if (root && dataEl && mount) {
     }
     recalc(est);
     rerenderEst(o, j, e);
-    toast("Recalculated locally — not saved");
+    toast("Recalculated — click Save to persist");
   });
 
+  async function saveEstimate(el: HTMLElement) {
+    const { o, j, e, est } = get(el);
+    const job = data.offices[o].jobs[j];
+    const btn = el as HTMLButtonElement;
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = "Saving…";
+    try {
+      const res = await fetch("/api/operations/estimate-audit/save", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          estimateId: est.estimateId, runId: job.runId, marginPct: est.marginPct,
+          lines: est.lines.map((l) => ({ lineId: l.lineId, description: l.description, qty: l.qty, uom: l.uom, unitCost: l.unitCost })),
+        }),
+      });
+      const r = await res.json();
+      toast(r.ok ? `Saved to Supabase — ${r.edits} edit${r.edits === 1 ? "" : "s"}` : "Save failed: " + (r.error_description || r.error || "error"));
+    } catch { toast("Save failed — network error"); }
+    btn.disabled = false; btn.textContent = orig || "Save estimate";
+  }
+
   mount.addEventListener("click", (ev) => {
+    const saveEl = (ev.target as HTMLElement).closest("[data-save]") as HTMLElement | null;
+    if (saveEl) { ev.preventDefault(); void saveEstimate(saveEl); return; }
     const el = (ev.target as HTMLElement).closest("[data-del],[data-add]") as HTMLElement | null;
     if (!el) return;
     ev.preventDefault();

@@ -110,11 +110,40 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
   const { client } = createServerSupabaseClient(env);
   if (!client) return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
 
-  const [jobRes, estRes, lineRes] = await Promise.all([
+  const [jobRes, estRes, lineRes, editRes] = await Promise.all([
     client.from("v_estimate_audit_job").select("*"),
     client.from("v_estimate_audit_estimate").select("*"),
     client.from("v_estimate_audit_line").select("*"),
+    client.from("estimate_audit_edits").select("*"),
   ]);
+
+  // Operator edit overlay (schema 112): estimate-level margin + line edits/adds/deletes.
+  const marginEdit = new Map<string, number>();
+  const lineEdit = new Map<string, Map<string, any>>(); // estimate_id → line_id → edit
+  const deletedLines = new Map<string, Set<string>>();   // estimate_id → deleted line_ids
+  const addedLines = new Map<string, any[]>();           // estimate_id → added line edits
+  const editedEstimates = new Set<string>();
+  for (const ed of (editRes.data as any[] | null) ?? []) {
+    editedEstimates.add(ed.estimate_id);
+    if (ed.scope === "estimate") { if (ed.margin_pct != null) marginEdit.set(ed.estimate_id, num(ed.margin_pct)); continue; }
+    if (ed.line_action === "deleted") {
+      const s = deletedLines.get(ed.estimate_id) ?? new Set<string>(); s.add(ed.line_id); deletedLines.set(ed.estimate_id, s);
+    } else if (ed.line_action === "added") {
+      const a = addedLines.get(ed.estimate_id) ?? []; a.push(ed); addedLines.set(ed.estimate_id, a);
+    } else {
+      const m = lineEdit.get(ed.estimate_id) ?? new Map<string, any>(); m.set(ed.line_id, ed); lineEdit.set(ed.estimate_id, m);
+    }
+  }
+  function recompute(opt: EstimateOption) {
+    const material = opt.lines.reduce((s, l) => s + (l.lineCost = Math.round(l.qty * l.unitCost * 100) / 100), 0);
+    opt.productCost = Math.round(material * 100) / 100;
+    opt.totalCost = Math.round((opt.productCost + opt.laborCost + opt.feeCost) * 100) / 100;
+    const m = Math.min(Math.max(opt.marginPct, 0), 99.9) / 100;
+    opt.totalPrice = Math.round((opt.totalCost / (1 - m)) * 100) / 100;
+    opt.marginRevenue = Math.round((opt.totalPrice - opt.totalCost) * 100) / 100;
+    opt.lines.forEach((l) => (l.linePrice = Math.round((l.lineCost / (1 - m)) * 100) / 100));
+    opt.lineCount = opt.lines.length;
+  }
 
   const jobRows = (jobRes.data as any[] | null) ?? [];
   if (jobRows.length === 0) {
@@ -156,6 +185,23 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
       lineCount: num(e.line_count),
       lines: linesByOption.get(e.estimate_id) ?? [],
     };
+    // Apply the operator edit overlay, then recompute totals so a reload shows the edits.
+    if (editedEstimates.has(opt.estimateId)) {
+      const del = deletedLines.get(opt.estimateId);
+      const le = lineEdit.get(opt.estimateId);
+      opt.lines = opt.lines
+        .filter((l) => !del?.has(l.lineId))
+        .map((l) => {
+          const ed = le?.get(l.lineId);
+          if (!ed) return l;
+          return { ...l, qty: ed.qty != null ? num(ed.qty) : l.qty, unitCost: ed.unit_cost != null ? num(ed.unit_cost) : l.unitCost };
+        });
+      for (const ad of addedLines.get(opt.estimateId) ?? []) {
+        opt.lines.push({ lineId: ad.line_id, description: ad.description ?? "", qty: num(ad.qty), uom: ad.uom ?? "EA", unitCost: num(ad.unit_cost), lineCost: 0, linePrice: 0 });
+      }
+      if (marginEdit.has(opt.estimateId)) opt.marginPct = marginEdit.get(opt.estimateId)!;
+      recompute(opt);
+    }
     const list = estByRun.get(e.run_id) ?? [];
     list.push(opt);
     estByRun.set(e.run_id, list);
