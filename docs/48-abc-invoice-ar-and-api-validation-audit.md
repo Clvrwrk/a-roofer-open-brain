@@ -51,7 +51,11 @@ sync ran **2026-06-18 09:45 UTC**; this invoice post-dates it. Next sync will pi
   correct; line detail beyond line 10 is silently dropped. Dataset-wide: no invoice has
   >10 lines, 152 sit at exactly 10. ~**$42.8K** of line value missing across the open
   set; worst single invoice missing **$4,191** of line detail (`2010874108-001`).
+  **Live-verified 2026-06-19**: fresh `GET /invoices/id/{invoiceId}` calls returned 10
+  lines for invoices with 14/18/26 real lines — confirming the cap is in the ABC API
+  itself, not our ingestion. No line-pagination param works (tested 5 variants).
   → Tracked as item #2 in [`docs/47`](47-external-abc-api-open-conversations.md).
+  Interim full-line source = the invoice PDF endpoint.
 - **3 of 56** (minor, ~$244 total): API has *more* lines than the report
   (`2009483334-001` +$162, `2009262059-001` +$69, `2008342472-001` +$12.70) — API-side
   line splitting or report-side consolidation of identical items.

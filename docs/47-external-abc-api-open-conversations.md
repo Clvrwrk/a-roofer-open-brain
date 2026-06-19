@@ -40,13 +40,30 @@ TOTAL_BEFORE_PAYMENT) would let us drop the manual CSV step.
 
 ## 2. 🔴 Invoice line items are truncated at 10 per invoice
 
-**What we see — this is the important one.** The invoice detail endpoint returns **at
-most 10 line items per invoice**. Verified dataset-wide:
+**What we see — this is the important one.** `GET /api/invoice/v1/invoices/id/{invoiceId}`
+returns **at most 10 line items per invoice**.
+
+**Live-verified 2026-06-19** (fresh calls against `partners.abcsupply.com`, not just our
+mirror — so this is the API, not our ingestion):
+
+| Invoice (by-id) | `lines` returned live | Real lines (report/PDF) | API `subTotal` | API `total` |
+|---|---|---|---|---|
+| 2010452632-001 | **10** | 26 | 13,296.14 | 14,417.81 |
+| 2010874108-001 | **10** | 14 | 8,001.15 | 8,293.74 |
+| 2008816395-001 | **10** | 18 | 6,207.63 | 6,750.80 |
+
+The header `subTotal`/`total` are correct and complete; only the `lines` array is capped.
+**No line pagination exists** — we probed `?itemsPerPage=100&pageNumber=1`, `?pageSize=100`,
+`?includeAllLines=true`, `?lineItemsPerPage=100`, and `?pageNumber=2` on the 26-line
+invoice: every one still returned exactly 10 lines. The `pagination` object the API
+exposes applies only to the **history list** endpoint, not to invoice lines. So there is
+no client-side workaround via this endpoint today.
+
+Also confirmed dataset-wide in our mirror:
 
 - `max(jsonb_array_length(raw->'lines'))` across all 560 synced invoices = **10**.
 - **152** invoices sit at exactly 10 lines; **zero** invoices have more than 10.
-- The downloaded report proves the real invoices have **more** than 10 lines. Examples
-  (open set, 2026-06-19 download):
+- Examples (open set, 2026-06-19 download):
 
   | Invoice | API lines (raw) | Real lines (report) | API line $ sum | Real line $ sum | Missing line $ |
   |---|---|---|---|---|---|
@@ -67,8 +84,16 @@ alone, **~$42.8K of line value is missing** from the API vs. the report.
 
 **Ask to ABC.** Either (a) return all line items, or (b) provide pagination on invoice
 lines (cursor / `page` / `pageSize`) with a `totalLineCount` so we can detect and fetch
-the rest. Confirm whether the cap is 10 exactly and whether it applies to the order API
-as well.
+the rest. Confirm whether the cap is exactly 10 and whether it applies to the order API
+as well. **Interim:** the invoice **PDF** (`GET /api/invoice/v1/invoices/pdf/{invoiceId}`)
+does contain all lines, so full line detail must be parsed from the PDF until the JSON
+endpoint is fixed.
+
+**Endpoints in use (all confirmed 200 on 2026-06-19):**
+`GET /api/invoice/v1/invoices/history/{billToAccount}?startDate=&endDate=&itemsPerPage=&pageNumber=`
+(header-only list — no line data; paginated, `pagination.totalItems`),
+`GET /api/invoice/v1/invoices/id/{invoiceId}` (full header + capped 10-line array),
+`GET /api/invoice/v1/invoices/pdf/{invoiceId}` (full document incl. all lines).
 
 ---
 
