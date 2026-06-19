@@ -672,6 +672,14 @@ async function syncInvoices(context) {
       // Dedupe lines by the (invoice_number, line_key) conflict target.
       const dedupedLines = [...new Map(lineRows.map((r) => [`${r.invoice_number}|${r.line_key}`, r])).values()];
       sync.lineRowsUpserted += await supabaseUpsertCount("abc_invoice_lines", dedupedLines, "invoice_number,line_key");
+      // Recurrence guard (Item 6): a line must never persist with null qty/price while the
+      // raw payload carries them — that signals invoiceLineRows() drifted from the ABC shape.
+      const unmapped = dedupedLines.filter((r) => (r.quantity == null || r.unit_price == null)
+        && r.raw && (r.raw.shippedQty?.value != null || r.raw.priceQty?.value != null || r.raw.pricePerUnitAmount != null));
+      if (unmapped.length) {
+        sync.unmappedLineWarnings = (sync.unmappedLineWarnings ?? 0) + unmapped.length;
+        console.warn(`[invoice-sync] WARNING: ${unmapped.length} line(s) mapped to null qty/price despite raw values — invoiceLineRows() may be out of sync with the ABC payload shape. Examples: ${unmapped.slice(0, 3).map((r) => `${r.invoice_number}/${r.item_number}`).join(", ")}`);
+      }
     }
   }
 }
@@ -1287,16 +1295,22 @@ function invoiceDetailRow(invoiceNumber, invoiceId, billToNumber, payload) {
 
 function invoiceLineRows(invoiceNumber, payload) {
   const lines = Array.isArray(payload?.lines) ? payload.lines : [];
+  // ABC invoice lines nest qty/uom under shippedQty (or priceQty) and price under
+  // pricePerUnitAmount / extendedPriceAmount — a DIFFERENT shape from the order payload
+  // (which uses orderedQty/unitPrice.value/amount). The earlier mapper read flat keys
+  // (line.quantity / unitPrice / extendedPrice) that don't exist, so columns came back
+  // null while raw held every value (2026-06-18 batch). Read the nested keys first, with
+  // the old flat keys retained as fallbacks in case the shape shifts again.
   return lines.map((line, index) => ({
     invoice_number: invoiceNumber,
     line_key: textOrNull(line.id || line.lineId || line.lineNumber || index + 1),
     line_number: textOrNull(line.lineNumber || line.id),
     item_number: textOrNull(line.itemNumber || line.item?.number),
     item_description: textOrNull(line.itemDescription || line.description || line.item?.description),
-    quantity: parseNumber(line.quantity || line.invoiceQuantity || line.shippedQuantity),
-    uom: textOrNull(line.uom || line.unitOfMeasure),
-    unit_price: priceNumber(line, ["unitPrice", "price", "sellPrice", "netPrice"]),
-    extended_price: priceNumber(line, ["extendedPrice", "lineTotal", "totalPrice", "amount"]),
+    quantity: parseNumber(line.shippedQty?.value ?? line.priceQty?.value ?? line.quantity ?? line.invoiceQuantity ?? line.shippedQuantity),
+    uom: textOrNull(line.shippedQty?.uom ?? line.shippedQty?.uomCode ?? line.priceQty?.uom ?? line.uom ?? line.unitOfMeasure),
+    unit_price: parseNumber(line.pricePerUnitAmount ?? line.unitPrice?.value ?? line.unitPrice ?? line.price ?? line.sellPrice ?? line.netPrice),
+    extended_price: parseNumber(line.extendedPriceAmount ?? line.amount ?? line.extendedPrice ?? line.lineTotal ?? line.totalPrice),
     raw: line,
     updated_at: nowIso,
   }));

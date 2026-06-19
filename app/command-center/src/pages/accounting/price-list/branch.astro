@@ -3,7 +3,7 @@ import { loadBranchPriceList } from "@lib/branch-price-list";
 
 const branch = Astro.url.searchParams.get("branch") ?? "";
 const invoice = Astro.url.searchParams.get("invoice") ?? "";
-const pl = await loadBranchPriceList(branch);
+const pl = await loadBranchPriceList(branch, invoice);
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hasActive = pl.agreements.some((a) => a.active);
 const fmtDate = (s: string) => s || "—";
@@ -19,12 +19,13 @@ const fmtDate = (s: string) => s || "—";
   <body class="pl">
     <header class="pl-head">
       <div>
-        <p class="pl-eyebrow">Negotiated Price List{invoice ? ` · for invoice ${invoice}` : ""}</p>
-        <h1>Branch #{branch || "—"}</h1>
+        <p class="pl-eyebrow">Negotiated Price List{pl.scopedInvoice ? ` · agreement active for invoice ${pl.scopedInvoice} (${pl.scopedInvoiceDate})` : ""}</p>
+        <h1>Branch #{branch || "—"}{pl.branchName ? ` — ${pl.branchName}` : ""}</h1>
+        {pl.branchAddress && <p class="pl-addr">{pl.branchAddress}</p>}
       </div>
       <div class="pl-status">
         {pl.status === "live" ? (
-          <span class={`pl-pill ${hasActive ? "ok" : "bad"}`}>{hasActive ? "Active agreement" : "All agreements expired — renewal needed"}</span>
+          <span class={`pl-pill ${hasActive ? "ok" : "bad"}`}>{pl.scopedInvoice ? `Agreement ${pl.scopedAgreementNumber || "—"}` : (hasActive ? "Active agreement" : "All agreements expired — renewal needed")}</span>
         ) : (
           <span class="pl-pill grey">No price list on file</span>
         )}
@@ -57,7 +58,7 @@ const fmtDate = (s: string) => s || "—";
                 <td>{it.manufacturer}</td>
                 <td>{it.uom}</td>
                 <td class="num">{money(it.unitPrice)}</td>
-                <td><span class={`pl-pill sm ${it.active ? "ok" : "bad"}`}>#{it.agreementId}{it.active ? "" : " exp"}</span></td>
+                <td><span class={`pl-pill sm ${it.active ? "ok" : "bad"}`}>{it.agreementNumber || `#${it.agreementId}`}{it.active ? "" : " exp"}</span></td>
               </tr>
             ))}
           </tbody>
@@ -79,6 +80,7 @@ const fmtDate = (s: string) => s || "—";
       .pl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
       .pl-eyebrow{margin:0;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
       .pl-head h1{margin:2px 0 0;font-size:20px}
+      .pl-addr{margin:3px 0 0;color:var(--muted);font-size:12.5px}
       .pl-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:650;background:var(--grey-bg);color:var(--grey)}
       .pl-pill.ok{background:var(--green-bg);color:var(--green)} .pl-pill.bad{background:var(--red-bg);color:var(--red)} .pl-pill.grey{background:var(--grey-bg);color:var(--grey)}
       .pl-pill.sm{padding:1px 7px;font-size:10px;font-weight:600}

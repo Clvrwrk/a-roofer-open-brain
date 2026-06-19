@@ -56,7 +56,8 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).repl
     <div class="iv-kpis">
       <div class="iv-kpi"><span class="iv-kpi-lab">Open Invoices</span><span class="iv-kpi-val">{data.totals.openInvoices.toLocaleString()}</span><span class="iv-kpi-sub">active · {data.totals.paidInvoices} paid/closed</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">To Audit</span><span class="iv-kpi-val">{data.totals.pending.toLocaleString()}</span><span class="iv-kpi-sub">lines pending review</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">overcharge vs negotiated</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">un-audited overcharge vs negotiated</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memo Requested</span><span class="iv-kpi-val">{money(data.totals.creditMemoRequested)}</span><span class="iv-kpi-sub">audited → credit-memo disposition</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">in current pull</span></div>
     </div>

@@ -18,6 +18,7 @@ export interface InvLine {
   negotiatedPrice: number | null;
   variancePct: number | null;
   varianceExt: number | null;
+  auditable: boolean; // has resolvable qty + extended price; false → never surfaced "to audit"
   audited: boolean;
   auditStatus: string; // passed | pending | disputed
   auditedBy: string;
@@ -44,6 +45,7 @@ export interface Invoice {
   noPriceLines: number;
   flaggedLines: number;
   atRisk: number;
+  creditMemoRequested: number;
   worstPct: number;
   auditedLines: number;
   pendingLines: number;
@@ -63,6 +65,7 @@ export interface InvBranch {
   invoiceCount: number;
   creditMemos: number;
   atRisk: number;
+  creditMemoRequested: number;
   noPrice: number;
   flagged: number;
   pending: number;
@@ -75,6 +78,7 @@ export interface InvOffice {
   invoiceCount: number;
   creditMemos: number;
   atRisk: number;
+  creditMemoRequested: number;
   noPrice: number;
   flagged: number;
   pending: number;
@@ -85,14 +89,14 @@ export interface InvoiceAuditData {
   status: "live" | "unconfigured";
   generatedAt: string;
   offices: InvOffice[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
 
 export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -131,6 +135,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
+      auditable: l.is_auditable !== false, // default true unless the view says otherwise
       audited: passed,
       auditStatus: a?.audit_status ?? "pending",
       auditedBy: a?.approved_by ?? "",
@@ -159,6 +164,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     noPriceLines: num(i.no_price_lines),
     flaggedLines: num(i.flagged_lines),
     atRisk: num(i.at_risk),
+    creditMemoRequested: num(i.credit_memo_amount),
     worstPct: num(i.worst_pct),
     auditedLines: 0,
     pendingLines: 0,
@@ -171,7 +177,9 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;
-    inv.pendingLines = inv.lines.length - inv.auditedLines;
+    // Only auditable lines (resolvable qty + price) can be "pending review" — a line
+    // with no qty/price must never surface to audit (Item 6 guard).
+    inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
     return inv;
   });
 
@@ -181,13 +189,14 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     const key = `${inv.office}|${inv.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
-      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, noPrice: 0, flagged: 0, pending: 0, invoices: [] };
+      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, invoices: [] };
       branchMap.set(key, br);
     }
     br.invoices.push(inv);
     br.invoiceCount++;
     if (inv.isCreditMemo) br.creditMemos++;
     br.atRisk += inv.atRisk;
+    br.creditMemoRequested += inv.creditMemoRequested;
     br.noPrice += inv.noPriceLines;
     br.flagged += inv.flaggedLines;
     br.pending += inv.pendingLines;
@@ -198,7 +207,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     br.invoices.sort((a, b) => (b.invoiceDate || "").localeCompare(a.invoiceDate || "") || b.atRisk - a.atRisk);
     let off = officeMap.get(br.office);
     if (!off) {
-      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, noPrice: 0, flagged: 0, pending: 0, branches: [] };
+      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, branches: [] };
       officeMap.set(br.office, off);
     }
     off.branches.push(br);
@@ -206,13 +215,14 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     off.invoiceCount += br.invoiceCount;
     off.creditMemos += br.creditMemos;
     off.atRisk += br.atRisk;
+    off.creditMemoRequested += br.creditMemoRequested;
     off.noPrice += br.noPrice;
     off.flagged += br.flagged;
     off.pending += br.pending;
   }
 
   const offices = Array.from(officeMap.values())
-    .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk) }))
+    .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), creditMemoRequested: Math.round(o.creditMemoRequested), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk) }))
     .sort((a, b) => b.atRisk - a.atRisk);
 
   return {
@@ -223,6 +233,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       invoices: invoices.length,
       creditMemos: invoices.filter((i) => i.isCreditMemo).length,
       atRisk: Math.round(offices.reduce((s, o) => s + o.atRisk, 0)),
+      creditMemoRequested: Math.round(offices.reduce((s, o) => s + o.creditMemoRequested, 0)),
       noPrice: offices.reduce((s, o) => s + o.noPrice, 0),
       flagged: offices.reduce((s, o) => s + o.flagged, 0),
       audited: invoices.reduce((s, i) => s + i.auditedLines, 0),
