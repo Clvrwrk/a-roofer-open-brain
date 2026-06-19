@@ -27,6 +27,13 @@ The static audit (even with validators) read **migration files**, not the **live
 
 → Verdicts below are the **dynamic-corrected** truth.
 
+## Resolution status (2026-06-18)
+All 3 confirmed defects **FIXED + verified** (before/after Supabase, test rows removed):
+- **#1 estimate persistence** → `87f2da9` (schema 112 overlay + save endpoint + Save button).
+- **#2 "Request Price List"** → `f1ef2ba` (new `request-price-list` endpoint; persists to `price_refresh_request`).
+- **#3 marketing nav + cleanup** → `eaf3ffd` (Marketing dept added to nav; orphan script + 37 `" 2"` dupes removed).
+- **Suspects #4 (Reopen reset) / #5 (AuditQueue KPI param)** → left as-is; they need a product-intent decision, not a clear bug fix (see below).
+
 ## Confirmed REAL defects (ranked)
 
 | # | Severity | Trigger / surface | What's wrong | Fix |
