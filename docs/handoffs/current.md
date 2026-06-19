@@ -1,8 +1,18 @@
-# Handoff — Command Center: audits, vendor pulls, AcuLynx matching, design system
+# Handoff — Command Center: vendor audits, Agreement Builder, full-site action audit
 
-**Date:** 2026-06-18 · **Branch:** `main` @ `9136075` (= `origin/main` = dev branch `cleverwork/price-agreement-audit`, deployed) · **Full logs:** `context/memory/2026-06-17.md` (Sessions 1–19) + `context/memory/2026-06-18.md`
+**Date:** 2026-06-18 (late) · **Branch:** `cleverwork/price-agreement-audit` = `origin/main` = deployed (Coolify). **Confirm before app work:** `git fetch origin` → both refs equal → branch from there. · **Full logs:** `context/memory/2026-06-17.md` + `context/memory/2026-06-18.md`.
 
-## ▶ NEW STANDING INSTRUCTION (from Chris, 2026-06-18) — vendor API skills
+## ▶ WHERE WE LEFT OFF (end of 2026-06-18)
+**The 3-item sequence is through Item 3; a full-site action audit ran and all its findings are fixed + deployed.**
+
+- **Item 1 (AR feed)** — STILL THE ONLY OPEN BUSINESS Q. How is `invoice_documents.payment_status` populated today (Make flow off the ABC portal CSV, or manual)? If a process refreshes it, the audit converges to ~169 on its own; if not, build the AR-CSV ingestion. No ABC API for AR/paid/due — portal CSV only.
+- **Item 2 (Order Audit)** — DONE & deployed. `/operations/order-audit` — priced variance audit (order unit price vs negotiated), 60-day/invoiced auto-archive. Schemas 106-108.
+- **Item 3 (Price Agreement Builder)** — DONE & deployed (all 5 slices, schemas 109-111). `/accounting/price-agreement/builder`: per-branch A+B worksheet → editable+persisted → PDF/CSV → drafted handoff (outbound guard) → single-claim magic link. Recipient = Justin Garza. Plan/status: `docs/40`.
+- **Full-site action audit** — DONE (`docs/41`). ~220 triggers, 13 surfaces, 26-agent workflow + dynamic/data pass. Found + FIXED: estimate edits now persist (schema 112), "Request Price List" now persists, marketing nav added, reopen-preserve, KPI filter pass-through. 3 static "dead" findings were false positives (verify against the LIVE DB, not migration files).
+
+**Next options:** Item 1 AR-CSV ingestion (needs Chris's answer first); EagleView/GAF/Roofr vendor API-data-map skills; or whatever Chris prioritizes.
+
+## ▶ STANDING INSTRUCTION (Chris, 2026-06-18) — vendor API skills + docs-first
 **Stop re-researching vendor schemas every session — it wastes tokens.** For any
 vendor we have a documented API for, there must be an **API data-map skill** that
 says exactly where each kind of data is stored (table.column), which endpoint

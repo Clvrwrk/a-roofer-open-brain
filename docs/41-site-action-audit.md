@@ -32,7 +32,10 @@ All 3 confirmed defects **FIXED + verified** (before/after Supabase, test rows r
 - **#1 estimate persistence** → `87f2da9` (schema 112 overlay + save endpoint + Save button).
 - **#2 "Request Price List"** → `f1ef2ba` (new `request-price-list` endpoint; persists to `price_refresh_request`).
 - **#3 marketing nav + cleanup** → `eaf3ffd` (Marketing dept added to nav; orphan script + 37 `" 2"` dupes removed).
-- **Suspects #4 (Reopen reset) / #5 (AuditQueue KPI param)** → left as-is; they need a product-intent decision, not a clear bug fix (see below).
+- **Suspect #4 (Reopen)** → `6daf392` — Chris chose **preserve**; reopen now keeps prior resolution/note (updates status only). Verified.
+- **Suspect #5 (AuditQueue KPI param)** → `6daf392` — Chris chose **pass filter through**; nav cards append `?filterCol=&filterVal=` and the queue reads them on init.
+
+**All audit findings are now resolved.** Net real defects this audit caught + fixed: 2 dead persist actions (estimate, Request Price List) + 1 nav gap + 2 semantic/UX suspects; 3 static false-positives were disproven by the dynamic pass.
 
 ## Confirmed REAL defects (ranked)
 
