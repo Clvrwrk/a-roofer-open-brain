@@ -39,6 +39,8 @@ export interface NegFamily {
   familyId: string;
   familyName: string;
   topClass: string;
+  categoryKey: string;
+  categoryLabel: string;
   variationCount: number;
   pricedCount: number;
   spend36mo: number;
@@ -89,14 +91,21 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [items, matches, priceItems, branchMeta, recentPrices] = await Promise.all([
+  const [items, matches, priceItems, branchMeta, recentPrices, catRows] = await Promise.all([
     selectAll<any>(client, "v_negotiable_items", "*"),
     selectAll<any>(client, "abc_price_agreement_branch_matches", "branch_number,ship_to_number,abc_price_agreement_id,confidence_score"),
-    selectAll<any>(client, "abc_price_list_items", "agreement_id,item_number,unit_price"),
+    selectAll<any>(client, "abc_price_list_items", "agreement_id,item_number,unit_price,category_key"),
     selectAll<any>(client, "abc_vendor_branches", "branch_number,branch_name,city,state"),
     selectAll<any>(client, "v_recent_invoice_price", "ship_to_number,item_number,unit_price,invoice_date"),
+    selectAll<any>(client, "roof_system_category", "key,label,sort_order"),
   ]);
   if (items.length === 0) return empty;
+
+  // item_number → roof-system category (from priced catalog; covers the negotiable A+B set well).
+  const catLabel = new Map<string, string>();
+  for (const c of catRows) catLabel.set(c.key, c.label);
+  const itemCat = new Map<string, string>();
+  for (const p of priceItems) if (p.category_key && !itemCat.has(p.item_number)) itemCat.set(p.item_number, p.category_key);
 
   // agreement_id → (item_number → lowest unit_price)
   const agPrices = new Map<string, Map<string, number>>();
@@ -200,7 +209,7 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
     const p = persisted.get(it.item_number);
     let fam = famMap.get(it.family_id);
     if (!fam) {
-      fam = { familyId: it.family_id, familyName: it.family_name, topClass: it.review_class, variationCount: 0, pricedCount: 0, spend36mo: 0, variations: [] };
+      fam = { familyId: it.family_id, familyName: it.family_name, topClass: it.review_class, categoryKey: "uncategorized", categoryLabel: "Uncategorized", variationCount: 0, pricedCount: 0, spend36mo: 0, variations: [] };
       famMap.set(it.family_id, fam);
     }
     fam.variations.push({
@@ -223,7 +232,17 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
   }
 
   const families = Array.from(famMap.values())
-    .map((f) => ({ ...f, variations: f.variations.sort((a, b) => b.spend36mo - a.spend36mo) }))
+    .map((f) => {
+      // Family category = the most common roof-system category across its variations.
+      const counts = new Map<string, number>();
+      for (const v of f.variations) {
+        const c = itemCat.get(v.itemNumber) || "uncategorized";
+        counts.set(c, (counts.get(c) ?? 0) + 1);
+      }
+      let categoryKey = "uncategorized", best = -1;
+      for (const [c, n] of counts) if (n > best) { best = n; categoryKey = c; }
+      return { ...f, categoryKey, categoryLabel: catLabel.get(categoryKey) ?? "Uncategorized", variations: f.variations.sort((a, b) => b.spend36mo - a.spend36mo) };
+    })
     .sort((a, b) => b.spend36mo - a.spend36mo);
 
   return {

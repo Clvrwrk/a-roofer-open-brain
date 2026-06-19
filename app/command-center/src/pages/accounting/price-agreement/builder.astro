@@ -1,47 +1,26 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
-import { loadAgreementBuilder } from "@lib/agreement-package";
+import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
 
-const branchParam = Astro.url.searchParams.get("branch") ?? undefined;
-const data = await loadAgreementBuilder(branchParam);
+const data = await loadAgreementBuilderOverview();
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
-const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
-const pricedPct = data.totals.items ? Math.round((data.totals.priced / data.totals.items) * 100) : 0;
+const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const offices = data.offices.map((o) => o.office);
 
-const payload = JSON.stringify({
-  families: data.families,
-  branch: data.branch,
-  packageId: data.packageId,
-  recipient: data.recipient,
-}).replace(/</g, "\\u003c");
+const payload = JSON.stringify({ offices: data.offices, recipient: data.recipient }).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Agreement Builder" eyebrow="Accounting" activePage="accounting">
   <section class="iv" data-theme="light" data-pref="system">
     <div class="iv-toolbar">
-      <input class="iv-input" id="iv-search" type="search" placeholder="Search item, family, description…" autocomplete="off" />
-      <select class="iv-select" id="iv-branch">
-        {data.branches.map((b) => (
-          <option value={b.branchNumber} selected={data.branch?.number === b.branchNumber}>
-            {b.branchName} (#{b.branchNumber}) — {b.pricedItems} priced
-          </option>
-        ))}
+      <input class="iv-input" id="iv-search" type="search" placeholder="Search office, branch…" autocomplete="off" />
+      <select class="iv-select" id="iv-office">
+        <option value="">All PE offices</option>
+        {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
-      <select class="iv-select" id="iv-cov">
-        <option value="">All items</option>
-        <option value="priced">Has prior price</option>
-        <option value="noprice">No prior price (→ 0)</option>
-      </select>
-      {data.branch && (
-        <>
-          <a class="iv-export" href={`/api/price-agreement/package/pdf?branch=${data.branch.number}`} target="_blank" rel="noopener">📄 PDF</a>
-          <a class="iv-export" href={`/api/price-agreement/package/csv?branch=${data.branch.number}`}>⬇ CSV</a>
-          <button type="button" class="iv-export iv-handoff" id="iv-handoff">📥 Draft for review</button>
-          <button type="button" class="iv-export iv-handoff" id="iv-issue">🔗 Issue link</button>
-        </>
-      )}
+      <a class="iv-export" id="iv-methodology" href="/accounting/price-agreement/methodology" target="_blank" rel="noopener">📘 ABC classes</a>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="iv-count">{generatedAt}</span>
@@ -53,26 +32,22 @@ const payload = JSON.stringify({
     </div>
 
     <div class="iv-kpis">
-      <div class="iv-kpi"><span class="iv-kpi-lab">Branch</span><span class="iv-kpi-val" style="font-size:16px">{data.branch ? data.branch.name : "—"}</span><span class="iv-kpi-sub">{data.branch ? `#${data.branch.number} · ${data.branch.office}` : "no branch"}</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Negotiable Items</span><span class="iv-kpi-val">{data.totals.families.toLocaleString()}</span><span class="iv-kpi-sub">top-level · {data.totals.items.toLocaleString()} variations</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Already Priced</span><span class="iv-kpi-val">{data.totals.priced.toLocaleString()}</span><span class="iv-kpi-sub">{pricedPct}% have a prior price here</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">To Negotiate</span><span class="iv-kpi-val">{(data.totals.items - data.totals.priced).toLocaleString()}</span><span class="iv-kpi-sub">prefill 0 · never negotiated here</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Proposed Set</span><span class="iv-kpi-val" id="iv-proposed">{data.totals.proposed.toLocaleString()}</span><span class="iv-kpi-sub">items with a negotiated target</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">PE Offices</span><span class="iv-kpi-val">{data.totals.offices}</span><span class="iv-kpi-sub">{data.totals.branches} vendor branches buying A+B</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Negotiable Items</span><span class="iv-kpi-val">{data.totals.negotiableItems.toLocaleString()}</span><span class="iv-kpi-sub">ABC review-class A+B master</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">36mo Spend</span><span class="iv-kpi-val">{money(data.totals.historicalSpend)}</span><span class="iv-kpi-sub">historical, on negotiable items</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Projected at Set Price</span><span class="iv-kpi-val">{money(data.totals.projectedCost)}</span><span class="iv-kpi-sub">negotiated / set prices × 36mo volume</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Projected Savings</span><span class="iv-kpi-val">{money(data.totals.savings)}</span><span class="iv-kpi-sub">vs historical spend</span></div>
     </div>
 
-    <p class="iv-note">Negotiable worksheet for this branch — ABC review-class <b>A+B</b> items (~87% of 36-mo spend), grouped as top-level families that expand to color/size variations. Each variation is prefilled with the branch's <b>latest negotiated price</b>, else the <b>last invoiced price if &lt; 60 days old</b>, else <b>0</b>. Set a price at the family level to apply it to every variation; override a single variation to make its price primary. Recipient on send = <b>{data.recipient.name}</b> ({data.recipient.email}), the ABC national account manager — but nothing sends from here: edits save as a <b>draft</b> for internal review.</p>
+    <p class="iv-note">Negotiable worksheet across every PE office. Drill in: <b>PE Office → Vendor → Vendor/Branch → Category → Item → Variation</b>. Costs roll up from each branch's trailing-36mo volume at the <b>set price</b> (persisted proposal → branch negotiated price → historical average). Each variation prefills with the branch's latest negotiated price; set a price at the item level to cascade to its variations. Recipient on send = <b>{data.recipient.name}</b> ({data.recipient.email}) — but nothing sends from here: edits save as a <b>draft</b> for review.</p>
 
-    {data.totals.items === 0 && <p class="iv-empty">No negotiable items found.</p>}
+    {data.offices.length === 0 && <p class="iv-empty">No negotiable items found.</p>}
     <div id="iv-tree"></div>
   </section>
 
-  <div class="iv-savebar" id="iv-savebar" hidden>
-    <span class="iv-savebar-msg" id="iv-savebar-msg">0 unsaved changes</span>
-    <button type="button" class="iv-save-btn" id="iv-save">Save draft</button>
-  </div>
-
   <script type="application/json" id="iv-data" set:html={payload}></script>
   <div class="ia-toast" id="iv-toast" role="status" aria-live="polite"></div>
+  <canvas id="iv-confetti" hidden></canvas>
 </AppShell>
 
 <style is:global>
@@ -92,25 +67,26 @@ const payload = JSON.stringify({
   .iv .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5}
   .iv .pill-green{background:var(--green-bg);color:var(--green)}
   .iv .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
+  .iv .pill-red{background:var(--red-bg);color:var(--red)}
   .iv .pill-grey{background:var(--grey-bg);color:var(--grey)}
   .iv .pill-brand{background:var(--brand-bg);color:var(--brand)}
 
   .iv-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .iv-input,.iv-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
-  .iv-input{min-width:240px}
+  .iv-input{min-width:220px}
   .iv-spacer{flex:1}
   .iv-count{font-size:12px;color:var(--muted)}
   .iv-empty{color:var(--muted);font-size:13px;padding:14px 4px}
-  .iv-note{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 16px;max-width:980px}
+  .iv-note{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 16px;max-width:1040px}
   .iv-note b{color:var(--ink)}
   .iv-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
   .iv-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
   .iv-theme button.is-active{background:var(--brand);color:#fff}
-  .iv-export{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
+  .iv-export{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap;cursor:pointer;font-family:inherit}
   .iv-export:hover{border-color:var(--brand);background:var(--brand-bg)}
-  .iv-handoff{cursor:pointer;font-family:inherit;background:var(--brand);color:#fff;border-color:var(--brand)}
-  .iv-handoff:hover{filter:brightness(.95);background:var(--brand)}
-  .iv-handoff:disabled{opacity:.5;cursor:default}
+  .iv-export.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .iv-export.primary:hover{filter:brightness(.95);background:var(--brand)}
+  .iv-export:disabled{opacity:.5;cursor:default}
 
   .iv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
@@ -118,15 +94,49 @@ const payload = JSON.stringify({
   .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-kpi-sub{font-size:11px;color:var(--muted)}
 
-  .iv-fam{border:1px solid var(--line);border-radius:11px;margin:8px 0;background:var(--panel)}
-  .iv-fam>summary{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;list-style:none;flex-wrap:wrap}
-  .iv-fam>summary::-webkit-details-marker{display:none}
+  /* Office / Vendor / Branch tree */
+  .iv-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .iv-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .iv-office>summary::-webkit-details-marker{display:none}
   .iv-chev{color:var(--muted);transition:transform .15s;font-size:15px}
   details[open]>summary .iv-chev{transform:rotate(90deg)}
-  .iv-fam-name{font-weight:700;font-size:13.5px}
+  .iv-office-name{font-weight:750;font-size:15px;flex:1}
+  .iv-mini{display:flex;gap:16px}
+  .iv-mini div{text-align:center}
+  .iv-mini strong{display:block;font-size:14px;font-weight:750;font-variant-numeric:tabular-nums}
+  .iv-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .iv-office-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  .iv-vendor{border:1px solid var(--line);border-radius:11px;margin:10px 0;background:var(--panel2)}
+  .iv-vendor>summary{display:flex;align-items:center;gap:12px;padding:10px 13px;cursor:pointer;list-style:none}
+  .iv-vendor>summary::-webkit-details-marker{display:none}
+  .iv-vendor-name{font-weight:700;font-size:13.5px;flex:1}
+  .iv-vendor-body{padding:2px 10px 10px}
+
+  .iv-branch{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel)}
+  .iv-branch>summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .iv-branch>summary::-webkit-details-marker{display:none}
+  .iv-branch-name{font-weight:700;font-size:13px}
+  .iv-branch-id{color:var(--muted);font-size:11px;font-family:ui-monospace,Menlo,monospace}
+  .iv-branch-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .iv-branch-body{padding:6px 10px 10px;border-top:1px solid var(--line)}
+  .iv-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 4px}
+  .iv-actions .iv-actions-id{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted);margin-right:2px}
+  .iv-loading{color:var(--muted);font-size:12.5px;padding:10px 4px}
+
+  /* Category / family / variation */
+  .iv-cat{border:1px solid var(--line);border-radius:9px;margin:7px 0;background:var(--panel2)}
+  .iv-cat>summary{display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;list-style:none}
+  .iv-cat>summary::-webkit-details-marker{display:none}
+  .iv-cat>summary b{font-size:12.5px}
+  .iv-cat-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .iv-fam{border:1px solid var(--line);border-radius:9px;margin:6px 8px;background:var(--panel)}
+  .iv-fam>summary{display:flex;align-items:center;gap:10px;padding:9px 11px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .iv-fam>summary::-webkit-details-marker{display:none}
+  .iv-fam-name{font-weight:700;font-size:13px}
   .iv-fam-sub{color:var(--muted);font-size:11.5px}
   .iv-fam-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .iv-fam-body{padding:2px 12px 12px;border-top:1px solid var(--line)}
+  .iv-fam-body{padding:2px 10px 10px}
 
   .iv-table{width:100%;border-collapse:collapse;margin-top:6px}
   .iv-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
@@ -134,25 +144,22 @@ const payload = JSON.stringify({
   .iv-table td.num{text-align:right;font-variant-numeric:tabular-nums}
   .iv-sku{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
   .iv.iv-priced-only .iv-ln.no-prior{display:none}
-  .iv.iv-noprice-only .iv-ln.has-prior{display:none}
   .iv-prefill{font-weight:650}
   .iv-prefill.zero{color:var(--muted)}
   .iv-prefill-src{font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);display:block;margin-top:1px}
-
   .iv-price-in{width:92px;text-align:right;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:inherit;font-variant-numeric:tabular-nums}
   .iv-price-in:focus{outline:none;border-color:var(--brand);background:var(--brand-bg)}
   .iv-price-in.dirty{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-bg)}
   .iv-fam-set{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
   .iv-fam-set input{width:84px}
   .iv-ovr{font-size:9.5px;color:var(--brand);font-weight:650;margin-left:5px}
+  .iv-cost-pos{color:var(--green);font-weight:650}
+  .iv-cost-neg{color:var(--red);font-weight:650}
 
-  .iv-savebar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--brand);box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:12px;padding:10px 14px;z-index:55}
-  .iv-savebar-msg{font-size:12.5px;color:var(--ink);font-weight:600}
-  .iv-save-btn{appearance:none;border:none;background:var(--brand);color:#fff;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:650;cursor:pointer;font-family:inherit}
-  .iv-save-btn:disabled{opacity:.5;cursor:default}
-  .ia-toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .ia-toast.show{opacity:1}
-  @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} }
+  #iv-confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:70}
+  @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} .iv-mini{gap:10px} }
 </style>
 
 <script src="/src/scripts/agreement-builder-tree.ts"></script>

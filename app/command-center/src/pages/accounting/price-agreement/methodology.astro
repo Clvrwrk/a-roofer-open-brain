@@ -1,0 +1,63 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+---
+
+<AppShell title="ABC Classification — Methodology" eyebrow="Accounting" activePage="accounting">
+  <section class="doc">
+    <p class="doc-back"><a href="/accounting/price-agreement/builder">← Back to Agreement Builder</a></p>
+    <h1>What "ABC Classification" means</h1>
+    <p>ABC classification is a standard <b>Pareto (80/20) inventory method</b>. Every item Pro
+    Exteriors buys is ranked by how much we actually spend on it, then bucketed:</p>
+    <div class="doc-cards">
+      <div class="doc-card"><span class="pill a">Class A</span><h3>The vital few</h3><p>High-spend items that make up the large majority of dollars. A small number of SKUs, a big share of spend. Negotiating these moves the needle.</p></div>
+      <div class="doc-card"><span class="pill b">Class B</span><h3>The useful many</h3><p>Mid-spend items. Worth negotiating, but each matters less than an A item.</p></div>
+      <div class="doc-card"><span class="pill c">Class C</span><h3>The trivial many</h3><p>Low-spend long-tail items. Lots of SKUs, a tiny share of spend. Generally not worth negotiating individually.</p></div>
+    </div>
+
+    <h2>How we compute it</h2>
+    <ul>
+      <li><b>Basis:</b> trailing <b>36-month spend</b> per item, from actual ABC invoice history, aggregated by item number.</li>
+      <li><b>Ranking:</b> items sorted high→low by spend; cumulative spend share assigns the class.</li>
+      <li><b>Negotiable set = A + B</b> — together <b>~87% of 36-month spend</b> in roughly <b>~857 SKUs across ~454 families</b>. We negotiate the ~half of the catalog that drives ~all of the cost and skip the C tail.</li>
+      <li>Items group into <b>families</b> (a base product) that expand to <b>variations</b> (color/size SKUs), so you work at the family level and only drill into variations when a specific SKU needs its own price.</li>
+    </ul>
+
+    <h2>Why it matters for negotiation</h2>
+    <ul>
+      <li>Focuses the agreement on items where a price concession is actually material.</li>
+      <li>Keeps the worksheet human-sized — hundreds of lines, not thousands.</li>
+      <li>Makes coverage measurable: "are our A+B items under a current negotiated price at this branch?" is what the Price Agreement Audit answers.</li>
+    </ul>
+
+    <h2>Caveats</h2>
+    <ul>
+      <li>Spend is historical; a brand-new product can be under-classified until it has purchase history.</li>
+      <li>Class is recomputed as invoice history grows — an item can move between B and C over time.</li>
+      <li>The A+B threshold (~87%) is a tunable policy, not a law; revisit if the catalog mix shifts.</li>
+    </ul>
+    <p class="doc-src">Live source: <code>v_negotiable_items</code> (schema 109).</p>
+  </section>
+</AppShell>
+
+<style>
+  .doc{max-width:880px;font-family:var(--font-sans,Inter,system-ui,sans-serif);color:#1c2733;line-height:1.6}
+  .doc-back{margin:0 0 12px}
+  .doc-back a{color:#5b46d8;text-decoration:none;font-size:13px;font-weight:600}
+  .doc h1{font-size:26px;margin:6px 0 10px}
+  .doc h2{font-size:18px;margin:26px 0 8px}
+  .doc h3{font-size:14px;margin:8px 0 4px}
+  .doc p{margin:8px 0;font-size:14px}
+  .doc ul{margin:8px 0;padding-left:20px;font-size:14px}
+  .doc li{margin:5px 0}
+  .doc b{color:#11133f}
+  .doc-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+  .doc-card{border:1px solid #e3e8ef;border-radius:12px;padding:14px;background:#fff}
+  .doc-card p{font-size:12.5px;color:#5a6573;margin:4px 0 0}
+  .doc .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700}
+  .doc .pill.a{background:#efecfd;color:#5b46d8}
+  .doc .pill.b{background:#e3f5ec;color:#137a4d}
+  .doc .pill.c{background:#eceff4;color:#5a6573}
+  .doc-src{color:#6b7886;font-size:12px;margin-top:22px}
+  .doc code{background:#eceff4;padding:1px 6px;border-radius:5px;font-size:12px}
+  @media (max-width:760px){ .doc-cards{grid-template-columns:1fr} }
+</style>

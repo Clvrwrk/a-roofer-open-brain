@@ -26,7 +26,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     ].join(","));
   }
   const csv = lines.join("\r\n");
-  const fname = `agreement-${exp.branch.number}-${exp.generatedAt.slice(0, 10)}.csv`;
+  const safeName = (url.searchParams.get("name") || "").replace(/[^\w\-#.]/g, "");
+  const fname = `${safeName || `agreement-${exp.branch.number}-${exp.generatedAt.slice(0, 10)}`}.csv`;
   return new Response(csv, {
     status: 200,
     headers: {

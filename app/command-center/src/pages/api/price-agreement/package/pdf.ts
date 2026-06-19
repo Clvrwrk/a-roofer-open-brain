@@ -101,7 +101,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
   }
 
   const bytes = await doc.save();
-  const fname = `agreement-${exp.branch.number}-${exp.generatedAt.slice(0, 10)}.pdf`;
+  const safeName = (url.searchParams.get("name") || "").replace(/[^\w\-#.]/g, "");
+  const fname = `${safeName || `agreement-${exp.branch.number}-${exp.generatedAt.slice(0, 10)}`}.pdf`;
   return new Response(bytes as unknown as BodyInit, {
     status: 200,
     headers: {
