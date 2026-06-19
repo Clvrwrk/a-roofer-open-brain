@@ -1,131 +1,134 @@
 ---
-import BoundaryNotice from "../../../components/accounting/BoundaryNotice.astro";
-import EvidenceStack from "../../../components/accounting/EvidenceStack.astro";
 import AppShell from "../../../layouts/AppShell.astro";
-import { formatCurrency, formatNumber, loadAccountingSurface } from "@lib/accounting-dashboard";
+import { loadCreditMemo } from "@lib/credit-memo";
 
-const invoiceParam = Astro.params.invoice ?? "";
-const invoiceNumber = decodeURIComponent(invoiceParam);
-const surface = await loadAccountingSurface();
-const packet = surface.creditMemoCandidates.find((candidate) => candidate.invoiceNumber === invoiceNumber);
+const invoiceNumber = decodeURIComponent(Astro.params.invoice ?? "");
+const cm = await loadCreditMemo(invoiceNumber);
+if (!cm) Astro.response.status = 404;
 
-if (!packet) {
-  Astro.response.status = 404;
-}
-
-function expectedCreditForLine(variance: number | null, quantity: number | null) {
-  const unitVariance = variance ?? 0;
-  const qty = quantity ?? 1;
-  return unitVariance > 0 ? unitVariance * qty : 0;
-}
+const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const headPill: Record<string, string> = { matches: "ok", mismatch: "bad", partial: "warn", no_reference: "grey" };
+const headLabel: Record<string, string> = { matches: "Matches original", mismatch: "Price mismatch", partial: "Partial match", no_reference: "No original reference" };
+const linePill: Record<string, string> = { match: "ok", mismatch: "bad", no_original: "grey" };
+const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evidence: "Needs review", rejected: "Rejected", sent: "Sent to vendor", received: "Received", draft: "Draft", closed: "Closed" };
 ---
 
-<AppShell title={packet ? `Credit Memo ${packet.invoiceNumber}` : "Credit Memo Not Found"} eyebrow="Accounting Packet" activePage="accounting">
-  {
-    packet ? (
-      <>
-        <section class="accounting-hero" aria-label="Credit memo packet summary">
-          <div class="surface-heading">
-            <div>
-              <p class="eyebrow">Lucinda Review Packet</p>
-              <h2>One vendor invoice, line-level evidence, no external send by agent</h2>
-            </div>
-            <div class="surface-meta">
-              <span class={`status-badge gap-${packet.severity}`}>{packet.severity}</span>
-              <span>{formatNumber(packet.lineCount)} disputed lines</span>
-            </div>
-          </div>
+<AppShell title={cm ? `Credit Memo ${cm.invoiceNumber}` : "Credit Memo Not Found"} eyebrow="Accounting · Credit Memos" activePage="accounting">
+  {cm ? (
+    <section class="cm" data-invoice={cm.invoiceNumber}>
+      <header class="cm-head">
+        <div>
+          <p class="cm-eyebrow"><a href="/accounting/audit/credit-memos">← All credit memos</a></p>
+          <h1>Credit Memo {cm.invoiceNumber}</h1>
+          <p class="cm-sub">
+            {cm.invoiceDate} · {cm.branchName}
+            {cm.originalInvoiceNumber
+              ? <> · credits invoice <a href={`/accounting/invoice-audit?invoice=${encodeURIComponent(cm.originalInvoiceNumber)}`}>{cm.originalInvoiceNumber}</a></>
+              : <> · reference {cm.originalReference ?? "—"} (original not found)</>}
+          </p>
+        </div>
+        <div class="cm-headright">
+          <span class={`cm-pill ${headPill[cm.matchStatus] ?? "grey"}`}>{headLabel[cm.matchStatus] ?? cm.matchStatus}</span>
+          <span class="cm-credit">{money(cm.creditAmount)}</span>
+          <span class="cm-sub">{cm.matchedLines}/{cm.lineCount} lines match</span>
+        </div>
+      </header>
 
-          <div class="accounting-metric-grid">
-            <div class="accounting-metric-card" data-tone="review">
-              <span>Expected credit</span>
-              <strong>{formatCurrency(packet.expectedCredit)}</strong>
-              <small>Calculated from positive unit variance x quantity</small>
-            </div>
-            <div class="accounting-metric-card" data-tone="info">
-              <span>Absolute variance</span>
-              <strong>{formatCurrency(packet.absoluteVariance)}</strong>
-              <small>All price deltas, regardless of direction</small>
-            </div>
-            <div class="accounting-metric-card" data-tone="critical">
-              <span>Payment status</span>
-              <strong>{packet.paymentStatus}</strong>
-              <small>From linked invoice document where available</small>
-            </div>
-            <div class="accounting-metric-card" data-tone="ready">
-              <span>Packet rule</span>
-              <strong>One invoice</strong>
-              <small>ACCT-035 enforced by route shape</small>
-            </div>
-          </div>
-        </section>
+      <table class="cm-table">
+        <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">CM Price</th><th class="num">Original Price</th><th>Match</th></tr></thead>
+        <tbody>
+          {cm.lines.map((l) => (
+            <tr>
+              <td class="mono">{l.itemNumber}</td>
+              <td>{l.itemDescription}</td>
+              <td class="num">{l.quantity}</td>
+              <td>{l.uom}</td>
+              <td class="num">{money(l.cmUnitPrice)}</td>
+              <td class="num">{l.originalUnitPrice == null ? "—" : money(l.originalUnitPrice)}</td>
+              <td><span class={`cm-pill sm ${linePill[l.matchStatus]}`}>{l.matchStatus === "match" ? "Match" : l.matchStatus === "mismatch" ? "Differs" : "No original"}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-        <section class="accounting-workbench" aria-label="Credit memo packet detail">
-          <div class="accounting-priority-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Disputed Lines</p>
-                <h2>{packet.invoiceNumber}</h2>
-              </div>
-              <a class="row-action" href="/accounting/credit-memos">All packets</a>
-            </div>
+      <aside class="cm-disp">
+        <div class="cm-disp-state" id="cm-state" data-status={cm.disposition?.status ?? ""}>
+          {cm.disposition
+            ? <p>Disposition: <b>{dispLabel[cm.disposition.status] ?? cm.disposition.status}</b>{cm.disposition.approvedBy ? ` · ${cm.disposition.approvedBy}` : ""}</p>
+            : <p>No disposition yet.{cm.matchStatus === "matches" ? " This memo matches its original — approve to accept the credit." : ""}</p>}
+        </div>
+        <div class="cm-actions">
+          <button type="button" class="cm-act ok" data-decision="approve">Approve credit</button>
+          <button type="button" class="cm-act warn" data-decision="review">Needs review</button>
+          <button type="button" class="cm-act bad" data-decision="reject">Reject</button>
+        </div>
+        <p class="cm-note">Records an internal disposition (credit_memo_requests). No external send.</p>
+      </aside>
+    </section>
+  ) : (
+    <p class="cm-empty">No credit memo found for {invoiceNumber}.</p>
+  )}
 
-            <div class="queue-table-wrap">
-              <table class="queue-table accounting-table accounting-gap-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Line / SKU</th>
-                    <th scope="col">Description</th>
-                    <th scope="col">Invoice Price</th>
-                    <th scope="col">Reference</th>
-                    <th scope="col">Expected Credit</th>
-                    <th scope="col">Human Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {packet.lines.map((line) => (
-                    <tr>
-                      <td>
-                        <strong>{line.lineNumber}</strong>
-                        <span>{line.itemNumber}</span>
-                      </td>
-                      <td>{line.itemDescription}</td>
-                      <td>
-                        <strong>{formatCurrency(line.invoicePrice)}</strong>
-                        <span>{line.quantity ?? "Qty missing"} {line.invoiceUom}</span>
-                      </td>
-                      <td><span>{line.referenceAgreement}</span></td>
-                      <td><strong>{formatCurrency(expectedCreditForLine(line.variance, line.quantity))}</strong></td>
-                      <td>{line.humanAction}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <aside class="accounting-decision-panel">
-            <p class="eyebrow">Approval State</p>
-            <h2>Draft only until workflow tables exist</h2>
-            <EvidenceStack
-              items={[
-                { label: "Primary reviewer", value: "Lucinda" },
-                { label: "Escalates to Chris", value: packet.expectedCredit > 1000 ? "Yes, expected credit is over $1,000" : "No, below current threshold" },
-                { label: "Branches", value: packet.branchLabels.join(", ") || "Unknown" },
-                { label: "Blockers", value: packet.gapReasonLabels.join(", ") || "None" },
-              ]}
-            />
-
-            <BoundaryNotice
-              title="Actions intentionally disabled"
-              detail="Approve, request changes, reject, mark sent, and mark received require credit_memo_requests, credit_memo_request_lines, and credit_memo_followups."
-              action="The route is ready for those write states once the workflow tables are added."
-            />
-          </aside>
-        </section>
-      </>
-    ) : (
-      <BoundaryNotice title="Credit memo packet not found" detail={`No live gap packet exists for invoice ${invoiceNumber}.`} action="Return to /accounting/credit-memos." />
-    )
-  }
+  <div class="cm-toast" id="cm-toast" role="status" aria-live="polite"></div>
 </AppShell>
+
+<style is:global>
+  :root{ --bg:#f4f6f9; --panel:#fff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --green:#137a4d; --green-bg:#e3f5ec; --red:#a51f1f; --red-bg:#fbe2e2; --yellow:#946400; --yellow-bg:#fbf0d4; --grey:#5a6573; --grey-bg:#eceff4; --brand:#5b46d8; }
+  .cm{font-family:var(--font-sans,Inter,system-ui,sans-serif);color:var(--ink);font-size:13px}
+  .cm-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+  .cm-eyebrow{margin:0 0 4px;font-size:12px}.cm-eyebrow a{color:var(--brand);text-decoration:none}
+  .cm-head h1{margin:0;font-size:20px}
+  .cm-sub{margin:4px 0 0;color:var(--muted);font-size:12.5px}.cm-sub a{color:var(--brand);text-decoration:none}
+  .cm-headright{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+  .cm-credit{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .cm-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:650;background:var(--grey-bg);color:var(--grey)}
+  .cm-pill.ok{background:var(--green-bg);color:var(--green)} .cm-pill.bad{background:var(--red-bg);color:var(--red)}
+  .cm-pill.warn{background:var(--yellow-bg);color:var(--yellow)} .cm-pill.grey{background:var(--grey-bg);color:var(--grey)}
+  .cm-pill.sm{padding:1px 8px;font-size:10.5px;font-weight:600}
+  .cm-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:16px}
+  .cm-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .cm-table td{padding:8px 11px;border-bottom:1px solid var(--line)}
+  .cm-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .cm-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .cm-disp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .cm-disp-state{margin-bottom:10px;font-size:13px}
+  .cm-actions{display:flex;gap:10px;flex-wrap:wrap}
+  .cm-act{appearance:none;border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:650;cursor:pointer;font-family:inherit;background:var(--panel)}
+  .cm-act.ok{border-color:var(--green);color:var(--green)} .cm-act.ok:hover{background:var(--green-bg)}
+  .cm-act.warn{border-color:var(--yellow);color:var(--yellow)} .cm-act.warn:hover{background:var(--yellow-bg)}
+  .cm-act.bad{border-color:var(--red);color:var(--red)} .cm-act.bad:hover{background:var(--red-bg)}
+  .cm-act:disabled{opacity:.5;cursor:default}
+  .cm-note{color:var(--muted);font-size:11.5px;margin:10px 0 0}
+  .cm-empty{color:var(--muted);padding:24px 4px}
+  .cm-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .cm-toast.show{opacity:1}
+</style>
+
+<script>
+  const sec = document.querySelector(".cm") as HTMLElement | null;
+  const toastEl = document.getElementById("cm-toast");
+  const stateEl = document.getElementById("cm-state");
+  const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evidence: "Needs review", rejected: "Rejected", sent: "Sent to vendor", received: "Received", draft: "Draft", closed: "Closed" };
+  function toast(msg: string) { if (!toastEl) return; toastEl.textContent = msg; toastEl.classList.add("show"); setTimeout(() => toastEl.classList.remove("show"), 2400); }
+  if (sec) {
+    const invoiceNumber = sec.dataset.invoice!;
+    sec.querySelectorAll<HTMLButtonElement>(".cm-act").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const decision = btn.dataset.decision!;
+        sec.querySelectorAll<HTMLButtonElement>(".cm-act").forEach((b) => (b.disabled = true));
+        try {
+          const res = await fetch("/api/credit-memos/disposition", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ invoiceNumber, decision }) });
+          const r = await res.json();
+          if (!r.ok) { toast("Save failed: " + (r.error_description || r.error || "error")); return; }
+          const status = r.record?.status as string;
+          if (stateEl) stateEl.innerHTML = `<p>Disposition: <b>${dispLabel[status] ?? status}</b>${r.record?.approved_by ? " · " + r.record.approved_by : ""}</p>`;
+          toast("Disposition saved: " + (dispLabel[status] ?? status));
+        } catch {
+          toast("Save failed — network error");
+        } finally {
+          sec.querySelectorAll<HTMLButtonElement>(".cm-act").forEach((b) => (b.disabled = false));
+        }
+      }));
+  }
+</script>

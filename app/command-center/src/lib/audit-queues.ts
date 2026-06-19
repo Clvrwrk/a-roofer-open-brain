@@ -413,13 +413,30 @@ const cmMatchMeta: Record<string, { reason: string; status: string; cls: string 
 export async function loadCreditMemoQueue(env: RuntimeEnv = getRuntimeEnv()): Promise<AuditQueuePayload> {
   const { client } = createServerSupabaseClient(env);
   let raw: any[] = [];
+  const dispByInvoice = new Map<string, { status: string; by: string }>();
   if (client) {
-    const { data } = await client.from("v_credit_memo_audit").select("*").order("invoice_date", { ascending: false });
+    const [{ data }, { data: disp }] = await Promise.all([
+      client.from("v_credit_memo_audit").select("*").order("invoice_date", { ascending: false }),
+      client.from("credit_memo_requests").select("invoice_number,status,approved_by"),
+    ]);
     raw = (data as any[] | null) ?? [];
+    for (const d of (disp as any[] | null) ?? []) dispByInvoice.set(d.invoice_number, { status: d.status, by: d.approved_by ?? "" });
   }
+  // A recorded disposition overrides the match-derived status (e.g. an approved CM shows
+  // "Approved" not "Matches"). Keeps the queue reflecting what the operator has actioned.
+  const dispMeta: Record<string, { status: string; cls: string }> = {
+    approved: { status: "Approved", cls: "pill-green" },
+    needs_more_evidence: { status: "Needs review", cls: "pill-yellow" },
+    rejected: { status: "Rejected", cls: "pill-red" },
+    sent: { status: "Sent to vendor", cls: "pill-review" },
+    received: { status: "Received", cls: "pill-new" },
+    closed: { status: "Closed", cls: "pill-grey" },
+  };
   const now = Date.now();
   const rows = raw.map((r) => {
     const meta = cmMatchMeta[r.match_status] ?? cmMatchMeta.no_reference;
+    const d = dispByInvoice.get(r.invoice_number);
+    const dm = d ? dispMeta[d.status] : null;
     const amount = Math.abs(Number(r.credit_amount) || 0);
     const age = r.invoice_date ? Math.max(0, Math.round((now - new Date(r.invoice_date).getTime()) / 864e5)) : 0;
     return {
@@ -430,8 +447,8 @@ export async function loadCreditMemoQueue(env: RuntimeEnv = getRuntimeEnv()): Pr
       amount,
       lines: `${r.matched_lines ?? 0}/${r.line_count ?? 0} match`,
       reason: meta.reason,
-      status: meta.status,
-      statusCls: meta.cls,
+      status: dm ? dm.status : meta.status,
+      statusCls: dm ? dm.cls : meta.cls,
       amountCls: meta.cls,
       age,
       ageTone: ageTone(age),
@@ -442,7 +459,7 @@ export async function loadCreditMemoQueue(env: RuntimeEnv = getRuntimeEnv()): Pr
   return {
     searchKeys: ["memo", "invoice", "branch", "account", "reason", "status"],
     filters: [
-      { id: "status", label: "All statuses", col: "status", options: ["Matches", "Mismatch", "Partial", "No reference"].map((v) => ({ value: v, label: v })) },
+      { id: "status", label: "All statuses", col: "status", options: ["Matches", "Mismatch", "Partial", "No reference", "Approved", "Needs review", "Rejected"].map((v) => ({ value: v, label: v })) },
       { id: "branch", label: "All branches", col: "branch", options: opts(rows.map((r) => r.branch)) },
     ],
     kpis: [
