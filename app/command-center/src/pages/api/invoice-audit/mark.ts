@@ -51,5 +51,54 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (error) {
     return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
   }
+
+  // Requested-credit-memo tracking (Item 1): a credit-memo disposition means we're requesting
+  // a credit from the vendor for this invoice's overcharge. Recompute the invoice's
+  // credit-flagged exposure from the audit ledger and upsert a 'requested' credit_memo_request
+  // (preserving any existing lifecycle status). Best-effort — never fails the audit write.
+  if (decision === "credit-flag" || decision === "credit-noflag") {
+    try {
+      const flagged = await client
+        .from("v_invoice_line_audit_current")
+        .select("invoice_line_id")
+        .eq("invoice_number", invoiceNumber)
+        .in("decision", ["credit-flag", "credit-noflag"]);
+      const ids = (flagged.data as any[] | null)?.map((r) => r.invoice_line_id) ?? [];
+      let credit = 0;
+      let lineCount = 0;
+      if (ids.length) {
+        const lines = await client.from("v_invoice_audit_line").select("variance_ext").in("line_id", ids);
+        for (const l of (lines.data as any[] | null) ?? []) {
+          const v = Number(l.variance_ext) || 0;
+          if (v > 0) credit += v;
+          lineCount += 1;
+        }
+      }
+      const existing = await client.from("credit_memo_requests").select("id,status").eq("invoice_number", invoiceNumber).maybeSingle();
+      const packet = { source: "invoice-audit", decision, requested_by: who, requested_at: new Date().toISOString() };
+      if (existing.data) {
+        await client.from("credit_memo_requests").update({
+          request_kind: "requested",
+          expected_credit: Math.round(credit * 100) / 100,
+          line_count: lineCount,
+          packet,
+          updated_at: new Date().toISOString(),
+        }).eq("invoice_number", invoiceNumber);
+      } else {
+        await client.from("credit_memo_requests").insert({
+          invoice_number: invoiceNumber,
+          request_kind: "requested",
+          status: "draft",
+          expected_credit: Math.round(credit * 100) / 100,
+          line_count: lineCount,
+          assigned_to: who,
+          packet,
+        });
+      }
+    } catch {
+      /* tracking is best-effort; the audit decision is already recorded */
+    }
+  }
+
   return jsonApiResponse({ ok: true, record: data });
 };

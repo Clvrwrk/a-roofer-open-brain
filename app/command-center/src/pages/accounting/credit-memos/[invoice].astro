@@ -11,6 +11,9 @@ const headPill: Record<string, string> = { matches: "ok", mismatch: "bad", parti
 const headLabel: Record<string, string> = { matches: "Matches original", mismatch: "Price mismatch", partial: "Partial match", no_reference: "No original reference" };
 const linePill: Record<string, string> = { match: "ok", mismatch: "bad", no_original: "grey" };
 const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evidence: "Needs review", rejected: "Rejected", sent: "Sent to vendor", received: "Received", draft: "Draft", closed: "Closed" };
+const isReq = cm?.kind === "requested";
+const headText = !cm ? "" : isReq ? (dispLabel[cm.disposition?.status ?? "draft"] ?? "Requested") : (headLabel[cm.matchStatus] ?? cm.matchStatus);
+const headCls = !cm ? "grey" : isReq ? "warn" : (headPill[cm.matchStatus] ?? "grey");
 ---
 
 <AppShell title={cm ? `Credit Memo ${cm.invoiceNumber}` : "Credit Memo Not Found"} eyebrow="Accounting · Credit Memos" activePage="accounting">
@@ -19,23 +22,24 @@ const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evi
       <header class="cm-head">
         <div>
           <p class="cm-eyebrow"><a href="/accounting/audit/credit-memos">← All credit memos</a></p>
-          <h1>Credit Memo {cm.invoiceNumber}</h1>
+          <h1>{isReq ? "Credit Request" : "Credit Memo"} {cm.invoiceNumber}</h1>
           <p class="cm-sub">
-            {cm.invoiceDate} · {cm.branchName}
-            {cm.originalInvoiceNumber
-              ? <> · credits invoice <a href={`/accounting/invoice-audit?invoice=${encodeURIComponent(cm.originalInvoiceNumber)}`}>{cm.originalInvoiceNumber}</a></>
-              : <> · reference {cm.originalReference ?? "—"} (original not found)</>}
+            {isReq
+              ? <>Credit requested from vendor on overcharged lines · <a href={`/accounting/invoice-audit?invoice=${encodeURIComponent(cm.invoiceNumber)}`}>open in Invoice Audit</a></>
+              : cm.originalInvoiceNumber
+                ? <>{cm.invoiceDate} · {cm.branchName} · credits invoice <a href={`/accounting/invoice-audit?invoice=${encodeURIComponent(cm.originalInvoiceNumber)}`}>{cm.originalInvoiceNumber}</a></>
+                : <>{cm.invoiceDate} · {cm.branchName} · reference {cm.originalReference ?? "—"} (original not found)</>}
           </p>
         </div>
         <div class="cm-headright">
-          <span class={`cm-pill ${headPill[cm.matchStatus] ?? "grey"}`}>{headLabel[cm.matchStatus] ?? cm.matchStatus}</span>
+          <span class={`cm-pill ${headCls}`}>{headText}</span>
           <span class="cm-credit">{money(cm.creditAmount)}</span>
-          <span class="cm-sub">{cm.matchedLines}/{cm.lineCount} lines match</span>
+          <span class="cm-sub">{isReq ? `${cm.lineCount} lines · expected credit` : `${cm.matchedLines}/${cm.lineCount} lines match`}</span>
         </div>
       </header>
 
       <table class="cm-table">
-        <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">CM Price</th><th class="num">Original Price</th><th>Match</th></tr></thead>
+        <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">{isReq ? "Invoice Price" : "CM Price"}</th><th class="num">{isReq ? "Negotiated" : "Original Price"}</th><th>{isReq ? "Variance" : "Match"}</th></tr></thead>
         <tbody>
           {cm.lines.map((l) => (
             <tr>
@@ -53,16 +57,28 @@ const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evi
 
       <aside class="cm-disp">
         <div class="cm-disp-state" id="cm-state" data-status={cm.disposition?.status ?? ""}>
-          {cm.disposition
-            ? <p>Disposition: <b>{dispLabel[cm.disposition.status] ?? cm.disposition.status}</b>{cm.disposition.approvedBy ? ` · ${cm.disposition.approvedBy}` : ""}</p>
-            : <p>No disposition yet.{cm.matchStatus === "matches" ? " This memo matches its original — approve to accept the credit." : ""}</p>}
+          {cm.disposition && (!isReq || cm.disposition.status !== "draft")
+            ? <p>{isReq ? "Status" : "Disposition"}: <b>{dispLabel[cm.disposition.status] ?? cm.disposition.status}</b>{cm.disposition.approvedBy ? ` · ${cm.disposition.approvedBy}` : ""}</p>
+            : isReq
+              ? <p>Drafted from an Invoice-Audit overcharge. Mark sent once requested from the vendor, then received when the credit lands.</p>
+              : <p>No disposition yet.{cm.matchStatus === "matches" ? " This memo matches its original — approve to accept the credit." : ""}</p>}
         </div>
         <div class="cm-actions">
-          <button type="button" class="cm-act ok" data-decision="approve">Approve credit</button>
-          <button type="button" class="cm-act warn" data-decision="review">Needs review</button>
-          <button type="button" class="cm-act bad" data-decision="reject">Reject</button>
+          {isReq ? (
+            <>
+              <button type="button" class="cm-act ok" data-decision="mark-sent">Mark sent to vendor</button>
+              <button type="button" class="cm-act ok" data-decision="mark-received">Mark received</button>
+              <button type="button" class="cm-act warn" data-decision="close">Close</button>
+            </>
+          ) : (
+            <>
+              <button type="button" class="cm-act ok" data-decision="approve">Approve credit</button>
+              <button type="button" class="cm-act warn" data-decision="review">Needs review</button>
+              <button type="button" class="cm-act bad" data-decision="reject">Reject</button>
+            </>
+          )}
         </div>
-        <p class="cm-note">Records an internal disposition (credit_memo_requests). No external send.</p>
+        <p class="cm-note">Records an internal disposition (credit_memo_requests). No external send — “sent” only logs that a human sent it.</p>
       </aside>
     </section>
   ) : (
