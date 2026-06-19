@@ -2,7 +2,8 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
-interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface Category { key: string; label: string; sortOrder: number; }
 interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; branches: Branch[]; }
@@ -13,7 +14,9 @@ const dataEl = document.getElementById("iv-data");
 const mount = document.getElementById("iv-tree");
 
 if (root && dataEl && mount) {
-  const { offices, actions } = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; actions: Action[] };
+  const { offices, actions, categories } = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; actions: Action[]; categories: Category[] };
+  const catList: Category[] = (categories ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const catLabel = new Map(catList.map((c) => [c.key, c.label]));
 
   const money = (n: number) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
   const money2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,8 +34,9 @@ if (root && dataEl && mount) {
     }
     return `<button class="iv-mark" data-mark data-line="LIDX">Mark passed</button>`;
   }
-  function invoiceBody(inv: Invoice): string {
-    const rows = inv.lines.map((l, li) => `
+  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>';
+  function lineRow(l: InvLine, li: number): string {
+    return `
       <tr class="iv-ln${l.audited ? " is-audited" : ""}" data-line="${li}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
         <td>${esc(l.itemDescription)}</td>
@@ -44,12 +48,40 @@ if (root && dataEl && mount) {
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
         <td><span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span></td>
         <td class="iv-audit-cell">${auditCell(l).replace("LIDX", String(li))}</td>
-      </tr>`).join("");
+      </tr>`;
+  }
+  // Group lines into collapsible roof-system category sections (preserving each line's
+  // original index so disposition still maps to inv.lines[idx]). Default-collapsed.
+  function invoiceBody(inv: Invoice): string {
+    const groups = new Map<string, number[]>();
+    inv.lines.forEach((l, li) => {
+      const k = l.categoryKey || "uncategorized";
+      (groups.get(k) ?? (groups.set(k, []), groups.get(k)!)).push(li);
+    });
+    const orderedKeys = catList.map((c) => c.key).filter((k) => groups.has(k));
+    for (const k of groups.keys()) if (!orderedKeys.includes(k)) orderedKeys.push(k);
+
+    const sections = orderedKeys.map((k) => {
+      const idxs = groups.get(k)!;
+      const lines = idxs.map((li) => inv.lines[li]);
+      const subtotal = lines.reduce((s, l) => s + (l.extendedPrice || 0), 0);
+      const atRisk = lines.reduce((s, l) => s + (!l.audited && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
+      const pend = lines.filter((l) => !l.audited).length;
+      const tags = [
+        `<span class="pill pill-grey">${lines.length} lines</span>`,
+        pend > 0 ? `<span class="pill pill-brand">${pend} to audit</span>` : '<span class="pill pill-green">✓</span>',
+        `<span class="iv-cat-sub">${money(subtotal)}</span>`,
+        atRisk > 0 ? `<span class="pill pill-red">${money(atRisk)} at risk</span>` : "",
+      ].filter(Boolean).join("");
+      return `
+        <details class="iv-cat" data-cat="${esc(k)}" data-pend="${pend}">
+          <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span></summary>
+          <table class="iv-table">${THEAD}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table>
+        </details>`;
+    }).join("");
+
     return `
-      <table class="iv-table">
-        <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="10">No lines.</td></tr>'}</tbody>
-      </table>
+      <div class="iv-cats">${sections || '<p class="iv-disp-lead">No lines.</p>'}</div>
       <div class="iv-disp"><div class="iv-disp-lead">Select a line item above to disposition it, or use “Mark passed”.</div></div>`;
   }
 

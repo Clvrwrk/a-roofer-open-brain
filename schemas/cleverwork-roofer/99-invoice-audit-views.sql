@@ -62,9 +62,12 @@ SELECT
   CASE WHEN n.negotiated_price IS NOT NULL AND b.qty IS NOT NULL AND b.qty <> 0
        THEN round((((b.ext / b.qty) - n.negotiated_price) * b.qty)::numeric, 2) END AS variance_ext,
   -- appended last so CREATE OR REPLACE stays additive
-  (b.qty IS NOT NULL AND b.qty <> 0 AND b.ext IS NOT NULL) AS is_auditable
+  (b.qty IS NOT NULL AND b.qty <> 0 AND b.ext IS NOT NULL) AS is_auditable,
+  -- roof-system segmentation (schema 114): curated override else keyword classifier
+  coalesce(o.category_key, public.classify_roof_system(b.item_description, b.item_number)) AS category_key
 FROM base b
-LEFT JOIN neg n ON n.ship_to_number = b.ship_to_number AND n.item_number = b.item_number;
+LEFT JOIN neg n ON n.ship_to_number = b.ship_to_number AND n.item_number = b.item_number
+LEFT JOIN public.item_roof_system_category o ON o.item_number = b.item_number;
 
 CREATE OR REPLACE VIEW public.v_invoice_audit_invoice AS
 WITH brmatch AS (

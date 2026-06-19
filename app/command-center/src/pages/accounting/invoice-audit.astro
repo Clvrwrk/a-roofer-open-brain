@@ -19,7 +19,7 @@ const ACTIONS = [
   { id: "credit-noflag", group: "credit", label: "Credit Memo — Do Not Flag", hint: "Generate credit-memo request; invoice remains payable." },
 ];
 
-const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).replace(/</g, "\\u003c");
+const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, categories: data.categories }).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Invoice Audit" eyebrow="Accounting" activePage="accounting">
@@ -139,6 +139,18 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS }).repl
   .iv-pricelist:hover{border-color:var(--brand);background:var(--brand-bg)}
   .iv-inv-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .iv-inv-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  /* roof-system category sections (collapsible, default-collapsed) */
+  .iv-cats{margin-top:6px}
+  .iv-cat{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel2)}
+  .iv-cat>summary{display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;list-style:none}
+  .iv-cat>summary::-webkit-details-marker{display:none}
+  .iv-cat>summary b{font-size:12.5px}
+  .iv-cat-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .iv-cat-sub{font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;color:var(--muted)}
+  .iv-cat .iv-table{margin:0 8px 8px}
+  /* In "to-audit only" mode, hide categories with nothing pending */
+  .iv-pending-only .iv-cat[data-pend="0"]{display:none}
 
   .iv-table{width:100%;border-collapse:collapse;margin-top:6px}
   .iv-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}

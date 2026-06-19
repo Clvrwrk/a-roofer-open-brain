@@ -29,6 +29,15 @@ value**. The audit views then read the null columns and surface broken/blank lin
 where ... `), update the mapper's nested keys, then backfill from raw (idempotent UPDATE,
 mirror schema 108/113). Never null-out — always COALESCE from `raw`.
 
+### Pattern C — PostgREST 1000-row cap (silent truncation)
+A Supabase `.select()` returns **at most 1000 rows**. The invoice-audit loader fetched
+`v_invoice_audit_line` (2,633), `v_invoice_line_audit_current` (1,501) and
+`invoice_documents` (2,844) with a plain select, so the audit silently showed only the
+first 1,000 lines (~38%) and stale paid/PDF/audit flags — invoices past the cap rendered
+with **zero lines**. Fixed with a `fetchAll()` helper in `invoice-audit.ts` that pages via
+`.range(from, from+999)` until a short page. **Rule:** any `.select()` over a table that
+can exceed ~1000 rows must paginate. Watch for this in the agreement/estimate loaders too.
+
 ### Pattern B — Unit-of-measure (UOM) normalization
 `abc_invoice_lines.unit_price` is **per-pack** for bundled SKUs (e.g. shingles at 3 BD/SQ)
 while `quantity` is in the invoice UOM (SQ). Comparing raw `unit_price` to a per-SQ
@@ -70,7 +79,26 @@ When two agreements are concurrently active on the invoice date, the branch scop
 the audit's negotiated-price `neg` CTE) pick the **highest-confidence match**. If a
 different tiebreak is wanted (e.g. most-specific or lowest price), adjust both together.
 
-## Deferred to Phase 2
-Credit-memo tracking (Item 1), daily invoice-PDF auto-pull (Item 4), and the roof-system
-segmentation taxonomy (9 categories incl. Labor + Service Fees). RLS on 7 exposed tables
-to be handled in the upcoming DB-health pass.
+## Phase 2 — Roof-system segmentation (done this round)
+Schema 114 adds `roof_system_category` (12 categories + `uncategorized`),
+`item_roof_system_category` (manual overrides), and `classify_roof_system(desc, item)` (a
+keyword classifier, ~81% coverage of distinct invoiced items). `v_invoice_audit_line` now
+returns `category_key` (override → classifier). The invoice-audit drill-down groups lines
+into **collapsible, default-collapsed category sections** with per-category line count, $
+subtotal, to-audit count, and at-risk rollup.
+
+**12 categories** (chosen with Chris): Decking, Underlayment, Shingles, Flashing, Vents,
+Skylights, Low-Slope/Membrane, Gutters & Downspouts, Accessories, Tools & Consumables,
+Labor, Service Fees — the last 3 added because the real catalog includes a commercial
+low-slope system, a gutter line, and tools that don't fit steep-slope buckets.
+
+**Uncategorized (~19%)** is mostly **metal & tile roofing** ("Misc Special Order Metal
+Roof", ML Villa/Slate tile) and **siding** (Norandex/Ndx) — separate systems and candidates
+for a future taxonomy decision (Metal Roofing / Tile / Siding categories). Refine any item
+via `item_roof_system_category` (override wins over the classifier). The classifier is the
+shared resolver for invoices, agreements, and estimates as those surfaces adopt grouping.
+
+## Deferred
+Credit-memo tracking (Item 1) and daily invoice-PDF auto-pull (Item 4). Apply the same
+segmentation grouping to the agreement (branch price list) and estimate surfaces. RLS on 7
+exposed tables → upcoming DB-health pass. Future taxonomy call on Metal/Tile/Siding.

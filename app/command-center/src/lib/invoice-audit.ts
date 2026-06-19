@@ -19,6 +19,7 @@ export interface InvLine {
   variancePct: number | null;
   varianceExt: number | null;
   auditable: boolean; // has resolvable qty + extended price; false → never surfaced "to audit"
+  categoryKey: string; // roof-system segment (schema 114)
   audited: boolean;
   auditStatus: string; // passed | pending | disputed
   auditedBy: string;
@@ -89,6 +90,7 @@ export interface InvoiceAuditData {
   status: "live" | "unconfigured";
   generatedAt: string;
   offices: InvOffice[];
+  categories: { key: string; label: string; sortOrder: number }[];
   totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number };
 }
 
@@ -96,31 +98,49 @@ const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
 
 export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [invRes, lineRes, auditRes, docRes, acculynxRes] = await Promise.all([
-    client.from("v_invoice_audit_invoice").select("*"),
-    client.from("v_invoice_audit_line").select("*"),
-    client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date"),
-    client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path"),
-    client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true),
+  // PostgREST caps a single response at 1000 rows; lines (2.6k), audit ledger (1.5k) and
+  // invoice_documents (2.8k) all exceed that, so page through every table or the audit
+  // silently drops >half its lines and shows stale paid/PDF/audit flags.
+  const fetchAll = async (make: () => any): Promise<any[]> => {
+    const PAGE = 1000;
+    let from = 0;
+    const rows: any[] = [];
+    for (;;) {
+      const { data } = await make().range(from, from + PAGE - 1);
+      const batch = (data as any[] | null) ?? [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+    return rows;
+  };
+
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows] = await Promise.all([
+    fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
+    fetchAll(() => client.from("v_invoice_audit_line").select("*")),
+    fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
+    fetchAll(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path")),
+    fetchAll(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true)),
+    fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
   ]);
-  const invRows = (invRes.data as any[] | null) ?? [];
+  const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
 
   const auditByLine = new Map<string, any>();
-  for (const a of (auditRes.data as any[] | null) ?? []) auditByLine.set(a.invoice_line_id, a);
+  for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
 
   const docByInvoice = new Map<string, any>();
-  for (const d of (docRes.data as any[] | null) ?? []) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
+  for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
 
   const acculynxByInvoice = new Map<string, any>();
-  for (const a of (acculynxRes.data as any[] | null) ?? []) acculynxByInvoice.set(a.invoice_number, a);
+  for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
 
   const linesByInvoice = new Map<string, InvLine[]>();
-  for (const l of (lineRes.data as any[] | null) ?? []) {
+  for (const l of lineRows) {
     const a = auditByLine.get(l.line_id);
     const passed = a?.audit_status === "passed";
     const list = linesByInvoice.get(l.invoice_number) ?? [];
@@ -136,6 +156,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       auditable: l.is_auditable !== false, // default true unless the view says otherwise
+      categoryKey: l.category_key ?? "uncategorized",
       audited: passed,
       auditStatus: a?.audit_status ?? "pending",
       auditedBy: a?.approved_by ?? "",
@@ -229,6 +250,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     status: "live",
     generatedAt: new Date().toISOString(),
     offices,
+    categories,
     totals: {
       invoices: invoices.length,
       creditMemos: invoices.filter((i) => i.isCreditMemo).length,
