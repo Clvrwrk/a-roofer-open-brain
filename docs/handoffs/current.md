@@ -1,6 +1,6 @@
 # Handoff — dashboard review reworks (territory map · invoice audit · price agreement audit · agreement builder)
 
-**Date:** 2026-06-19 PM · **Branch:** `cleverwork/price-agreement-audit` at **`a947252`**. ⚠️ **Branch is 3 commits AHEAD of `origin/main` — NOT pushed, NOT deployed.** `origin/main` = `origin/cleverwork/price-agreement-audit` = `126d1f5` (pre-session). Local `main` (`a85202f`) is STALE/divergent — ignore it, reset to `origin/main` before ever using it. · **Full logs:** `context/memory/2026-06-19.md` (sessions through 12:00). · **Prior handoff:** `docs/handoffs/archive/2026-06-19-1035.md`.
+**Date:** 2026-06-19 PM · **Branch:** `cleverwork/price-agreement-audit`. ✅ **PUSHED + DEPLOYED — dev = `origin/cleverwork/price-agreement-audit` = `origin/main` = live `cc.proexteriorsus.net` buildCommit, 100% aligned (verified via `/healthz`).** Local `main` (`a85202f`) is STALE/divergent — ignore it, reset to `origin/main` before ever using it. · **Full logs:** `context/memory/2026-06-19.md` (sessions through 12:00). · **Prior handoff:** `docs/handoffs/archive/2026-06-19-1035.md`.
 
 ## ▶ WHERE WE LEFT OFF
 Chris reviewed four dashboards in turn and gave punch-lists. Three are **built, verified on dev, and committed (not pushed)**. The Agreement Builder is **Phase A done; Phase B (#6) held by Chris** for next session. Deploy decision (push → `origin/main`) is Chris's.
@@ -28,10 +28,11 @@ Chris reviewed four dashboards in turn and gave punch-lists. Three are **built, 
 4. **API non-negotiated labeling** (`docs/43`, #4) — extend the `API · non-negotiated` tag to order/invoice/estimate lines; warn when API price used in-drive-time.
 5. Carried from AM (gated): Item-4 PDF auto-pull in the nightly sync (agent host); Metal/Tile/Siding categories (Chris decision); RLS on 7 tables (DB-health pass).
 
-## ▶ DEV ↔ MAIN ALIGNMENT (validated 2026-06-19 PM)
-- `local HEAD` = `a947252` (3 ahead). `origin/cleverwork/price-agreement-audit` = `origin/main` = `126d1f5`. Local `main` = `a85202f` (stale, ignore).
-- **To reach 100% + deploy:** `git push origin cleverwork/price-agreement-audit` then `git push origin HEAD:main` (this redeploys cc.proexteriorsus.net — Chris's call). Then verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit` shows `a947252`.
-- Migrations **117 + 118** and the PDF backfill are **already LIVE on the shared prod DB** (so DB-side IA-1/IA-3 fixes + 560/560 PDFs are reflected on the deployed site now); only the **app/UI** changes await the push.
+## ▶ DEV ↔ MAIN ALIGNMENT (deployed 2026-06-19 PM — 100%)
+- Chris authorized the deploy. Pushed `cleverwork/price-agreement-audit` → `origin`, then `HEAD:main`; Coolify rebuilt and `/healthz` `buildCommit` flipped to the deployed commit (confirmed). dev = origin branch = `origin/main` = live, 0 commits apart.
+- Local `main` (`a85202f`) is still STALE — only the local ref; ignore / reset to `origin/main`.
+- Migrations **117 + 118** + the PDF backfill were already live on the shared prod DB; the UI is now deployed too, so the full session is live on cc.proexteriorsus.net.
+- ⚠️ **For Phase B / on-demand PDF in prod:** add `ABC_SUPPLY_CLIENT_ID` / `ABC_SUPPLY_CLIENT_SECRET` to the command-center **Coolify env** (web tier has no ABC client yet).
 
 ## ▶ STANDING INSTRUCTIONS (Chris)
 - **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill.** Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
