@@ -1,41 +1,47 @@
-# Handoff — Invoice Audit walkthrough fixes · segmentation · site speed · credit memos
+# Handoff — dashboard review reworks (territory map · invoice audit · price agreement audit · agreement builder)
 
-**Date:** 2026-06-19 · **Branch:** `cleverwork/price-agreement-audit` = `origin/main` = deployed (Coolify), all at commit **`dffc50d`** (verified equal this session). **Confirm before app work:** `git fetch origin` → all three refs equal → branch from there. · **Full logs:** `context/memory/2026-06-19.md` (this session, blocks through 10:31) + `context/memory/2026-06-18.md`. · **Prior handoff:** `docs/handoffs/archive/2026-06-18-2017.md`.
+**Date:** 2026-06-19 PM · **Branch:** `cleverwork/price-agreement-audit` at **`a947252`**. ⚠️ **Branch is 3 commits AHEAD of `origin/main` — NOT pushed, NOT deployed.** `origin/main` = `origin/cleverwork/price-agreement-audit` = `126d1f5` (pre-session). Local `main` (`a85202f`) is STALE/divergent — ignore it, reset to `origin/main` before ever using it. · **Full logs:** `context/memory/2026-06-19.md` (sessions through 12:00). · **Prior handoff:** `docs/handoffs/archive/2026-06-19-1035.md`.
 
-## ▶ WHERE WE LEFT OFF (end of 2026-06-19)
-Chris did a human walkthrough of the Invoice Audit and gave **6 findings + a segmentation ask**. **All 6 + segmentation + a client-blocking speed fix are DONE and deployed.** Three follow-ups remain, each gated on something outside the session (a host, a Chris decision, or a scheduled pass).
+## ▶ WHERE WE LEFT OFF
+Chris reviewed four dashboards in turn and gave punch-lists. Three are **built, verified on dev, and committed (not pushed)**. The Agreement Builder is **Phase A done; Phase B (#6) held by Chris** for next session. Deploy decision (push → `origin/main`) is Chris's.
 
-### DONE & deployed this session
-- **Item 2 — At Risk KPI** now counts only *un-audited* overcharge (a `passed` audit, incl. the historical backfill, clears exposure) + new **"Credit Memo Requested"** KPI. Headline dropped **$877K → ~$6.2K** (≈99% was a UOM artifact).
-- **Item 3 — UOM pricing** fixed for all ×3/×4/×5 bundled SKUs: audit views compare/display **`effective_unit_price` (extended÷qty)**, never raw `unit_price` (e.g. `02MLHLXABB` $387→$129/SQ). Schema 99 + 113.
-- **Item 5 — branch price list** (`/accounting/price-list/branch`): branch name+address, agreement **number** pill (was internal id "#7"), scoped to the agreement active on the invoice date. Schema 101.
-- **Item 6 — blank auditable lines**: root cause was `invoiceLineRows()` reading flat keys; ABC invoice payload nests qty/uom under `shippedQty|priceQty`, price under `pricePerUnitAmount|extendedPriceAmount`. Fixed parser + backfilled 171 lines + raw-fallback in views + post-sync canary. Schema 113.
-- **Segmentation (12 categories)** — `roof_system_category` + `classify_roof_system()` + `item_roof_system_category` overrides (schema 114). Collapsible, default-collapsed category sections **site-wide**: Invoice Audit, Order Audit, Estimate Audit, branch price list. Documented as the standard in **`docs/40` §5a**.
-- **Site speed (client-blocking)** — Order Audit **22s → 0.45s**: scope to the active window + lazy-load lines per order via `/api/order-audit/lines`. Also fixed a pre-existing **PostgREST 1000-row cap** that was hiding >half of invoice-audit lines.
-- **Item 1 — credit memos (COMPLETE)** — `/accounting/audit/credit-memos` is live (was mock):
-  - **Received CMs** (vendor issued): `v_credit_memo_audit` (schema 115) resolves the original invoice + line-by-line unit-price match (Matches/Mismatch/Partial/No-reference). Packet page (`/accounting/credit-memos/[invoice]`) → **Approve / Needs-review / Reject** writes `credit_memo_requests`.
-  - **Requested CMs** (we claim a credit): Invoice-Audit `credit-flag`/`credit-noflag` dispositions **auto-create** a tracked `requested` request; lifecycle **draft → sent (+14d follow-up) → received → close** via the packet page. Queue merges both with a **Type** filter + `$ Requested`/`Awaiting Vendor` KPIs. Schema 116 (`request_kind`).
+### Commit `fafa2c3` — Territory Map + Invoice Audit punch-list (7 items)
+- **IA-1** branch/office now from each invoice's real selling branch (`abc_invoices.raw->'branch'`), not the ship-to price-agreement match (which wrongly collapsed every invoice to "152 Edmond OK"). Groups Wichita/Richardson/Denver/KC correctly.
+- **IA-3** UOM variance fix: negotiated price (per-SQ) normalized into the line's ordered UOM via `raw->priceQty.priceConversionFactor`. `02TKTXTRB` was −59.6% ("saving") → really +21% overcharge. **Migration 117** (both invoice-audit views).
+- **IA-2** PDFs: backfilled all 45 missing (560/560 now) via `integrations/bridges/abc-supply/backfill-invoice-pdfs.mjs`; on-demand fetch added in `pdf/[invoiceNumber].ts` (`lib/abc-invoice-pdf.server.ts`, source must be `portal_sync`). **Needs `ABC_SUPPLY_CLIENT_ID/_SECRET` in command-center Coolify env to fire in prod** (web tier had no ABC client before).
+- **IA-4/5** Price List greys out when no list; Price List + Invoice as matching left-justified pills; "PDF"→"Invoice".
+- **TM-1** logo spans rail width. **TM-2** popup/side-card show `[PA <number>] [Expired <date>]` (added `agreementOnFile` incl. lapsed agreements; all 5 verified agreements are expired).
 
-### ▶ OPEN — pick up here (all gated)
-1. **Item 4 — daily invoice-PDF auto-pull.** 45 invoices lack a PDF; all have `invoice_id`. Plan: a `syncInvoicePdfs()` pass in `integrations/bridges/abc-supply/mirror-backfill.mjs` (call ABC `GET /api/invoice/v1/invoices/pdf/{invoiceId}` — needs a binary fetch, the JSON helper won't do; upload to the private `invoices` bucket; upsert `invoice_documents` source=`portal_sync`). **Code only — runs/verifies on the Hetzner/Coolify agent host, NOT in this sandbox** (the ABC sync can't run here).
-2. **Metal / Tile / Siding categories** — the bulk of the ~19% "Uncategorized". **Chris decision**: add as categories (→15) or leave. Refine any item via `item_roof_system_category`.
-3. **RLS on 7 exposed tables** (`agreement_packages`, `agreement_package_items`, `agreement_package_submissions`, `estimate_audit_edits`, `spatial_ref_sys`, 2× `_backup_*`) — Chris's scheduled **DB-health agent pass**.
-- Optional: auto-approve-all-matching received CMs; apply the lazy-line pattern to Invoice Audit (1.2s).
+### Commit `3d83b0e` — Price Agreement Audit rework
+- `/abc-price-agreement-gaps` → **PE Office → Vendor/Branch → Item Category → Item** drill-down. KPIs: branch-coverage rate avg per office, Expired, Expiring ≤30d, + negotiated agreements / distinct priced items (per-distinct-agreement counts, not summed-per-branch). API price lists (`agreement_number LIKE 'API-%'`, 92 branches) flagged `API · non-negotiated` + filter. Request-renewal preserved.
 
-## ▶ REPEATING-ISSUE PLAYBOOKS — read `docs/42` before touching ABC data
-1. **ABC ingestion mapping drift** — the mapper has twice (orders schema 108, invoices schema 113) read flat keys that don't exist while `raw` held the values → null columns. Always check `raw` shape first; COALESCE from `raw` in views; the post-sync canary warns on recurrence.
-2. **UOM normalization** — invoice `unit_price` is per-pack for bundled SKUs; the only correct per-UOM price is `effective_unit_price = extended/qty`. Never compare raw `unit_price`.
-3. **PostgREST 1000-row cap** — any `.select()` over a table that can exceed ~1000 rows must paginate (`.range()`).
+### Commit `a947252` — Agreement Builder **Phase A**
+- `/accounting/price-agreement/builder` rebuilt single-branch worksheet → **all-offices 6-level: PE Office → Vendor → Vendor/Branch → Category → Item → Variation**. Branch skeleton from `lib/agreement-builder-overview.ts`; per-branch catalog lazy-loads via `/api/price-agreement/branch-detail`.
+- **Cost roll-up**: set price = proposed → branch negotiated → historical avg; projected = Σ set×(36mo qty); savings = historical − projected; rolls Branch→Vendor→Office. Per-branch volume from new view **`v_branch_item_spend`** (migration 118, real selling branch × item × 36mo).
+- **Exports** download as `PA-<VENDOR>#<BRANCH>-<PA#>` (e.g. `PA-ABC#113-2036874-16.pdf/.csv`, via `&name=`). **Methodology** page `/accounting/price-agreement/methodology` (ABC classification) + "📘 ABC classes" button (toolbar + per-branch action bar). Per-branch Save/Draft-for-review/Issue-link kept.
+- KPIs: 4 offices · 857 items · $937k 36mo spend · $951k projected · −$14k savings (negotiated prices net slightly above recent avg — a real signal to revisit in negotiation).
+
+### ▶ OPEN — pick up here
+1. **Agreement Builder Phase B (#6)** — per-family review checkbox + per-branch progress bar + confetti at 100% + Submit (→ draft-for-review into the comms gate). Needs an **additive `reviewed`/`reviewed_at` on `agreement_package_items`**. Confetti `<canvas id="iv-confetti">` already stubbed in `builder.astro`, unused.
+2. **Communications Dashboard** (`docs/45`) — single source of truth / approval gate across renewals, credit memos, price-list requests, agreement drafts. Phase B's Submit feeds it. Design note only; develop with Chris.
+3. **Invoice↔price-list match-lock** (`docs/43`, #3) — lock the first match; override only in Invoice Audit. Build with Price List Coverage.
+4. **API non-negotiated labeling** (`docs/43`, #4) — extend the `API · non-negotiated` tag to order/invoice/estimate lines; warn when API price used in-drive-time.
+5. Carried from AM (gated): Item-4 PDF auto-pull in the nightly sync (agent host); Metal/Tile/Siding categories (Chris decision); RLS on 7 tables (DB-health pass).
+
+## ▶ DEV ↔ MAIN ALIGNMENT (validated 2026-06-19 PM)
+- `local HEAD` = `a947252` (3 ahead). `origin/cleverwork/price-agreement-audit` = `origin/main` = `126d1f5`. Local `main` = `a85202f` (stale, ignore).
+- **To reach 100% + deploy:** `git push origin cleverwork/price-agreement-audit` then `git push origin HEAD:main` (this redeploys cc.proexteriorsus.net — Chris's call). Then verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit` shows `a947252`.
+- Migrations **117 + 118** and the PDF backfill are **already LIVE on the shared prod DB** (so DB-side IA-1/IA-3 fixes + 560/560 PDFs are reflected on the deployed site now); only the **app/UI** changes await the push.
 
 ## ▶ STANDING INSTRUCTIONS (Chris)
-- **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill** — don't re-research schemas. Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
+- **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill.** Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
 - **Verify against the LIVE DB, not migration files.**
-- **Validation layer on every agent** (pair builds/audits with an adversarial verifier).
-- **Zero external agent sends (v1)** — agents draft/notify internally; humans send externally. Credit-memo "Mark sent" only *logs* that a human sent it.
-- **All dashboards function the same** — new line-list surfaces follow `docs/40` (category sections, `.range()` pagination, scoped deep-links, both themes).
+- **Validation layer on every agent** (adversarial verifier).
+- **Zero external agent sends (v1)** — agents draft/notify; humans send.
+- **All dashboards function the same** — `docs/40` (category sections, `.range()` pagination, scoped deep-links, both themes); the PE Office → Vendor/Branch → Category → Item shape is now standard across Invoice Audit, PA Audit, and Agreement Builder.
+
+## ▶ PLAYBOOKS — read `docs/42` before touching ABC data
+1. ABC ingestion mapping drift (flat vs nested keys → null columns; check `raw`, COALESCE from `raw`). 2. UOM: `effective_unit_price` = ext/qty; ALSO normalize the negotiated/agreement price by `raw->priceQty.priceConversionFactor` when UOMs differ (schema 117). 3. PostgREST 1000-row cap → paginate `.range()`. 4. Invoice branch/office derive from `raw->'branch'`, never ship-to.
 
 ## Environment / deploy
-Source = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE = `origin/main`** = dev `cleverwork/price-agreement-audit`. `git push origin main` auto-deploys (Coolify); verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. Local dev `127.0.0.1:4321` (Local Operator). Supabase `rnhmvcpsvtqjlffpsayu`; schemas mirrored through **116** (all additive/idempotent, applied live). ABC sync `mirror-backfill.mjs --env=production` on the real host (not this sandbox). Build gate: `cd app/command-center && npm run build`.
-
-## Note
-`excalidraw.log` shows as modified in `git status` — a stray tracked log, unrelated to this work; left untouched.
+Source = GitHub `Clvrwrk/a-roofer-open-brain`; canonical LIVE = `origin/main` (Coolify auto-builds main). `git push origin HEAD:main` deploys. Local dev `127.0.0.1:4321` (Local Operator). Supabase `rnhmvcpsvtqjlffpsayu`; schemas mirrored through **118** (additive/idempotent, applied live). ABC sync runs on the Hetzner/Coolify host, not a sandbox. Build gate: `cd app/command-center && npm run build`.

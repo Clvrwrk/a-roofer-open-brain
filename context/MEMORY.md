@@ -2,20 +2,17 @@
 # Working Memory
 
 ## ▶ Pick up here
-**Full handoff: `docs/handoffs/current.md`.** 2026-06-19: Chris's 6-item Invoice-Audit walkthrough + segmentation + a client-blocking speed fix + credit memos (Item 1) are ALL done & deployed (commit `dffc50d`; dev=main aligned). **Open (all gated):** Item 4 PDF auto-pull (code only — runs on the agent host, not this sandbox); Metal/Tile/Siding categories (Chris decision); RLS on 7 tables (DB-health pass).
+**Full handoff: `docs/handoffs/current.md`.** 2026-06-19 PM: three dashboard reworks done on branch `cleverwork/price-agreement-audit` — `fafa2c3` territory-map + invoice-audit punch-list (branch/office from `raw->branch`, UOM fix, 45 PDFs backfilled + on-demand), `3d83b0e` Price Agreement Audit → Office/Branch/Category/Item, `a947252` Agreement Builder **Phase A** → 6-level Office/Vendor/Branch/Category/Item/Variation + cost roll-up. **Branch is 3 commits AHEAD of `origin/main` — NOT pushed/deployed.** Next: **Phase B (#6)** builder review checkboxes + progress + confetti + Submit (needs a `reviewed` col on agreement_package_items). Gated: Comms Dashboard (`docs/45`), invoice↔price-list match-lock (`docs/43`), API-nonnegotiated labels on orders/invoices, Item-4 PDF auto-pull, Metal/Tile/Siding cats, RLS 7 tables.
 
 ## Standing instructions (Chris)
-- **Vendor data = official API docs FIRST, then the `<vendor>-api` data-map skill.** Built: abc-supply-api, acculynx-api. TODO: EagleView/GAF/Roofr.
+- **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
 - **Verify against the LIVE DB, not migration files.**
-- **Validation layer on every agent** (pair builds/audits with an adversarial verifier).
-- **Zero external agent sends (v1):** agents draft/notify internally; humans send. ("Mark sent" only logs a human sent it.)
-- **All dashboards function the same** — follow `docs/40` (category sections, `.range()` pagination, scoped deep-links, both themes).
+- **Validation layer on every agent** (adversarial verifier).
+- **Zero external agent sends (v1):** agents draft; humans send.
+- **Dashboards share one shape** — `docs/40` (category sections, `.range()` pagination, scoped deep-links, both themes); PE Office→Vendor/Branch→Category→Item.
 
-## Repeating-issue playbooks (`docs/42`) — read before touching ABC data
-1. ABC ingestion mapping drift (flat vs nested keys → null columns; check `raw` first, COALESCE from raw). 2. UOM: use `effective_unit_price`=ext/qty, never raw `unit_price` (per-pack on bundles). 3. PostgREST 1000-row cap → paginate `.range()`.
-
-## Command Center — LIVE (all on `main`, design-system)
-Home territory map · **Invoice Audit** (effective-price variance, un-audited At Risk, category sections) · **Order Audit** (lazy lines, 0.45s) · **Estimate Audit** (persisted edits) · **Credit Memos** (`/accounting/audit/credit-memos`: received CM↔original match + Approve/Reject; requested-CM tracker) · Price Agreement Audit + Agreement Builder · Price List Coverage · Price Foundation · branch price list. **Segmentation:** `roof_system_category` (12) + `classify_roof_system()` + overrides.
+## Repeating-issue playbooks (`docs/42`)
+1. ABC mapping drift (flat vs nested → null cols; COALESCE from `raw`). 2. UOM: effective price = ext/qty; ALSO normalize negotiated price by `raw->priceQty.priceConversionFactor` when UOMs differ (schema 117). 3. PostgREST 1000-row cap → paginate `.range()`. 4. Invoice branch/office come from `raw->'branch'`, not ship-to.
 
 ## Environment / Deploy
-Source = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE = `origin/main`** = dev `cleverwork/price-agreement-audit`. `git push origin main` auto-deploys (Coolify). Verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. Local dev `127.0.0.1:4321` (Local Operator). Supabase `rnhmvcpsvtqjlffpsayu`. Schemas mirrored thru **116**. ABC sync `mirror-backfill.mjs --env=production` (real host). Build: `cd app/command-center && npm run build`.
+Source = GitHub `Clvrwrk/a-roofer-open-brain`; **canonical LIVE = `origin/main`** (Coolify auto-builds main). Dev branch `cleverwork/price-agreement-audit` (now 3 ahead of main, unpushed). `git push origin main` deploys; verify `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit`. **Local `main` is STALE (≠ origin/main) — reset to origin/main before using it.** Local dev `127.0.0.1:4321`. Supabase `rnhmvcpsvtqjlffpsayu`. Schemas mirrored thru **118**. Build: `cd app/command-center && npm run build`.
