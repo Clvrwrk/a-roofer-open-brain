@@ -205,15 +205,26 @@ if (dataEl && root) {
     document.querySelectorAll<HTMLElement>("tr.plc2-branch").forEach((tr) =>
       tr.addEventListener("click", () => { const b = tr.dataset.branch!; openB.has(b) ? openB.delete(b) : openB.add(b); render(); }));
     document.querySelectorAll<HTMLButtonElement>("button[data-request]").forEach((btn) =>
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const bn = btn.dataset.request!;
-        reqOverride[bn] = { requestStatus: "requested", requestedDate: P.today, daysOpen: 0, nextFollowUp: addDays(P.today, 7) };
         const b = allBranches.find((x: any) => x.branchNo === bn);
         const mgr = b && b.managerName ? `${b.managerName}${b.managerEmail ? " <" + b.managerEmail + ">" : ""}` : "branch manager";
         const rep = b && b.salesRepName ? ` + rep ${b.salesRepName}` : "";
-        toast(`Drafted price-list request for ${bn} → ${mgr}${rep} (FYI Lucinda, Roberto) · awaiting approval`);
-        render();
+        btn.disabled = true; const orig = btn.textContent; btn.textContent = "Requesting…";
+        try {
+          const res = await fetch("/api/price-agreement/request-price-list", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ vendorBranchId: b?.vendorBranchId, branchNumber: bn, branchName: b?.branchName, managerName: b?.managerName, managerEmail: b?.managerEmail, salesRepName: b?.salesRepName, coverageStatus: b?.listStatus }),
+          });
+          const r = await res.json();
+          if (r.ok) {
+            // Persisted (or already open) — only NOW reflect it in the UI.
+            reqOverride[bn] = { requestStatus: "requested", requestedDate: P.today, daysOpen: 0, nextFollowUp: addDays(P.today, 7) };
+            toast(r.alreadyOpen ? `Price-list request already open for ${bn}` : `Drafted price-list request for ${bn} → ${mgr}${rep} (FYI Lucinda, Roberto) · awaiting approval`);
+            render();
+          } else { btn.disabled = false; btn.textContent = orig || "Request Price List"; toast("Request failed: " + (r.error_description || r.error || "error")); }
+        } catch { btn.disabled = false; btn.textContent = orig || "Request Price List"; toast("Request failed — network error"); }
       }));
   }
 

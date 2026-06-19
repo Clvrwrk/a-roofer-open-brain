@@ -17,7 +17,7 @@ export const PLC_YEAR_FACTORS: Record<number, number> = { 2024: 0.82, 2025: 0.91
 
 export type CoverageItem = { sku: string; desc: string; uom: string; qty: number; spend: number; source: string; sourceCls: string; negotiated: boolean };
 export type CoverageBranch = {
-  vendor: string; branchNo: string; branchName: string; office: string; state: string;
+  vendor: string; branchNo: string; vendorBranchId?: string; branchName: string; office: string; state: string;
   managerName?: string; managerEmail?: string; salesRepName?: string;
   inDriveTime: boolean; hasOrder: boolean; inScope: boolean;
   listStatus: "full" | "partial" | "none"; listCls: string; coverageLabel: string;
@@ -192,7 +192,7 @@ export async function loadPriceListCoverage(env: RuntimeEnv = getRuntimeEnv()): 
     }
 
     return {
-      vendor: b.vendor || "ABC Supply", branchNo: b.branch_number, branchName: b.branch_name || "",
+      vendor: b.vendor || "ABC Supply", branchNo: b.branch_number, vendorBranchId: b.vendor_branch_id || "", branchName: b.branch_name || "",
       office: b.office || "", state: b.state || "",
       managerName: b.manager_name || "", managerEmail: b.manager_email || "", salesRepName: b.sales_rep_name || "",
       inDriveTime, hasOrder, inScope, listStatus, listCls, coverageLabel,
