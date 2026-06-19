@@ -64,12 +64,21 @@ the validation layer are baked in below.
    `channel='human_send_required'`, recipient Justin Garza, PDF/CSV links), idempotent per branch,
    moves package → `pending_review`. NEVER sends. "Draft for review" button on the builder.
    Verified: full-feature grep shows the only network calls are same-origin saves — no email/SMTP.
-5. **TODO — magic-link submission** — `agreement_package_submissions` (append-only, `magic_token`
-   NULL until a human approves), unauthenticated `/submit-agreement/[token]` (TTL = **7 working days
-   @ 06:00**; add to middleware public allowlist) for Justin's per-line final prices +
-   approve/revise/reject. AgentMail "approved" reply = documented manual fallback.
-   **Open before building:** token reuse policy (single-claim vs multi-visit-before-claim); the
-   internal notification mechanism to Lucinda/Roberto (Slack vs internal email) — both human-triggered.
+5. **DONE (commit de8e8cd)** — magic-link submission. Schema 111
+   (`agreement_package_submissions`: `magic_token`, **7-business-day @ ~06:00 Central** expiry,
+   **single-claim**; + `vendor_final_price`/`vendor_note` on items). `POST /api/price-agreement/
+   package/issue-link` (AUTH-GATED — the human-approval step; idempotent; returns the URL for the
+   operator to email). PUBLIC `/submit-agreement/[token]` standalone page + `POST
+   /api/price-agreement/submit/[token]` (token-gated, atomic single-claim, writes only the token's
+   package). Middleware allowlists the two public prefixes; siblings stay authed. Builder "Issue
+   link" button copies the URL. Defaults used: single-claim token; notify via the review queue.
+   Security-reviewed + hardened (removed a set:html sink, canonical-UUID regex, per-IP rate limit).
+   Internal notify to Lucinda/Roberto = the `agreement_package` draft in the review queue (human-triggered send).
+
+## Status: Item 3 COMPLETE (slices 1-5, all deployed to main). Schemas 109-111.
+Remaining polish (not blocking): exact ABC PDF ledger fidelity if Chris wants it; AgentMail
+"approved" reply as an automated fallback to the magic link (currently manual); richer review-queue
+UI for Lucinda/Roberto to action `agreement_package` drafts.
 
 ## Human-gated boundary (never auto-send)
 Email drafts only (`awaiting_verification` → human sends). Magic-link `magic_token` issued only
