@@ -129,27 +129,54 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   // 2. Current-state overlay (latest decision wins, keyed by review_key).
-  const { data: overlay, error: overlayError } = await client
-    .from("price_foundation_review_actions")
-    .upsert(
-      {
-        action_log_id: action?.id ?? null,
-        defer_until: deferUntil,
-        note,
-        problem_category: problemCategory,
-        queue_type: queue,
-        resolution,
-        resolution_status: status,
-        reviewed_at: now,
-        reviewed_by: actor.displayName,
-        review_key: key,
-        source_pk: sourcePk,
-        source_table: sourceTable,
-      },
-      { onConflict: "review_key" },
-    )
-    .select("id,resolution_status,reviewed_at")
-    .single();
+  // REOPEN preserves the prior resolution/note/problem_category/defer_until (Chris
+  // 2026-06-18) — it only flips the status back to open, leaving the history intact.
+  let overlay: any = null;
+  let overlayError: any = null;
+  if (status === "open") {
+    const upd = await client
+      .from("price_foundation_review_actions")
+      .update({ action_log_id: action?.id ?? null, resolution_status: status, reviewed_at: now, reviewed_by: actor.displayName })
+      .eq("review_key", key)
+      .select("id,resolution_status,reviewed_at")
+      .maybeSingle();
+    overlay = upd.data;
+    overlayError = upd.error;
+    if (!overlayError && !overlay) {
+      // No prior overlay to preserve — insert a minimal reopened row.
+      const ins = await client
+        .from("price_foundation_review_actions")
+        .insert({ action_log_id: action?.id ?? null, queue_type: queue, resolution_status: status, reviewed_at: now, reviewed_by: actor.displayName, review_key: key, source_pk: sourcePk, source_table: sourceTable })
+        .select("id,resolution_status,reviewed_at")
+        .single();
+      overlay = ins.data;
+      overlayError = ins.error;
+    }
+  } else {
+    const res = await client
+      .from("price_foundation_review_actions")
+      .upsert(
+        {
+          action_log_id: action?.id ?? null,
+          defer_until: deferUntil,
+          note,
+          problem_category: problemCategory,
+          queue_type: queue,
+          resolution,
+          resolution_status: status,
+          reviewed_at: now,
+          reviewed_by: actor.displayName,
+          review_key: key,
+          source_pk: sourcePk,
+          source_table: sourceTable,
+        },
+        { onConflict: "review_key" },
+      )
+      .select("id,resolution_status,reviewed_at")
+      .single();
+    overlay = res.data;
+    overlayError = res.error;
+  }
 
   if (overlayError) {
     return jsonApiResponse(

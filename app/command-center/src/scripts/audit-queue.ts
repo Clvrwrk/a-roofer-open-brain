@@ -56,7 +56,13 @@ if (dataEl && root) {
   /* ---------- KPI drill cards ---------- */
   const kpisEl = document.getElementById("aq-kpis")!;
   kpisEl.innerHTML = P.kpis
-    .map((k, i) => `<a class="aq-kpi" href="${k.href || "#"}" data-i="${i}"><span class="lab">${k.lab}</span><span class="val">${k.val}</span>${k.go ? `<span class="go">${k.go}</span>` : ""}</a>`)
+    .map((k, i) => {
+      // Navigation cards carry their filter to the destination so it lands pre-filtered.
+      const href = k.href
+        ? (k.filterCol ? `${k.href}${k.href.includes("?") ? "&" : "?"}filterCol=${encodeURIComponent(k.filterCol)}&filterVal=${encodeURIComponent(k.filterVal || "")}` : k.href)
+        : "#";
+      return `<a class="aq-kpi" href="${href}" data-i="${i}"><span class="lab">${k.lab}</span><span class="val">${k.val}</span>${k.go ? `<span class="go">${k.go}</span>` : ""}</a>`;
+    })
     .join("");
 
   /* ---------- filter selects ---------- */
@@ -186,6 +192,14 @@ if (dataEl && root) {
     sel.value = sel.value === val ? "" : val; // toggle: click same target again to clear
     render();
   });
+
+  /* land pre-filtered when arrived via a KPI drill-down (?filterCol=&filterVal=) */
+  const urlParams = new URLSearchParams(window.location.search);
+  const fCol = urlParams.get("filterCol");
+  if (fCol) {
+    const sel = selects.find((s) => s.dataset.col === fCol);
+    if (sel) sel.value = urlParams.get("filterVal") || "";
+  }
 
   render();
 }
