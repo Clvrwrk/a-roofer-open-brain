@@ -4,7 +4,7 @@
 // expand. Defaults to ACTIVE orders (archived = invoiced or >60d). Reads
 // ?office=/?branch= to land pre-filtered.
 
-interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; categoryKey: string; }
+interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; }
 interface Category { key: string; label: string; sortOrder: number; }
 interface Order { orderNumber: string; po: string; orderedOn: string; deliveryRequestedFor: string; orderStatus: string; orderType: string; orderTotal: number; lineTotal: number; disposition: "active" | "archived"; archiveReason: string; branchCode: string; branchName: string; office: string; lineCount: number; coveredLines: number; uncoveredLines: number; flaggedLines: number; atRisk: number; worstPct: number; matched: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: OrdLine[]; }
 interface Branch { branchCode: string; branchName: string; office: string; orderCount: number; activeCount: number; matched: number; orderTotal: number; atRisk: number; flaggedLines: number; uncoveredLines: number; orders: Order[]; }
@@ -37,17 +37,25 @@ if (root && dataEl && mount) {
   /* ---- line table (lazy) ---- */
   const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Order Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>';
   function lineRow(l: OrdLine): string {
+    // UOM mismatch (schema 121): agreement priced in a different unit than the order line,
+    // so the variance is not computed — flag for manual review.
+    const negCell = l.uomMismatch
+      ? `<span class="pill pill-orange" title="Agreement priced per ${esc(l.negotiatedUom || "?")} but ordered per ${esc(l.uom)} — review">UOM mismatch</span>`
+      : (l.negotiatedPrice == null ? '<span class="pill pill-grey">No agreement</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`);
+    const tolCell = l.uomMismatch
+      ? '<span class="pill pill-grey">Review (UOM)</span>'
+      : `<span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span>`;
     return `
       <tr class="iv-ln${l.covered ? " is-covered" : ""}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
         <td>${esc(l.itemDescription) || '<span class="iv-inv-sub">—</span>'}</td>
         <td class="num">${l.qty}</td>
         <td>${esc(l.uom)}</td>
-        <td class="num">${money2(l.unitPrice)}</td>
-        <td>${l.negotiatedPrice == null ? '<span class="pill pill-grey">No agreement</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`}</td>
+        <td class="num">${money2(l.unitPrice)} <span class="iv-uom-sfx">/${esc(l.uom)}</span></td>
+        <td>${negCell}</td>
         <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
-        <td><span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span></td>
+        <td>${tolCell}</td>
       </tr>`;
   }
   // Group lines into collapsible roof-system category sections (default-collapsed),

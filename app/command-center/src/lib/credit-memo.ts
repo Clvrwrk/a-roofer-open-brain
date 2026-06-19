@@ -43,26 +43,26 @@ export async function loadCreditMemo(invoiceNumber: string, env: RuntimeEnv = ge
   const originalInvoiceNumber: string | null = h.original_invoice_number ?? null;
 
   const [{ data: cmRows }, { data: origRows }, { data: dispRows }] = await Promise.all([
-    client.from("abc_invoice_lines").select("item_number,item_description,quantity,uom,unit_price").eq("invoice_number", invoiceNumber),
+    client.from("abc_invoice_lines").select("item_number,item_description,price_qty,price_uom,price_per_uom").eq("invoice_number", invoiceNumber),
     originalInvoiceNumber
-      ? client.from("abc_invoice_lines").select("item_number,unit_price").eq("invoice_number", originalInvoiceNumber)
+      ? client.from("abc_invoice_lines").select("item_number,price_per_uom").eq("invoice_number", originalInvoiceNumber)
       : Promise.resolve({ data: [] as any[] }),
     client.from("credit_memo_requests").select("status,approved_by,packet,updated_at").eq("invoice_number", invoiceNumber).maybeSingle(),
   ]);
 
   const origByItem = new Map<string, number>();
-  for (const o of (origRows as any[] | null) ?? []) if (o.unit_price != null) origByItem.set(o.item_number, num(o.unit_price));
+  for (const o of (origRows as any[] | null) ?? []) if (o.price_per_uom != null) origByItem.set(o.item_number, num(o.price_per_uom));
 
   const lines: CreditMemoLine[] = ((cmRows as any[] | null) ?? []).map((l) => {
     const orig = origByItem.has(l.item_number) ? origByItem.get(l.item_number)! : null;
-    const cmUnit = num(l.unit_price);
+    const cmUnit = num(l.price_per_uom);
     const matchStatus: CreditMemoLine["matchStatus"] =
       orig == null ? "no_original" : Math.round(cmUnit * 100) === Math.round(orig * 100) ? "match" : "mismatch";
     return {
       itemNumber: l.item_number ?? "",
       itemDescription: l.item_description ?? "",
-      quantity: num(l.quantity),
-      uom: l.uom ?? "",
+      quantity: num(l.price_qty),
+      uom: l.price_uom ?? "",
       cmUnitPrice: cmUnit,
       originalUnitPrice: orig,
       matchStatus,

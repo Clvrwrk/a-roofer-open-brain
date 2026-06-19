@@ -45,6 +45,10 @@ interface InvoiceLineRow {
   item_number: string | null;
   item_description: string | null;
   raw: Record<string, unknown> | null;
+  // Canonical UOM columns (schema 119): always in the pricing UOM, comparable to agreement price.
+  price_per_uom: number | string | null;
+  price_qty: number | string | null;
+  price_uom: string | null;
 }
 
 interface OrderRow {
@@ -543,12 +547,17 @@ function evidenceStatusFrom(reasons: GapReason[], referenceAgreement: Candidate 
   return { status: "pdf_mapped", label: "PDF price agreement mapped" };
 }
 
-function getInvoiceQuantity(raw: Record<string, unknown> | null) {
+// Quantity in the pricing UOM (schema 119 price_qty); falls back to raw for safety.
+function getInvoiceQuantity(line: InvoiceLineRow) {
+  if (line.price_qty != null) return Number(line.price_qty);
+  const raw = line.raw;
   return toNumber(raw?.shippedQty) ?? toNumber(raw?.orderedQty) ?? toNumber(raw?.priceQty);
 }
 
-function getInvoiceUom(raw: Record<string, unknown> | null) {
-  const priceQty = raw?.priceQty;
+// The pricing UOM (the unit the agreement is quoted in).
+function getInvoiceUom(line: InvoiceLineRow) {
+  if (line.price_uom) return String(line.price_uom);
+  const priceQty = line.raw?.priceQty;
   if (priceQty && typeof priceQty === "object") {
     const uom = (priceQty as Record<string, unknown>).uom;
     if (uom) return String(uom);
@@ -556,8 +565,11 @@ function getInvoiceUom(raw: Record<string, unknown> | null) {
   return "Missing";
 }
 
-function getInvoicePrice(raw: Record<string, unknown> | null) {
-  return toNumber(raw?.pricePerUnitAmount);
+// Canonical effective price = extendedPriceAmount / priceQty.value, in price_uom (schema 119).
+// NOT raw.pricePerUnitAmount, which is per-pack/inconsistent for bundled SKUs.
+function getInvoicePrice(line: InvoiceLineRow) {
+  if (line.price_per_uom != null) return Number(line.price_per_uom);
+  return toNumber(line.raw?.pricePerUnitAmount);
 }
 
 function toBranchLabel(branch: BranchRow | undefined, branchNumber: string | null | undefined) {
@@ -687,7 +699,7 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         selectAll<InvoiceLineRow>(
           client,
           "abc_invoice_lines",
-          "invoice_number,line_key,line_number,item_number,item_description,raw",
+          "invoice_number,line_key,line_number,item_number,item_description,raw,price_per_uom,price_qty,price_uom",
         ),
         selectAll<OrderRow>(client, "abc_orders", "order_number,branch_number,order_name,purchase_order_number,ship_to_number"),
         selectAll<BranchRow>(client, "abc_vendor_branches", "branch_number,branch_name,city,state,region_code"),
@@ -789,11 +801,11 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
       const nonFixedAgreement =
         candidates.find((candidate) => !hasFixedWindow(candidate.agreement) && !isApiAgreement(candidate.agreement)) ?? null;
       const referenceAgreement = activeAtInvoice ?? activeToday ?? pastAgreement ?? futureAgreement ?? apiReference ?? nonFixedAgreement;
-      const invoicePrice = getInvoicePrice(line.raw);
+      const invoicePrice = getInvoicePrice(line);
       const referencePrice = toNumber(referenceAgreement?.item.unit_price);
       const variance = invoicePrice !== null && referencePrice !== null ? invoicePrice - referencePrice : null;
       const variancePct = variance !== null && referencePrice ? variance / referencePrice : null;
-      const invoiceUom = getInvoiceUom(line.raw);
+      const invoiceUom = getInvoiceUom(line);
       const agreementUom = compact(referenceAgreement?.item.unit, "");
       const reasons: GapReason[] = [];
 
@@ -871,7 +883,7 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         acculynxJobNumber,
         invoiceEvidenceLabel,
         invoiceEvidenceStatus,
-        quantity: getInvoiceQuantity(line.raw),
+        quantity: getInvoiceQuantity(line),
         invoiceUom,
         invoicePrice,
         referencePrice,

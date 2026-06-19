@@ -53,6 +53,8 @@
 .aq .pill-new{background:var(--new-bg);color:var(--new)}
 .aq .pill-review{background:var(--review-bg);color:var(--review)}
 .aq .pill-hold{background:var(--hold-bg);color:var(--hold)}
+/* UOM suffix on price cells (e.g. "$139.51 /SQ") — muted, so the price stays dominant */
+.iv-uom-sfx{color:var(--grey);font-size:.82em;font-weight:400}
 .aq .pill-escalated{background:var(--escalated-bg);color:var(--escalated)}
 
 /* aging / severity text tones */

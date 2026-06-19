@@ -2,6 +2,8 @@
 
 Two kinds of agents run per client brain: **vertical** (client-facing in Slack) and **horizontal** (infrastructure). Full charters live under [`agents/`](agents/). This file is the roster + the worktree discipline for AI agents building/maintaining the repo.
 
+> **Pricing/UOM invariant (Accounting + Ops agents):** every invoice/order vs price-agreement comparison happens in ABC's pricing UOM (`priceQty.uom`, e.g. SQ). Use `abc_invoice_lines.price_per_uom` and `v_item_uom_map`; never compare on the raw `quantity`/`uom`/`unit_price`/`pricePerUnitAmount` fields. See [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+
 ## The 13-agent workforce
 
 ### Vertical (5) — client-facing, mentioned in Slack

@@ -2,7 +2,7 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
-interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
 interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; invoices: Invoice[]; }
@@ -36,17 +36,25 @@ if (root && dataEl && mount) {
   }
   const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>';
   function lineRow(l: InvLine, li: number): string {
+    // UOM mismatch: the agreement is priced in a different unit than the invoice line,
+    // so a variance would be meaningless — surface it for manual review instead (schema 120).
+    const negCell = l.uomMismatch
+      ? `<span class="pill pill-orange" title="Agreement priced per ${esc(l.negotiatedUom || "?")} but invoiced per ${esc(l.uom)} — review">UOM mismatch</span>`
+      : (l.negotiatedPrice == null ? '<span class="pill pill-red">No Price</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`);
+    const tolCell = l.uomMismatch
+      ? '<span class="pill pill-grey">Review (UOM)</span>'
+      : `<span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span>`;
     return `
       <tr class="iv-ln${l.audited ? " is-audited" : ""}" data-line="${li}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
         <td>${esc(l.itemDescription)}</td>
         <td class="num">${l.qty}</td>
         <td>${esc(l.uom)}</td>
-        <td class="num">${money2(l.unitPrice)}</td>
-        <td>${l.negotiatedPrice == null ? '<span class="pill pill-red">No Price</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`}</td>
+        <td class="num">${money2(l.unitPrice)} <span class="iv-uom-sfx">/${esc(l.uom)}</span></td>
+        <td>${negCell}</td>
         <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
-        <td><span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span></td>
+        <td>${tolCell}</td>
         <td class="iv-audit-cell">${auditCell(l).replace("LIDX", String(li))}</td>
       </tr>`;
   }

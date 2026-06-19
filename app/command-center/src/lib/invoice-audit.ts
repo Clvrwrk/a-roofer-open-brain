@@ -19,6 +19,8 @@ export interface InvLine {
   variancePct: number | null;
   varianceExt: number | null;
   auditable: boolean; // has resolvable qty + extended price; false → never surfaced "to audit"
+  uomMismatch: boolean; // agreement priced in a different UOM than the invoice line (schema 120) → variance not computed
+  negotiatedUom: string; // the UOM the agreement price is quoted in
   categoryKey: string; // roof-system segment (schema 114)
   audited: boolean;
   auditStatus: string; // passed | pending | disputed
@@ -156,6 +158,8 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       auditable: l.is_auditable !== false, // default true unless the view says otherwise
+      uomMismatch: l.uom_mismatch === true,
+      negotiatedUom: l.negotiated_uom ?? "",
       categoryKey: l.category_key ?? "uncategorized",
       audited: passed,
       auditStatus: a?.audit_status ?? "pending",

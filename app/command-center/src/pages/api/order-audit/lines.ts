@@ -45,6 +45,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     variancePct: l.variance_pct == null ? null : num(l.variance_pct),
     varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
     covered: !!l.covered,
+    uomMismatch: l.uom_mismatch === true,
+    negotiatedUom: l.negotiated_uom ?? "",
     categoryKey: l.category_key ?? "uncategorized",
   })).sort((a, b) => Math.abs(b.variancePct ?? -1) - Math.abs(a.variancePct ?? -1));
 
