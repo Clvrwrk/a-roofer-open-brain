@@ -1,0 +1,99 @@
+# =============================================================================
+# CodeRabbit config — a-roofers-open-brain  (repo override of Cleverwork defaults)
+# -----------------------------------------------------------------------------
+# Canonical template + rationale live in the "Code Rabbit Config" project.
+# This file adds repo-specific review rules that enforce the hard rules in
+# CLAUDE.md / CONVENTIONS.md. Posture matches org default: ADVISORY ONLY.
+#
+# Schema: https://docs.coderabbit.ai/reference/configuration
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# =============================================================================
+
+language: "en-US"
+
+tone_instructions: >
+  Be concise and direct. Prioritize correctness, security, and the repo's hard
+  rules (see CLAUDE.md / CONVENTIONS.md). Lead with the highest-severity issues.
+  No praise padding.
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false   # advisory only — never blocks a merge
+
+  high_level_summary: true
+  review_status: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true        # review on every push (per-commit loop)
+    auto_pause_after_reviewed_commits: 0 # never go silent on busy PRs
+    drafts: false
+    # main is the default branch (always reviewed). Production work converges on
+    # the *-live contrib branches, so review PRs targeting those too.
+    base_branches:
+      - "main"
+      - "contrib/cleverwork/.*-live"
+
+  path_filters:
+    - "!archive/**"          # historical dumps; not for review
+    - "!**/*.excalidraw"
+    - "!**/*.log"
+
+  # --- Hard-rule enforcement (from CLAUDE.md rules 1-11 + CONVENTIONS.md) ------
+  path_instructions:
+    - path: "schemas/**"
+      instructions: |
+        - NO destructive SQL. Flag any DROP TABLE, DROP COLUMN, TRUNCATE, or
+          DELETE-of-atoms against a client brain. Migrations must be additive and
+          idempotent: require ADD COLUMN IF NOT EXISTS, CREATE ... IF NOT EXISTS,
+          CREATE OR REPLACE. Prefer archive/deprecate over delete.
+        - Property-first: atoms describing a place must carry property_id.
+        - Era-aware: atoms describing a code/material/practice must carry
+          era_of_practice and, where known, regulatory_snapshot_id.
+        - Trust-tier discipline: inferred/generated memory defaults to `evidence`;
+          `instruction`-grade requires human confirmation or trusted import.
+        - Do not modify vendored OB1 base schemas under schemas/ob1-base/ except
+          as allowed by their attribution/licence.
+    - path: "supabase/**"
+      instructions: |
+        - Same DB safety rules as schemas/**: additive + idempotent only, never
+          destructive against a client brain. The shared prod Supabase is one DB
+          for dev and live — a destructive change hits production immediately.
+    - path: "{agents,server,integrations,mcp}/**"
+      instructions: |
+        - Enforce the security boundary: the Historian is internal-only (never the
+          public internet); the Researcher is external-only (never the client
+          brain). Flag any code that crosses these.
+        - Consent boundary: cross-client property atoms may move ONLY through the
+          consent-gated read path with anonymization and an atom_access_log entry.
+          Flag any cross-client read that bypasses this.
+        - MCPs are containers only — flag local stdio / local Node MCP servers.
+    - path: "app/**"
+      instructions: |
+        - Live ⇄ Dev alignment: flag work that assumes `main` is the deploy branch
+          without confirmation, and call out anything that would strand a feature
+          on a side branch instead of converging on the live branch.
+    - path: "config/**"
+      instructions: |
+        - Customization belongs in config/roofer.config.yaml. Flag any specific
+          company name, account, or client-specific value hard-coded elsewhere.
+    - path: "**/*.{ts,tsx,js,jsx,py,sql,yaml,yml,env,sh}"
+      instructions: |
+        - No secrets: flag any API key, token, service-role key, password, or PII.
+          Placeholders must be mirrored in config/.env.example.
+        - Clean, professional content only — no profanity in code, comments, docs,
+          prompts, or seed data.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"
+      - "**/CONVENTIONS.md"
+      - "**/AGENTS.md"
+  learnings:
+    scope: "global"
+
+chat:
+  auto_reply: true
