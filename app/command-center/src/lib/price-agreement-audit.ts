@@ -1,99 +1,364 @@
-// Price Agreement Audit — the agreement lifecycle audit. Every negotiated price
-// agreement with its status (active / expiring ≤30d / expired / empty shell),
-// coverage, and renewal urgency, over v_price_agreement_audit (live).
+// Price Agreement Audit — PE Office → Vendor/Branch → Item Category → Item drill-down
+// over the negotiated ABC price agreements (abc_price_agreements + abc_price_list_items),
+// matched to branches via abc_price_agreement_branch_matches and rolled up to the PE
+// office that services each branch (vendor_branches.pricing_territory_office_id).
 //
-// Distinct from Invoice Audit (line variance): this audits the AGREEMENTS
-// themselves. Surfaces the core issue — the item-bearing agreements are expired.
+// Mirrors the Invoice Audit hierarchy so the two dashboards read the same way. Items
+// carry the roof-system category (schema 114). API price lists (agreement_number
+// 'API-%') are non-negotiated: they flag a branch but never contribute drill-down items.
+//
+// KPIs: branch-coverage rate per office (branches with a CURRENT negotiated agreement /
+// total branches assigned to the office), averaged across offices; expired; expiring ≤30d.
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
 export type PaLifecycle = "active" | "expiring" | "expired" | "no_expiry";
 
-export interface PaAgreement {
-  agreementId: number;
+export interface PaItem {
+  itemNumber: string;
+  description: string;
+  uom: string;
+  unitPrice: number;
+  categoryKey: string;
+}
+
+export interface PaCategory {
+  key: string;
+  label: string;
+  sortOrder: number;
+  itemCount: number;
+  items: PaItem[];
+}
+
+export interface PaBranch {
+  branchCode: string;
+  branchName: string;
+  office: string;
+  agreementId: number | null;
   agreementNumber: string;
   versionLabel: string;
-  scope: string;
-  lifecycle: PaLifecycle;
-  staleness: string;
   effective: string;
   expiry: string;
+  lifecycle: PaLifecycle;
   daysToExpiry: number | null;
-  itemCount: number;
-  branchCount: number;
   ceoVerified: boolean;
   salesRep: string;
-  needsAction: boolean;
+  itemCount: number;
+  covered: boolean; // has a current (non-expired) negotiated agreement
+  apiNonNegotiated: boolean; // branch also/only carries an API (non-negotiated) price list
+  needsAction: boolean; // priced + expired/expiring
   renewalRequested: boolean;
   renewalRequestedAt: string;
+  categories: PaCategory[];
+}
+
+export interface PaOffice {
+  office: string;
+  totalBranches: number; // denominator: branches assigned to this office
+  coveredBranches: number; // branches with a current negotiated agreement
+  coverageRate: number; // 0..1
+  matchedBranchCount: number;
+  itemCount: number;
+  expired: number;
+  expiring: number;
+  apiBranches: number;
+  branches: PaBranch[];
 }
 
 export interface PriceAgreementAudit {
   status: "live" | "unconfigured";
   generatedAt: string;
-  agreements: PaAgreement[];
-  totals: { needsAction: number; expired: number; expiring: number; active: number; empty: number; pricedItems: number };
+  offices: PaOffice[];
+  categories: { key: string; label: string; sortOrder: number }[];
+  totals: {
+    coverageAvg: number; // 0..1, averaged across offices with a denominator
+    expired: number;
+    expiring: number;
+    negotiatedAgreements: number;
+    branchesCovered: number;
+    items: number;
+    apiBranches: number;
+    needsAction: number;
+  };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const d10 = (v: unknown) => (v ? String(v).slice(0, 10) : "");
+const normBranch = (v: unknown) => String(v ?? "").trim().replace(/^0+/, "") || String(v ?? "").trim();
+const isApiAgreement = (number: string | null) => /^API-/i.test(number ?? "");
+
+function lifecycleOf(expiry: string): { lifecycle: PaLifecycle; daysToExpiry: number | null } {
+  if (!expiry) return { lifecycle: "no_expiry", daysToExpiry: null };
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+  const exp = new Date(expiry + "T00:00:00Z").getTime();
+  const days = Math.round((exp - today) / 86400000);
+  if (days < 0) return { lifecycle: "expired", daysToExpiry: days };
+  if (days <= 30) return { lifecycle: "expiring", daysToExpiry: days };
+  return { lifecycle: "active", daysToExpiry: days };
+}
 
 export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<PriceAgreementAudit> {
-  const empty: PriceAgreementAudit = { status: "unconfigured", generatedAt: new Date().toISOString(), agreements: [], totals: { needsAction: 0, expired: 0, expiring: 0, active: 0, empty: 0, pricedItems: 0 } };
+  const empty: PriceAgreementAudit = {
+    status: "unconfigured",
+    generatedAt: new Date().toISOString(),
+    offices: [],
+    categories: [],
+    totals: { coverageAvg: 0, expired: 0, expiring: 0, negotiatedAgreements: 0, branchesCovered: 0, items: 0, apiBranches: 0, needsAction: 0 },
+  };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [agRes, reqRes] = await Promise.all([
-    client.from("v_price_agreement_audit").select("*"),
-    client.from("price_refresh_request").select("agreement_id,status,created_at").eq("reason", "agreement_renewal").in("status", ["awaiting_verification", "approved", "ready_to_send", "sent"]),
+  const fetchAll = async (make: () => any): Promise<any[]> => {
+    const PAGE = 1000;
+    let from = 0;
+    const rows: any[] = [];
+    for (;;) {
+      const { data } = await make().range(from, from + PAGE - 1);
+      const batch = (data as any[] | null) ?? [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+    return rows;
+  };
+
+  const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows] = await Promise.all([
+    fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified")),
+    fetchAll(() => client.from("abc_price_agreement_branch_matches").select("abc_price_agreement_id,branch_number,confidence_score")),
+    fetchAll(() => client.from("abc_price_list_items").select("agreement_id,item_number,description,unit,unit_price,category_key")),
+    fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
+    fetchAll(() => client.from("vendor_branches").select("branch_number,branch_name,pricing_territory_office_id,is_active")),
+    fetchAll(() => client.from("office").select("id,name")),
+    fetchAll(() => client.from("price_refresh_request").select("agreement_id,status,created_at").eq("reason", "agreement_renewal").in("status", ["awaiting_verification", "approved", "ready_to_send", "sent"])),
   ]);
-  const rows = (agRes.data as any[] | null) ?? [];
-  if (rows.length === 0) return empty;
+  if (agRows.length === 0) return empty;
 
-  const reqByAgreement = new Map<number, any>();
-  for (const r of (reqRes.data as any[] | null) ?? []) if (r.agreement_id != null) reqByAgreement.set(Number(r.agreement_id), r);
+  const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
+  const catLabel = new Map(categories.map((c) => [c.key, c]));
 
-  const agreements: PaAgreement[] = rows.map((r) => {
-    const itemCount = num(r.item_count);
-    const lifecycle = (r.lifecycle ?? "no_expiry") as PaLifecycle;
-    const needsAction = itemCount > 0 && (lifecycle === "expired" || lifecycle === "expiring");
-    return {
-      agreementId: num(r.agreement_id),
-      agreementNumber: r.agreement_number || `#${r.agreement_id}`,
-      versionLabel: r.version_label || "",
-      scope: r.branch_number ? `Branch ${r.branch_number}` : r.region_code ? `Region ${r.region_code}` : r.abc_account_number ? `Acct ${r.abc_account_number}` : "—",
+  // office id -> name
+  const officeName = new Map<string, string>();
+  for (const o of officeRows) officeName.set(o.id, o.name);
+
+  // normalized branch number -> { name, office, total denominator counts }
+  const branchInfo = new Map<string, { name: string; office: string }>();
+  const officeDenominator = new Map<string, number>(); // office -> total assigned branches
+  for (const vb of vbRows) {
+    const norm = normBranch(vb.branch_number);
+    if (!norm) continue;
+    const office = vb.pricing_territory_office_id ? (officeName.get(vb.pricing_territory_office_id) ?? "Unassigned") : "Unassigned";
+    if (!branchInfo.has(norm)) branchInfo.set(norm, { name: vb.branch_name || `Branch ${norm}`, office });
+    if (vb.pricing_territory_office_id && office !== "Unassigned") officeDenominator.set(office, (officeDenominator.get(office) ?? 0) + 1);
+  }
+
+  // items grouped by agreement id
+  const itemsByAgreement = new Map<number, PaItem[]>();
+  for (const it of itemRows) {
+    const aid = num(it.agreement_id);
+    const list = itemsByAgreement.get(aid) ?? [];
+    list.push({
+      itemNumber: it.item_number ?? "",
+      description: it.description ?? "",
+      uom: it.unit ?? "",
+      unitPrice: num(it.unit_price),
+      categoryKey: it.category_key || "uncategorized",
+    });
+    itemsByAgreement.set(aid, list);
+  }
+
+  // agreement metadata
+  const renewalByAgreement = new Map<number, any>();
+  for (const r of reqRows) if (r.agreement_id != null) renewalByAgreement.set(num(r.agreement_id), r);
+
+  interface AgMeta {
+    id: number;
+    number: string;
+    versionLabel: string;
+    salesRep: string;
+    effective: string;
+    expiry: string;
+    ceoVerified: boolean;
+    lifecycle: PaLifecycle;
+    daysToExpiry: number | null;
+    isApi: boolean;
+    itemCount: number;
+  }
+  const agById = new Map<number, AgMeta>();
+  for (const a of agRows) {
+    const id = num(a.id);
+    const expiry = d10(a.expiry_date);
+    const { lifecycle, daysToExpiry } = lifecycleOf(expiry);
+    agById.set(id, {
+      id,
+      number: a.agreement_number || `#${id}`,
+      versionLabel: a.version_label || "",
+      salesRep: a.sales_rep || "",
+      effective: d10(a.effective_date),
+      expiry,
+      ceoVerified: !!a.ceo_verified,
       lifecycle,
-      staleness: r.staleness_status || "",
-      effective: d10(r.effective_date),
-      expiry: d10(r.expiry_date),
-      daysToExpiry: r.days_to_expiry == null ? null : num(r.days_to_expiry),
+      daysToExpiry,
+      isApi: isApiAgreement(a.agreement_number),
+      itemCount: (itemsByAgreement.get(id) ?? []).length,
+    });
+  }
+
+  // branch (normalized) -> matched agreements
+  const agreementsByBranch = new Map<string, Set<number>>();
+  for (const m of matchRows) {
+    const norm = normBranch(m.branch_number);
+    const aid = num(m.abc_price_agreement_id);
+    if (!norm || !agById.has(aid)) continue;
+    const set = agreementsByBranch.get(norm) ?? new Set<number>();
+    set.add(aid);
+    agreementsByBranch.set(norm, set);
+  }
+
+  // Pick the branch's primary negotiated agreement: prefer a current (non-expired) one
+  // with the most items, else the most recently expired.
+  const pickPrimary = (metas: AgMeta[]): AgMeta | null => {
+    const negotiated = metas.filter((m) => !m.isApi);
+    if (negotiated.length === 0) return null;
+    const current = negotiated.filter((m) => m.lifecycle !== "expired");
+    const pool = current.length ? current : negotiated;
+    return pool.slice().sort((a, b) => {
+      // current first, then most items, then latest expiry
+      const ac = a.lifecycle !== "expired" ? 0 : 1;
+      const bc = b.lifecycle !== "expired" ? 0 : 1;
+      return ac - bc || b.itemCount - a.itemCount || (b.expiry || "").localeCompare(a.expiry || "");
+    })[0];
+  };
+
+  // Distinct branches carrying an API (non-negotiated) price list — counted independently
+  // so the KPI reflects all of them even though API-only branches aren't rendered as rows.
+  const apiBranchSet = new Set<string>();
+  for (const [norm, aidSet] of agreementsByBranch) {
+    if ([...aidSet].some((id) => agById.get(id)?.isApi)) apiBranchSet.add(norm);
+  }
+
+  const branches: PaBranch[] = [];
+  for (const [norm, aidSet] of agreementsByBranch) {
+    const metas = [...aidSet].map((id) => agById.get(id)!).filter(Boolean);
+    const info = branchInfo.get(norm) ?? { name: `Branch ${norm}`, office: "Unassigned" };
+    const apiNonNegotiated = metas.some((m) => m.isApi);
+    const primary = pickPrimary(metas);
+
+    let categoriesOut: PaCategory[] = [];
+    let itemCount = 0;
+    if (primary) {
+      const items = itemsByAgreement.get(primary.id) ?? [];
+      itemCount = items.length;
+      const byCat = new Map<string, PaItem[]>();
+      for (const it of items) (byCat.get(it.categoryKey) ?? (byCat.set(it.categoryKey, []), byCat.get(it.categoryKey)!)).push(it);
+      categoriesOut = [...byCat.entries()]
+        .map(([key, list]) => ({
+          key,
+          label: catLabel.get(key)?.label ?? key,
+          sortOrder: catLabel.get(key)?.sortOrder ?? 998,
+          itemCount: list.length,
+          items: list.sort((a, b) => a.itemNumber.localeCompare(b.itemNumber)),
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+
+    // Render negotiated branches (the auditable catalog) AND API-only branches (flagged,
+    // no items). Skip only branches with no agreement of either kind.
+    if (!primary && !apiNonNegotiated) continue;
+
+    const covered = !!primary && primary.lifecycle !== "expired";
+    const needsAction = !!primary && primary.itemCount > 0 && (primary.lifecycle === "expired" || primary.lifecycle === "expiring");
+    branches.push({
+      branchCode: norm,
+      branchName: info.name,
+      office: info.office,
+      agreementId: primary?.id ?? null,
+      agreementNumber: primary?.number ?? "",
+      versionLabel: primary?.versionLabel ?? "",
+      effective: primary?.effective ?? "",
+      expiry: primary?.expiry ?? "",
+      lifecycle: primary?.lifecycle ?? "no_expiry",
+      daysToExpiry: primary?.daysToExpiry ?? null,
+      ceoVerified: primary?.ceoVerified ?? false,
+      salesRep: primary?.salesRep ?? "",
       itemCount,
-      branchCount: num(r.branch_count),
-      ceoVerified: !!r.ceo_verified,
-      salesRep: r.sales_rep || "",
+      covered,
+      apiNonNegotiated,
       needsAction,
-      renewalRequested: reqByAgreement.has(num(r.agreement_id)),
-      renewalRequestedAt: reqByAgreement.get(num(r.agreement_id))?.created_at ? String(reqByAgreement.get(num(r.agreement_id)).created_at).slice(0, 10) : "",
-    };
+      renewalRequested: primary ? renewalByAgreement.has(primary.id) : false,
+      renewalRequestedAt: primary && renewalByAgreement.get(primary.id)?.created_at ? String(renewalByAgreement.get(primary.id).created_at).slice(0, 10) : "",
+      categories: categoriesOut,
+    });
+  }
+
+  // Group branches into offices. Item counts are over DISTINCT agreements (an agreement
+  // covering N branches is one catalog, not N) so office/total item counts aren't inflated.
+  const officeMap = new Map<string, PaOffice>();
+  const officeAgIds = new Map<string, Set<number>>();
+  for (const br of branches) {
+    let off = officeMap.get(br.office);
+    if (!off) {
+      off = {
+        office: br.office,
+        totalBranches: officeDenominator.get(br.office) ?? 0,
+        coveredBranches: 0,
+        coverageRate: 0,
+        matchedBranchCount: 0,
+        itemCount: 0,
+        expired: 0,
+        expiring: 0,
+        apiBranches: 0,
+        branches: [],
+      };
+      officeMap.set(br.office, off);
+      officeAgIds.set(br.office, new Set<number>());
+    }
+    off.branches.push(br);
+    off.matchedBranchCount++;
+    if (br.agreementId) officeAgIds.get(br.office)!.add(br.agreementId);
+    if (br.covered) off.coveredBranches++;
+    if (br.lifecycle === "expired") off.expired++;
+    if (br.lifecycle === "expiring") off.expiring++;
+    if (br.apiNonNegotiated) off.apiBranches++;
+  }
+
+  const offices = [...officeMap.values()].map((o) => {
+    o.itemCount = [...(officeAgIds.get(o.office) ?? [])].reduce((s, id) => s + (agById.get(id)?.itemCount ?? 0), 0);
+    // Denominator falls back to matched branches when the office has no assigned-branch count.
+    const denom = o.totalBranches || o.matchedBranchCount;
+    o.totalBranches = denom;
+    o.coverageRate = denom > 0 ? o.coveredBranches / denom : 0;
+    o.branches.sort((a, b) => {
+      const rank = (x: PaBranch) => (x.needsAction && x.lifecycle === "expired" ? 0 : x.needsAction ? 1 : x.covered ? 2 : 3);
+      return rank(a) - rank(b) || b.itemCount - a.itemCount || a.branchName.localeCompare(b.branchName);
+    });
+    return o;
+  });
+  // Real offices first (by coverage), Unassigned last.
+  offices.sort((a, b) => {
+    if (a.office === "Unassigned") return 1;
+    if (b.office === "Unassigned") return -1;
+    return b.coverageRate - a.coverageRate || b.itemCount - a.itemCount;
   });
 
-  // Sort: urgent (item-bearing expired) first, then expiring, then by items.
-  const rank = (a: PaAgreement) => (a.needsAction && a.lifecycle === "expired" ? 0 : a.needsAction ? 1 : a.itemCount > 0 ? 2 : 3);
-  agreements.sort((a, b) => rank(a) - rank(b) || b.itemCount - a.itemCount || (a.daysToExpiry ?? 0) - (b.daysToExpiry ?? 0));
+  const coverageOffices = offices.filter((o) => o.office !== "Unassigned" && o.totalBranches > 0);
+  const coverageAvg = coverageOffices.length ? coverageOffices.reduce((s, o) => s + o.coverageRate, 0) / coverageOffices.length : 0;
 
-  const itemBearing = agreements.filter((a) => a.itemCount > 0);
   return {
     status: "live",
     generatedAt: new Date().toISOString(),
-    agreements,
+    offices,
+    categories,
     totals: {
-      needsAction: agreements.filter((a) => a.needsAction).length,
-      expired: itemBearing.filter((a) => a.lifecycle === "expired").length,
-      expiring: itemBearing.filter((a) => a.lifecycle === "expiring").length,
-      active: itemBearing.filter((a) => a.lifecycle === "active" || a.lifecycle === "no_expiry").length,
-      empty: agreements.filter((a) => a.itemCount === 0).length,
-      pricedItems: agreements.reduce((s, a) => s + a.itemCount, 0),
+      coverageAvg,
+      expired: branches.filter((b) => b.agreementId && b.lifecycle === "expired").length,
+      expiring: branches.filter((b) => b.agreementId && b.lifecycle === "expiring").length,
+      negotiatedAgreements: [...agById.values()].filter((a) => !a.isApi && a.itemCount > 0).length,
+      branchesCovered: branches.filter((b) => b.covered).length,
+      // Distinct negotiated line items actually surfaced (one agreement counted once).
+      items: [...new Set(branches.map((b) => b.agreementId).filter((id): id is number => id != null))].reduce((s, id) => s + (agById.get(id)?.itemCount ?? 0), 0),
+      apiBranches: apiBranchSet.size,
+      needsAction: branches.filter((b) => b.needsAction).length,
     },
   };
 }

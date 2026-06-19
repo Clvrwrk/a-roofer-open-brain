@@ -6,29 +6,30 @@ const data = await loadPriceAgreementAudit();
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
-
-const lifeCls = (l: string) => (l === "expired" ? "pill-red" : l === "expiring" ? "pill-orange" : l === "active" ? "pill-green" : "pill-grey");
-const lifeLab = (l: string) => (l === "expired" ? "Expired" : l === "expiring" ? "Expiring" : l === "active" ? "Active" : "No expiry");
-const daysLabel = (a: { lifecycle: string; daysToExpiry: number | null }) =>
-  a.daysToExpiry == null ? "—" : a.lifecycle === "expired" ? `${Math.abs(a.daysToExpiry)}d ago` : `${a.daysToExpiry}d left`;
-const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
+const offices = data.offices.map((o) => o.office);
+const pct = (n: number) => Math.round(n * 100) + "%";
+const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Price Agreement Audit" eyebrow="Accounting" activePage="pricing">
   <section class="pa" data-theme="light" data-pref="system">
     <div class="pa-toolbar">
-      <input class="pa-input" id="pa-search" type="search" placeholder="Search agreement, scope, rep…" autocomplete="off" />
+      <input class="pa-input" id="pa-search" type="search" placeholder="Search branch, agreement, item…" autocomplete="off" />
+      <select class="pa-select" id="pa-office">
+        <option value="">All PE offices</option>
+        {offices.map((o) => <option value={o}>{o}</option>)}
+      </select>
       <select class="pa-select" id="pa-filter">
+        <option value="">All branches</option>
         <option value="needs">Needs renewal</option>
-        <option value="expired">Expired (priced)</option>
+        <option value="expired">Expired</option>
         <option value="expiring">Expiring ≤30d</option>
-        <option value="active">Active (priced)</option>
-        <option value="empty">Empty shells</option>
-        <option value="">All agreements</option>
+        <option value="active">Active (covered)</option>
+        <option value="api">API · non-negotiated</option>
       </select>
       <span class="pa-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
-      <span class="pa-count" id="pa-count">{generatedAt}</span>
+      <span class="pa-count">{generatedAt}</span>
       <div class="pa-theme" role="group" aria-label="Theme">
         <button type="button" data-set-theme="system" class="is-active">System</button>
         <button type="button" data-set-theme="light">Light</button>
@@ -37,19 +38,15 @@ const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
     </div>
 
     <div class="pa-kpis">
-      <div class="pa-kpi"><span class="pa-kpi-lab">Needs Renewal</span><span class="pa-kpi-val">{data.totals.needsAction}</span><span class="pa-kpi-sub">priced + expired/expiring</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Expired (priced)</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">item-bearing, past expiry</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Coverage Rate</span><span class="pa-kpi-val">{pct(data.totals.coverageAvg)}</span><span class="pa-kpi-sub">avg per PE office · branches with a current agreement</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Expired</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">branches with a lapsed agreement</span></div>
       <div class="pa-kpi"><span class="pa-kpi-lab">Expiring ≤30d</span><span class="pa-kpi-val">{data.totals.expiring}</span><span class="pa-kpi-sub">renew before lapse</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Active (priced)</span><span class="pa-kpi-val">{data.totals.active}</span><span class="pa-kpi-sub">in effect with items</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Priced Items</span><span class="pa-kpi-val">{data.totals.pricedItems.toLocaleString()}</span><span class="pa-kpi-sub">{data.totals.empty} empty agreements</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Negotiated Agreements</span><span class="pa-kpi-val">{data.totals.negotiatedAgreements}</span><span class="pa-kpi-sub">{data.totals.apiBranches} branches API · non-negotiated</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Priced Items</span><span class="pa-kpi-val">{data.totals.items.toLocaleString()}</span><span class="pa-kpi-sub">negotiated line items in scope</span></div>
     </div>
 
-    {data.agreements.length === 0 && <p class="pa-empty">No price agreements found.</p>}
-
-    <table class="pa-table" id="pa-table">
-      <thead><tr><th>Agreement</th><th>Scope</th><th>Status</th><th>Effective → Expiry</th><th class="num">Days</th><th class="num">Items</th><th class="num">Branches</th><th>Sales Rep</th><th></th></tr></thead>
-      <tbody id="pa-rows"></tbody>
-    </table>
+    {data.offices.length === 0 && <p class="pa-empty">No price agreements found in the live pipeline.</p>}
+    <div id="pa-tree"></div>
   </section>
 
   <script type="application/json" id="pa-data" set:html={payload}></script>
@@ -70,107 +67,63 @@ const payload = JSON.stringify(data.agreements).replace(/</g, "\\u003c");
     --brand:#8a7bff; --brand-bg:#21243f; --green:#7ee2ad; --green-bg:#123626; --yellow:#f2cf6b; --yellow-bg:#3a3115;
     --orange:#f3a766; --orange-bg:#3d2913; --red:#ff8585; --red-bg:#3d1a1a; --grey:#9aa6b4; --grey-bg:#222c38; --shadow:0 6px 18px rgba(0,0,0,.4);
   }
-  .pa .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+  .pa .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5}
   .pa .pill-green{background:var(--green-bg);color:var(--green)} .pa .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
-  .pa .pill-orange{background:var(--orange-bg);color:var(--orange)} .pa .pill-red{background:var(--red-bg);color:var(--red)} .pa .pill-grey{background:var(--grey-bg);color:var(--grey)}
+  .pa .pill-orange{background:var(--orange-bg);color:var(--orange)} .pa .pill-red{background:var(--red-bg);color:var(--red)}
+  .pa .pill-grey{background:var(--grey-bg);color:var(--grey)} .pa .pill-brand{background:var(--brand-bg);color:var(--brand)}
+
   .pa-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .pa-input,.pa-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
   .pa-input{min-width:240px} .pa-spacer{flex:1} .pa-count{font-size:12px;color:var(--muted)} .pa-empty{color:var(--muted);padding:14px 4px}
   .pa-theme{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
   .pa-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
   .pa-theme button.is-active{background:var(--brand);color:#fff}
+
   .pa-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   .pa-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
   .pa-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .pa-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
   .pa-kpi-sub{font-size:11px;color:var(--muted)}
-  .pa-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .pa-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
-  .pa-table td{padding:9px 11px;border-bottom:1px solid var(--line);font-size:12.5px}
-  .pa-table td.num{text-align:right;font-variant-numeric:tabular-nums}
-  .pa-ag{font-weight:650} .pa-ver{color:var(--muted);font-size:11px}
+
+  .pa-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .pa-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .pa-office>summary::-webkit-details-marker{display:none}
+  .pa-chev{color:var(--muted);transition:transform .15s;font-size:15px}
+  details[open]>summary .pa-chev{transform:rotate(90deg)}
+  .pa-office-name{font-weight:750;font-size:15px;flex:1}
+  .pa-mini{display:flex;gap:16px}
+  .pa-mini div{text-align:center}
+  .pa-mini strong{display:block;font-size:15px;font-weight:750;font-variant-numeric:tabular-nums}
+  .pa-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .pa-office-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  .pa-branch{border:1px solid var(--line);border-radius:11px;margin:10px 0;background:var(--panel2)}
+  .pa-branch>summary{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .pa-branch>summary::-webkit-details-marker{display:none}
+  .pa-branch-id{display:inline-flex;align-items:baseline;gap:6px}
+  .pa-branch-name{font-weight:700;font-size:13.5px}
+  .pa-sub{color:var(--muted);font-size:11.5px}
+  .pa-branch-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .pa-branch-body{padding:4px 8px 10px}
   .pa-renew{appearance:none;border:1px solid var(--brand);background:var(--brand-bg);color:var(--brand);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:650;cursor:pointer;font-family:inherit;white-space:nowrap}
   .pa-renew:hover{filter:brightness(.97)}
+
+  .pa-cats{margin-top:6px}
+  .pa-disp-lead{font-size:12.5px;color:var(--muted);padding:8px 6px}
+  .pa-cat{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel)}
+  .pa-cat>summary{display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;list-style:none}
+  .pa-cat>summary::-webkit-details-marker{display:none}
+  .pa-cat>summary b{font-size:12.5px}
+  .pa-cat-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .pa-itable{width:100%;border-collapse:collapse;margin:0 8px 8px}
+  .pa-itable thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .pa-itable td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .pa-itable td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pa-sku{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+
   .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .ia-toast.show{opacity:1}
-  @media (max-width:1100px){ .pa-kpis{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:1100px){ .pa-kpis{grid-template-columns:repeat(2,1fr)} .pa-mini{gap:10px} }
 </style>
 
-<script>
-  const root = document.querySelector(".pa") as HTMLElement | null;
-  const dataEl = document.getElementById("pa-data");
-  const tbody = document.getElementById("pa-rows");
-  if (root && dataEl && tbody) {
-    const ags = JSON.parse(dataEl.textContent || "[]");
-    const esc = (s: string) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
-    const lifeCls = (l: string) => (l === "expired" ? "pill-red" : l === "expiring" ? "pill-orange" : l === "active" ? "pill-green" : "pill-grey");
-    const lifeLab = (l: string) => (l === "expired" ? "Expired" : l === "expiring" ? "Expiring" : l === "active" ? "Active" : "No expiry");
-    const days = (a: any) => (a.daysToExpiry == null ? "—" : a.lifecycle === "expired" ? `${Math.abs(a.daysToExpiry)}d ago` : `${a.daysToExpiry}d left`);
-    const stale = (s: string) => (s ? `<span class="pill ${s === "critical" ? "pill-red" : s === "serious" ? "pill-orange" : s === "problem" ? "pill-yellow" : "pill-grey"}">${esc(s)}</span>` : "");
-
-    const search = document.getElementById("pa-search") as HTMLInputElement;
-    const filter = document.getElementById("pa-filter") as HTMLSelectElement;
-    const countEl = document.getElementById("pa-count")!;
-
-    function row(a: any): string {
-      return `<tr data-search="${esc((a.agreementNumber + " " + a.scope + " " + a.salesRep).toLowerCase())}">
-        <td><span class="pa-ag">${esc(a.agreementNumber)}</span>${a.ceoVerified ? ' <span class="pill pill-green">CEO ✓</span>' : ""}<br><span class="pa-ver">${esc(a.versionLabel)}</span></td>
-        <td>${esc(a.scope)}</td>
-        <td><span class="pill ${lifeCls(a.lifecycle)}">${lifeLab(a.lifecycle)}</span> ${stale(a.staleness)}</td>
-        <td>${a.effective || "—"} → ${a.expiry || "∞"}</td>
-        <td class="num">${days(a)}</td>
-        <td class="num">${a.itemCount.toLocaleString()}</td>
-        <td class="num">${a.branchCount}</td>
-        <td>${esc(a.salesRep) || "—"}</td>
-        <td>${a.renewalRequested
-          ? `<span class="pill pill-yellow">Renewal requested${a.renewalRequestedAt ? " · " + a.renewalRequestedAt : ""}</span>`
-          : (a.needsAction || a.lifecycle === "expiring")
-            ? `<button class="pa-renew" data-renew="${a.agreementId}">Request renewal</button>`
-            : ""}</td>
-      </tr>`;
-    }
-
-    function visible(a: any): boolean {
-      const f = filter.value;
-      if (f === "needs") return a.needsAction;
-      if (f === "expired") return a.itemCount > 0 && a.lifecycle === "expired";
-      if (f === "expiring") return a.lifecycle === "expiring";
-      if (f === "active") return a.itemCount > 0 && (a.lifecycle === "active" || a.lifecycle === "no_expiry");
-      if (f === "empty") return a.itemCount === 0;
-      return true;
-    }
-    function render() {
-      const q = search.value.trim().toLowerCase();
-      const list = ags.filter((a: any) => visible(a) && (!q || (a.agreementNumber + " " + a.scope + " " + a.salesRep).toLowerCase().includes(q)));
-      tbody!.innerHTML = list.map(row).join("") || `<tr><td colspan="9" style="color:var(--muted);padding:16px">No agreements match.</td></tr>`;
-      countEl.textContent = `${list.length} of ${ags.length} agreements`;
-      tbody!.querySelectorAll<HTMLButtonElement>("[data-renew]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          const id = Number(b.dataset.renew);
-          const a = ags.find((x: any) => x.agreementId === id);
-          b.disabled = true; b.textContent = "Requesting…";
-          try {
-            const res = await fetch("/api/price-agreement/request-renewal", {
-              method: "POST", headers: { "content-type": "application/json" },
-              body: JSON.stringify({ agreementId: id, agreementNumber: a?.agreementNumber, scope: a?.scope, salesRep: a?.salesRep, expiry: a?.expiry }),
-            });
-            const r = await res.json();
-            if (r.ok) { if (a) { a.renewalRequested = true; a.renewalRequestedAt = (r.record?.created_at || "").slice(0, 10); } render(); toast("Renewal request drafted for " + (a?.agreementNumber || id) + " — queued for approval (no auto-send)"); }
-            else { b.disabled = false; b.textContent = "Request renewal"; toast("Failed: " + (r.error_description || r.error || "error")); }
-          } catch { b.disabled = false; b.textContent = "Request renewal"; toast("Network error"); }
-        }));
-    }
-    [search, filter].forEach((el) => el.addEventListener("input", render));
-    render();
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    function applyTheme(p: string) { root!.dataset.theme = p === "system" ? (mq.matches ? "dark" : "light") : p; root!.dataset.pref = p; root!.querySelectorAll<HTMLButtonElement>(".pa-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === p)); }
-    let pref = "system"; try { pref = localStorage.getItem("paTheme") || "system"; } catch {}
-    applyTheme(pref);
-    root.querySelectorAll<HTMLButtonElement>(".pa-theme button").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem("paTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
-    mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
-
-    let timer: number | undefined; const toastEl = document.getElementById("pa-toast")!;
-    function toast(m: string) { toastEl.textContent = m; toastEl.classList.add("show"); window.clearTimeout(timer); timer = window.setTimeout(() => toastEl.classList.remove("show"), 2600); }
-  }
-</script>
+<script src="/src/scripts/price-agreement-tree.ts"></script>
