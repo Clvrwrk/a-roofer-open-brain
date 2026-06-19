@@ -107,11 +107,13 @@ const PAGE_SIZE = 1000;
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
 
-async function selectAll<T = any>(client: SupabaseClient, table: string, columns: string): Promise<T[]> {
+async function selectAll<T = any>(client: SupabaseClient, table: string, columns: string, modify?: (q: any) => any): Promise<T[]> {
   const rows: T[] = [];
   let from = 0;
   for (;;) {
-    const { data, error } = await client.from(table).select(columns).range(from, from + PAGE_SIZE - 1);
+    let q = client.from(table).select(columns);
+    if (modify) q = modify(q);
+    const { data, error } = await q.range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(`${table}: ${error.message}`);
     const batch = (data ?? []) as T[];
     rows.push(...batch);
@@ -120,7 +122,11 @@ async function selectAll<T = any>(client: SupabaseClient, table: string, columns
   }
 }
 
-export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<OrderAuditData> {
+// scope "active" (default) loads only the catchable window — 181 orders + their lines —
+// which is the page default and keeps load fast. "all" pulls archived too (heavier; only
+// when the user explicitly opens archived/all). Lines are scoped to the loaded orders so we
+// never fetch the full 18.6k-line set just to render a summary tree.
+export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "active" | "all" = "active"): Promise<OrderAuditData> {
   const empty: OrderAuditData = {
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
@@ -131,41 +137,27 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [ordRows, lineRows, matchRows, catRows] = await Promise.all([
-    selectAll<any>(client, "v_order_audit_order", "*"),
-    selectAll<any>(client, "v_order_audit_line", "*"),
+  const activeOnly = scope !== "all";
+  const [ordRows, matchRows, catRows, archivedCountRes] = await Promise.all([
+    selectAll<any>(client, "v_order_audit_order", "*", activeOnly ? (q) => q.eq("disposition", "active") : undefined),
     selectAll<any>(client, "v_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched"),
     selectAll<any>(client, "roof_system_category", "key,label,sort_order"),
+    // archived count for the KPI sub-line (active scope doesn't load archived orders)
+    activeOnly ? client.from("v_order_audit_order").select("order_number", { count: "exact", head: true }).eq("disposition", "archived") : Promise.resolve({ count: 0 } as any),
   ]);
   const categories = catRows
     .map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }))
     .sort((a, b) => a.sortOrder - b.sortOrder);
   if (ordRows.length === 0) return empty;
+  const archivedCount = num((archivedCountRes as any)?.count);
 
   const matchByOrder = new Map<string, any>();
   for (const m of matchRows) matchByOrder.set(m.order_number, m);
 
-  const linesByOrder = new Map<string, OrdLine[]>();
-  for (const l of lineRows) {
-    const list = linesByOrder.get(l.order_number) ?? [];
-    list.push({
-      lineId: l.line_id,
-      lineKey: l.line_key ?? "",
-      itemNumber: l.item_number ?? "",
-      itemDescription: l.item_description ?? "",
-      qty: num(l.quantity),
-      uom: l.uom ?? "",
-      unitPrice: num(l.unit_price),
-      extendedPrice: num(l.extended_price),
-      negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
-      variancePct: l.variance_pct == null ? null : num(l.variance_pct),
-      varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
-      covered: !!l.covered,
-      categoryKey: l.category_key ?? "uncategorized",
-    });
-    linesByOrder.set(l.order_number, list);
-  }
-
+  // Lines are NOT loaded here — the tree lazy-fetches them per order via
+  // /api/order-audit/lines on expand, so the summary tree renders fast without the
+  // full 18.6k-line set. Per-order rollups (line_count, at_risk, flagged) come from
+  // v_order_audit_order, so the summary + KPIs are complete.
   const orders: Order[] = ordRows.map((o) => {
     const m = matchByOrder.get(o.order_number);
     const matched = !!m?.matched;
@@ -193,8 +185,7 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       jobNumber: matched ? m?.pe_job_number ?? "" : "",
       clientName: matched ? m?.client_name ?? "" : "",
       jobCategory: matched ? m?.job_category_name ?? "" : "",
-      // Worst variance first so the pricing issues surface at the top of the line table.
-      lines: (linesByOrder.get(o.order_number) ?? []).sort((a, b) => Math.abs(b.variancePct ?? -1) - Math.abs(a.variancePct ?? -1)),
+      lines: [], // lazy-loaded on expand via /api/order-audit/lines
     };
   });
 
@@ -254,9 +245,9 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     offices,
     categories,
     totals: {
-      orders: orders.length,
+      orders: activeOnly ? active.length + archivedCount : orders.length,
       active: active.length,
-      archived: orders.length - active.length,
+      archived: activeOnly ? archivedCount : orders.length - active.length,
       matched: active.filter((o) => o.matched).length,
       orderTotal: Math.round(active.reduce((s, o) => s + o.orderTotal, 0)),
       atRisk: Math.round(active.reduce((s, o) => s + o.atRisk, 0)),

@@ -1,8 +1,12 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
 import { loadOrderAudit } from "@lib/order-audit";
+import { getRuntimeEnv } from "@lib/runtime-env";
 
-const data = await loadOrderAudit();
+// Default to the fast "active" window; "archived"/all need the heavier full load.
+const statusParam = Astro.url.searchParams.get("status") ?? "active";
+const scope: "active" | "all" = statusParam === "active" ? "active" : "all";
+const data = await loadOrderAudit(getRuntimeEnv(), scope);
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
@@ -23,9 +27,9 @@ const cutoff = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric"
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
       <select class="iv-select" id="iv-status">
-        <option value="active">Active (last 60 days)</option>
-        <option value="archived">Archived (invoiced / aged)</option>
-        <option value="">All orders</option>
+        <option value="active" selected={statusParam === "active"}>Active (last 60 days)</option>
+        <option value="archived" selected={statusParam === "archived"}>Archived (invoiced / aged)</option>
+        <option value="" selected={statusParam === ""}>All orders</option>
       </select>
       <select class="iv-select" id="iv-tol">
         <option value="">All tolerance</option>

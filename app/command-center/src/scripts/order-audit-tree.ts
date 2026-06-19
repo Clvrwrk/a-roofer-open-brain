@@ -96,7 +96,7 @@ if (root && dataEl && mount) {
   function orderNode(ord: Order): string {
     const job = ord.matched ? ` · <span class="iv-job">${esc(ord.jobNumber)}${ord.clientName ? " · " + esc(ord.clientName) : ""}${ord.jobCategory ? " · " + esc(ord.jobCategory) : ""}</span>` : "";
     const dates = [ord.orderedOn, ord.deliveryRequestedFor ? "→ " + ord.deliveryRequestedFor : ""].filter(Boolean).join(" ");
-    const search = (ord.orderNumber + " " + ord.po + " " + ord.jobNumber + " " + ord.clientName + " " + ord.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase();
+    const search = (ord.orderNumber + " " + ord.po + " " + ord.jobNumber + " " + ord.clientName).toLowerCase();
     return `
       <details class="iv-inv" data-search="${esc(search)}" data-matched="${ord.matched ? "1" : "0"}" data-disp="${ord.disposition}" data-worst="${ord.worstPct}" data-noprice="${ord.uncoveredLines}">
         <summary>
@@ -148,14 +148,24 @@ if (root && dataEl && mount) {
   const ordByNumber = new Map<string, Order>();
   offices.forEach((o) => o.branches.forEach((b) => b.orders.forEach((ord) => ordByNumber.set(ord.orderNumber, ord))));
   mount.querySelectorAll<HTMLDetailsElement>(".iv-inv").forEach((det) => {
-    det.addEventListener("toggle", () => {
+    det.addEventListener("toggle", async () => {
       if (!det.open) return;
       const body = det.querySelector(".iv-inv-body") as HTMLElement;
       if (body.dataset.rendered) return;
+      body.dataset.rendered = "1"; // guard against double-fetch on rapid toggles
       const ord = ordByNumber.get(body.dataset.ord!);
       if (!ord) return;
-      body.innerHTML = orderBody(ord);
-      body.dataset.rendered = "1";
+      body.innerHTML = '<p class="iv-disp-lead">Loading lines…</p>';
+      try {
+        const res = await fetch(`/api/order-audit/lines?order=${encodeURIComponent(ord.orderNumber)}`);
+        const r = await res.json();
+        if (!r.ok) { body.innerHTML = `<p class="iv-disp-lead">Could not load lines: ${esc(r.error_description || r.error || "error")}</p>`; return; }
+        ord.lines = r.lines || [];
+        body.innerHTML = orderBody(ord);
+      } catch {
+        body.innerHTML = '<p class="iv-disp-lead">Could not load lines — network error.</p>';
+        body.dataset.rendered = ""; // allow retry on next open
+      }
     });
   });
 
@@ -195,7 +205,14 @@ if (root && dataEl && mount) {
       oEl.style.display = officeHas ? "" : "none";
     });
   }
-  [search, officeSel, statusSel, tolSel, matchSel].forEach((el) => el?.addEventListener("input", applyFilter));
+  [search, officeSel, tolSel, matchSel].forEach((el) => el?.addEventListener("input", applyFilter));
+  // Status changes the server-side load scope (active = fast 181-order window; archived/all
+  // = heavier full load), so reload with ?status= rather than filter client-side.
+  statusSel?.addEventListener("change", () => {
+    const p = new URLSearchParams(window.location.search);
+    p.set("status", statusSel.value);
+    window.location.search = p.toString();
+  });
   applyFilter();
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */
