@@ -29,6 +29,7 @@ The deployable template for a single roofing company's persistent, property-firs
 ## Working style
 
 - **UOM & pricing (read before touching any price comparison):** compare invoice/order prices to agreements in ONE unit — ABC's pricing UOM (`priceQty.uom`, e.g. SQ). Canonical effective price = `abc_invoice_lines.price_per_uom` (`extendedPriceAmount ÷ priceQty.value`); align orders via `v_item_uom_map`; never compare on `quantity`/`uom`/`unit_price`/`effective_unit_price`/`pricePerUnitAmount`. Full contract: [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md) (migrations 119–122, 2026-06-19).
+- **Agent access to the live site:** `cc.proexteriorsus.net` is WorkOS-gated; agents authenticate to `/api/*` routes with `Authorization: Bearer <service-token>` (the HTML dashboards stay human-only). Canonical reference: the **`/workos-agent-auth`** skill (`.claude/skills/workos-agent-auth/`).
 - Diagram-first docs where it helps: diagram → short explanation → copy-paste setup → deeper reference.
 - Keep the customization surface in `config/roofer.config.yaml`. Don't hard-code a specific company anywhere else.
 - Parallel agents: one git worktree per workstream. See [`AGENTS.md`](AGENTS.md). The assigned path is the boundary.

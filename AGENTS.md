@@ -4,6 +4,8 @@ Two kinds of agents run per client brain: **vertical** (client-facing in Slack) 
 
 > **Pricing/UOM invariant (Accounting + Ops agents):** every invoice/order vs price-agreement comparison happens in ABC's pricing UOM (`priceQty.uom`, e.g. SQ). Use `abc_invoice_lines.price_per_uom` and `v_item_uom_map`; never compare on the raw `quantity`/`uom`/`unit_price`/`pricePerUnitAmount` fields. See [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
 
+> **Reaching the live site:** the Command Center (`cc.proexteriorsus.net`) is WorkOS-gated; agents read live data via `/api/*` with an `Authorization: Bearer <service-token>` (HTML pages are human-only). Canonical how-to: the **`/workos-agent-auth`** skill.
+
 ## The 13-agent workforce
 
 ### Vertical (5) — client-facing, mentioned in Slack
