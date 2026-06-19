@@ -4,6 +4,9 @@
    Invoice numbers bias toward the four present in the invoice-audit screen
    so the "Open audit →" deep-links round-trip and auto-open the invoice. */
 
+import { createServerSupabaseClient } from "@lib/supabase.server";
+import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
+
 export type AuditCol = {
   key: string;
   label: string;
@@ -395,3 +398,75 @@ export const avgResolutionPayload: AuditQueuePayload = {
   themeKey: "aqResolutionTheme",
   years: AUDIT_YEARS,
 };
+
+/* ============ LIVE Credit Memos queue (v_credit_memo_audit, schema 115) ============ */
+const cmMatchMeta: Record<string, { reason: string; status: string; cls: string }> = {
+  matches: { reason: "Matches original — ready to approve", status: "Matches", cls: "pill-green" },
+  mismatch: { reason: "Price differs from original — review", status: "Mismatch", cls: "pill-red" },
+  partial: { reason: "Some items not on original invoice", status: "Partial", cls: "pill-yellow" },
+  no_reference: { reason: "No original invoice reference", status: "No reference", cls: "pill-grey" },
+};
+
+// Live replacement for the mock creditMemosPayload. Each row is a real credit memo with its
+// resolved original invoice and per-line unit-price match status, so a CM that matches its
+// original can be approved quickly. Read-only; no write/disposition path yet.
+export async function loadCreditMemoQueue(env: RuntimeEnv = getRuntimeEnv()): Promise<AuditQueuePayload> {
+  const { client } = createServerSupabaseClient(env);
+  let raw: any[] = [];
+  if (client) {
+    const { data } = await client.from("v_credit_memo_audit").select("*").order("invoice_date", { ascending: false });
+    raw = (data as any[] | null) ?? [];
+  }
+  const now = Date.now();
+  const rows = raw.map((r) => {
+    const meta = cmMatchMeta[r.match_status] ?? cmMatchMeta.no_reference;
+    const amount = Math.abs(Number(r.credit_amount) || 0);
+    const age = r.invoice_date ? Math.max(0, Math.round((now - new Date(r.invoice_date).getTime()) / 864e5)) : 0;
+    return {
+      memo: r.invoice_number,
+      invoice: r.original_invoice_number ?? r.original_invoice_reference ?? "—",
+      branch: r.branch_name ?? "",
+      account: r.ship_to_number ?? "",
+      amount,
+      lines: `${r.matched_lines ?? 0}/${r.line_count ?? 0} match`,
+      reason: meta.reason,
+      status: meta.status,
+      statusCls: meta.cls,
+      amountCls: meta.cls,
+      age,
+      ageTone: ageTone(age),
+      auditHref: `/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`,
+    };
+  });
+  const sum = (pred: (r: any) => boolean) => rows.filter(pred).reduce((s, r) => s + r.amount, 0);
+  return {
+    searchKeys: ["memo", "invoice", "branch", "account", "reason", "status"],
+    filters: [
+      { id: "status", label: "All statuses", col: "status", options: ["Matches", "Mismatch", "Partial", "No reference"].map((v) => ({ value: v, label: v })) },
+      { id: "branch", label: "All branches", col: "branch", options: opts(rows.map((r) => r.branch)) },
+    ],
+    kpis: [
+      { lab: "Credit Memos", val: String(rows.length), go: "All memos" },
+      { lab: "$ Credit", val: "$" + (rows.reduce((s, r) => s + r.amount, 0) / 1000).toFixed(1) + "k", go: "Total →" },
+      { lab: "Matches Original", val: String(rows.filter((r) => r.status === "Matches").length), go: "Approve →", filterCol: "status", filterVal: "Matches" },
+      { lab: "Needs Review", val: String(rows.filter((r) => r.status === "Mismatch").length), go: "Review →", filterCol: "status", filterVal: "Mismatch" },
+      { lab: "$ Mismatch", val: "$" + sum((r) => r.status === "Mismatch").toFixed(0), go: "Disputed →" },
+      { lab: "No Reference", val: String(rows.filter((r) => r.status === "No reference").length), go: "Manual →", filterCol: "status", filterVal: "No reference" },
+    ],
+    columns: [
+      { key: "memo", label: "Credit Memo #", render: "mono", sort: true },
+      { key: "invoice", label: "Original Invoice", render: "mono", sort: true },
+      { key: "branch", label: "Branch", subKey: "account", sort: true },
+      { key: "amount", label: "Credit", align: "num", sort: true, render: "pillMoney", clsKey: "amountCls" },
+      { key: "lines", label: "Lines", sort: true },
+      { key: "reason", label: "Match", sort: true },
+      { key: "age", label: "Age", align: "num", sort: true, render: "days", toneKey: "ageTone" },
+      { key: "status", label: "Status", sort: true, render: "pill", clsKey: "statusCls" },
+      { key: "_a", label: "", sort: false, render: "action" },
+    ],
+    rows,
+    countNoun: "memos",
+    defaultSort: { key: "age", dir: -1 },
+    themeKey: "aqCreditMemoTheme",
+  };
+}

@@ -1,7 +1,9 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import AuditQueue from "../../../components/audit/AuditQueue.astro";
-import { creditMemosPayload } from "@lib/audit-queues";
+import { loadCreditMemoQueue } from "@lib/audit-queues";
+
+const creditMemosPayload = await loadCreditMemoQueue();
 ---
 
 <AppShell title="Credit Memo Requests" eyebrow="Accounting · Invoice Audit" activePage="accounting">
