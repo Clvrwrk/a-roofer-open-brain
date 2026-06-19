@@ -89,6 +89,9 @@ as well. **Interim:** the invoice **PDF** (`GET /api/invoice/v1/invoices/pdf/{in
 does contain all lines, so full line detail must be parsed from the PDF until the JSON
 endpoint is fixed.
 
+**Outgoing bug report (copy-paste ready):**
+[`integrations/bridges/abc-supply/abc-invoice-line-truncation-bug-report.md`](../integrations/bridges/abc-supply/abc-invoice-line-truncation-bug-report.md).
+
 **Endpoints in use (all confirmed 200 on 2026-06-19):**
 `GET /api/invoice/v1/invoices/history/{billToAccount}?startDate=&endDate=&itemsPerPage=&pageNumber=`
 (header-only list — no line data; paginated, `pagination.totalItems`),
