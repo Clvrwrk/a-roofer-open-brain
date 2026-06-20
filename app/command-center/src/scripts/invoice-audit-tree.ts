@@ -34,7 +34,7 @@ if (root && dataEl && mount) {
     }
     return `<button class="iv-mark" data-mark data-line="LIDX">Mark passed</button>`;
   }
-  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>';
+  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th class="num">API Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>';
   function lineRow(l: InvLine, li: number): string {
     // UOM mismatch: the agreement is priced in a different unit than the invoice line,
     // so a variance would be meaningless — surface it for manual review instead (schema 120).
@@ -51,6 +51,7 @@ if (root && dataEl && mount) {
         <td class="num">${l.qty}</td>
         <td>${esc(l.uom)}</td>
         <td class="num">${money2(l.unitPrice)} <span class="iv-uom-sfx">/${esc(l.uom)}</span></td>
+        <td class="num">${l.apiPrice == null ? '<span class="iv-uom-sfx">—</span>' : money2(l.apiPrice) + ` <span class="iv-uom-sfx">/${esc(l.apiUom || l.uom)}</span>`}</td>
         <td>${negCell}</td>
         <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>

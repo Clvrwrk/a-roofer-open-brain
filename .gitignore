@@ -47,3 +47,4 @@ node_modules/
 
 # Claude local (machine-specific permissions)
 .claude/settings.local.json
+integrations/bridges/abc-supply/.price-seed-runs/

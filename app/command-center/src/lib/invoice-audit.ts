@@ -16,6 +16,8 @@ export interface InvLine {
   unitPrice: number;
   extendedPrice: number;
   negotiatedPrice: number | null;
+  apiPrice: number | null; // current ABC API price for this item at the invoice's branch (seed)
+  apiUom: string;
   variancePct: number | null;
   varianceExt: number | null;
   auditable: boolean; // has resolvable qty + extended price; false → never surfaced "to audit"
@@ -121,7 +123,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     return rows;
   };
 
-  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows] = await Promise.all([
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, apiPriceRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
     fetchAll(() => client.from("v_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
@@ -131,9 +133,18 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
     // invoice_documents gate is a secondary internal signal we reconcile to this.
     fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    // Current ABC API price per item per branch (monthly seed, migration 134).
+    fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
+
+  // API price keyed by item|branch (leading zeros stripped); branch comes from the invoice.
+  const normBranch = (b: unknown) => String(b ?? "").replace(/^0+/, "");
+  const apiByKey = new Map<string, { price: number; uom: string }>();
+  for (const r of apiPriceRows) apiByKey.set(`${r.item_number}|${r.branch_number_norm}`, { price: num(r.api_price), uom: r.api_uom ?? "" });
+  const branchByInvoice = new Map<string, string>();
+  for (const i of invRows) branchByInvoice.set(i.invoice_number, normBranch(i.branch_number ?? i.ship_to_number));
 
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
@@ -153,6 +164,7 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     const a = auditByLine.get(l.line_id);
     const passed = a?.audit_status === "passed";
     const list = linesByInvoice.get(l.invoice_number) ?? [];
+    const api = apiByKey.get(`${l.item_number ?? ""}|${branchByInvoice.get(l.invoice_number) ?? ""}`);
     list.push({
       lineId: l.line_id,
       itemNumber: l.item_number ?? "",
@@ -162,6 +174,8 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       unitPrice: num(l.unit_price),
       extendedPrice: num(l.extended_price),
       negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
+      apiPrice: api ? api.price : null,
+      apiUom: api ? api.uom : "",
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       auditable: l.is_auditable !== false, // default true unless the view says otherwise
