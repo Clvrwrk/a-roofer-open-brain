@@ -2,7 +2,7 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
-interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; categoryKey: string; }
+interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; imageUrl: string; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
 interface PaBranch {
   branchCode: string; branchName: string; office: string;
@@ -44,7 +44,7 @@ if (root && dataEl && mount) {
       <details class="pa-cat" data-cat="${esc(c.key)}">
         <summary><span class="pa-chev" aria-hidden="true">›</span><b>${esc(c.label)}</b>
           <span class="pa-cat-tags"><span class="pill pill-grey">${c.itemCount} items</span></span></summary>
-        <table class="pa-itable"><thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
+        <table class="pa-itable"><thead><tr><th></th><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
           <tbody>${c.items.map((it) => {
             const varCls = it.variancePct == null ? "" : Math.abs(it.variancePct) <= 3 ? "pa-var-ok" : Math.abs(it.variancePct) <= 6 ? "pa-var-mid" : "pa-var-hi";
             // Version-comparison badge: change vs the prior agreement version (migration 138).
@@ -53,6 +53,7 @@ if (root && dataEl && mount) {
               : it.changeTier === "decrease" ? `<span class="pa-chg pa-chg-ok" title="Prior ${it.changePrior != null ? money2(it.changePrior) : "—"} → ${money2(it.unitPrice)}">▼ ${it.changePct != null ? it.changePct.toFixed(1) + "%" : ""}</span>` : "";
             return `
             <tr>
+              <td class="pa-imgcell">${it.imageUrl ? `<img class="pa-imgchip" src="${esc(it.imageUrl)}" data-full="${esc(it.imageUrl)}" alt="" loading="lazy" />` : '<span class="pa-imgph"></span>'}</td>
               <td class="pa-sku">${esc(it.itemNumber)}</td>
               <td>${esc(it.description)}</td>
               <td>${esc(it.uom)}</td>
@@ -196,6 +197,21 @@ if (root && dataEl && mount) {
   root.querySelectorAll<HTMLButtonElement>(".pa-theme button").forEach((b) =>
     b.addEventListener("click", () => { try { localStorage.setItem("paTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
   mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+
+  /* ---- image chip: click to enlarge, click again to close (Chris) ---- */
+  root.addEventListener("click", (e) => {
+    const img = (e.target as HTMLElement).closest(".pa-imgchip") as HTMLImageElement | null;
+    if (!img) return;
+    e.preventDefault(); e.stopPropagation();
+    let ov = document.getElementById("pa-imgov") as HTMLElement | null;
+    if (!ov) {
+      ov = document.createElement("div"); ov.id = "pa-imgov"; ov.className = "pa-imgov";
+      ov.addEventListener("click", () => ov!.classList.remove("show"));
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = `<img src="${img.dataset.full}" alt="" />`;
+    ov.classList.add("show");
+  });
 
   /* ---- toast ---- */
   let timer: number | undefined;

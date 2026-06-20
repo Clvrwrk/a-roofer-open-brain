@@ -27,6 +27,7 @@ export interface PaItem {
   changeTier: string;        // vs prior agreement version: accept|review|critical|decrease|new_item|"" (migration 138)
   changePct: number | null;  // % change vs prior version
   changePrior: number | null; // prior version's price
+  imageUrl: string;          // ABC product image (migration 141) for the price-list chip
   categoryKey: string;
 }
 
@@ -141,7 +142,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
   const gpaSet = new Set<string>((gpaRows as any[]).map((r) => r.item_number).filter(Boolean));
   const gpaList = [...gpaSet];
 
-  const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows, gpaCatRows, apiRows, reviewRows] = await Promise.all([
+  const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows, gpaCatRows, apiRows, reviewRows, imageRows] = await Promise.all([
     fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified,source_file,pdf_storage_path")),
     fetchAll(() => client.from("abc_price_agreement_branch_matches").select("abc_price_agreement_id,branch_number,confidence_score")),
     fetchAll(() => client.from("abc_price_list_items").select("agreement_id,item_number,description,unit,unit_price,category_key")),
@@ -155,8 +156,15 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
     // Price-list version comparison: per-item change vs the prior agreement version (migration 138).
     fetchAll(() => client.from("agreement_version_review").select("agreement_id,item_number,tier,pct_change,prior_price,status")),
+    // Product image paths for the price-list image chip (migration 141), GPA items only.
+    fetchAll(() => client.from("abc_product_catalog").select("item_number,image_storage_path").not("image_storage_path", "is", null).in("item_number", gpaList)),
   ]);
   if (agRows.length === 0) return empty;
+
+  // Public image URL per item (the chip shown as the first column when a price list is expanded).
+  const imgBase = String(env.PUBLIC_SUPABASE_URL || env.SUPABASE_URL || "").replace(/\/$/, "") + "/storage/v1/object/public/product-images/";
+  const imageByItem = new Map<string, string>();
+  for (const r of imageRows as any[]) if (r.image_storage_path) imageByItem.set(r.item_number, imgBase + r.image_storage_path);
 
   // Version-comparison lookup, keyed by agreement_id|item_number.
   const reviewByKey = new Map<string, { tier: string; pctChange: number | null; priorPrice: number | null; status: string }>();
@@ -325,6 +333,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
         changeTier: chg && (chg.tier === "review" || chg.tier === "critical" || chg.tier === "decrease") ? chg.tier : "",
         changePct: chg ? chg.pctChange : null,
         changePrior: chg ? chg.priorPrice : null,
+        imageUrl: imageByItem.get(itemNumber) ?? "",
         categoryKey: neg?.categoryKey || gpaMaster.get(itemNumber)?.categoryKey || "uncategorized",
       });
     }

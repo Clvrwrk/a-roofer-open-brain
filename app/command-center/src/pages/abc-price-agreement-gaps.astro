@@ -75,6 +75,10 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .pa .pa-pill-agreement{background:rgba(147,112,219,.16);color:#9370db;font-weight:650;text-decoration:none;cursor:pointer}
   .pa a.pa-pill-agreement:hover{background:rgba(147,112,219,.28)} .pa .pa-pill-agreement.is-nopdf{opacity:.7;cursor:default}
   .pa .pa-dash{color:var(--muted)} .pa .pa-var-ok{color:#2e9e5b} .pa .pa-var-mid{color:#d08a1d} .pa .pa-var-hi{color:#d0494b}
+  .pa .pa-imgcell{width:40px;padding:2px 4px} .pa .pa-imgchip{width:32px;height:32px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--line);cursor:zoom-in;display:block}
+  .pa .pa-imgph{display:inline-block;width:32px;height:32px;border-radius:6px;border:1px dashed var(--line);opacity:.4}
+  .pa-imgov{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;cursor:zoom-out;padding:5vh}
+  .pa-imgov.show{display:flex} .pa-imgov img{max-width:90vw;max-height:90vh;object-fit:contain;border-radius:10px;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5)}
   .pa .pa-chg{display:inline-block;font-size:10px;font-weight:650;padding:1px 6px;border-radius:8px;margin-left:4px;white-space:nowrap}
   .pa .pa-chg-hi{background:rgba(208,73,75,.16);color:#d0494b} .pa .pa-chg-mid{background:rgba(208,138,29,.16);color:#d08a1d} .pa .pa-chg-ok{background:rgba(46,158,91,.14);color:#2e9e5b}
 
