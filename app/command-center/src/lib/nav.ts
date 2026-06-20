@@ -41,9 +41,13 @@ export const navDepartments: NavDepartment[] = [
       { label: "EH&S Audit", status: "soon", note: "Environmental, Health & Safety" },
       { label: "Price Agreement Audit", href: "/abc-price-agreement-gaps", status: "built" },
       { label: "Agreement Builder", href: "/accounting/price-agreement/builder", status: "built", note: "Per-branch negotiable worksheet (A+B), prefilled from prior agreements" },
-      { label: "Price List Coverage", href: "/accounting/vendor-regions", status: "built" },
-      { label: "Negotiated Catalog", href: "/accounting/price-list/catalog", status: "built" },
-      { label: "Price Foundation", href: "/data-quality/price-foundation", status: "built" },
+      // Retired from go-live nav 2026-06-19 (pages kept, just unlinked) — see docs/49.
+      // Price Foundation: one-time data-quality migration tool, review queue empty (obsolete).
+      // Negotiated Catalog / Price List Coverage: superseded by Agreement Builder + Price Agreement Audit
+      // for the go-live audit flow; revisit folding Coverage into Agreement Builder post-launch.
+      // { label: "Price List Coverage", href: "/accounting/vendor-regions", status: "built" },
+      // { label: "Negotiated Catalog", href: "/accounting/price-list/catalog", status: "built" },
+      // { label: "Price Foundation", href: "/data-quality/price-foundation", status: "built" },
     ],
   },
   {

@@ -121,13 +121,16 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     return rows;
   };
 
-  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows] = await Promise.all([
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
     fetchAll(() => client.from("v_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
     fetchAll(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path")),
     fetchAll(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true)),
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
+    // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
+    // invoice_documents gate is a secondary internal signal we reconcile to this.
+    fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
@@ -137,6 +140,10 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
 
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
+
+  // ABC AR report: ar_status drives open/paid (source of truth); date_paid is the report due date proxy.
+  const arByInvoice = new Map<string, any>();
+  for (const a of arRows) arByInvoice.set(a.invoice_number, a);
 
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
@@ -193,8 +200,16 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     worstPct: num(i.worst_pct),
     auditedLines: 0,
     pendingLines: 0,
-    paid: docByInvoice.get(i.invoice_number)?.payment_status === "paid",
-    paidAt: docByInvoice.get(i.invoice_number)?.paid_at ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10) : "",
+    // Open vs paid = ABC AR report (ar_status). Falls back to the internal gate only when an
+    // invoice has no AR-report coverage (e.g. brand-new, pre-reconcile).
+    paid: arByInvoice.has(i.invoice_number)
+      ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
+      : docByInvoice.get(i.invoice_number)?.payment_status === "paid",
+    paidAt: arByInvoice.get(i.invoice_number)?.date_paid
+      ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
+      : docByInvoice.get(i.invoice_number)?.paid_at
+        ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
+        : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
     jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
     clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
