@@ -56,8 +56,11 @@ invoice shows 26 lines identically across surfaces. Open/paid everywhere keys of
   invoices (ABC API caps lines at 10 — docs/47 #2). Full sets reconcile to subtotal.
 - **Historical (pre-Dec-2025) invoices** exist only in the report; imported header+lines
   from CSV (`abc_csv_history`). Their `ship_to_number` is best-effort (`2036874-<suffix>`
-  from the report's ship-to acct) and branch is from the report `BRANCH_NUMBER`; **1
-  historical invoice has a blank branch** (report gap) and won't map to an office.
+  from the report's ship-to acct). Branch comes from the report `BRANCH_NUMBER`, which is
+  the API branch with a trailing letter (`462A`→`462`) — verified via the crosswalk learned
+  from invoices present in both API and report, then the trailing letter stripped so they
+  map to PE offices (414/415 mapped; **1 historical invoice has a blank branch** = report
+  gap, shows as Unassigned).
 - **4 zero-$ documents** (in neither report) are tagged `ar_status='paid'`
   (`ar_source='zero_dollar_doc'`) — settled, not open AR.
 - **`pricePerUnitAmount` (legacy `unit_price`) for CSV lines** is derived as
