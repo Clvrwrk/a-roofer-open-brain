@@ -258,7 +258,9 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
 
   const officeMap = new Map<string, InvOffice>();
   for (const br of branchMap.values()) {
-    br.invoices.sort((a, b) => (b.invoiceDate || "").localeCompare(a.invoiceDate || "") || b.atRisk - a.atRisk);
+    // Oldest invoice first (FIFO) — pricing/payment is time-sensitive, so the oldest
+    // open invoices need attention first (Chris, 2026-06-20).
+    br.invoices.sort((a, b) => (a.invoiceDate || "").localeCompare(b.invoiceDate || "") || b.atRisk - a.atRisk);
     let off = officeMap.get(br.office);
     if (!off) {
       off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, branches: [] };

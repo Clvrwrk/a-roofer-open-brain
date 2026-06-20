@@ -171,7 +171,17 @@ if (root && dataEl && mount) {
     ].filter(Boolean).join("");
   }
   function invoiceNode(inv: Invoice, hasPriceList: boolean): string {
-    const job = inv.jobNumber ? ` · <span class="iv-job">${esc(inv.jobNumber)}${inv.clientName ? " · " + esc(inv.clientName) : ""}${inv.jobCategory ? " · " + esc(inv.jobCategory) : ""}</span>` : "";
+    // Purple callout: PO is shown for every invoice that has one (169/172); client name + job
+    // type are appended when the PO matches an AccuLynx job (v_invoice_acculynx_match).
+    // The job number usually equals the PO (that's how they matched), so show it only when it differs.
+    const norm = (s: string) => s.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const calloutBits = [
+      inv.po ? "PO " + esc(inv.po) : (inv.jobNumber ? esc(inv.jobNumber) : ""),
+      inv.jobNumber && norm(inv.jobNumber) !== norm(inv.po) ? esc(inv.jobNumber) : "",
+      inv.clientName ? esc(inv.clientName) : "",
+      inv.jobCategory ? esc(inv.jobCategory) : "",
+    ].filter(Boolean);
+    const job = calloutBits.length ? ` · <span class="iv-job">${calloutBits.join(" · ")}</span>` : "";
     // Invoice PDF: always an active link — the endpoint fetches it on demand from ABC
     // and stores it if no PDF is on file yet (so every invoice resolves to a document).
     const invoiceBtn = `<a class="iv-rowbtn" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Invoice</a>`;
@@ -184,7 +194,7 @@ if (root && dataEl && mount) {
       <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
-          <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${job}</span></span>
+          <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${job}</span></span>
           <span class="iv-rowbtns">${priceListBtn}${invoiceBtn}</span>
           <span class="iv-inv-tags">${invoiceTags(inv)}</span>
         </summary>
