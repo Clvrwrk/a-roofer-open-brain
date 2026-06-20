@@ -86,8 +86,9 @@ The ~8 audit views (`v_invoice_audit_line`, `v_invoice_audit_invoice`, `v_branch
 `v_abc_invoice_lines_with_pdf`, `v_credit_memo_audit`) and 5 app libs still read
 `abc_invoice_lines` directly, so the **live** audit still interrogates the truncated set
 for the 145. Repointing them at `v_invoice_lines_complete` (with per-dashboard
-verification) is Phase 2 — recommended as the first Phase-6-cleanup item, since cleanup
-touches these same dashboards. Automated go-forward coverage for new/out-of-window
+verification) is Phase 2 — **DECIDED (Chris, 2026-06-19): the first Phase-6-cleanup
+item**, since cleanup touches these same dashboards. Until then, treat the live
+line-level audit as incomplete for the 145 truncated invoices. Automated go-forward coverage for new/out-of-window
 invoices = the PDF OCR phase ([`proposals/2026-06-19-invoice-pdf-ocr-line-completion.md`](../proposals/2026-06-19-invoice-pdf-ocr-line-completion.md)).
 
 ## ⚠️ For Chris's review
