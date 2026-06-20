@@ -43,6 +43,7 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
       <div class="pa-kpi"><span class="pa-kpi-lab">Agreements Expired</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">branches with a lapsed agreement</span></div>
       <div class="pa-kpi"><span class="pa-kpi-lab">Agreements Expiring ≤30d</span><span class="pa-kpi-val">{data.totals.expiring}</span><span class="pa-kpi-sub">renew before lapse</span></div>
       <div class="pa-kpi"><span class="pa-kpi-lab">Avg Variance %</span><span class="pa-kpi-val">{data.totals.avgVariancePct == null ? "—" : data.totals.avgVariancePct.toFixed(1) + "%"}</span><span class="pa-kpi-sub">negotiated vs API price</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Price Changes to Review</span><span class="pa-kpi-val">{data.totals.priceChangesToReview}</span><span class="pa-kpi-sub">new vs prior version · 3–6% review + &gt;6% critical</span></div>
     </div>
 
     {data.offices.length === 0 && <p class="pa-empty">No price agreements found in the live pipeline.</p>}
@@ -74,6 +75,8 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .pa .pa-pill-agreement{background:rgba(147,112,219,.16);color:#9370db;font-weight:650;text-decoration:none;cursor:pointer}
   .pa a.pa-pill-agreement:hover{background:rgba(147,112,219,.28)} .pa .pa-pill-agreement.is-nopdf{opacity:.7;cursor:default}
   .pa .pa-dash{color:var(--muted)} .pa .pa-var-ok{color:#2e9e5b} .pa .pa-var-mid{color:#d08a1d} .pa .pa-var-hi{color:#d0494b}
+  .pa .pa-chg{display:inline-block;font-size:10px;font-weight:650;padding:1px 6px;border-radius:8px;margin-left:4px;white-space:nowrap}
+  .pa .pa-chg-hi{background:rgba(208,73,75,.16);color:#d0494b} .pa .pa-chg-mid{background:rgba(208,138,29,.16);color:#d08a1d} .pa .pa-chg-ok{background:rgba(46,158,91,.14);color:#2e9e5b}
 
   .pa-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .pa-input,.pa-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
@@ -82,7 +85,7 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .pa-theme button{appearance:none;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;font-family:inherit}
   .pa-theme button.is-active{background:var(--brand);color:#fff}
 
-  .pa-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  .pa-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
   .pa-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
   .pa-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .pa-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}

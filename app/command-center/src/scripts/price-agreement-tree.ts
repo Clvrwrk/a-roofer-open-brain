@@ -2,7 +2,7 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
-interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; categoryKey: string; }
+interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
 interface PaBranch {
   branchCode: string; branchName: string; office: string;
@@ -47,12 +47,16 @@ if (root && dataEl && mount) {
         <table class="pa-itable"><thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
           <tbody>${c.items.map((it) => {
             const varCls = it.variancePct == null ? "" : Math.abs(it.variancePct) <= 3 ? "pa-var-ok" : Math.abs(it.variancePct) <= 6 ? "pa-var-mid" : "pa-var-hi";
+            // Version-comparison badge: change vs the prior agreement version (migration 138).
+            const chgBadge = it.changeTier === "critical" ? `<span class="pa-chg pa-chg-hi" title="Prior ${it.changePrior != null ? money2(it.changePrior) : "—"} → ${money2(it.unitPrice)}">▲ ${it.changePct != null ? "+" + it.changePct.toFixed(1) + "%" : ""} critical</span>`
+              : it.changeTier === "review" ? `<span class="pa-chg pa-chg-mid" title="Prior ${it.changePrior != null ? money2(it.changePrior) : "—"} → ${money2(it.unitPrice)}">▲ ${it.changePct != null ? "+" + it.changePct.toFixed(1) + "%" : ""} review</span>`
+              : it.changeTier === "decrease" ? `<span class="pa-chg pa-chg-ok" title="Prior ${it.changePrior != null ? money2(it.changePrior) : "—"} → ${money2(it.unitPrice)}">▼ ${it.changePct != null ? it.changePct.toFixed(1) + "%" : ""}</span>` : "";
             return `
             <tr>
               <td class="pa-sku">${esc(it.itemNumber)}</td>
               <td>${esc(it.description)}</td>
               <td>${esc(it.uom)}</td>
-              <td class="num">${it.hasNegotiated ? money2(it.unitPrice) : '<span class="pa-dash">—</span>'}</td>
+              <td class="num">${it.hasNegotiated ? money2(it.unitPrice) + " " + chgBadge : '<span class="pa-dash">—</span>'}</td>
               <td class="num">${it.apiPrice == null ? '<span class="pa-dash">—</span>' : money2(it.apiPrice) + ` <span class="pa-dash">/${esc(it.apiUom || it.uom)}</span>`}</td>
               <td class="num ${varCls}">${it.variancePct == null ? "—" : (it.variancePct >= 0 ? "+" : "") + it.variancePct.toFixed(1) + "%"}</td>
             </tr>`; }).join("")}</tbody>
