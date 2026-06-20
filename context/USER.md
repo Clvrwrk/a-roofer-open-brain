@@ -16,3 +16,4 @@
 
 - Moves quickly and expects the assistant to make reasonable implementation choices when enough context exists.
 - Likes phase-based progress: maintenance/front desk first, then app skeleton, then real data surfaces, then runtime/auth/memory.
+- Thinks in canonical/vendor-agnostic data models (normalize once, map many) to cut human review surface; running an accounting alpha launch (Lucinda) — wants decisions reduced to yes/no for the human team.
