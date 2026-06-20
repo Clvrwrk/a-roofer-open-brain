@@ -2,7 +2,7 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
-interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; categoryKey: string; }
+interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
 interface PaBranch {
   branchCode: string; branchName: string; office: string;
@@ -10,6 +10,7 @@ interface PaBranch {
   effective: string; expiry: string; lifecycle: string; daysToExpiry: number | null;
   ceoVerified: boolean; salesRep: string; itemCount: number; covered: boolean;
   apiNonNegotiated: boolean; needsAction: boolean; renewalRequested: boolean; renewalRequestedAt: string;
+  agreementPdfUrl: string;
   categories: PaCategory[];
 }
 interface PaOffice {
@@ -43,9 +44,18 @@ if (root && dataEl && mount) {
       <details class="pa-cat" data-cat="${esc(c.key)}">
         <summary><span class="pa-chev" aria-hidden="true">›</span><b>${esc(c.label)}</b>
           <span class="pa-cat-tags"><span class="pill pill-grey">${c.itemCount} items</span></span></summary>
-        <table class="pa-itable"><thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th></tr></thead>
-          <tbody>${c.items.map((it) => `
-            <tr><td class="pa-sku">${esc(it.itemNumber)}</td><td>${esc(it.description)}</td><td>${esc(it.uom)}</td><td class="num">${money2(it.unitPrice)}</td></tr>`).join("")}</tbody>
+        <table class="pa-itable"><thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
+          <tbody>${c.items.map((it) => {
+            const varCls = it.variancePct == null ? "" : Math.abs(it.variancePct) <= 3 ? "pa-var-ok" : Math.abs(it.variancePct) <= 6 ? "pa-var-mid" : "pa-var-hi";
+            return `
+            <tr>
+              <td class="pa-sku">${esc(it.itemNumber)}</td>
+              <td>${esc(it.description)}</td>
+              <td>${esc(it.uom)}</td>
+              <td class="num">${it.hasNegotiated ? money2(it.unitPrice) : '<span class="pa-dash">—</span>'}</td>
+              <td class="num">${it.apiPrice == null ? '<span class="pa-dash">—</span>' : money2(it.apiPrice) + ` <span class="pa-dash">/${esc(it.apiUom || it.uom)}</span>`}</td>
+              <td class="num ${varCls}">${it.variancePct == null ? "—" : (it.variancePct >= 0 ? "+" : "") + it.variancePct.toFixed(1) + "%"}</td>
+            </tr>`; }).join("")}</tbody>
         </table>
       </details>`).join("");
     return `<div class="pa-cats">${sections}</div>`;
@@ -53,7 +63,10 @@ if (root && dataEl && mount) {
 
   function branchTags(br: PaBranch): string {
     const tags: string[] = [];
-    if (br.agreementNumber) tags.push(`<span class="pill pill-brand">PA ${esc(br.agreementNumber)}</span>`);
+    // Purple Agreement pill — opens the agreement PDF when one is on file (Chris).
+    if (br.agreementNumber) tags.push(br.agreementPdfUrl
+      ? `<a class="pill pa-pill-agreement" href="${esc(br.agreementPdfUrl)}" target="_blank" rel="noopener" title="Open agreement PDF" onclick="event.stopPropagation()">PA ${esc(br.agreementNumber)}</a>`
+      : `<span class="pill pa-pill-agreement is-nopdf" title="No agreement PDF on file yet">PA ${esc(br.agreementNumber)}</span>`);
     if (br.agreementId) tags.push(`<span class="pill ${lifeCls(br.lifecycle)}">${lifeLab(br.lifecycle)}${daysText(br) ? " · " + daysText(br) : ""}</span>`);
     if (br.ceoVerified) tags.push('<span class="pill pill-green">CEO ✓</span>');
     if (br.apiNonNegotiated) tags.push('<span class="pill pill-grey" title="Covered by an ABC API price list — non-negotiated">API · non-negotiated</span>');

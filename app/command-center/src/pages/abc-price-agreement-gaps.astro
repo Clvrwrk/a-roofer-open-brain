@@ -38,11 +38,11 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
     </div>
 
     <div class="pa-kpis">
-      <div class="pa-kpi"><span class="pa-kpi-lab">Coverage Rate</span><span class="pa-kpi-val">{pct(data.totals.coverageAvg)}</span><span class="pa-kpi-sub">avg per PE office · branches with a current agreement</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Expired</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">branches with a lapsed agreement</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Expiring ≤30d</span><span class="pa-kpi-val">{data.totals.expiring}</span><span class="pa-kpi-sub">renew before lapse</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Negotiated Agreements</span><span class="pa-kpi-val">{data.totals.negotiatedAgreements}</span><span class="pa-kpi-sub">{data.totals.apiBranches} branches API · non-negotiated</span></div>
-      <div class="pa-kpi"><span class="pa-kpi-lab">Priced Items</span><span class="pa-kpi-val">{data.totals.items.toLocaleString()}</span><span class="pa-kpi-sub">negotiated line items in scope</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">API Coverage</span><span class="pa-kpi-val">{pct(data.totals.apiCoveragePct)}</span><span class="pa-kpi-sub">{Math.round(data.totals.apiCoveragePct * data.totals.gpaItems)}/{data.totals.gpaItems} GPA items with a live API price</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Negotiated</span><span class="pa-kpi-val">{pct(data.totals.negotiatedPct)}</span><span class="pa-kpi-sub">{Math.round(data.totals.negotiatedPct * data.totals.gpaItems)}/{data.totals.gpaItems} GPA items with a negotiated price</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Agreements Expired</span><span class="pa-kpi-val">{data.totals.expired}</span><span class="pa-kpi-sub">branches with a lapsed agreement</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Agreements Expiring ≤30d</span><span class="pa-kpi-val">{data.totals.expiring}</span><span class="pa-kpi-sub">renew before lapse</span></div>
+      <div class="pa-kpi"><span class="pa-kpi-lab">Avg Variance %</span><span class="pa-kpi-val">{data.totals.avgVariancePct == null ? "—" : data.totals.avgVariancePct.toFixed(1) + "%"}</span><span class="pa-kpi-sub">negotiated vs API price</span></div>
     </div>
 
     {data.offices.length === 0 && <p class="pa-empty">No price agreements found in the live pipeline.</p>}
@@ -71,6 +71,9 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .pa .pill-green{background:var(--green-bg);color:var(--green)} .pa .pill-yellow{background:var(--yellow-bg);color:var(--yellow)}
   .pa .pill-orange{background:var(--orange-bg);color:var(--orange)} .pa .pill-red{background:var(--red-bg);color:var(--red)}
   .pa .pill-grey{background:var(--grey-bg);color:var(--grey)} .pa .pill-brand{background:var(--brand-bg);color:var(--brand)}
+  .pa .pa-pill-agreement{background:rgba(147,112,219,.16);color:#9370db;font-weight:650;text-decoration:none;cursor:pointer}
+  .pa a.pa-pill-agreement:hover{background:rgba(147,112,219,.28)} .pa .pa-pill-agreement.is-nopdf{opacity:.7;cursor:default}
+  .pa .pa-dash{color:var(--muted)} .pa .pa-var-ok{color:#2e9e5b} .pa .pa-var-mid{color:#d08a1d} .pa .pa-var-hi{color:#d0494b}
 
   .pa-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .pa-input,.pa-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}

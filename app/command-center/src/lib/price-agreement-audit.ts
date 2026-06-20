@@ -19,7 +19,11 @@ export interface PaItem {
   itemNumber: string;
   description: string;
   uom: string;
-  unitPrice: number;
+  unitPrice: number;        // negotiated price (0 if API-only, not in the agreement)
+  hasNegotiated: boolean;   // the branch's agreement covers this item
+  apiPrice: number | null;  // current ABC API price at this branch (monthly seed, migration 134)
+  apiUom: string;
+  variancePct: number | null; // (negotiated - api) / api * 100, when both exist
   categoryKey: string;
 }
 
@@ -50,6 +54,7 @@ export interface PaBranch {
   needsAction: boolean; // priced + expired/expiring
   renewalRequested: boolean;
   renewalRequestedAt: string;
+  agreementPdfUrl: string; // source file for the purple Agreement pill → PDF
   categories: PaCategory[];
 }
 
@@ -80,6 +85,10 @@ export interface PriceAgreementAudit {
     items: number;
     apiBranches: number;
     needsAction: number;
+    gpaItems: number;          // size of the Global Price Agreement item set (the scope)
+    apiCoveragePct: number;    // 0..1 — GPA items with a live API price / gpaItems
+    negotiatedPct: number;     // 0..1 — GPA items with a negotiated price / gpaItems
+    avgVariancePct: number | null; // mean |negotiated - api| / api across covered cells
   };
 }
 
@@ -104,7 +113,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     generatedAt: new Date().toISOString(),
     offices: [],
     categories: [],
-    totals: { coverageAvg: 0, expired: 0, expiring: 0, negotiatedAgreements: 0, branchesCovered: 0, items: 0, apiBranches: 0, needsAction: 0 },
+    totals: { coverageAvg: 0, expired: 0, expiring: 0, negotiatedAgreements: 0, branchesCovered: 0, items: 0, apiBranches: 0, needsAction: 0, gpaItems: 0, apiCoveragePct: 0, negotiatedPct: 0, avgVariancePct: null },
   };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
@@ -123,16 +132,35 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     return rows;
   };
 
-  const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows] = await Promise.all([
-    fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified")),
+  // GPA scope: the approved Global Price Agreement item set (53 families / 99 SKUs).
+  const gpaRows = await fetchAll(() => client.from("frequently_ordered_import").select("item_number"));
+  const gpaSet = new Set<string>((gpaRows as any[]).map((r) => r.item_number).filter(Boolean));
+  const gpaList = [...gpaSet];
+
+  const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows, gpaCatRows, apiRows] = await Promise.all([
+    fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified,source_file")),
     fetchAll(() => client.from("abc_price_agreement_branch_matches").select("abc_price_agreement_id,branch_number,confidence_score")),
     fetchAll(() => client.from("abc_price_list_items").select("agreement_id,item_number,description,unit,unit_price,category_key")),
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     fetchAll(() => client.from("vendor_branches").select("branch_number,branch_name,pricing_territory_office_id,is_active")),
     fetchAll(() => client.from("office").select("id,name")),
     fetchAll(() => client.from("price_refresh_request").select("agreement_id,status,created_at").eq("reason", "agreement_renewal").in("status", ["awaiting_verification", "approved", "ready_to_send", "sent"])),
+    // GPA item master (description + roof-system category) for items not in a branch's agreement.
+    fetchAll(() => client.from("abc_product_catalog").select("item_number,item_description,category_key").in("item_number", gpaList)),
+    // Current ABC API price per item per branch (monthly seed, migration 134).
+    fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
   ]);
   if (agRows.length === 0) return empty;
+
+  // GPA item master + branch-tied API price lookups.
+  const gpaMaster = new Map<string, { description: string; categoryKey: string }>();
+  for (const g of gpaCatRows as any[]) gpaMaster.set(g.item_number, { description: g.item_description ?? "", categoryKey: g.category_key || "uncategorized" });
+  const apiByKey = new Map<string, { price: number; uom: string }>(); // item|branchNorm → API price
+  const apiItems = new Set<string>(); // GPA items with any API price (for the coverage KPI)
+  for (const r of apiRows as any[]) {
+    apiByKey.set(`${r.item_number}|${r.branch_number_norm}`, { price: num(r.api_price), uom: r.api_uom ?? "" });
+    if (gpaSet.has(r.item_number)) apiItems.add(r.item_number);
+  }
 
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const catLabel = new Map(categories.map((c) => [c.key, c]));
@@ -152,19 +180,24 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     if (vb.pricing_territory_office_id && office !== "Unassigned") officeDenominator.set(office, (officeDenominator.get(office) ?? 0) + 1);
   }
 
-  // items grouped by agreement id
-  const itemsByAgreement = new Map<number, PaItem[]>();
+  // Negotiated price info per agreement, keyed by item — SCOPED to the GPA item set
+  // ("only these items should be loaded; all others removed"). Non-GPA items are dropped here.
+  type NegInfo = { unitPrice: number; uom: string; description: string; categoryKey: string };
+  const negByAgreement = new Map<number, Map<string, NegInfo>>();
+  const negotiatedGpaItems = new Set<string>(); // GPA items with a negotiated price anywhere (for the KPI)
   for (const it of itemRows) {
+    const itemNumber = it.item_number ?? "";
+    if (!gpaSet.has(itemNumber)) continue; // GPA scope
     const aid = num(it.agreement_id);
-    const list = itemsByAgreement.get(aid) ?? [];
-    list.push({
-      itemNumber: it.item_number ?? "",
-      description: it.description ?? "",
-      uom: it.unit ?? "",
+    const m = negByAgreement.get(aid) ?? new Map<string, NegInfo>();
+    m.set(itemNumber, {
       unitPrice: num(it.unit_price),
-      categoryKey: it.category_key || "uncategorized",
+      uom: it.unit ?? "",
+      description: it.description ?? gpaMaster.get(itemNumber)?.description ?? "",
+      categoryKey: it.category_key || gpaMaster.get(itemNumber)?.categoryKey || "uncategorized",
     });
-    itemsByAgreement.set(aid, list);
+    negByAgreement.set(aid, m);
+    negotiatedGpaItems.add(itemNumber);
   }
 
   // agreement metadata
@@ -183,6 +216,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     daysToExpiry: number | null;
     isApi: boolean;
     itemCount: number;
+    sourceFile: string;
   }
   const agById = new Map<number, AgMeta>();
   for (const a of agRows) {
@@ -200,9 +234,13 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       lifecycle,
       daysToExpiry,
       isApi: isApiAgreement(a.agreement_number),
-      itemCount: (itemsByAgreement.get(id) ?? []).length,
+      itemCount: (negByAgreement.get(id)?.size ?? 0), // GPA-scoped item count
+      sourceFile: a.source_file || "",
     });
   }
+
+  // Avg variance KPI accumulator (|negotiated - api| / api across covered cells).
+  const varianceSamples: number[] = [];
 
   // branch (normalized) -> matched agreements
   const agreementsByBranch = new Map<string, Set<number>>();
@@ -244,23 +282,43 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     const apiNonNegotiated = metas.some((m) => m.isApi);
     const primary = pickPrimary(metas);
 
-    let categoriesOut: PaCategory[] = [];
-    let itemCount = 0;
-    if (primary) {
-      const items = itemsByAgreement.get(primary.id) ?? [];
-      itemCount = items.length;
-      const byCat = new Map<string, PaItem[]>();
-      for (const it of items) (byCat.get(it.categoryKey) ?? (byCat.set(it.categoryKey, []), byCat.get(it.categoryKey)!)).push(it);
-      categoriesOut = [...byCat.entries()]
-        .map(([key, list]) => ({
-          key,
-          label: catLabel.get(key)?.label ?? key,
-          sortOrder: catLabel.get(key)?.sortOrder ?? 998,
-          itemCount: list.length,
-          items: list.sort((a, b) => a.itemNumber.localeCompare(b.itemNumber)),
-        }))
-        .sort((a, b) => a.sortOrder - b.sortOrder);
+    // Per branch, show every GPA item it has EITHER a negotiated price (from its primary
+    // agreement) OR a current API price for (branch-tied). Negotiated + API sit side-by-side
+    // with the variance between them.
+    const negMap = primary ? (negByAgreement.get(primary.id) ?? new Map()) : new Map<string, NegInfo>();
+    const itemsOut: PaItem[] = [];
+    for (const itemNumber of gpaSet) {
+      const neg = negMap.get(itemNumber) as NegInfo | undefined;
+      const api = apiByKey.get(`${itemNumber}|${norm}`);
+      if (!neg && !api) continue; // no price of either kind at this branch → not shown
+      const unitPrice = neg ? neg.unitPrice : 0;
+      const apiPrice = api ? api.price : null;
+      const variancePct = neg && apiPrice != null && apiPrice !== 0 ? ((unitPrice - apiPrice) / apiPrice) * 100 : null;
+      if (variancePct != null) varianceSamples.push(Math.abs(variancePct));
+      itemsOut.push({
+        itemNumber,
+        description: neg?.description || gpaMaster.get(itemNumber)?.description || "",
+        uom: neg?.uom || api?.uom || "",
+        unitPrice,
+        hasNegotiated: !!neg,
+        apiPrice,
+        apiUom: api?.uom ?? "",
+        variancePct,
+        categoryKey: neg?.categoryKey || gpaMaster.get(itemNumber)?.categoryKey || "uncategorized",
+      });
     }
+    const itemCount = itemsOut.length;
+    const byCat = new Map<string, PaItem[]>();
+    for (const it of itemsOut) (byCat.get(it.categoryKey) ?? (byCat.set(it.categoryKey, []), byCat.get(it.categoryKey)!)).push(it);
+    const categoriesOut: PaCategory[] = [...byCat.entries()]
+      .map(([key, list]) => ({
+        key,
+        label: catLabel.get(key)?.label ?? key,
+        sortOrder: catLabel.get(key)?.sortOrder ?? 998,
+        itemCount: list.length,
+        items: list.sort((a, b) => a.itemNumber.localeCompare(b.itemNumber)),
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
     // Render negotiated branches (the auditable catalog) AND API-only branches (flagged,
     // no items). Skip only branches with no agreement of either kind.
@@ -287,6 +345,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       needsAction,
       renewalRequested: primary ? renewalByAgreement.has(primary.id) : false,
       renewalRequestedAt: primary && renewalByAgreement.get(primary.id)?.created_at ? String(renewalByAgreement.get(primary.id).created_at).slice(0, 10) : "",
+      agreementPdfUrl: primary?.sourceFile ?? "",
       categories: categoriesOut,
     });
   }
@@ -359,6 +418,12 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       items: [...new Set(branches.map((b) => b.agreementId).filter((id): id is number => id != null))].reduce((s, id) => s + (agById.get(id)?.itemCount ?? 0), 0),
       apiBranches: apiBranchSet.size,
       needsAction: branches.filter((b) => b.needsAction).length,
+      // GPA scope coverage: of the 99 Global Price Agreement items, how many have a live API
+      // price vs a negotiated price; plus the average |negotiated − API| spread.
+      gpaItems: gpaSet.size,
+      apiCoveragePct: gpaSet.size ? apiItems.size / gpaSet.size : 0,
+      negotiatedPct: gpaSet.size ? negotiatedGpaItems.size / gpaSet.size : 0,
+      avgVariancePct: varianceSamples.length ? varianceSamples.reduce((s, v) => s + v, 0) / varianceSamples.length : null,
     },
   };
 }
