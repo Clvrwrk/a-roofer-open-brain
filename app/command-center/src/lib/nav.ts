@@ -40,6 +40,7 @@ export const navDepartments: NavDepartment[] = [
       { label: "Business Expense Audit", status: "soon", note: "Insurance, CPA, advisors, compliance" },
       { label: "EH&S Audit", status: "soon", note: "Environmental, Health & Safety" },
       { label: "Price Agreement Audit", href: "/abc-price-agreement-gaps", status: "built" },
+      { label: "Price List Review", href: "/accounting/price-agreement/review", status: "built", note: "Confirm item-id matches for family-level PDFs (Denver/Dallas), then promote to agreements" },
       { label: "Agreement Builder", href: "/accounting/price-agreement/builder", status: "built", note: "Per-branch negotiable worksheet (A+B), prefilled from prior agreements" },
       // Retired from go-live nav 2026-06-19 (pages kept, just unlinked) — see docs/49.
       // Price Foundation: one-time data-quality migration tool, review queue empty (obsolete).
