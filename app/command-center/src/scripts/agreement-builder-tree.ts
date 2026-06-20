@@ -3,7 +3,7 @@
 // each branch's negotiable catalog loads lazily from /api/price-agreement/branch-detail on
 // first expand. Price edits, draft save, handoff, issue-link and exports are per-branch.
 
-interface NegVariation { itemNumber: string; description: string; uom: string; reviewClass: string; spend36mo: number; purchases36mo: number; priorPrice: number | null; priorPriceSource: "agreement" | "invoice_60d" | null; proposedPrice: number | null; isOverride: boolean; excluded: boolean; }
+interface NegVariation { itemNumber: string; description: string; uom: string; reviewClass: string; spend36mo: number; purchases36mo: number; priorPrice: number | null; priorPriceSource: "agreement" | "invoice_60d" | null; apiPrice: number | null; apiUom: string; proposedPrice: number | null; isOverride: boolean; excluded: boolean; }
 interface NegFamily { familyId: string; familyName: string; topClass: string; categoryKey: string; categoryLabel: string; variationCount: number; pricedCount: number; spend36mo: number; variations: NegVariation[]; }
 interface AbBranch { branchNumber: string; branchName: string; office: string; vendor: string; paNumber: string; exportId: string; itemCount: number; familyCount: number; pricedCount: number; reviewedCount: number; projectedCost: number; historicalSpend: number; savings: number; hasPackage: boolean; }
 interface AbVendor { vendor: string; branchCount: number; projectedCost: number; historicalSpend: number; savings: number; branches: AbBranch[]; }
@@ -121,9 +121,10 @@ if (root && dataEl && mount) {
           <td>${esc(v.uom)}</td>
           <td class="num">${money(v.spend36mo)}</td>
           <td class="num"><span class="iv-prefill ${v.priorPrice == null ? "zero" : ""}">${v.priorPrice == null ? "$0.00" : money2(v.priorPrice)}</span><span class="iv-prefill-src">${srcLabel(v.priorPriceSource)}</span></td>
+          <td class="num">${v.apiPrice == null ? '<span class="iv-uom-sfx">—</span>' : money2(v.apiPrice) + ` <span class="iv-uom-sfx">/${esc(v.apiUom || v.uom)}</span>`}</td>
           <td class="num"><input class="iv-price-in" type="number" min="0" step="0.01" inputmode="decimal" value="${startVal(v).toFixed(2)}" data-item="${esc(v.itemNumber)}" data-init="${startVal(v).toFixed(2)}" /><span class="iv-ovr" data-ovr="${esc(v.itemNumber)}" ${v.isOverride ? "" : "hidden"}>override</span></td>
         </tr>`).join("");
-      return `<table class="iv-table"><thead><tr><th>Item</th><th>Description</th><th>Class</th><th>UOM</th><th class="num">36mo Spend</th><th class="num">Prior</th><th class="num">Proposed</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<table class="iv-table"><thead><tr><th>Item</th><th>Description</th><th>Class</th><th>UOM</th><th class="num">36mo Spend</th><th class="num">Prior</th><th class="num">API Price</th><th>Proposed</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     function setSaveEnabled(scope: HTMLElement, on: boolean) {
       const btn = scope.querySelector<HTMLButtonElement>('[data-act="save"]');

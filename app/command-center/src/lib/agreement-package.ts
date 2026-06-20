@@ -30,6 +30,8 @@ export interface NegVariation {
   purchases36mo: number;
   priorPrice: number | null;
   priorPriceSource: "agreement" | "invoice_60d" | null;
+  apiPrice: number | null; // current ABC API price at this branch (monthly seed, migration 134)
+  apiUom: string;
   proposedPrice: number | null; // persisted edit, null = not yet set
   isOverride: boolean;
   excluded: boolean;
@@ -171,6 +173,13 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
   const negMap = branchNegPrice.get(selected.branchNumber) ?? new Map<string, number>();
   const shipTos = Array.from(branchShipTos.get(selected.branchNumber) ?? []);
 
+  // Current ABC API price per item at this branch (monthly seed, migration 134).
+  const apiPriceByItem = new Map<string, { price: number; uom: string }>();
+  {
+    const { data: apiRows } = await client.from("v_branch_item_api_price").select("item_number,api_price,api_uom").eq("branch_number_norm", selected.branchNumber);
+    for (const r of (apiRows as any[] | null) ?? []) apiPriceByItem.set(r.item_number, { price: num(r.api_price), uom: r.api_uom ?? "" });
+  }
+
   // Load any persisted draft package for this branch and its item edits.
   const { data: pkgRow } = await client
     .from("agreement_packages")
@@ -222,6 +231,8 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
       purchases36mo: num(it.purchases_36mo),
       priorPrice: prior.price,
       priorPriceSource: prior.source,
+      apiPrice: apiPriceByItem.get(it.item_number)?.price ?? null,
+      apiUom: apiPriceByItem.get(it.item_number)?.uom ?? "",
       proposedPrice: p && p.proposed_price != null ? num(p.proposed_price) : null,
       isOverride: !!p?.is_override,
       excluded: p?.item_status === "excluded",
