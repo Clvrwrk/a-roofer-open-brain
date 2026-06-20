@@ -129,7 +129,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       .eq("invoice_number", invoiceNumber)
       .maybeSingle<InvoiceRow>(),
     client
-      .from("abc_invoice_lines")
+      // v_invoice_lines_complete: full line set for API-truncated invoices (ABC 10-line cap, docs/47 #2)
+      .from("v_invoice_lines_complete")
       .select("invoice_number,line_key,line_number,item_number,item_description,raw")
       .eq("invoice_number", invoiceNumber)
       .order("line_number", { ascending: true, nullsFirst: false }),

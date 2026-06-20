@@ -43,9 +43,10 @@ export async function loadCreditMemo(invoiceNumber: string, env: RuntimeEnv = ge
   const originalInvoiceNumber: string | null = h.original_invoice_number ?? null;
 
   const [{ data: cmRows }, { data: origRows }, { data: dispRows }] = await Promise.all([
-    client.from("abc_invoice_lines").select("item_number,item_description,price_qty,price_uom,price_per_uom").eq("invoice_number", invoiceNumber),
+    // v_invoice_lines_complete: full line set for API-truncated invoices (ABC 10-line cap, docs/47 #2)
+    client.from("v_invoice_lines_complete").select("item_number,item_description,price_qty,price_uom,price_per_uom").eq("invoice_number", invoiceNumber),
     originalInvoiceNumber
-      ? client.from("abc_invoice_lines").select("item_number,price_per_uom").eq("invoice_number", originalInvoiceNumber)
+      ? client.from("v_invoice_lines_complete").select("item_number,price_per_uom").eq("invoice_number", originalInvoiceNumber)
       : Promise.resolve({ data: [] as any[] }),
     client.from("credit_memo_requests").select("status,approved_by,packet,updated_at").eq("invoice_number", invoiceNumber).maybeSingle(),
   ]);

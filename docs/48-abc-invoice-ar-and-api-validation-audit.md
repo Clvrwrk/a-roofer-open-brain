@@ -80,15 +80,30 @@ current dataset**.
   full set with **no double-counting** (3,434 view rows = 1,183 non-truncated API +
   2,251 complete); **0** multi-line invoices lack complete coverage.
 
-### ⏭️ Phase 2 — NOT yet done (live audit still reads truncated lines)
-The ~8 audit views (`v_invoice_audit_line`, `v_invoice_audit_invoice`, `v_branch_item_spend`,
-`v_item_uom_map`, `v_recent_invoice_price`, `v_invoice_line_audit_eval`,
-`v_abc_invoice_lines_with_pdf`, `v_credit_memo_audit`) and 5 app libs still read
-`abc_invoice_lines` directly, so the **live** audit still interrogates the truncated set
-for the 145. Repointing them at `v_invoice_lines_complete` (with per-dashboard
-verification) is Phase 2 — **DECIDED (Chris, 2026-06-19): the first Phase-6-cleanup
-item**, since cleanup touches these same dashboards. Until then, treat the live
-line-level audit as incomplete for the 145 truncated invoices. Automated go-forward coverage for new/out-of-window
+### ✅ Phase 2 — DONE (2026-06-19, migs 126-127): live audit now reads every line
+Repointed all 8 audit views (`v_invoice_audit_line`, `v_invoice_audit_invoice`,
+`v_branch_item_spend`, `v_item_uom_map`, `v_recent_invoice_price`,
+`v_invoice_line_audit_eval`, `v_abc_invoice_lines_with_pdf`, `v_credit_memo_audit`) and 3
+app libs (`credit-memo.ts`, `abc-price-gaps.ts`, `mark-paid.ts`) from `abc_invoice_lines`
+to `v_invoice_lines_complete`. (`live-work.ts`/`decision.ts` only carry a `sourceTable`
+label — left as-is.)
+
+- **FK relax** (mig 126): dropped `invoice_line_audit_invoice_line_id_fkey` so audit
+  decisions can be recorded on complete-set (CSV) line ids. Column + index kept; lines are
+  never deleted so the old `ON DELETE CASCADE` was dead weight.
+- **Verification:** non-truncated invoices byte-identical (audit_invoice line_count 1183,
+  at_risk $327.02, audit_line rows 1183 — unchanged). Truncated invoices now interrogate
+  the full set: audit_line rows 1450→**2251**, `v_item_uom_map` line_count 2633→**3434**,
+  worst invoice now shows all 26 lines.
+- **Newly surfaced exposure:** the 145 truncated invoices now show **903 overcharged
+  lines**, **1,269 no-agreement lines**, and **$8,656.75 at-risk** that the 10-line cap
+  had hidden.
+- **Audit-decision re-derivation** (mirrors the original mig-100 rules so lines don't
+  falsely revert to "needs review"): 538 pre-2026 CSV lines backfilled `passed`; 55 2026
+  CSV lines `passed` via price-match auto_match; 1,658 correctly remain pending/surfaced.
+- Grants + RLS on the new objects: mig 127.
+
+Automated go-forward coverage for new/out-of-window invoices = the PDF OCR phase Automated go-forward coverage for new/out-of-window
 invoices = the PDF OCR phase ([`proposals/2026-06-19-invoice-pdf-ocr-line-completion.md`](../proposals/2026-06-19-invoice-pdf-ocr-line-completion.md)).
 
 ## ⚠️ For Chris's review

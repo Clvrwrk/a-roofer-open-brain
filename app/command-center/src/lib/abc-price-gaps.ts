@@ -698,7 +698,8 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         ),
         selectAll<InvoiceLineRow>(
           client,
-          "abc_invoice_lines",
+          // v_invoice_lines_complete: full line set for API-truncated invoices (ABC 10-line cap, docs/47 #2)
+          "v_invoice_lines_complete",
           "invoice_number,line_key,line_number,item_number,item_description,raw,price_per_uom,price_qty,price_uom",
         ),
         selectAll<OrderRow>(client, "abc_orders", "order_number,branch_number,order_name,purchase_order_number,ship_to_number"),
