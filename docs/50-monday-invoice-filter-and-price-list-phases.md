@@ -41,10 +41,19 @@ Two scanned PDFs from Justin (no text layer; partial transcription loaded):
 - **`wichita_branch_113_list`** — Customer **Price List** (branch 113, eff 6/16–6/30). Brand-
   grouped, **family-level** (descriptions only, no item#), in SQ/BD/RL. Not yet loaded.
 
+### OCR pipeline — VALIDATED (Unstructured.io, 2026-06-19)
+The recurring vendor-format problem is solved with **Unstructured.io** as the OCR engine
+(key in `.env`, placeholder in `config/.env.example`). Proven end-to-end on both scanned PDFs:
+- `POST https://api.unstructuredapp.io/general/v0/general` (`strategy=hi_res`) → Table
+  elements with `text_as_html` (prices, descriptions, UOM extracted cleanly).
+- **Normalization layer** (the key step): match OCR'd item# to `abc_product_catalog`.
+  On the PA agreement, **66/73 exact (90%)**; 4 of the 7 misses auto-corrected via
+  `pg_trgm` similarity (`02MLVIASHE→02MLVIA3HE`, `141P81716→14IP81716`); 3 ambiguous →
+  human review queue. This is the ingest loop for every vendor going forward.
+
 ### Remaining (the deferred phase)
-- Full extract of PA-16 **pages 2–3** + the **Wichita branch list** (4 pp). Both are scanned
-  with no text layer and no tesseract here — needs OCR install, or (better) **Justin's source
-  file (Excel/CSV)** to avoid transcription error on prices.
+- Re-run both PDFs through the validated OCR loop and promote to a live agreement after
+  the exec confirms the ~3 review-queue items per doc.
 - Match the family-level branch list → our families → SKUs.
 - After review, **promote PA-16 to a live agreement** (new `abc_price_agreements` +
   `abc_price_list_items`), superseding the stale prices. (The "price-list submission" review
