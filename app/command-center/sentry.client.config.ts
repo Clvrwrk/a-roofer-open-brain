@@ -8,7 +8,11 @@
 // addresses, or pricing.
 import * as Sentry from "@sentry/astro";
 
-const dsn = import.meta.env.PUBLIC_SENTRY_DSN;
+// A Sentry DSN is a PUBLIC identifier (it ships in the client bundle by design) — not a secret,
+// so a literal fallback is safe and guarantees prod telemetry even if PUBLIC_SENTRY_DSN isn't wired
+// as a build arg. Gated on import.meta.env.PROD so local `astro dev` stays silent.
+const LITERAL_DSN = "https://64100fe85831a3ae8523eb6e810773af@o4511120856449024.ingest.us.sentry.io/4511599368798208";
+const dsn = import.meta.env.PUBLIC_SENTRY_DSN ?? (import.meta.env.PROD ? LITERAL_DSN : undefined);
 
 if (dsn) {
   Sentry.init({

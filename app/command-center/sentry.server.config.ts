@@ -6,7 +6,10 @@
 // belt-and-suspenders beforeSend that drops cookies + the Authorization header.
 import * as Sentry from "@sentry/astro";
 
-const dsn = process.env.SENTRY_DSN;
+// DSN is a public identifier (not a secret); literal fallback guarantees prod telemetry even if
+// SENTRY_DSN isn't set in the runtime env. Gated on NODE_ENV=production so local dev stays silent.
+const LITERAL_DSN = "https://64100fe85831a3ae8523eb6e810773af@o4511120856449024.ingest.us.sentry.io/4511599368798208";
+const dsn = process.env.SENTRY_DSN ?? (process.env.NODE_ENV === "production" ? LITERAL_DSN : undefined);
 
 if (dsn) {
   Sentry.init({
