@@ -40,6 +40,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 }));
 
 const DRY = Boolean(args.dry);
+const SCOPE = args.scope === "purchased" ? "purchased" : "gpa"; // gpa = 99 freq items; purchased = ~606 products we buy
 const BRANCH_LIMIT = args.branches ? Number(args.branches) : Infinity;
 const ITEM_LIMIT = args.items ? Number(args.items) : Infinity;
 const SHIP_TO_OVERRIDE = args["ship-to"] ? String(args["ship-to"]) : null;
@@ -64,7 +65,7 @@ if (!SB_URL || !SB_KEY) { console.error("Missing Supabase URL/service-role key")
 
 const RUN_DIR = resolve(new URL(".", import.meta.url).pathname, ".price-seed-runs");
 mkdirSync(RUN_DIR, { recursive: true });
-const CKPT = resolve(RUN_DIR, `checkpoint-${CYCLE}.json`);
+const CKPT = resolve(RUN_DIR, `checkpoint-${SCOPE}-${CYCLE}.json`);
 const ckpt = existsSync(CKPT) ? JSON.parse(readFileSync(CKPT, "utf8")) : { done: [], stats: {} };
 const doneBranches = new Set(ckpt.done);
 
@@ -123,17 +124,23 @@ const lineItem = (l) => l?.itemNumber || l?.item?.number || l?.id || null;
 async function main() {
   log(`ABC price seed — env=${ABC_ENV} cycle=${CYCLE} dry=${DRY} (resume: ${doneBranches.size} branches done)`);
 
-  // 1. GPA items: products whose manufacturer_sku is a frequently-ordered item#.
-  const freq = await sbGet(`frequently_ordered_import?select=item_number`);
-  const freqSet = [...new Set(freq.map((r) => r.item_number).filter(Boolean))];
-  const prodRows = [];
-  for (let i = 0; i < freqSet.length; i += 100) {
-    const chunk = freqSet.slice(i, i + 100).map((s) => `"${s}"`).join(",");
-    prodRows.push(...await sbGet(`products?select=id,manufacturer_sku,base_uom&manufacturer_sku=in.(${chunk})`));
+  // 1. Item set. scope=purchased -> v_price_seed_item (canonical products we buy, ~606);
+  //    scope=gpa -> the 99 frequently-ordered SKUs.
+  let prodRows = [];
+  if (SCOPE === "purchased") {
+    prodRows = await sbGet(`v_price_seed_item?select=product_id,item_number,base_uom`);
+    prodRows = prodRows.map((r) => ({ id: r.product_id, manufacturer_sku: r.item_number, base_uom: r.base_uom }));
+  } else {
+    const freq = await sbGet(`frequently_ordered_import?select=item_number`);
+    const freqSet = [...new Set(freq.map((r) => r.item_number).filter(Boolean))];
+    for (let i = 0; i < freqSet.length; i += 100) {
+      const chunk = freqSet.slice(i, i + 100).map((s) => `"${s}"`).join(",");
+      prodRows.push(...await sbGet(`products?select=id,manufacturer_sku,base_uom&manufacturer_sku=in.(${chunk})`));
+    }
   }
   const items = prodRows.filter((p) => p.manufacturer_sku).slice(0, ITEM_LIMIT);
   const prodByItem = new Map(items.map((p) => [p.manufacturer_sku, p]));
-  log(`GPA items: ${items.length}`);
+  log(`scope=${SCOPE} items: ${items.length}`);
 
   // 2. Canonical vendor_branches id map (for the observation's vendor_branch_id).
   const vBranches = await sbGet(`vendor_branches?select=id,branch_number`);

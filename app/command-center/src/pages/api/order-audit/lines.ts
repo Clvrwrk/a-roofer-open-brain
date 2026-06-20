@@ -32,6 +32,15 @@ export const GET: APIRoute = async ({ url, locals }) => {
     return jsonApiResponse({ error: "query_failed", error_description: error.message }, { status: 500 });
   }
 
+  // Current ABC API price per item at this order's branch (monthly seed, migration 134).
+  const { data: ordRow } = await client.from("v_order_audit_order").select("branch_number").eq("order_number", orderNumber).limit(1).maybeSingle();
+  const branchNorm = String((ordRow as any)?.branch_number ?? "").replace(/^0+/, "");
+  const apiByItem = new Map<string, { price: number; uom: string }>();
+  if (branchNorm) {
+    const { data: apiRows } = await client.from("v_branch_item_api_price").select("item_number,api_price,api_uom").eq("branch_number_norm", branchNorm);
+    for (const r of (apiRows as any[] | null) ?? []) apiByItem.set(r.item_number, { price: num(r.api_price), uom: r.api_uom ?? "" });
+  }
+
   const lines = ((data as any[] | null) ?? []).map((l) => ({
     lineId: l.line_id,
     lineKey: l.line_key ?? "",
@@ -41,6 +50,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     uom: l.uom ?? "",
     unitPrice: num(l.unit_price),
     extendedPrice: num(l.extended_price),
+    apiPrice: apiByItem.get(l.item_number ?? "")?.price ?? null,
+    apiUom: apiByItem.get(l.item_number ?? "")?.uom ?? "",
     negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
     variancePct: l.variance_pct == null ? null : num(l.variance_pct),
     varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
