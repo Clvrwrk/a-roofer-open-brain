@@ -56,10 +56,11 @@ const payload = JSON.stringify({ docs: data.docs }).replace(/</g, "\\u003c");
 </AppShell>
 
 <style is:global>
-  .plr{padding:4px 2px}
-  .plr-lead{color:var(--muted,#8a93a6);font-size:13px;margin:0 0 16px}
-  .plr-empty{color:var(--muted,#8a93a6)}
-  .plr-doc{background:var(--panel,#10151f);border:1px solid var(--line,#222b3a);border-radius:14px;margin-bottom:14px;padding:4px 14px 12px}
+  .plr{--bg:#f4f6f9;--panel:#fff;--ink:#1c2733;--muted:#6b7886;--line:#e3e8ef;padding:4px 2px;color:var(--ink)}
+  @media (prefers-color-scheme: dark){ .plr{--bg:#0f141b;--panel:#161d27;--ink:#e6edf5;--muted:#8b98a8;--line:#27313e} }
+  .plr-lead{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .plr-empty{color:var(--muted)}
+  .plr-doc{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;padding:4px 14px 12px}
   .plr-doc>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;padding:12px 2px;list-style:none}
   .plr-doc-name{font-weight:650}
   .plr-doc-tags{display:flex;align-items:center;gap:8px}
@@ -70,10 +71,10 @@ const payload = JSON.stringify({ docs: data.docs }).replace(/</g, "\\u003c");
   .plr-promote{background:#9370db;color:#fff;border:none;border-radius:9px;padding:6px 12px;font-weight:650;font-size:12px;cursor:pointer}
   .plr-promote:hover{filter:brightness(1.08)} .plr-promote:disabled{opacity:.5;cursor:default}
   .plr-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
-  .plr-table th{text-align:left;color:var(--muted,#8a93a6);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line,#222b3a)}
-  .plr-table td{padding:5px 8px;border-bottom:1px solid var(--line,#1a2230)} .plr-table .num{text-align:right;font-variant-numeric:tabular-nums}
-  .plr-fam{color:var(--muted,#8a93a6)}
-  .plr-item{width:120px;background:var(--bg,#0b0f17);border:1px solid var(--line,#222b3a);border-radius:6px;color:inherit;padding:3px 6px;font-size:12px}
+  .plr-table th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .plr-table td{padding:5px 8px;border-bottom:1px solid var(--line);color:var(--ink)} .plr-table .num{text-align:right;font-variant-numeric:tabular-nums}
+  .plr-fam{color:var(--muted)}
+  .plr-item{width:120px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:3px 6px;font-size:12px}
   .plr-stat.plr-high{background:rgba(46,158,91,.16);color:#2e9e5b} .plr-stat.plr-review{background:rgba(208,138,29,.16);color:#d08a1d}
   .plr-stat.plr-none{background:rgba(208,73,75,.16);color:#d0494b} .plr-stat.plr-confirmed{background:rgba(46,158,91,.28);color:#2e9e5b}
   .plr-stat.plr-rejected{background:rgba(140,150,170,.16);color:#8a93a6} .plr-stat.plr-promoted{background:rgba(147,112,219,.18);color:#9370db}
