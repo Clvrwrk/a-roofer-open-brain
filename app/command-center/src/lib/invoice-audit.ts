@@ -270,17 +270,23 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     generatedAt: new Date().toISOString(),
     offices,
     categories,
-    totals: {
-      invoices: invoices.length,
-      creditMemos: invoices.filter((i) => i.isCreditMemo).length,
-      atRisk: Math.round(offices.reduce((s, o) => s + o.atRisk, 0)),
-      creditMemoRequested: Math.round(offices.reduce((s, o) => s + o.creditMemoRequested, 0)),
-      noPrice: offices.reduce((s, o) => s + o.noPrice, 0),
-      flagged: offices.reduce((s, o) => s + o.flagged, 0),
-      audited: invoices.reduce((s, i) => s + i.auditedLines, 0),
-      pending: invoices.reduce((s, i) => s + i.pendingLines, 0),
-      openInvoices: invoices.filter((i) => !i.paid).length,
-      paidInvoices: invoices.filter((i) => i.paid).length,
-    },
+    // KPI cards reflect OPEN (unpaid per the ABC AR report) invoices only — the actionable
+    // set for go-live. Paid/closed invoices remain a browsable historical record below the
+    // cards (via the office tree + the "All invoices" filter), but don't inflate the headline.
+    totals: (() => {
+      const openInv = invoices.filter((i) => !i.paid);
+      return {
+        invoices: invoices.length, // total (drives the empty-state guard, not a card)
+        creditMemos: openInv.filter((i) => i.isCreditMemo).length,
+        atRisk: Math.round(openInv.reduce((s, i) => s + i.atRisk, 0)),
+        creditMemoRequested: Math.round(openInv.reduce((s, i) => s + i.creditMemoRequested, 0)),
+        noPrice: openInv.reduce((s, i) => s + i.noPriceLines, 0),
+        flagged: openInv.reduce((s, i) => s + i.flaggedLines, 0),
+        audited: openInv.reduce((s, i) => s + i.auditedLines, 0),
+        pending: openInv.reduce((s, i) => s + i.pendingLines, 0),
+        openInvoices: openInv.length,
+        paidInvoices: invoices.filter((i) => i.paid).length,
+      };
+    })(),
   };
 }
