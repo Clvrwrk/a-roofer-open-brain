@@ -180,7 +180,7 @@ if (root && dataEl && mount) {
       ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
       : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
     return `
-      <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-paid="${inv.paid ? "1" : "0"}">
+      <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${inv.po ? " · PO " + esc(inv.po) : ""}${job}</span></span>
@@ -191,6 +191,28 @@ if (root && dataEl && mount) {
       </details>`;
   }
 
+  // Rollup pills/stats are rebuilt from the *visible* invoices on every filter change
+  // (applyFilter), so the office/branch bars always match the active scope — open-only
+  // by default, since that is this dashboard's sole task. Shared builders keep the
+  // render-time and recompute-time markup identical.
+  interface Roll { invoiceCount: number; pending: number; atRisk: number; noPrice: number; }
+  function branchTags(r: Roll): string {
+    return [
+      `<span class="pill pill-grey">${r.invoiceCount} invoices</span>`,
+      r.pending ? `<span class="pill pill-brand">${r.pending} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
+      r.atRisk > 0 ? `<span class="pill pill-red">${money(r.atRisk)} at risk</span>` : "",
+      r.noPrice ? `<span class="pill pill-yellow">${r.noPrice} no-price</span>` : "",
+    ].filter(Boolean).join("");
+  }
+  function officeMini(r: Roll): string {
+    return [
+      `<div><strong>${r.pending}</strong><span>To Audit</span></div>`,
+      `<div><strong>${r.invoiceCount}</strong><span>Invoices</span></div>`,
+      `<div><strong>${money(r.atRisk)}</strong><span>At Risk</span></div>`,
+      `<div><strong>${r.noPrice}</strong><span>No-Price</span></div>`,
+    ].join("");
+  }
+
   function branchNode(br: Branch): string {
     // A branch has a price list iff at least one of its lines resolved a negotiated price.
     const branchHasPriceList = br.invoices.some((i) => i.lines.some((l) => l.negotiatedPrice != null));
@@ -199,12 +221,7 @@ if (root && dataEl && mount) {
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-branch-name">${esc(br.branchName)}</span> <span class="iv-inv-sub">#${esc(br.branchCode)}</span></span>
-          <span class="iv-branch-tags">
-            <span class="pill pill-grey">${br.invoiceCount} invoices</span>
-            ${br.pending ? `<span class="pill pill-brand">${br.pending} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>'}
-            ${br.atRisk > 0 ? `<span class="pill pill-red">${money(br.atRisk)} at risk</span>` : ""}
-            ${br.noPrice ? `<span class="pill pill-yellow">${br.noPrice} no-price</span>` : ""}
-          </span>
+          <span class="iv-branch-tags">${branchTags(br)}</span>
         </summary>
         <div class="iv-branch-body">${br.invoices.map((inv) => invoiceNode(inv, branchHasPriceList)).join("")}</div>
       </details>`;
@@ -216,12 +233,7 @@ if (root && dataEl && mount) {
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-office-name">${esc(off.office)}</span>
-          <span class="iv-mini">
-            <div><strong>${off.pending}</strong><span>To Audit</span></div>
-            <div><strong>${off.invoiceCount}</strong><span>Invoices</span></div>
-            <div><strong>${money(off.atRisk)}</strong><span>At Risk</span></div>
-            <div><strong>${off.noPrice}</strong><span>No-Price</span></div>
-          </span>
+          <span class="iv-mini">${officeMini({ invoiceCount: off.invoiceCount, pending: off.pending, atRisk: off.atRisk, noPrice: off.noPrice })}</span>
         </summary>
         <div class="iv-office-body">${off.branches.map(branchNode).join("")}</div>
       </details>`;
@@ -261,12 +273,15 @@ if (root && dataEl && mount) {
     mount.querySelectorAll<HTMLElement>(".iv-office").forEach((oEl) => {
       const officeOk = !off || oEl.dataset.office === off;
       let officeHas = false;
+      const offRoll: Roll = { invoiceCount: 0, pending: 0, atRisk: 0, noPrice: 0 };
       oEl.querySelectorAll<HTMLElement>(".iv-branch").forEach((bEl) => {
         let branchHas = false;
+        const brRoll: Roll = { invoiceCount: 0, pending: 0, atRisk: 0, noPrice: 0 };
         bEl.querySelectorAll<HTMLElement>(".iv-inv").forEach((iEl) => {
           const worst = parseFloat(iEl.dataset.worst || "0");
           const noprice = parseInt(iEl.dataset.noprice || "0", 10);
           const pending = parseInt(iEl.dataset.pending || "0", 10);
+          const atrisk = parseFloat(iEl.dataset.atrisk || "0");
           const paid = iEl.dataset.paid === "1";
           const tolOk = !tol ? true : tol === "noprice" ? noprice > 0 : worst >= parseFloat(tol);
           const statusOk = status === "open" ? !paid : status === "paid" ? paid : true;
@@ -275,11 +290,25 @@ if (root && dataEl && mount) {
           const ok = officeOk && tolOk && statusOk && pendOk && qOk;
           iEl.style.display = ok ? "" : "none";
           if (ok) branchHas = true;
+          // Bars track the STATUS scope (open by default — the dashboard's sole task), not the
+          // tol/to-audit/search drill filters. So the office "Invoices" headcount sums to the
+          // open KPI (172), while "To Audit" stays the work remaining within that scope.
+          if (statusOk && officeOk) {
+            brRoll.invoiceCount++; brRoll.pending += pending; brRoll.atRisk += atrisk; brRoll.noPrice += noprice;
+          }
         });
         bEl.style.display = branchHas ? "" : "none";
-        if (branchHas) officeHas = true;
+        const brTags = bEl.querySelector<HTMLElement>(".iv-branch-tags");
+        if (brTags) brTags.innerHTML = branchTags({ ...brRoll, atRisk: Math.round(brRoll.atRisk) });
+        if (branchHas) {
+          officeHas = true;
+          offRoll.invoiceCount += brRoll.invoiceCount; offRoll.pending += brRoll.pending;
+          offRoll.atRisk += brRoll.atRisk; offRoll.noPrice += brRoll.noPrice;
+        }
       });
       oEl.style.display = officeHas ? "" : "none";
+      const mini = oEl.querySelector<HTMLElement>(".iv-mini");
+      if (mini) mini.innerHTML = officeMini({ ...offRoll, atRisk: Math.round(offRoll.atRisk) });
     });
   }
   [search, officeSel, tolSel, statusSel, pendingBox].forEach((el) => el?.addEventListener("input", applyFilter));
