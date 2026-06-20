@@ -24,6 +24,9 @@ export interface EstimateLine {
   lineCost: number;
   linePrice: number;
   categoryKey: string; // roof-system segment (schema 114)
+  abcItemNumber: string; // mapped ABC item (estimate_product_mappings, view mig 140)
+  apiPrice: number | null; // current ABC API price at the estimate's branch (seed, mig 134)
+  apiUom: string;
 }
 
 export interface EstimateOption {
@@ -128,12 +131,14 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     return rows;
   };
 
-  const [jobRows, estRows, lineRows, editRows, catRows] = await Promise.all([
+  const [jobRows, estRows, lineRows, editRows, catRows, apiPriceRows] = await Promise.all([
     fetchAll(() => client.from("v_estimate_audit_job").select("*")),
     fetchAll(() => client.from("v_estimate_audit_estimate").select("*")),
     fetchAll(() => client.from("v_estimate_audit_line").select("*")),
     fetchAll(() => client.from("estimate_audit_edits").select("*")),
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
+    // Current ABC API price per item per branch (monthly seed, migration 134).
+    fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
 
@@ -169,6 +174,11 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories, totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
   }
 
+  // API price keyed by item|branch (leading zeros stripped); branch is the estimate's job branch.
+  const normBranch = (b: unknown) => String(b ?? "").replace(/^0+/, "");
+  const apiByKey = new Map<string, { price: number; uom: string }>();
+  for (const r of apiPriceRows) apiByKey.set(`${r.item_number}|${r.branch_number_norm}`, { price: num(r.api_price), uom: r.api_uom ?? "" });
+
   const linesByOption = new Map<string, EstimateLine[]>();
   for (const l of lineRows) {
     const list = linesByOption.get(l.option_id) ?? [];
@@ -181,6 +191,9 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
       lineCost: num(l.line_cost),
       linePrice: num(l.line_price),
       categoryKey: l.category_key ?? "uncategorized",
+      abcItemNumber: l.abc_item_number ?? "",
+      apiPrice: null,
+      apiUom: "",
     });
     linesByOption.set(l.option_id, list);
   }
@@ -217,7 +230,7 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
           return { ...l, qty: ed.qty != null ? num(ed.qty) : l.qty, unitCost: ed.unit_cost != null ? num(ed.unit_cost) : l.unitCost };
         });
       for (const ad of addedLines.get(opt.estimateId) ?? []) {
-        opt.lines.push({ lineId: ad.line_id, description: ad.description ?? "", qty: num(ad.qty), uom: ad.uom ?? "EA", unitCost: num(ad.unit_cost), lineCost: 0, linePrice: 0, categoryKey: "uncategorized" });
+        opt.lines.push({ lineId: ad.line_id, description: ad.description ?? "", qty: num(ad.qty), uom: ad.uom ?? "EA", unitCost: num(ad.unit_cost), lineCost: 0, linePrice: 0, categoryKey: "uncategorized", abcItemNumber: "", apiPrice: null, apiUom: "" });
       }
       if (marginEdit.has(opt.estimateId)) opt.marginPct = marginEdit.get(opt.estimateId)!;
       recompute(opt);
@@ -260,6 +273,16 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
       estimates,
     };
   });
+
+  // Attach the branch-tied API price to each line (mapped ABC item × the job's branch).
+  for (const job of jobs) {
+    const bn = normBranch(job.branchCode);
+    for (const opt of job.estimates) for (const line of opt.lines) {
+      if (!line.abcItemNumber) continue;
+      const api = apiByKey.get(`${line.abcItemNumber}|${bn}`);
+      if (api) { line.apiPrice = api.price; line.apiUom = api.uom; }
+    }
+  }
 
   // Group into offices.
   const officeMap = new Map<string, EstimateJob[]>();

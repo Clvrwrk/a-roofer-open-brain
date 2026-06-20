@@ -5,7 +5,7 @@
 // Nothing persists yet (write-back to Supabase is the follow-up); edits toast
 // "recalculated locally — not saved".
 
-interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; categoryKey: string; }
+interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; categoryKey: string; abcItemNumber: string; apiPrice: number | null; apiUom: string; }
 interface Category { key: string; label: string; sortOrder: number; }
 interface EstOption {
   estimateId: string; tier: string; tierLabel: string; customName: string | null;
@@ -52,7 +52,7 @@ if (root && dataEl && mount) {
   }
 
   /* ---- render: one editable line row (keeps its original est.lines index) ---- */
-  const THEAD = '<thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>';
+  const THEAD = '<thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">API Price</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>';
   function lineRow(l: Line, li: number, oi: number, ji: number, ei: number): string {
     return `
         <tr>
@@ -60,6 +60,7 @@ if (root && dataEl && mount) {
           <td class="num"><input class="ea-qty" type="number" step="any" value="${l.qty}" data-edit="qty" data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" /></td>
           <td>${esc(l.uom)}</td>
           <td class="num"><input class="ea-price" type="number" step="any" value="${l.unitCost}" data-edit="unit" data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" title="Unit cost — set a one-off here when no pricing exists" /></td>
+          <td class="num">${l.apiPrice == null ? '<span class="ea-dash">—</span>' : money2(l.apiPrice) + ` <span class="ea-dash">/${esc(l.apiUom || l.uom)}</span>`}</td>
           <td class="num" data-cell="linecost">${money2(l.lineCost)}</td>
           <td class="num" data-cell="lineprice">${money2(l.linePrice)}</td>
           <td><button class="ea-del" data-del data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" title="Delete line">×</button></td>
@@ -253,7 +254,7 @@ if (root && dataEl && mount) {
       est.lines.splice(+el.dataset.l!, 1);
       toast("Line deleted (local)");
     } else {
-      est.lines.push({ lineId: "new-" + est.lines.length, description: "", qty: 1, uom: "EA", unitCost: 0, lineCost: 0, linePrice: 0, categoryKey: "uncategorized" });
+      est.lines.push({ lineId: "new-" + est.lines.length, description: "", qty: 1, uom: "EA", unitCost: 0, lineCost: 0, linePrice: 0, categoryKey: "uncategorized", abcItemNumber: "", apiPrice: null, apiUom: "" });
       toast("Line added — set description, qty, and one-off price");
     }
     recalc(est);
