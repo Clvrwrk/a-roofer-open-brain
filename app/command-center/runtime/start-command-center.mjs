@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
 
+// Load Sentry (@sentry/node) before the Slack runtime's own imports so it auto-instruments.
+// No-ops unless SENTRY_DSN is set (see runtime/sentry-instrument.mjs).
+const SLACK_ARGS = ["--import", "./runtime/sentry-instrument.mjs", "runtime/slack-socket-runtime.mjs"];
+
 const children = new Map();
 let shuttingDown = false;
 let slackRestartAttempts = 0;
@@ -28,7 +32,7 @@ function spawnChild(name, args) {
   log("spawn", { name, args });
 
   const child = spawn(process.execPath, args, {
-    env: process.env,
+    env: { ...process.env, SENTRY_COMPONENT: name === "slack" ? "slack-runtime" : "command-center" },
     stdio: "inherit",
   });
 
@@ -71,7 +75,7 @@ function scheduleSlackRestart() {
 
   slackRestartTimer = setTimeout(() => {
     slackRestartTimer = null;
-    spawnChild("slack", ["runtime/slack-socket-runtime.mjs"]);
+    spawnChild("slack", SLACK_ARGS);
   }, delayMs);
 }
 
@@ -104,7 +108,7 @@ process.on("SIGINT", () => shutdown(0));
 spawnChild("web", ["dist/server/entry.mjs"]);
 
 if (hasSlackRuntimeEnv()) {
-  spawnChild("slack", ["runtime/slack-socket-runtime.mjs"]);
+  spawnChild("slack", SLACK_ARGS);
 } else {
   log("slack_skipped_missing_env");
 }

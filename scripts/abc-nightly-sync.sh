@@ -39,9 +39,23 @@ else
   LABEL="nightly cycle-counting (recompute + due items)"
 fi
 
+# Sentry (optional): if @sentry/node is installed under the command-center app and the repo-root
+# .env carries a SENTRY_DSN, load the instrument before the sync so failures report to Sentry
+# (component=abc-sync). Until then this is a no-op and the sync runs exactly as before.
+SENTRY_INSTRUMENT="$REPO_ROOT/app/command-center/runtime/sentry-instrument.mjs"
+SENTRY_IMPORT=""
+if [ -d "$REPO_ROOT/app/command-center/node_modules/@sentry/node" ] && [ -f "$SENTRY_INSTRUMENT" ]; then
+  # Export SENTRY_* from repo-root .env so the --import instrument (runs before the script) sees them.
+  if [ -f "$REPO_ROOT/.env" ]; then
+    set -a; eval "$(grep -E '^SENTRY_(DSN|ENVIRONMENT|RELEASE)=' "$REPO_ROOT/.env" || true)"; set +a
+  fi
+  export SENTRY_COMPONENT="abc-sync"
+  [ -n "${SENTRY_DSN:-}" ] && SENTRY_IMPORT="--import $SENTRY_INSTRUMENT"
+fi
+
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: abc sync start [$LABEL] ==="
-  if node integrations/bridges/abc-supply/production-sync.mjs $SYNC_ARGS; then
+  if node $SENTRY_IMPORT integrations/bridges/abc-supply/production-sync.mjs $SYNC_ARGS; then
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: done OK ==="
   else
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: FAILED (exit $?) ==="

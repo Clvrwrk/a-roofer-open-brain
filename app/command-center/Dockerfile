@@ -9,8 +9,22 @@ RUN npm ci
 
 FROM deps AS build
 
+# Sentry build-time inputs (passed as Coolify build args). SENTRY_AUTH_TOKEN lets the Sentry Vite
+# plugin upload source maps during `astro build`; PUBLIC_SENTRY_DSN is baked into the client bundle.
+# These live ONLY in this build stage — the runner stage below is a separate FROM and never sees
+# the token. (Upgrade path: BuildKit `--mount=type=secret` for stricter secret hygiene.)
+ARG SENTRY_AUTH_TOKEN=""
+ARG PUBLIC_SENTRY_DSN=""
+ARG PUBLIC_SENTRY_ENVIRONMENT="production"
+ARG SENTRY_RELEASE=""
+
 COPY . .
-RUN npm run build
+RUN SENTRY_AUTH_TOKEN="$SENTRY_AUTH_TOKEN" \
+    PUBLIC_SENTRY_DSN="$PUBLIC_SENTRY_DSN" \
+    PUBLIC_SENTRY_ENVIRONMENT="$PUBLIC_SENTRY_ENVIRONMENT" \
+    PUBLIC_SENTRY_RELEASE="$SENTRY_RELEASE" \
+    SENTRY_RELEASE="$SENTRY_RELEASE" \
+    npm run build
 
 FROM node:22-bookworm-slim AS runner
 

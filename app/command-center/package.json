@@ -10,7 +10,7 @@
     "check": "astro build",
     "start": "node runtime/start-command-center.mjs",
     "start:web": "node dist/server/entry.mjs",
-    "slack:runtime": "node runtime/slack-socket-runtime.mjs",
+    "slack:runtime": "node --import ./runtime/sentry-instrument.mjs runtime/slack-socket-runtime.mjs",
     "price-agreements:audit": "node scripts/audit-price-agreement-items.mjs",
     "price-agreements:audit:active": "node scripts/audit-price-agreement-items.mjs --active-only",
     "price-agreements:audit:fail": "node scripts/audit-price-agreement-items.mjs --fail-on-gaps",
@@ -19,6 +19,8 @@
   },
   "dependencies": {
     "@astrojs/node": "^10.1.3",
+    "@sentry/astro": "^10.59.0",
+    "@sentry/node": "^10.59.0",
     "@slack/bolt": "^4.7.3",
     "@supabase/supabase-js": "^2.107.0",
     "@workos-inc/node": "^10.2.0",

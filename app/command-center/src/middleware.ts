@@ -1,10 +1,19 @@
 import { defineMiddleware } from "astro:middleware";
+import * as Sentry from "@sentry/astro";
 import {
   buildUnauthorizedResponse,
   localActor,
   resolveActorFromSessionUser,
   resolveServiceActorFromBearer,
 } from "@lib/access-control";
+
+// Attach the resolved actor to the current request's Sentry scope so each error names the
+// account that hit it (id + email per the alpha decision). No-ops when Sentry isn't initialized.
+function applySentryUser(actor: { id: string; type: string; displayName: string; email: string | null } | null) {
+  if (!actor) return;
+  Sentry.setUser({ id: actor.id, email: actor.email ?? undefined, username: actor.displayName });
+  Sentry.setTag("actor.type", actor.type);
+}
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { prewarmSurfaceCaches } from "@lib/prewarm.server";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
@@ -100,13 +109,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const serviceActor = resolveServiceActorFromBearer(request, env);
     if (serviceActor) {
       locals.actor = serviceActor;
+      applySentryUser(serviceActor);
       return next();
     }
   }
 
   // 3. Dev fallback: anything but explicit workos mode keeps the Local Operator.
   if (env.COMMAND_CENTER_AUTH_MODE !== "workos") {
-    locals.actor = localActor();
+    const actor = localActor();
+    locals.actor = actor;
+    applySentryUser(actor);
     return next();
   }
 
@@ -132,5 +144,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   locals.actor = actor;
+  applySentryUser(actor);
   return next();
 });

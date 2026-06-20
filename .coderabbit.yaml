@@ -74,6 +74,18 @@ reviews:
         - Live ⇄ Dev alignment: flag work that assumes `main` is the deploy branch
           without confirmation, and call out anything that would strand a feature
           on a side branch instead of converging on the live branch.
+    # --- Observability / error-handling focus (Sentry is live; surface failures) -------
+    - path: "{app,integrations,scripts,runtime}/**/*.{ts,tsx,js,jsx,mjs}"
+      instructions: |
+        - Flag swallowed errors: empty catch blocks, catch blocks that only
+          console.log/console.error and continue, and async work whose promise
+          rejection is ignored (no await, no .catch). These hide failures from Sentry.
+        - In server routes, background runtimes, and cron/sync scripts, an error path
+          that is caught and not rethrown should call Sentry.captureException (or
+          deliberately document why it is safe to swallow). Flag caught errors that
+          vanish with no Sentry capture and no rethrow.
+        - Do NOT log secrets/tokens/PII into error messages or breadcrumbs (rule 2);
+          flag error reporting that could ship customer names, addresses, or pricing.
     - path: "config/**"
       instructions: |
         - Customization belongs in config/roofer.config.yaml. Flag any specific
