@@ -77,6 +77,19 @@ invoice shows 26 lines identically across surfaces. Open/paid everywhere keys of
 - **Price List Coverage** — retired from go-live nav. Distinct "request a price list at a
   branch" workflow; candidate to fold into Agreement Builder post-launch. Page kept.
 
+## Order Audit (checked 2026-06-19 — already aligned, no work needed)
+
+- **No truncation:** the ABC *order* API returns full line detail (max 28 lines, 829
+  orders >10 lines). The 10-line cap is invoice-endpoint-only.
+- **Canonical UOM:** `v_order_audit_line/order` (mig 121) already align via `v_item_uom_map`
+  and `raw->branch` — the same canonical spine as invoices. Order Audit actually *improved*
+  from the invoice line-completion: `v_item_uom_map` grew 2,633→3,434 lines, so more items
+  now have a UOM map for order-price alignment.
+- **Sanity:** 3,178 orders, 312 with at-risk, ~$30,108 total order at-risk.
+- **One small gap (business decision, not a bug):** 9 orders (0.3%) on 5 ABC branches
+  (36, 37, 38, 79, 1271) that aren't assigned to a PE-office territory in `vendor_branches`
+  → they show as "Unassigned" office. Assign those branches to a territory to clear it.
+
 ## Not done / follow-ups
 
 - The historical 415 are header+line from CSV only (no API enrichment). If ABC ever
