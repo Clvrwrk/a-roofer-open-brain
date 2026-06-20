@@ -60,6 +60,36 @@ sync ran **2026-06-18 09:45 UTC**; this invoice post-dates it. Next sync will pi
   (`2009483334-001` +$162, `2009262059-001` +$69, `2008342472-001` +$12.70) — API-side
   line splitting or report-side consolidation of identical items.
 
+## Line-completion from CSV (Phase 1 — done 2026-06-19, mig 124)
+
+The downloaded report CSV was verified to carry **full, untruncated** line detail (e.g.
+`2010452632-001`: all 26 product rows summing exactly to the 13,296.14 subtotal). So we
+closed the API 10-line gap from the CSV we already staged — **no PDF OCR needed for the
+current dataset**.
+
+- **Truncated invoices:** **145** (precise — CSV product-line count > API line count; 7 of
+  the 152 at-exactly-10 genuinely have 10 lines and were correctly excluded).
+- New flags on `abc_invoices`: `lines_truncated_by_api`, `api_line_count`,
+  `full_line_count`, `lines_complete_source`.
+- New table `abc_invoice_lines_full`: **2,251** complete CSV lines for the 145 invoices,
+  canonical pricing UOM populated (`price_uom`/`price_qty`/`price_per_uom`).
+- New view `v_invoice_lines_complete`: API lines for un-truncated invoices + full CSV
+  lines for truncated ones. **No deletion** — partial API lines stay in
+  `abc_invoice_lines` untouched (rule 1).
+- **Validation:** all **145/145** reconcile to subtotal to the penny; view returns the
+  full set with **no double-counting** (3,434 view rows = 1,183 non-truncated API +
+  2,251 complete); **0** multi-line invoices lack complete coverage.
+
+### ⏭️ Phase 2 — NOT yet done (live audit still reads truncated lines)
+The ~8 audit views (`v_invoice_audit_line`, `v_invoice_audit_invoice`, `v_branch_item_spend`,
+`v_item_uom_map`, `v_recent_invoice_price`, `v_invoice_line_audit_eval`,
+`v_abc_invoice_lines_with_pdf`, `v_credit_memo_audit`) and 5 app libs still read
+`abc_invoice_lines` directly, so the **live** audit still interrogates the truncated set
+for the 145. Repointing them at `v_invoice_lines_complete` (with per-dashboard
+verification) is Phase 2 — recommended as the first Phase-6-cleanup item, since cleanup
+touches these same dashboards. Automated go-forward coverage for new/out-of-window
+invoices = the PDF OCR phase ([`proposals/2026-06-19-invoice-pdf-ocr-line-completion.md`](../proposals/2026-06-19-invoice-pdf-ocr-line-completion.md)).
+
 ## ⚠️ For Chris's review
 
 1. **API 10-line truncation (highest priority).** This is a real ABC API defect, not a
