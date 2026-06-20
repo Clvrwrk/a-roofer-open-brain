@@ -159,6 +159,14 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
   .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .ia-toast.show{opacity:1}
   #iv-confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:70}
+  /* Phase B: review checkbox + per-branch progress bar */
+  .iv-fam-review{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+  .iv-fam-review input{accent-color:var(--brand,#2563eb);width:14px;height:14px;cursor:pointer}
+  .iv-progress{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:10px 0 14px}
+  .iv-progress-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:7px}
+  .iv-progress-head b{color:var(--ink);font-size:12.5px}
+  .iv-progress-track{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+  .iv-progress-fill{height:100%;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:99px;transition:width .35s ease}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} .iv-mini{gap:10px} }
 </style>
 

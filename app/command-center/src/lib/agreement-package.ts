@@ -33,6 +33,7 @@ export interface NegVariation {
   proposedPrice: number | null; // persisted edit, null = not yet set
   isOverride: boolean;
   excluded: boolean;
+  reviewed: boolean; // Phase B: per-item reviewed/audited flag
 }
 
 export interface NegFamily {
@@ -185,7 +186,7 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
   if (packageId) {
     const { data: pkgItems } = await client
       .from("agreement_package_items")
-      .select("item_number,proposed_price,is_override,item_status")
+      .select("item_number,proposed_price,is_override,item_status,reviewed")
       .eq("package_id", packageId);
     for (const it of (pkgItems as any[] | null) ?? []) persisted.set(it.item_number, it);
   }
@@ -224,6 +225,7 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
       proposedPrice: p && p.proposed_price != null ? num(p.proposed_price) : null,
       isOverride: !!p?.is_override,
       excluded: p?.item_status === "excluded",
+      reviewed: !!p?.reviewed,
     });
     fam.variationCount++;
     if (prior.price != null) fam.pricedCount++;

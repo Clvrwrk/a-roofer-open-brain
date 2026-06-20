@@ -73,7 +73,7 @@ if (root && dataEl && mount) {
             </details>`;
         }).join("");
 
-        body.innerHTML = actions + (catList || `<p class="iv-loading">No negotiable items for this branch.</p>`);
+        body.innerHTML = actions + progressBar(families) + (catList || `<p class="iv-loading">No negotiable items for this branch.</p>`);
 
         // family bodies lazy-render
         body.querySelectorAll<HTMLDetailsElement>(".iv-fam").forEach((det) => {
@@ -89,6 +89,7 @@ if (root && dataEl && mount) {
           });
         });
         bindFamSet(body, famById);
+        bindFamReview(body, branch, famById, families);
         bindActions(body, branch, families, byItem, dirty);
       })
       .catch(() => { body.innerHTML = `<p class="iv-loading">Failed to load — network error.</p>`; });
@@ -105,6 +106,7 @@ if (root && dataEl && mount) {
               <span class="pill ${classPill(fam.topClass)}">Class ${esc(fam.topClass)}</span>
               ${fam.pricedCount ? `<span class="pill pill-green">${fam.pricedCount}/${fam.variationCount} priced</span>` : `<span class="pill pill-yellow">none priced</span>`}
               <span class="pill pill-grey">${money(fam.spend36mo)} / 36mo</span>
+              <label class="iv-fam-review" title="Mark this family reviewed/audited"><input type="checkbox" data-famreview="${esc(fam.familyId)}" ${famReviewed(fam) ? "checked" : ""} /> Reviewed</label>
             </span>
           </summary>
           <div class="iv-fam-body" data-body="${esc(fam.familyId)}"></div>
@@ -126,6 +128,63 @@ if (root && dataEl && mount) {
     function setSaveEnabled(scope: HTMLElement, on: boolean) {
       const btn = scope.querySelector<HTMLButtonElement>('[data-act="save"]');
       if (btn) { btn.disabled = !on; btn.textContent = on ? "Save draft •" : "Save draft"; }
+    }
+    // ---- Phase B: review progress ----
+    function famReviewed(fam: NegFamily): boolean {
+      return fam.variations.length > 0 && fam.variations.every((v) => v.reviewed);
+    }
+    function progressBar(fams: NegFamily[]): string {
+      const total = fams.length;
+      const done = fams.filter(famReviewed).length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      return `<div class="iv-progress" data-progress>
+        <div class="iv-progress-head"><b>Review progress</b><span data-progress-txt>${done}/${total} families reviewed · ${pct}%</span></div>
+        <div class="iv-progress-track"><div class="iv-progress-fill" data-progress-fill style="width:${pct}%"></div></div>
+      </div>`;
+    }
+    function updateProgress(scope: HTMLElement, fams: NegFamily[]) {
+      const total = fams.length, done = fams.filter(famReviewed).length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      const fill = scope.querySelector<HTMLElement>("[data-progress-fill]");
+      const txt = scope.querySelector<HTMLElement>("[data-progress-txt]");
+      if (fill) fill.style.width = pct + "%";
+      if (txt) txt.textContent = `${done}/${total} families reviewed · ${pct}%`;
+      if (pct === 100 && total > 0) burstConfetti();
+    }
+    function bindFamReview(scope: HTMLElement, branch: { number: string; name: string; office: string }, fmap: Map<string, NegFamily>, fams: NegFamily[]) {
+      scope.querySelectorAll<HTMLInputElement>("[data-famreview]").forEach((cb) => {
+        cb.addEventListener("click", (e) => e.stopPropagation());
+        cb.addEventListener("change", async (e) => {
+          e.stopPropagation();
+          const fam = fmap.get(cb.dataset.famreview!); if (!fam) return;
+          const on = cb.checked;
+          fam.variations.forEach((v) => { v.reviewed = on; });
+          updateProgress(scope, fams);
+          const payload = fam.variations.map((v) => ({ itemNumber: v.itemNumber, familyId: fam.familyId, familyName: fam.familyName, description: v.description, uom: v.uom, reviewClass: v.reviewClass, priorPrice: v.priorPrice, priorPriceSource: v.priorPriceSource, proposedPrice: v.proposedPrice, isOverride: v.isOverride, excluded: v.excluded, reviewed: v.reviewed }));
+          try {
+            const res = await fetch("/api/price-agreement/package/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ branchNumber: branch.number, branchName: branch.name, office: branch.office, items: payload }) });
+            const r = await res.json();
+            if (!r.ok) { toast("Review save failed: " + (r.error_description || r.error || "error")); cb.checked = !on; fam.variations.forEach((v) => { v.reviewed = !on; }); updateProgress(scope, fams); return; }
+            toast(on ? `Marked “${fam.familyName}” reviewed` : `Unmarked “${fam.familyName}”`);
+          } catch { toast("Review save failed — network error."); cb.checked = !on; fam.variations.forEach((v) => { v.reviewed = !on; }); updateProgress(scope, fams); }
+        });
+      });
+    }
+    function burstConfetti() {
+      const cv = document.getElementById("iv-confetti") as HTMLCanvasElement | null;
+      if (!cv) return;
+      cv.hidden = false; cv.width = innerWidth; cv.height = innerHeight;
+      const ctx = cv.getContext("2d"); if (!ctx) return;
+      const colors = ["#2563eb", "#16a34a", "#f59e0b", "#db2777", "#7c3aed"];
+      const N = 140, parts = Array.from({ length: N }, (_, i) => ({ x: innerWidth / 2, y: innerHeight / 3, vx: (i / N - 0.5) * 16 + (i % 5 - 2), vy: -Math.abs((i % 9) - 4) * 2 - 6, c: colors[i % colors.length], r: 3 + (i % 4), life: 0 }));
+      let frame = 0;
+      const tick = () => {
+        ctx.clearRect(0, 0, cv.width, cv.height); frame++;
+        let alive = false;
+        for (const p of parts) { p.vy += 0.35; p.x += p.vx; p.y += p.vy; p.life++; if (p.y < cv.height + 20) { alive = true; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, p.r, p.r); } }
+        if (alive && frame < 220) requestAnimationFrame(tick); else { cv.hidden = true; ctx.clearRect(0, 0, cv.width, cv.height); }
+      };
+      requestAnimationFrame(tick);
     }
     function bindFamBody(det: HTMLElement, fam: NegFamily) {
       const fb = det.querySelector(".iv-fam-body") as HTMLElement;
@@ -167,7 +226,7 @@ if (root && dataEl && mount) {
         const btn = act("save")!; btn.disabled = true;
         const payload = Array.from(dirtySet).map((it) => {
           const v = items.get(it)!; const fam = fams.find((f) => f.variations.includes(v));
-          return { itemNumber: v.itemNumber, familyId: fam?.familyId, familyName: fam?.familyName, description: v.description, uom: v.uom, reviewClass: v.reviewClass, priorPrice: v.priorPrice, priorPriceSource: v.priorPriceSource, proposedPrice: v.proposedPrice, isOverride: v.isOverride, excluded: v.excluded };
+          return { itemNumber: v.itemNumber, familyId: fam?.familyId, familyName: fam?.familyName, description: v.description, uom: v.uom, reviewClass: v.reviewClass, priorPrice: v.priorPrice, priorPriceSource: v.priorPriceSource, proposedPrice: v.proposedPrice, isOverride: v.isOverride, excluded: v.excluded, reviewed: v.reviewed };
         });
         try {
           const res = await fetch("/api/price-agreement/package/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ branchNumber: branch.number, branchName: branch.name, office: branch.office, items: payload }) });

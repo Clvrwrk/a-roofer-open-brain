@@ -86,6 +86,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     proposed_price: clampNum(it.proposedPrice),
     is_override: !!it.isOverride,
     item_status: it.excluded ? "excluded" : "included",
+    // Phase B: per-item reviewed/audited flag (from the family review checkbox). Sent on
+    // every save so price-only saves preserve review state.
+    reviewed: !!it.reviewed,
+    reviewed_at: it.reviewed ? nowIso : null,
+    reviewed_by: it.reviewed ? who : null,
     updated_by: who,
     updated_at: nowIso,
   })).filter((r) => r.item_number);
