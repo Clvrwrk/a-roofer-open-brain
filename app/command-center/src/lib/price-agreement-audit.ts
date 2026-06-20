@@ -138,7 +138,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
   const gpaList = [...gpaSet];
 
   const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows, gpaCatRows, apiRows] = await Promise.all([
-    fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified,source_file")),
+    fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified,source_file,pdf_storage_path")),
     fetchAll(() => client.from("abc_price_agreement_branch_matches").select("abc_price_agreement_id,branch_number,confidence_score")),
     fetchAll(() => client.from("abc_price_list_items").select("agreement_id,item_number,description,unit,unit_price,category_key")),
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
@@ -217,6 +217,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
     isApi: boolean;
     itemCount: number;
     sourceFile: string;
+    hasPdf: boolean;
   }
   const agById = new Map<number, AgMeta>();
   for (const a of agRows) {
@@ -236,6 +237,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       isApi: isApiAgreement(a.agreement_number),
       itemCount: (negByAgreement.get(id)?.size ?? 0), // GPA-scoped item count
       sourceFile: a.source_file || "",
+      hasPdf: !!a.pdf_storage_path,
     });
   }
 
@@ -345,7 +347,8 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       needsAction,
       renewalRequested: primary ? renewalByAgreement.has(primary.id) : false,
       renewalRequestedAt: primary && renewalByAgreement.get(primary.id)?.created_at ? String(renewalByAgreement.get(primary.id).created_at).slice(0, 10) : "",
-      agreementPdfUrl: primary?.sourceFile ?? "",
+      // Purple pill → the stored agreement PDF via the signed-URL endpoint (migration 136).
+      agreementPdfUrl: primary?.hasPdf ? `/api/price-agreement/pdf/${primary.id}` : "",
       categories: categoriesOut,
     });
   }
