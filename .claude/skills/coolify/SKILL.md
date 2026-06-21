@@ -29,8 +29,12 @@ the canonical access + ops reference so we never re-discover it. Full background
 
 ## Credentials — READ THIS FIRST
 
-**The Coolify creds are in `.env.agent-passwords` (repo root), NOT root `.env`.** This is the
-#1 thing that wastes time — root `.env` returns empty for `COOLIFY_PE_OPEN_BRAIN_API_KEY`.
+**The Coolify creds are in root `.env`, COMMENTED OUT** — lines like
+`# COOLIFY_PE_OPEN_BRAIN_API_KEY=…` (also `# COOLIFY_USER_EMAIL=…`, `# COOLIFY_PASSWORD=…`).
+Extract with a grep that tolerates the leading `# ` (the `readval` helper below does this).
+They are **NOT** in `.env.agent-passwords` — that file holds the WorkOS *agent passwords*.
+(Verified 2026-06-20: the working 50-char API key lives in root `.env`, commented; this doc
+previously had it backwards and that cost real time.)
 Keys: `COOLIFY_PE_OPEN_BRAIN_API_KEY` (API bearer token), `COOLIFY_USER_EMAIL`,
 `COOLIFY_PASSWORD` (dashboard login).
 
@@ -38,13 +42,13 @@ Keys: `COOLIFY_PE_OPEN_BRAIN_API_KEY` (API bearer token), `COOLIFY_USER_EMAIL`,
 - **Never print a Coolify (or any) secret value into the chat transcript.** The auto-mode
   classifier blocks "scan a credential store → surface the secret" as a leak — correctly.
 - If the user asks for the **password/login**: do NOT paste it. Point them to their own file
-  (`.env.agent-passwords`) to read it themselves, AND offer to perform the operation via the
-  API instead (below) so nobody handles the secret.
+  (root `.env`, the commented `# COOLIFY_*` lines) to read it themselves, AND offer to perform
+  the operation via the API instead (below) so nobody handles the secret.
 - To USE the key: read it **in-place into a shell variable, never echoed**. This is allowed
   (it's an ops action, not surfacing the secret). Helper:
   ```bash
   readval(){ grep -E "^#? *$1=" "$2" 2>/dev/null | head -1 | sed -E "s/^#? *[^=]+=//" | tr -d "\"'" | xargs; }
-  KEY="$(readval COOLIFY_PE_OPEN_BRAIN_API_KEY .env.agent-passwords)"
+  KEY="$(readval COOLIFY_PE_OPEN_BRAIN_API_KEY .env)"
   ```
 - A **stage-2 classifier error** ("usually transient — retrying often succeeds") on an API
   call is transient — just retry the same command once.
@@ -61,10 +65,15 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/applications/$UUID"          # �
 # List env vars (print KEY NAMES only; never dump values)
 curl -s -H "Authorization: Bearer $KEY" "$BASE/applications/$UUID/envs"
 
-# Create an env var — MINIMAL body only. Extra fields (is_literal, is_build_time, …) → HTTP 422.
+# Create an env var — POST with {key,value} (a bare POST with is_literal etc. → 422).
 curl -s -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
      -d '{"key":"FOO","value":"<value>"}' "$BASE/applications/$UUID/envs"     # → {"uuid":...}
 # Update an existing key: PATCH "$BASE/applications/$UUID/envs" with {"key","value"}.
+# Make a var available at BUILD time (Docker --build-arg — needed for source maps, PUBLIC_*
+# client-bundle values, etc.): PATCH with field is_buildtime:true (it is is_buildtime, NOT
+# is_build_time). New vars are runtime-only by default. The /envs GET lists each var twice (cosmetic).
+curl -s -X PATCH -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+     -d '{"key":"FOO","value":"<value>","is_buildtime":true}' "$BASE/applications/$UUID/envs"
 
 # Redeploy (apply new env / ship a build)
 curl -s -H "Authorization: Bearer $KEY" "$BASE/deploy?uuid=$UUID"            # → {deployments:[{deployment_uuid}]}
@@ -74,8 +83,8 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/deployments/<deployment_uuid>"  #
 ```
 
 ### Set env var(s) + redeploy + verify — the standard play
-1. Source `$KEY` from `.env.agent-passwords` (in-place), source any secret values from their
-   real home (e.g. `ABC_SUPPLY_*` from root `.env`) — never echo.
+1. Source `$KEY` from root `.env` (in-place; the key is on a commented `# COOLIFY_*` line),
+   source any secret values from their real home (e.g. `ABC_SUPPLY_*` from root `.env`) — never echo.
 2. `POST …/envs` with `{key,value}` per var; confirm by re-listing keys (names only).
 3. `GET …/deploy?uuid=$UUID`; poll `…/deployments/<uuid>` until `finished`.
 4. Verify: `curl -s https://cc.proexteriorsus.net/healthz` → expect `status:ok` + the right

@@ -103,3 +103,33 @@ Approve | Reject | Needs Info
 - If UOM conversion is missing or uncertain, mark `needs_human_approval`.
 - If the product appears new, create a draft product candidate instead of forcing a match.
 - Keep rejected mappings for audit; do not delete them.
+
+## Promoting raw ABC catalog items into curated `products`
+
+When an ABC item appears on a real invoice/order but has no `products` row (it lives only in
+raw `abc_product_catalog`), it has no place to attach a per-branch API price and shows blank on
+the audits. Promotion is identity-mapped (manufacturer_sku = ABC item_number), additive, and
+idempotent. Verified procedure (migration 142, 2026-06-20):
+
+- **`manufacturer_sku`** = `item_number`; **`name`** / `description_normalized` = `item_description`
+  (upper for normalized).
+- **`base_uom`** = the **stocking** UOM from `abc_product_catalog.uoms[]`
+  (`uoms[] where description='stocking'`), NOT the costing UOM.
+- **`manufacturer_id`** = explicit supplier→manufacturer **alias map** from `c.supplier_name`
+  (ABC legal entity names) to `manufacturers.name` (curated brands) — e.g. `ACM SUPPLIER` →
+  `AMERICAN CONSTRUCTION METALS`, `OWENS CORNING SALES LLC` → `OWENS CORNING`,
+  `TAMKO BUILDING PRODUCTS INC` → `TAMKO ROOFING PRODUCTS`. Unmappable (`MUST ASSIGN A VALID
+  SUPPLIER`, etc.) → fall back to the existing `MISCELLANEOUS VENDOR` (legacy_id 59); **don't
+  invent new manufacturer rows** unless a real new brand.
+- **`taxonomy_id`** = join the ABC hierarchy labels into `product_taxonomy`:
+  `lower(major_group)=hierarchy.productGroup.label AND lower(category)=…category.label AND
+  lower(product_type)=…productType.label`. A handful of `product_type` labels repeat — also
+  match on major_group+category. Fallback for an unmatched type → a generic Other-Products row.
+- **`internal_sku`** = `'M' || manufacturer.legacy_id || '-' || manufacturer_sku` (existing convention).
+- **`is_active`** = true. NOT-NULL columns are: internal_sku, manufacturer_sku, name,
+  manufacturer_id, taxonomy_id, base_uom. Idempotent guard: `WHERE NOT EXISTS (… manufacturer_sku)`.
+- **Key nuance:** the invoice/order audits categorize by `category_key`, NOT `products.taxonomy_id`
+  — so taxonomy_id is low-stakes for the audit display (still set it correctly).
+- Items ABC **won't price** ("Cannot price item … Call for pricing" — `NS*` special-order metal)
+  and transactional charges (freight/fuel/delivery/jurisdiction/credits) are intentionally NOT
+  promoted; they have no API price by design.
