@@ -45,6 +45,17 @@ integrations/bridges/abc-supply/.mirror-runs/
 # Node
 node_modules/
 
+# Scratch / log / byproduct files (kept out of history; trip branch-switch guard otherwise)
+*.log
+t.txt
+time.txt
+probe-time.txt
+.playwright-mcp/
+outputs/
+.claude/launch.json
+# Editor/sync duplicate copies, e.g. "excalidraw 2.log", "workspace 2.json"
+* 2.*
+
 # Claude local (machine-specific permissions)
 .claude/settings.local.json
 integrations/bridges/abc-supply/.price-seed-runs/
