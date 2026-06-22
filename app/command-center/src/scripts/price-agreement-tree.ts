@@ -8,7 +8,7 @@ interface PaBranch {
   branchCode: string; branchName: string; office: string;
   agreementId: number | null; agreementNumber: string; versionLabel: string;
   effective: string; expiry: string; lifecycle: string; daysToExpiry: number | null;
-  ceoVerified: boolean; salesRep: string; itemCount: number; covered: boolean;
+  ceoVerified: boolean; salesRep: string; itemCount: number; negotiatedCount: number; covered: boolean;
   apiNonNegotiated: boolean; needsAction: boolean; renewalRequested: boolean; renewalRequestedAt: string;
   agreementPdfUrl: string;
   categories: PaCategory[];
@@ -24,7 +24,8 @@ const dataEl = document.getElementById("pa-data");
 const mount = document.getElementById("pa-tree");
 
 if (root && dataEl && mount) {
-  const { offices } = JSON.parse(dataEl.textContent || "{}") as { offices: PaOffice[] };
+  const { offices, gpaItems } = JSON.parse(dataEl.textContent || "{}") as { offices: PaOffice[]; gpaItems: number };
+  const gpaTotal = gpaItems || 0;
 
   const money2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pctText = (n: number) => Math.round(n * 100) + "%";
@@ -77,6 +78,11 @@ if (root && dataEl && mount) {
     if (br.apiNonNegotiated) tags.push('<span class="pill pill-grey" title="Covered by an ABC API price list — non-negotiated">API · non-negotiated</span>');
     if (br.itemCount) tags.push(`<span class="pill pill-grey">${br.itemCount} items</span>`);
     if (br.renewalRequested) tags.push(`<span class="pill pill-yellow">Renewal requested${br.renewalRequestedAt ? " · " + br.renewalRequestedAt : ""}</span>`);
+    // GPA negotiated-coverage pill: how many of the Global Price List items this branch has negotiated.
+    if (gpaTotal && br.negotiatedCount < gpaTotal) {
+      const cls = br.negotiatedCount === 0 ? "pill-red" : "pill-yellow";
+      tags.push(`<span class="pill ${cls}" title="${br.negotiatedCount} of ${gpaTotal} Global Price List items have a negotiated price at this branch">${br.negotiatedCount}/${gpaTotal} negotiated</span>`);
+    }
     return tags.join("");
   }
 
@@ -84,13 +90,18 @@ if (root && dataEl && mount) {
     const renew = br.needsAction && !br.renewalRequested
       ? `<button class="pa-renew" data-renew="${br.agreementId}" data-ag="${esc(br.agreementNumber)}" data-rep="${esc(br.salesRep)}" data-exp="${esc(br.expiry)}" data-scope="Branch ${esc(br.branchCode)}" onclick="event.stopPropagation()">Request renewal</button>`
       : "";
+    // Under-100% Global Price List coverage → jump to the Agreement Builder scoped to this branch
+    // (prefilled from prior agreement pricing; process the items still missing a negotiated price).
+    const build = gpaTotal && br.negotiatedCount < gpaTotal
+      ? `<a class="pa-build" href="/accounting/price-agreement/builder?branch=${encodeURIComponent(br.branchCode)}&focus=gaps" title="Build/extend this branch's agreement — prefilled from prior pricing; fill the ${gpaTotal - br.negotiatedCount} item(s) still un-negotiated" onclick="event.stopPropagation()">Build agreement →</a>`
+      : "";
     return `
       <details class="pa-branch" data-life="${br.lifecycle}" data-needs="${br.needsAction ? 1 : 0}" data-api="${br.apiNonNegotiated ? 1 : 0}" data-covered="${br.covered ? 1 : 0}"
         data-search="${esc((br.branchName + " " + br.branchCode + " " + br.agreementNumber + " " + br.salesRep).toLowerCase())}">
         <summary>
           <span class="pa-chev" aria-hidden="true">›</span>
           <span class="pa-branch-id"><span class="pa-branch-name">${esc(br.branchName)}</span> <span class="pa-sub">#${esc(br.branchCode)}</span></span>
-          ${renew}
+          ${build}${renew}
           <span class="pa-branch-tags">${branchTags(br)}</span>
         </summary>
         <div class="pa-branch-body" data-branch="${esc(br.office + "|" + br.branchCode)}"></div>
@@ -105,7 +116,7 @@ if (root && dataEl && mount) {
           <span class="pa-chev" aria-hidden="true">›</span>
           <span class="pa-office-name">${esc(off.office)}</span>
           <span class="pa-mini">
-            ${covered ? `<div><strong><span class="pill ${covCls(off.coverageRate)}">${pctText(off.coverageRate)}</span></strong><span>Coverage</span></div>` : ""}
+            ${covered ? `<div title="${off.coveredBranches} of ${off.totalBranches} branches in this office carry a current (non-expired) negotiated agreement."><strong><span class="pill ${covCls(off.coverageRate)}">${pctText(off.coverageRate)}</span></strong><span class="pa-help">Branch coverage</span></div>` : ""}
             <div><strong>${off.coveredBranches}/${off.totalBranches}</strong><span>Covered</span></div>
             <div><strong>${off.expired}</strong><span>Expired</span></div>
             <div><strong>${off.expiring}</strong><span>Expiring</span></div>

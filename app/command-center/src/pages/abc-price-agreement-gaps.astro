@@ -8,7 +8,7 @@ const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
 const offices = data.offices.map((o) => o.office);
 const pct = (n: number) => Math.round(n * 100) + "%";
-const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c");
+const payload = JSON.stringify({ offices: data.offices, gpaItems: data.totals.gpaItems }).replace(/</g, "\\u003c");
 ---
 
 <AppShell title="Price Agreement Audit" eyebrow="Accounting" activePage="pricing">
@@ -117,6 +117,9 @@ const payload = JSON.stringify({ offices: data.offices }).replace(/</g, "\\u003c
   .pa-branch-body{padding:4px 8px 10px}
   .pa-renew{appearance:none;border:1px solid var(--brand);background:var(--brand-bg);color:var(--brand);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:650;cursor:pointer;font-family:inherit;white-space:nowrap}
   .pa-renew:hover{filter:brightness(.97)}
+  .pa-build{display:inline-flex;align-items:center;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:650;text-decoration:none;white-space:nowrap}
+  .pa-build:hover{filter:brightness(1.05)}
+  .pa-help{cursor:help;border-bottom:1px dotted var(--muted)}
 
   .pa-cats{margin-top:6px}
   .pa-disp-lead{font-size:12.5px;color:var(--muted);padding:8px 6px}

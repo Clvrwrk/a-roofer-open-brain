@@ -350,6 +350,20 @@ if (root && dataEl && mount) {
   [search, officeSel].forEach((el) => el?.addEventListener("input", applyFilter));
   applyFilter();
 
+  /* ---------- deep link: ?branch=XXX (from the Price Agreement Audit "Build agreement →") ---------- */
+  (() => {
+    const wantBranch = new URLSearchParams(location.search).get("branch");
+    if (!wantBranch) return;
+    const det = mount.querySelector<HTMLDetailsElement>(`.iv-branch[data-branch="${CSS.escape(wantBranch)}"]`);
+    if (!det) return;
+    // Isolate the branch via the existing filter, then open its office/vendor ancestors + the branch.
+    if (search) { search.value = wantBranch; applyFilter(); }
+    let node: HTMLElement | null = det;
+    while (node) { if (node instanceof HTMLDetailsElement) node.open = true; node = node.parentElement; }
+    det.dispatchEvent(new Event("toggle")); // fires the lazy-render listener for the branch body
+    requestAnimationFrame(() => det.scrollIntoView({ behavior: "smooth", block: "start" }));
+  })();
+
   /* ---------- theme ---------- */
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   function applyTheme(pref: string) {

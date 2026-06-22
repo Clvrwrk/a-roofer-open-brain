@@ -55,6 +55,7 @@ export interface PaBranch {
   ceoVerified: boolean;
   salesRep: string;
   itemCount: number;
+  negotiatedCount: number; // GPA items with a negotiated price at this branch (for coverage gap)
   covered: boolean; // has a current (non-expired) negotiated agreement
   apiNonNegotiated: boolean; // branch also/only carries an API (non-negotiated) price list
   needsAction: boolean; // priced + expired/expiring
@@ -356,6 +357,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       });
     }
     const itemCount = itemsOut.length;
+    const negotiatedCount = itemsOut.reduce((n, it) => n + (it.hasNegotiated ? 1 : 0), 0);
     const byCat = new Map<string, PaItem[]>();
     for (const it of itemsOut) (byCat.get(it.categoryKey) ?? (byCat.set(it.categoryKey, []), byCat.get(it.categoryKey)!)).push(it);
     const categoriesOut: PaCategory[] = [...byCat.entries()]
@@ -388,6 +390,7 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       ceoVerified: primary?.ceoVerified ?? false,
       salesRep: primary?.salesRep ?? "",
       itemCount,
+      negotiatedCount,
       covered,
       apiNonNegotiated,
       needsAction,
