@@ -1,7 +1,8 @@
 # Handoff — Open-invoice API-price gap fill · Observability (Sentry + CodeRabbit) live · skill updates
 
-**Date:** 2026-06-20 (evening) · **Branch:** `contrib/cleverwork/observability-sentry`.
-✅ **ALIGNED + DEPLOYED: dev (local) = `origin/main` = `72c70dd`, 0/0.** Coolify auto-built `origin/main` → `cc.proexteriorsus.net`; verified live (`/healthz` buildCommit = `72c70dd`). **Sentry is live and verified end-to-end** (error → Sentry → Slack `#cc-proexteriors`).
+**Date:** 2026-06-20 (evening); **wrap-up refresh 2026-06-22.** · **Branch:** `contrib/cleverwork/observability-sentry`.
+✅ **ALIGNED + DEPLOYED: dev (local) = local `main` = `origin/main` = `b6b0169` (+ 2026-06-22 wrap-up commit on top), 0/0.** Coolify auto-builds `origin/main` → `cc.proexteriorsus.net`; confirm current HEAD via `/healthz` buildCommit. **Sentry is live and verified end-to-end** (error → Sentry → Slack `#cc-proexteriors`).
+**2026-06-22 wrap-up:** all stale worktrees pruned (only primary checkout remains), 5 local-only merged branches deleted, memory refreshed. Detail in `context/memory/2026-06-22.md` (Session 2).
 **Full log:** `context/memory/2026-06-20.md` (later sessions). **Prior handoff:** `docs/handoffs/archive/2026-06-20-gpa-buildout.md` (its open items still stand — carried forward below).
 
 This session did three things: (1) filled open-invoice API-price gaps, (2) stood up **error monitoring** for the Monday alpha, (3) corrected/added skills from what we learned.
