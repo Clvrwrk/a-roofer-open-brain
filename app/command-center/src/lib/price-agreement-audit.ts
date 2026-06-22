@@ -12,6 +12,7 @@
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
+import { loadItemUomMap, canonicalUom, convertPrice } from "@lib/uom";
 
 export type PaLifecycle = "active" | "expiring" | "expired" | "no_expiry";
 
@@ -21,9 +22,10 @@ export interface PaItem {
   uom: string;
   unitPrice: number;        // negotiated price (0 if API-only, not in the agreement)
   hasNegotiated: boolean;   // the branch's agreement covers this item
-  apiPrice: number | null;  // current ABC API price at this branch (monthly seed, migration 134)
-  apiUom: string;
-  variancePct: number | null; // (negotiated - api) / api * 100, when both exist
+  apiPrice: number | null;  // current ABC API price at this branch (monthly seed, migration 134), normalized to `uom`
+  apiUom: string;           // == uom (canonical); kept for back-compat with the tree script
+  uomMismatch: boolean;     // negotiated/API units couldn't be aligned to one UOM (variance suppressed)
+  variancePct: number | null; // (negotiated - api) / api * 100, in the canonical UOM, when aligned
   changeTier: string;        // vs prior agreement version: accept|review|critical|decrease|new_item|"" (migration 138)
   changePct: number | null;  // % change vs prior version
   changePrior: number | null; // prior version's price
@@ -141,6 +143,10 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
   const gpaRows = await fetchAll(() => client.from("frequently_ordered_import").select("item_number"));
   const gpaSet = new Set<string>((gpaRows as any[]).map((r) => r.item_number).filter(Boolean));
   const gpaList = [...gpaSet];
+
+  // Canonical UOM map — convert negotiated + API prices into one comparable unit per item.
+  // See @lib/uom and docs/46. Without this, negotiated (SQ) vs API (BD) produces false variance.
+  const uomMap = await loadItemUomMap(fetchAll, client);
 
   const [agRows, matchRows, itemRows, catRows, vbRows, officeRows, reqRows, gpaCatRows, apiRows, reviewRows, imageRows] = await Promise.all([
     fetchAll(() => client.from("abc_price_agreements").select("id,agreement_number,version_label,abc_account_number,sales_rep,effective_date,expiry_date,ceo_verified,source_file,pdf_storage_path")),
@@ -315,20 +321,32 @@ export async function loadPriceAgreementAudit(env: RuntimeEnv = getRuntimeEnv())
       const neg = negMap.get(itemNumber) as NegInfo | undefined;
       const api = apiByKey.get(`${itemNumber}|${norm}`);
       if (!neg && !api) continue; // no price of either kind at this branch → not shown
-      const unitPrice = neg ? neg.unitPrice : 0;
-      const apiPrice = api ? api.price : null;
-      const variancePct = neg && apiPrice != null && apiPrice !== 0 ? ((unitPrice - apiPrice) / apiPrice) * 100 : null;
+
+      // ONE UOM per row: the item's price_uom (Global Price List unit) wins. Convert both the
+      // negotiated and API prices into it; never compare across mismatched units (docs/46).
+      const canonU = canonicalUom(itemNumber, uomMap, neg?.uom ?? "", api?.uom ?? "");
+      const negConv = neg ? convertPrice(neg.unitPrice, neg.uom, canonU, itemNumber, uomMap) : { value: null, aligned: true };
+      const apiConv = api ? convertPrice(api.price, api.uom, canonU, itemNumber, uomMap) : { value: null, aligned: true };
+      const unitPrice = neg ? (negConv.value ?? neg.unitPrice) : 0;
+      const apiPrice = apiConv.value;
+      // Mismatch only matters when both prices exist but one couldn't be aligned to canonU.
+      const uomMismatch = !!neg && !!api && (!negConv.aligned || !apiConv.aligned);
+      const variancePct =
+        neg && apiPrice != null && apiPrice !== 0 && !uomMismatch
+          ? ((unitPrice - apiPrice) / apiPrice) * 100
+          : null;
       if (variancePct != null) varianceSamples.push(Math.abs(variancePct));
       // Version change vs the prior agreement version (only for items in this branch's agreement).
       const chg = primary ? reviewByKey.get(`${primary.id}|${itemNumber}`) : undefined;
       itemsOut.push({
         itemNumber,
         description: neg?.description || gpaMaster.get(itemNumber)?.description || "",
-        uom: neg?.uom || api?.uom || "",
+        uom: canonU || neg?.uom || api?.uom || "",
         unitPrice,
         hasNegotiated: !!neg,
         apiPrice,
-        apiUom: api?.uom ?? "",
+        apiUom: canonU || api?.uom || "",
+        uomMismatch,
         variancePct,
         changeTier: chg && (chg.tier === "review" || chg.tier === "critical" || chg.tier === "decrease") ? chg.tier : "",
         changePct: chg ? chg.pctChange : null,

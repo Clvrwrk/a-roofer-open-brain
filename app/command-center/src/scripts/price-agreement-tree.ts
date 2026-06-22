@@ -2,7 +2,7 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
-interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; imageUrl: string; categoryKey: string; }
+interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; uomMismatch: boolean; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; imageUrl: string; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
 interface PaBranch {
   branchCode: string; branchName: string; office: string;
@@ -58,8 +58,8 @@ if (root && dataEl && mount) {
               <td>${esc(it.description)}</td>
               <td>${esc(it.uom)}</td>
               <td class="num">${it.hasNegotiated ? money2(it.unitPrice) + " " + chgBadge : '<span class="pa-dash">—</span>'}</td>
-              <td class="num">${it.apiPrice == null ? '<span class="pa-dash">—</span>' : money2(it.apiPrice) + ` <span class="pa-dash">/${esc(it.apiUom || it.uom)}</span>`}</td>
-              <td class="num ${varCls}">${it.variancePct == null ? "—" : (it.variancePct >= 0 ? "+" : "") + it.variancePct.toFixed(1) + "%"}</td>
+              <td class="num">${it.apiPrice == null ? '<span class="pa-dash">—</span>' : money2(it.apiPrice)}</td>
+              <td class="num ${varCls}">${it.uomMismatch ? '<span class="pa-chg pa-chg-mid" title="Negotiated and API units could not be aligned to one UOM — variance withheld">UOM ?</span>' : it.variancePct == null ? "—" : (it.variancePct >= 0 ? "+" : "") + it.variancePct.toFixed(1) + "%"}</td>
             </tr>`; }).join("")}</tbody>
         </table>
       </details>`).join("");
