@@ -101,3 +101,15 @@ Track durable session activity in `context/memory/{YYYY-MM-DD}.md`. Use one sess
 ```
 
 Log silently. Do not announce routine memory writes unless the user explicitly asked to remember something.
+
+## Handoff / Wrap-up (end every session here)
+
+When the user says **"handoff"**, **"wrapup"**, **"wrap up"**, **"end of session"**, or invokes **`/wrapup`** — or when context usage reaches ~50% — run this checklist in order and do not stop until the working tree is clean and converged. The goal: the next session starts on a clean, current `main` and immediately knows where work left off.
+
+1. **Finish the block.** Never stop mid-function/migration/component. Complete it, then commit completed work with a clear message.
+2. **Clean the tree.** `git status --short` must end **empty**. For each straggler: gitignore scratch/logs/byproducts (`*.log`, scratch `*.txt`, tool dirs, `* 2.*` duplicate copies), `git rm --cached` anything tracked that should be ignored (logs, build output), delete empty/accidental files, and commit anything that is real content. Never commit secrets or raw client/PII data (hard rule 2) — ignore those buckets instead. When in doubt about a non-scratch file, ask rather than ignore/delete it.
+3. **Update memory.** Write today's daily-log session block (`context/memory/{YYYY-MM-DD}.md`); update `context/MEMORY.md` (≤2,500 chars, `wc -c` first) and `context/USER.md` (≤1,375) only if something durable changed. Route curated writes through `meta-memory-write`.
+4. **Converge (Live ⇄ Dev).** Confirm the canonical/live branch (`git fetch origin` first — do not assume). Merge the `contrib/cleverwork/<task>` branch into it and **push to origin**. Never strand work on a side branch. If `main` is the canonical, end with `main == origin/main` and the contrib work merged in.
+5. **Report.** One message: branch + last commit hash/msg, `tree clean ✓` (or what remains and why), what was accomplished, the exact next task, and any blocker needing the user. Then stop — do not start the next task.
+
+The standing trigger lives here; the `/wrapup` skill (`.claude/skills/wrapup/`) is the invokable entry point for the same sequence.
