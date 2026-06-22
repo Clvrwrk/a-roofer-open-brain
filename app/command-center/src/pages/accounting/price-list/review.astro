@@ -1,0 +1,142 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadPriceListReviewHierarchy } from "@lib/price-list-review-hierarchy";
+
+const data = await loadPriceListReviewHierarchy();
+const money = (n: number | null) => (n == null ? "—" : "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const totalItems = data.offices.reduce((s, o) => s + o.itemCount, 0);
+const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
+---
+
+<AppShell title="Global Price List" eyebrow="Accounting · Price List Review" activePage="accounting">
+  <section class="plr" id="plr">
+    <header class="plr-head">
+      <div>
+        <h1>Global Price List</h1>
+        <p class="plr-sub">PE Office → Global Price List → Vendor → Branch → Current / Archived agreements. Every price is shown in the item's canonical pricing UOM — the <b>UOM</b> column is the unit for the whole row.</p>
+      </div>
+      <div class="plr-progress" data-cc-progress>
+        <span class="plr-progress-txt" data-cc-progress-txt>0/0 offices reviewed</span>
+        <div class="cc-progress-track"><div class="cc-progress-fill" data-cc-progress-fill></div></div>
+      </div>
+    </header>
+
+    {data.status !== "live" && <p class="plr-empty">Price list data isn't configured for this brain yet.</p>}
+
+    {data.status === "live" && (
+      <>
+        <div class="plr-toolbar">
+          <input id="plr-search" type="search" placeholder="Search item, description, branch…" autocomplete="off" />
+          <span class="plr-count">{data.offices.length} offices · {totalItems} priced items · {totalBranches} branches</span>
+        </div>
+
+        {data.offices.map((o) => (
+          <details class="plr-office" open={data.offices.length <= 2}>
+            <summary>
+              <span class="plr-chev" aria-hidden="true">›</span>
+              <b>{o.officeName}</b>
+              <span class="plr-tags">
+                <span class="plr-pill grey">{o.itemCount} items</span>
+                <span class="plr-pill grey">{o.branchCount} branches</span>
+                {o.expiringSoon && <span class="plr-pill bad">renewal needed</span>}
+              </span>
+              <label class="plr-reviewed" title="Mark this office reviewed" onclick="event.stopPropagation()">
+                <input type="checkbox" data-cc-check={`office-${o.officeId}`} /> reviewed
+              </label>
+            </summary>
+
+            <div class="plr-section">
+              <h3 class="plr-h3">Global Price List <span class="plr-note">lowest open invoice · ABC API · negotiated min/mean/max across the office's 2-hour territory</span></h3>
+              <table class="plr-table plr-global">
+                <thead>
+                  <tr>
+                    <th>Item</th><th>Description</th><th>UOM</th>
+                    <th class="num">Lowest Open Inv</th><th class="num">API</th>
+                    <th class="num">Neg Min</th><th class="num">Neg Mean</th><th class="num">Neg Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {o.globalItems.map((it) => (
+                    <tr data-search={`${it.itemNumber} ${it.description}`.toLowerCase()}>
+                      <td class="mono">{it.itemNumber}</td>
+                      <td>{it.description}</td>
+                      <td>{it.uom}</td>
+                      <td class="num">{money(it.lowestOpenInvoice)}</td>
+                      <td class="num">{money(it.apiPrice)}</td>
+                      <td class="num">{money(it.negMin)}</td>
+                      <td class="num">{money(it.negMean)}</td>
+                      <td class="num">{money(it.negMax)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="plr-section">
+              <h3 class="plr-h3">ABC Supply · Branches <span class="plr-note">expand a branch for its current negotiated price list and archived agreement history</span></h3>
+              {o.branches.length === 0 && <p class="plr-empty sm">No branches with negotiated pricing in this territory yet.</p>}
+              {o.branches.map((b) => (
+                <details class="plr-branch" data-branch={b.branchNumber} data-search={`${b.branchNumber} ${b.branchName} ${b.city}`.toLowerCase()}>
+                  <summary>
+                    <span class="plr-chev" aria-hidden="true">›</span>
+                    <b>{b.branchName || `Branch #${b.branchNumber}`}</b>
+                    <span class="plr-branch-num">#{b.branchNumber}{b.city ? ` · ${b.city}${b.state ? ", " + b.state : ""}` : ""}</span>
+                    <span class="plr-tags">
+                      <span class="plr-pill grey">{b.itemCount} items</span>
+                      <span class={`plr-pill ${b.currentActive ? "ok" : "bad"}`}>{b.currentActive ? "active" : "expired"}</span>
+                      {b.archivedCount > 0 && <span class="plr-pill grey">{b.archivedCount} archived</span>}
+                    </span>
+                  </summary>
+                  <div class="plr-branch-body" data-loaded="0"><p class="plr-loading">Loading price list…</p></div>
+                </details>
+              ))}
+            </div>
+          </details>
+        ))}
+      </>
+    )}
+  </section>
+
+  <style is:global>
+    .plr{padding:6px 4px 40px;color:var(--ink,#1c2733);font-size:13px}
+    .plr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;flex-wrap:wrap}
+    .plr-head h1{margin:0;font-size:21px}
+    .plr-sub{margin:4px 0 0;color:var(--muted,#6b7886);font-size:12.5px;max-width:680px;line-height:1.5}
+    .plr-progress{min-width:220px}
+    .plr-progress-txt{display:block;font-size:11.5px;color:var(--muted,#6b7886);margin-bottom:5px;font-weight:650;text-align:right}
+    .plr-toolbar{display:flex;align-items:center;gap:12px;margin:10px 0 14px}
+    #plr-search{flex:1;max-width:360px;background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);color:inherit;border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+    .plr-count{color:var(--muted,#6b7886);font-size:12px}
+    .plr-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:650;background:var(--grey-bg,#eceff4);color:var(--grey,#5a6573)}
+    .plr-pill.ok{background:var(--green-bg,#e3f5ec);color:var(--green,#137a4d)} .plr-pill.bad{background:var(--red-bg,#fbe2e2);color:var(--red,#a51f1f)} .plr-pill.grey{background:var(--grey-bg,#eceff4);color:var(--grey,#5a6573)}
+    .plr-office{border:1px solid var(--line,#e3e8ef);border-radius:10px;margin:9px 0;background:var(--panel,#fff)}
+    .plr-office>summary,.plr-branch>summary{display:flex;align-items:center;gap:10px;padding:11px 13px;cursor:pointer;list-style:none}
+    .plr-office>summary::-webkit-details-marker,.plr-branch>summary::-webkit-details-marker{display:none}
+    .plr-office>summary b{font-size:14px}
+    .plr-tags{display:flex;gap:6px;align-items:center;margin-left:6px}
+    .plr-reviewed{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted,#6b7886);cursor:pointer;font-weight:600}
+    .plr-chev{color:var(--muted,#6b7886);transition:transform .15s;font-size:15px}
+    .plr-office[open]>summary .plr-chev,.plr-branch[open]>summary .plr-chev{transform:rotate(90deg)}
+    .plr-section{padding:4px 13px 14px}
+    .plr-h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7886);margin:10px 0 7px;font-weight:700}
+    .plr-note{text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted,#8b98a8);font-size:11px;margin-left:6px}
+    .plr-branch{border:1px solid var(--line,#e3e8ef);border-radius:8px;margin:7px 0;background:var(--panel2,#f7f8fb)}
+    .plr-branch>summary b{font-size:13px}
+    .plr-branch-num{color:var(--muted,#6b7886);font-size:11.5px}
+    .plr-branch-body{padding:2px 12px 12px}
+    .plr-loading,.plr-empty{color:var(--muted,#6b7886)} .plr-empty{padding:18px 4px} .plr-empty.sm{padding:8px 2px;font-size:12px}
+    .plr-table{width:100%;border-collapse:collapse;background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:10px;overflow:hidden}
+    .plr-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#6b7886);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line,#e3e8ef);background:var(--panel2,#f7f8fb)}
+    .plr-table th.num,.plr-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .plr-table td{padding:7px 10px;border-bottom:1px solid var(--line,#e3e8ef)}
+    .plr-table tbody tr:last-child td{border-bottom:0}
+    .plr-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+    .plr-up{color:var(--red,#a51f1f);font-weight:650} .plr-down{color:var(--green,#137a4d);font-weight:650} .plr-flat{color:var(--muted,#6b7886)}
+    .plr-ag-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+    .plr-ag{display:flex;align-items:center;gap:10px;border:1px solid var(--line,#e3e8ef);border-left:3px solid var(--grey,#5a6573);border-radius:8px;padding:7px 11px;background:var(--panel,#fff)}
+    .plr-ag.ok{border-left-color:var(--green,#137a4d)} .plr-ag.bad{border-left-color:var(--red,#a51f1f)}
+    .plr-ag b{font-size:12.5px} .plr-ag span{color:var(--muted,#6b7886);font-size:11.5px}
+  </style>
+
+  <script src="/src/scripts/price-list-review-tree.ts"></script>
+</AppShell>
