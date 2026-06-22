@@ -51,8 +51,8 @@ if (root && dataEl && mount) {
         <td>${esc(l.itemDescription) || '<span class="iv-inv-sub">—</span>'}</td>
         <td class="num">${l.qty}</td>
         <td>${esc(l.uom)}</td>
-        <td class="num">${money2(l.unitPrice)} <span class="iv-uom-sfx">/${esc(l.uom)}</span></td>
-        <td class="num">${l.apiPrice == null ? '<span class="iv-uom-sfx">—</span>' : money2(l.apiPrice) + ` <span class="iv-uom-sfx">/${esc(l.apiUom || l.uom)}</span>`}</td>
+        <td class="num">${money2(l.unitPrice)}</td>
+        <td class="num">${l.apiPrice == null ? "—" : money2(l.apiPrice)}</td>
         <td>${negCell}</td>
         <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
         <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
