@@ -30,7 +30,18 @@ The invokable entry point for the **Handoff / Wrap-up** checklist in `CLAUDE.md`
    - Merge the current `contrib/cleverwork/<task>` branch into the canonical branch and **push to origin**.
    - If `main` is canonical, end with the work merged into `main` and `main == origin/main`. Never strand work on an unpushed side branch.
 
-5. **Report and stop.** Send one message:
+5. **Agent alignment — keep every harness in sync.**
+   - The team runs multiple harnesses. Each reads its own instruction file; all must carry the same instruction set so an agent behaves identically no matter which tool runs it.
+   - **Source of truth:** `CONVENTIONS.md` §13. The known harness files that must stay aligned:
+     - `CLAUDE.md` — Claude Code
+     - `AGENTS.md` — Codex and other AGENTS.md-aware tools
+     - `CONVENTIONS.md` — the shared contract (§13 wrap-up)
+     - `.cursor/rules/*.mdc` — Cursor
+   - **On every wrap-up:** if this session changed a rule, hard rule, memory budget, security/consent boundary, the design-system contract, or this wrap-up procedure, propagate the change to **all** of the files above — and to any new harness file the team has added since (e.g. `.windsurfrules`, `.github/copilot-instructions.md`, `GEMINI.md`). Add the new file to this list when you create it.
+   - Quick drift check: `grep -L "Session wrap-up\|wrapup\|§13" CLAUDE.md AGENTS.md CONVENTIONS.md .cursor/rules/*.mdc` — any file listed is missing the wrap-up contract and must be updated.
+   - Files may differ in framing/length but must **never contradict** each other or `CONVENTIONS.md` §13. Commit the alignment as part of the same wrap-up.
+
+6. **Report and stop.** Send one message:
    - Branch + last commit (hash — message)
    - `tree clean ✓` (or exactly what remains and why)
    - Accomplished this session (bullets)

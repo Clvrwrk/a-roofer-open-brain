@@ -44,6 +44,19 @@ When multiple AI agents work on this repo, do not share a checkout. **Stay align
 - Before staging: `git status --short`; stage only files belonging to the current task. **Commit early — never let substantial work sit untracked/uncommitted** (that is how the tracks diverged on 2026-06-17).
 - **Close the loop:** merge the task branch **back into the live branch and push** so dev and live converge — then `git worktree remove <path>`. Never leave a production feature (vendor map, WorkOS auth, a new surface) stranded on a side branch the rest of dev doesn't build on.
 
+## Session wrap-up / handoff
+
+**Canonical procedure: `CONVENTIONS.md` §13** (shared across all harnesses). End every session here.
+
+Trigger: the user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"tie off"*, or runs `/wrapup` — or context hits ~50%. Run in order, don't stop until the tree is clean and converged:
+
+1. **Finish the block**, then commit completed work.
+2. **Clean the tree** — `git status --short` must end **empty**: gitignore scratch/logs/byproducts, `git rm --cached` tracked-but-ignorable files, delete junk, commit real content. Never commit secrets/PII (§4) — ignore those buckets.
+3. **Update memory** — today's daily-log block; `MEMORY.md`/`USER.md` only if something durable changed (via `meta-memory-write`).
+4. **Converge** — `git fetch origin`, confirm the live branch (not assumed `main`), merge the `contrib/*` branch in and **push**.
+5. **Agent alignment** — if any rule or this procedure changed, propagate it to **all** harness files (`CLAUDE.md`, `AGENTS.md`, `CONVENTIONS.md` §13, `.cursor/rules/*.mdc`, plus any new ones) and commit the alignment. They may differ in framing but must never contradict CONVENTIONS §13.
+6. **Report and stop** — branch, last commit, `tree clean ✓`, next task, blockers. Do not start the next task.
+
 ## Memory discipline
 
 - Read the frozen startup memory in `context/SOUL.md`, `context/USER.md`, `context/MEMORY.md`, and today's `context/memory/YYYY-MM-DD.md` before broad repo exploration. In Claude Code the `.claude/hooks/load-memory-snapshot.js` SessionStart hook injects this automatically; in Codex/Cowork read the files manually.

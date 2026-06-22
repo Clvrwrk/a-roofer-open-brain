@@ -1,0 +1,34 @@
+---
+description: a-roofers-open-brain agent contract — read on every task; governs hard rules, memory, Live⇄Dev alignment, and session wrap-up.
+globs:
+alwaysApply: true
+---
+
+# Cursor agent rules — a-roofers-open-brain
+
+These rules mirror `CLAUDE.md` and `AGENTS.md` so Cursor agents behave identically to every other harness. **`CONVENTIONS.md` is the shared contract — read it first.** When anything here disagrees with `CONVENTIONS.md`, the contract wins.
+
+## Read first (every task)
+- `CONVENTIONS.md` — the contract (atoms, trust tiers, security/consent boundaries, design system, §13 wrap-up).
+- `CLAUDE.md` — hard rules + Live⇄Dev alignment + memory budget.
+- `AGENTS.md` — workforce + parallel-agent worktree discipline.
+- Startup memory: `context/SOUL.md`, `context/USER.md`, `context/MEMORY.md`, today's `context/memory/YYYY-MM-DD.md`. (No SessionStart hook fires in Cursor — read these manually.)
+
+## Hard rules (the line stops if you break these)
+- No destructive SQL or git. Migrations additive/idempotent; archive, never delete atoms.
+- No secrets, service-role keys, or raw PII in committed files or curated memory.
+- Trust-tier discipline: inferred memory is `evidence`; only humans/Quality Control promote to `instruction`.
+- Security boundary: Historian internal-only, Researcher external-only. Consent-gated cross-client sharing only.
+- Property-first and era-aware: place atoms carry `property_id`; code/material/practice atoms carry `era_of_practice`.
+- Clean, professional language everywhere.
+- Live⇄Dev: branch from the deployed/live branch (do not assume `main`), commit early, converge back — never fork lineages.
+
+## Session wrap-up / handoff — canonical: `CONVENTIONS.md` §13
+Trigger: user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"tie off"* — or context ~50%. Run in order, don't stop until the tree is clean and converged:
+
+1. Finish the block, then commit completed work.
+2. Clean the tree — `git status --short` must end **empty**: gitignore scratch/logs/byproducts, `git rm --cached` tracked-but-ignorable files, delete junk, commit real content. Never commit secrets/PII.
+3. Update memory — today's daily-log block; `MEMORY.md`/`USER.md` only if something durable changed.
+4. Converge — `git fetch origin`, confirm the live branch, merge the `contrib/*` branch in and **push**.
+5. Agent alignment — if any rule or this procedure changed, propagate it to **all** harness files (`CLAUDE.md`, `AGENTS.md`, `CONVENTIONS.md` §13, `.cursor/rules/*.mdc`, plus any new ones) and commit. Never let the harness files contradict each other or CONVENTIONS §13.
+6. Report and stop — branch, last commit, `tree clean ✓`, next task, blockers. Do not start the next task.

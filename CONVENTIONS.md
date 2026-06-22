@@ -120,3 +120,16 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 - **No cron job moves files by itself.** Workspace inventory and conformance checks are dry-run until a manifest row is approved.
 - **GSD Core is the app-build operating loop.** App/product work follows Discuss -> optional UI design -> Plan -> Execute -> Verify -> Ship. GSD artifacts may assist planning, but the 13-agent workforce and this repo's trust/security boundaries still govern behavior.
 - **One task, one worktree.** `.worktrees/` is local-only. Agents must keep their assigned absolute path as the boundary and stage only files belonging to the current task.
+
+## 13. Session wrap-up & agent alignment (the handoff contract)
+
+This is the **canonical** end-of-session procedure for every harness (Claude Code, Codex, Cursor, and any future tool). Each harness's own instruction file (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`) carries the trigger and a pointer here; this section is the source of truth.
+
+**Trigger.** When the user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"tie off"*, or invokes `/wrapup` — or when context usage reaches ~50% — run the checklist in order and do not stop until the working tree is clean and converged. Goal: the next session starts on a clean, current canonical branch and immediately knows where work left off.
+
+1. **Finish the block.** Never stop mid-function/migration/component. Complete it, then commit completed work with a clear message.
+2. **Clean the tree — `git status --short` must end empty.** Gitignore scratch/logs/byproducts (`*.log`, scratch `*.txt`, tool dirs, `* 2.*` editor/sync duplicate copies); `git rm --cached` anything tracked that should be ignored (logs, build output); delete empty/accidental files; commit anything that is real content. Never commit secrets or raw client/PII data (§4, hard rule 2) — ignore those buckets. When a non-scratch file's fate is unclear, ask rather than ignore/delete it.
+3. **Update memory.** Write today's daily-log session block (`context/memory/{YYYY-MM-DD}.md`); update `context/MEMORY.md` (≤2,500 chars) and `context/USER.md` (≤1,375) only if something durable changed. Route curated writes through `meta-memory-write`.
+4. **Converge (Live ⇄ Dev).** `git fetch origin`, confirm the canonical/live branch (do **not** assume `main`), merge the `contrib/cleverwork/<task>` branch into it, and **push to origin**. Never strand work on an unpushed side branch.
+5. **Agent alignment.** Before reporting, verify every harness instruction file carries the same instruction set. If a rule, hard rule, memory budget, or this procedure changed, propagate the change to **all** of: `CLAUDE.md`, `AGENTS.md`, `CONVENTIONS.md` (this file — the source of truth), and `.cursor/rules/*.mdc`, plus any new harness file the team has added since. Commit the alignment in the same wrap-up. The harness files may differ in framing but must never contradict each other or this section.
+6. **Report and stop.** One message: branch + last commit (hash — msg), `tree clean ✓`, what was accomplished, the exact next task, blockers needing the user. Then stop — do not start the next task.
