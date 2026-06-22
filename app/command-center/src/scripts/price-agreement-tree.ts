@@ -2,7 +2,7 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
-import { initProgressChecklist } from "./progress-checklist";
+import { initProgressTree } from "./progress-checklist";
 
 interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; uomMismatch: boolean; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; imageUrl: string; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
@@ -36,6 +36,10 @@ if (root && dataEl && mount) {
   const lifeLab = (l: string) => (l === "expired" ? "Expired" : l === "expiring" ? "Expiring" : l === "active" ? "Active" : "No expiry");
   const daysText = (b: PaBranch) => (b.daysToExpiry == null ? "" : b.lifecycle === "expired" ? `${Math.abs(b.daysToExpiry)}d ago` : `${b.daysToExpiry}d left`);
   const covCls = (r: number) => (r >= 0.75 ? "pill-green" : r >= 0.4 ? "pill-yellow" : "pill-red");
+  // Path-key: paths are slash-delimited, so a segment must not contain "/".
+  const pk = (s: string) => String(s ?? "").replace(/\//g, "_");
+  // Review-progress bar (localStorage leaves = item rows) shown at office/branch/category levels.
+  const reviewBar = () => '<span class="pa-bar" data-cc-progress title="Items reviewed"><span class="pa-bar-txt" data-cc-progress-txt></span><span class="pa-bar-track"><span class="pa-bar-fill" data-cc-progress-fill></span></span></span>';
 
   /* ---- branch body (lazy): category sections + item tables ---- */
   function branchBody(br: PaBranch): string {
@@ -43,11 +47,12 @@ if (root && dataEl && mount) {
       return `<div class="pa-cats"><p class="pa-disp-lead">API price list — non-negotiated. No negotiated catalog to audit for this branch.</p></div>`;
     }
     if (!br.categories.length) return `<div class="pa-cats"><p class="pa-disp-lead">No priced items on this agreement.</p></div>`;
+    const catPrefix = (c: PaCategory) => `${pk(br.office)}/${pk(br.branchCode)}/${pk(c.key)}`;
     const sections = br.categories.map((c) => `
-      <details class="pa-cat" data-cat="${esc(c.key)}">
+      <details class="pa-cat" data-cc-scope data-cc-path="${esc(catPrefix(c))}" data-cc-total="${c.itemCount}" data-cat="${esc(c.key)}">
         <summary><span class="pa-chev" aria-hidden="true">›</span><b>${esc(c.label)}</b>
-          <span class="pa-cat-tags"><span class="pill pill-grey">${c.itemCount} items</span></span></summary>
-        <table class="pa-itable"><thead><tr><th></th><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
+          <span class="pa-cat-tags"><span class="pill pill-grey">${c.itemCount} items</span></span>${reviewBar()}</summary>
+        <table class="pa-itable"><thead><tr><th class="pa-rev">✓</th><th></th><th>Item</th><th>Description</th><th>UOM</th><th class="num">Negotiated Price</th><th class="num">API Price</th><th class="num">Var %</th></tr></thead>
           <tbody>${c.items.map((it) => {
             const varCls = it.variancePct == null ? "" : Math.abs(it.variancePct) <= 3 ? "pa-var-ok" : Math.abs(it.variancePct) <= 6 ? "pa-var-mid" : "pa-var-hi";
             // Version-comparison badge: change vs the prior agreement version (migration 138).
@@ -56,6 +61,7 @@ if (root && dataEl && mount) {
               : it.changeTier === "decrease" ? `<span class="pa-chg pa-chg-ok" title="Prior ${it.changePrior != null ? money2(it.changePrior) : "—"} → ${money2(it.unitPrice)}">▼ ${it.changePct != null ? it.changePct.toFixed(1) + "%" : ""}</span>` : "";
             return `
             <tr>
+              <td class="pa-rev"><input type="checkbox" data-cc-check="${esc(catPrefix(c))}/${esc(it.itemNumber)}" title="Mark this item reviewed"></td>
               <td class="pa-imgcell">${it.imageUrl ? `<img class="pa-imgchip" src="${esc(it.imageUrl)}" data-full="${esc(it.imageUrl)}" alt="" loading="lazy" />` : '<span class="pa-imgph"></span>'}</td>
               <td class="pa-sku">${esc(it.itemNumber)}</td>
               <td>${esc(it.description)}</td>
@@ -97,15 +103,16 @@ if (root && dataEl && mount) {
     const build = gpaTotal && br.negotiatedCount < gpaTotal
       ? `<a class="pa-build" href="/accounting/price-agreement/builder?branch=${encodeURIComponent(br.branchCode)}&focus=gaps" title="Build/extend this branch's agreement — prefilled from prior pricing; fill the ${gpaTotal - br.negotiatedCount} item(s) still un-negotiated" onclick="event.stopPropagation()">Build agreement →</a>`
       : "";
+    const branchPath = `${pk(br.office)}/${pk(br.branchCode)}`;
     return `
-      <details class="pa-branch" data-life="${br.lifecycle}" data-needs="${br.needsAction ? 1 : 0}" data-api="${br.apiNonNegotiated ? 1 : 0}" data-covered="${br.covered ? 1 : 0}"
+      <details class="pa-branch" data-cc-scope data-cc-path="${esc(branchPath)}" data-cc-total="${br.itemCount}" data-life="${br.lifecycle}" data-needs="${br.needsAction ? 1 : 0}" data-api="${br.apiNonNegotiated ? 1 : 0}" data-covered="${br.covered ? 1 : 0}"
         data-search="${esc((br.branchName + " " + br.branchCode + " " + br.agreementNumber + " " + br.salesRep).toLowerCase())}">
         <summary>
           <span class="pa-chev" aria-hidden="true">›</span>
           <span class="pa-branch-id"><span class="pa-branch-name">${esc(br.branchName)}</span> <span class="pa-sub">#${esc(br.branchCode)}</span></span>
-          <label class="cc-check" title="Mark this branch reviewed — persists when you leave and return" onclick="event.stopPropagation()"><input type="checkbox" data-cc-check="${esc(br.branchCode)}" /> Reviewed</label>
           ${build}${renew}
           <span class="pa-branch-tags">${branchTags(br)}</span>
+          ${reviewBar()}
         </summary>
         <div class="pa-branch-body" data-branch="${esc(br.office + "|" + br.branchCode)}"></div>
       </details>`;
@@ -113,8 +120,9 @@ if (root && dataEl && mount) {
 
   function officeNode(off: PaOffice): string {
     const covered = off.office !== "Unassigned";
+    const officeItemsTotal = off.branches.reduce((s, b) => s + (b.itemCount || 0), 0);
     return `
-      <details class="pa-office" data-office="${esc(off.office)}">
+      <details class="pa-office" data-cc-scope data-cc-path="${esc(pk(off.office))}" data-cc-total="${officeItemsTotal}" data-office="${esc(off.office)}">
         <summary>
           <span class="pa-chev" aria-hidden="true">›</span>
           <span class="pa-office-name">${esc(off.office)}</span>
@@ -138,15 +146,12 @@ if (root && dataEl && mount) {
 
   mount.innerHTML = offices.map(officeNode).join("") || `<p class="pa-empty">No price agreements found.</p>`;
 
-  // Resumable "branches reviewed" progress per office — same bar + checkbox primitive other
-  // multi-step surfaces use; state persists in localStorage so the user can leave and return.
-  mount.querySelectorAll<HTMLElement>(".pa-office").forEach((officeEl) => {
-    const office = officeEl.dataset.office || "";
-    initProgressChecklist({
-      root: officeEl,
-      storageKey: `cc:pa-audit:${office}`,
-      label: (d, t, p) => `${d}/${t} branches reviewed · ${p}%`,
-    });
+  // Hierarchical review progress: leaf = item row, rolls up category → branch → office.
+  // One tree over the whole mount; state persists in localStorage (leave & return).
+  const progress = initProgressTree({
+    root: mount,
+    storageKey: "pa:items-reviewed:v1",
+    label: (d, t, p) => `${d}/${t} · ${p}%`,
   });
 
   // Lazy-render branch bodies on first expand.
@@ -178,6 +183,7 @@ if (root && dataEl && mount) {
       if (!br) return;
       body.innerHTML = branchBody(br);
       body.dataset.rendered = "1";
+      progress.refresh(); // sync just-mounted item checkboxes + recompute category/branch/office bars
     });
   });
 

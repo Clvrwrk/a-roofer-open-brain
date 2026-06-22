@@ -117,6 +117,14 @@ const cutoff = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric"
   details[open]>summary .iv-chev{transform:rotate(90deg)}
   .iv-office-name{font-weight:750;font-size:15px;flex:1}
   .iv-mini{display:flex;gap:16px}
+  /* Review-progress bar shown at every nesting level (office/branch/order). */
+  .iv-bar{display:inline-flex;align-items:center;gap:7px;margin-left:10px;min-width:120px;flex:none}
+  .iv-bar-txt{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:650}
+  .iv-bar-track{flex:1;min-width:54px;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+  .iv-bar-fill{display:block;height:100%;width:0;background:var(--brand);border-radius:999px;transition:width .2s}
+  .iv-bar.is-complete .iv-bar-fill{background:var(--green)}
+  .iv-rev{width:30px;text-align:center}
+  .iv-rev input{cursor:pointer;width:15px;height:15px}
   .iv-mini div{text-align:center}
   .iv-mini strong{display:block;font-size:15px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}

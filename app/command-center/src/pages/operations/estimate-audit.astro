@@ -76,6 +76,15 @@ const payload = JSON.stringify(data).replace(/</g, "\\u003c");
   details[open]>summary .ea-chev{transform:rotate(90deg)}
   .ea-office-name{font-weight:750;font-size:15px;flex:1}
   .ea-mini{display:flex;gap:16px}
+  /* Review-progress bar shown at every nesting level (office/job/estimate/category). */
+  .ea-bar{display:inline-flex;align-items:center;gap:7px;margin-left:10px;min-width:120px;flex:none}
+  .ea-est-tags + .ea-bar,.ea-job-tags + .ea-bar{margin-left:10px}
+  .ea-bar-txt{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:650}
+  .ea-bar-track{flex:1;min-width:54px;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+  .ea-bar-fill{display:block;height:100%;width:0;background:var(--brand);border-radius:999px;transition:width .2s}
+  .ea-bar.is-complete .ea-bar-fill{background:var(--green)}
+  .ea-rev{width:30px;text-align:center}
+  .ea-rev input{cursor:pointer;width:15px;height:15px}
   .ea-mini div{text-align:center}
   .ea-mini strong{display:block;font-size:16px;font-weight:750}
   .ea-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}

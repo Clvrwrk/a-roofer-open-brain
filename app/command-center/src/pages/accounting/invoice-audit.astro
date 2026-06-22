@@ -119,6 +119,12 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, catego
   details[open]>summary .iv-chev{transform:rotate(90deg)}
   .iv-office-name{font-weight:750;font-size:15px;flex:1}
   .iv-mini{display:flex;gap:16px}
+  /* Audited-progress bar shown at every nesting level (office/branch/invoice/category). */
+  .iv-bar{display:inline-flex;align-items:center;width:74px;height:6px;border-radius:999px;background:var(--line);overflow:hidden;flex:none;margin-left:10px}
+  .iv-office>summary .iv-bar,.iv-branch>summary .iv-bar{width:90px}
+  .iv-bar-fill{display:block;height:100%;width:0;background:var(--brand);border-radius:999px;transition:width .2s}
+  .iv-bar.is-complete .iv-bar-fill{background:var(--green)}
+  .iv-cat>summary .iv-bar{margin-left:8px}
   .iv-mini div{text-align:center}
   .iv-mini strong{display:block;font-size:15px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}

@@ -5,7 +5,7 @@
 // • Search filters global-price-list rows and branches; offices/branches with no match collapse.
 // One-UOM rule: the UOM column carries the unit, so price cells render plain $x.xx (no /SQ suffix).
 
-import { initProgressChecklist } from "./progress-checklist";
+import { initProgressTree } from "./progress-checklist";
 
 interface PlItem {
   itemNumber: string; description: string; manufacturer: string; categoryKey: string; uom: string;
@@ -26,11 +26,11 @@ if (root) {
   const esc = (s: string) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
   const dt = (s: string) => s || "—";
 
-  // ── Progress over offices ──────────────────────────────────────────────────
-  initProgressChecklist({
+  // ── Hierarchical review progress: leaf = branch item, rolls up branch → office → top ──
+  const progress = initProgressTree({
     root,
-    storageKey: "plr:offices-reviewed:v1",
-    label: (d, t, p) => `${d}/${t} offices reviewed · ${p}%`,
+    storageKey: "plr:items-reviewed:v1",
+    label: (d, t, p) => `${d}/${t} · ${p}%`,
   });
 
   // ── Lazy branch detail ──────────────────────────────────────────────────────
@@ -41,13 +41,14 @@ if (root) {
     return `<span class="${cls}">${sign}${it.priceDeltaPct.toFixed(1)}%</span>`;
   }
 
-  function renderBranch(items: PlItem[], agreements: PlAgreement[]): string {
+  function renderBranch(items: PlItem[], agreements: PlAgreement[], pathPrefix: string): string {
     const current = agreements.find((a) => a.isCurrent);
     const archived = agreements.filter((a) => !a.isCurrent);
 
     const itemRows = items.length
       ? items.map((it) => `
         <tr>
+          <td class="plr-rev"><input type="checkbox" data-cc-check="${esc(pathPrefix)}/${esc(it.itemNumber)}" title="Mark this item reviewed"></td>
           <td class="mono">${esc(it.itemNumber)}</td>
           <td>${esc(it.description)}</td>
           <td>${esc(it.uom)}</td>
@@ -55,12 +56,12 @@ if (root) {
           <td class="num">${money(it.priorPrice)}</td>
           <td class="num">${deltaCell(it)}</td>
         </tr>`).join("")
-      : `<tr><td colspan="6" class="plr-empty sm">No negotiated items for this branch.</td></tr>`;
+      : `<tr><td colspan="7" class="plr-empty sm">No negotiated items for this branch.</td></tr>`;
 
     const itemsTable = `
       <h4 class="plr-h3">Current Negotiated Price List ${current ? `<span class="plr-note">${current.active ? "active" : "expired"} · ${esc(dt(current.effective))} → ${esc(dt(current.expiry))}</span>` : ""}</h4>
       <table class="plr-table">
-        <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Current</th><th class="num">Prior</th><th class="num">Δ vs prior</th></tr></thead>
+        <thead><tr><th class="plr-rev">✓</th><th>Item</th><th>Description</th><th>UOM</th><th class="num">Current</th><th class="num">Prior</th><th class="num">Δ vs prior</th></tr></thead>
         <tbody>${itemRows}</tbody>
       </table>`;
 
@@ -82,11 +83,13 @@ if (root) {
     if (!body || body.dataset.loaded === "1") return;
     body.dataset.loaded = "1";
     const branch = det.dataset.branch || "";
+    const pathPrefix = `${det.dataset.office || ""}/${branch}`;
     try {
       const res = await fetch(`/api/price-list-review/branch?branch=${encodeURIComponent(branch)}`);
       const r = await res.json();
       if (!res.ok || !r.ok) throw new Error(r.error_description || r.error || "load failed");
-      body.innerHTML = renderBranch(r.items || [], r.agreements || []);
+      body.innerHTML = renderBranch(r.items || [], r.agreements || [], pathPrefix);
+      progress.refresh(); // sync the just-mounted checkboxes + recompute branch/office/top bars
     } catch (e) {
       body.dataset.loaded = "0";
       body.innerHTML = `<p class="plr-empty sm">Couldn't load this branch (${esc(String((e as Error).message))}). Collapse and retry.</p>`;

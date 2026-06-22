@@ -114,6 +114,15 @@ const payload = JSON.stringify({ offices: data.offices, gpaItems: data.totals.gp
   .pa-branch-name{font-weight:700;font-size:13.5px}
   .pa-sub{color:var(--muted);font-size:11.5px}
   .pa-branch-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  /* Review-progress bar shown at every nesting level (office/branch/category). */
+  .pa-bar{display:inline-flex;align-items:center;gap:7px;margin-left:10px;min-width:120px;flex:none}
+  .pa-cat>summary .pa-bar{margin-left:auto}
+  .pa-bar-txt{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:650}
+  .pa-bar-track{flex:1;min-width:54px;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+  .pa-bar-fill{display:block;height:100%;width:0;background:var(--brand);border-radius:999px;transition:width .2s}
+  .pa-bar.is-complete .pa-bar-fill{background:var(--green)}
+  .pa-rev{width:30px;text-align:center}
+  .pa-rev input{cursor:pointer;width:15px;height:15px}
   .pa-branch-body{padding:4px 8px 10px}
   .pa-renew{appearance:none;border:1px solid var(--brand);background:var(--brand-bg);color:var(--brand);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:650;cursor:pointer;font-family:inherit;white-space:nowrap}
   .pa-renew:hover{filter:brightness(.97)}

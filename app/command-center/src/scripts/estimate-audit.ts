@@ -4,6 +4,12 @@
 // qty adjust, one-off price entry, add/delete line — all recalculated locally.
 // Nothing persists yet (write-back to Supabase is the follow-up); edits toast
 // "recalculated locally — not saved".
+//
+// Review progress: estimate lines have no DB disposition, so the leaf is a localStorage
+// "reviewed" checkbox per line; bars roll up category → estimate → job → office (shared
+// primitive). Everything renders at once, so scope totals are DOM-counted (no declared total).
+
+import { initProgressTree } from "./progress-checklist";
 
 interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; categoryKey: string; abcItemNumber: string; apiPrice: number | null; apiUom: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -39,6 +45,13 @@ if (root && dataEl && mount) {
   const esc = (s: string) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
   const contact = (name: string, email: string) =>
     name ? (email ? `<a href="mailto:${esc(email)}">${esc(name)}</a>` : esc(name)) : '<span class="pill pill-grey">TBD</span>';
+  // Path-key (segments are slash-delimited) + per-level review bar (DOM-counted totals).
+  const pk = (s: string) => String(s ?? "").replace(/\//g, "_");
+  const estPrefixOf = (o: number, j: number, e: number) => {
+    const off = data.offices[o]; const job = off.jobs[j]; const est = job.estimates[e];
+    return `${pk(off.office)}/${pk(job.runId)}/${pk(est.estimateId)}`;
+  };
+  const reviewBar = () => '<span class="ea-bar" data-cc-progress title="Lines reviewed"><span class="ea-bar-txt" data-cc-progress-txt></span><span class="ea-bar-track"><span class="ea-bar-fill" data-cc-progress-fill></span></span></span>';
 
   /* ---- recalc: lines drive material cost; labor + fee stay fixed ---- */
   function recalc(est: EstOption) {
@@ -52,10 +65,11 @@ if (root && dataEl && mount) {
   }
 
   /* ---- render: one editable line row (keeps its original est.lines index) ---- */
-  const THEAD = '<thead><tr><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">API Price</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>';
-  function lineRow(l: Line, li: number, oi: number, ji: number, ei: number): string {
+  const THEAD = '<thead><tr><th class="ea-rev">✓</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Unit Cost</th><th class="num">API Price</th><th class="num">Line Cost</th><th class="num">Line Price</th><th></th></tr></thead>';
+  function lineRow(l: Line, li: number, oi: number, ji: number, ei: number, catPrefix: string): string {
     return `
         <tr>
+          <td class="ea-rev"><input type="checkbox" data-cc-check="${esc(catPrefix)}/${esc(l.lineId)}" title="Mark this line reviewed"></td>
           <td>${esc(l.description) || "<em>New line</em>"}</td>
           <td class="num"><input class="ea-qty" type="number" step="any" value="${l.qty}" data-edit="qty" data-o="${oi}" data-j="${ji}" data-e="${ei}" data-l="${li}" /></td>
           <td>${esc(l.uom)}</td>
@@ -71,6 +85,7 @@ if (root && dataEl && mount) {
   // line's original est.lines index so qty/price edits + delete still map back).
   // Ordered by category sort_order; default-collapsed.
   function lineSections(est: EstOption, oi: number, ji: number, ei: number): string {
+    const estPrefix = estPrefixOf(oi, ji, ei);
     const groups = new Map<string, number[]>();
     est.lines.forEach((l, li) => {
       const k = l.categoryKey || "uncategorized";
@@ -84,14 +99,15 @@ if (root && dataEl && mount) {
       const lines = idxs.map((li) => est.lines[li]);
       const cost = lines.reduce((s, l) => s + (l.lineCost || 0), 0);
       const price = lines.reduce((s, l) => s + (l.linePrice || 0), 0);
+      const catPrefix = `${estPrefix}/${pk(k)}`;
       const tags = [
         `<span class="pill pill-grey">${lines.length} lines</span>`,
         `<span class="ea-cat-sub">Cost ${money(cost)} · Price ${money(price)}</span>`,
       ].join("");
       return `
-        <details class="ea-cat" data-cat="${esc(k)}">
-          <summary><span class="ea-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="ea-cat-tags">${tags}</span></summary>
-          <table class="ea-table">${THEAD}<tbody>${idxs.map((li) => lineRow(est.lines[li], li, oi, ji, ei)).join("")}</tbody></table>
+        <details class="ea-cat" data-cc-scope data-cc-path="${esc(catPrefix)}" data-cat="${esc(k)}">
+          <summary><span class="ea-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="ea-cat-tags">${tags}</span>${reviewBar()}</summary>
+          <table class="ea-table">${THEAD}<tbody>${idxs.map((li) => lineRow(est.lines[li], li, oi, ji, ei, catPrefix)).join("")}</tbody></table>
         </details>`;
     }).join("");
   }
@@ -110,7 +126,7 @@ if (root && dataEl && mount) {
   function estimateNode(est: EstOption, oi: number, ji: number, ei: number): string {
     const tierCls = est.tierLabel === "Good" ? "pill-grey" : est.tierLabel === "Better" ? "pill-yellow" : est.tierLabel === "Best" ? "pill-green" : "pill-brand";
     return `
-      <details class="ea-est">
+      <details class="ea-est" data-cc-scope data-cc-path="${esc(estPrefixOf(oi, ji, ei))}">
         <summary>
           <span class="ea-chev" aria-hidden="true">›</span>
           <span class="ea-est-tier"><span class="pill ${tierCls}">${esc(est.tierLabel)}</span></span>
@@ -123,6 +139,7 @@ if (root && dataEl && mount) {
             <span>Price <b data-s="price">${money(est.totalPrice)}</b></span>
           </span>
           <span class="ea-est-tags">${est.selected ? '<span class="pill pill-brand">Selected</span>' : ""}${est.approved ? '<span class="pill pill-green">Approved</span>' : `<span class="pill pill-grey">${esc(est.status)}</span>`}</span>
+          ${reviewBar()}
         </summary>
         <div class="ea-est-body" id="est-${oi}-${ji}-${ei}">${estBody(est, oi, ji, ei)}</div>
       </details>`;
@@ -131,7 +148,7 @@ if (root && dataEl && mount) {
   function jobNode(job: Job, oi: number, ji: number): string {
     const cls = (b: boolean) => (b ? "pill-green" : "pill-red");
     return `
-      <details class="ea-job" data-search="${esc([job.street, job.branchName, job.clientName, job.office].join(" ").toLowerCase())}">
+      <details class="ea-job" data-cc-scope data-cc-path="${esc(pk(job.office) + "/" + pk(job.runId))}" data-search="${esc([job.street, job.branchName, job.clientName, job.office].join(" ").toLowerCase())}">
         <summary>
           <span class="ea-chev" aria-hidden="true">›</span>
           <span><span class="ea-job-addr">${esc(job.street)}</span><br><span class="ea-job-sub">${esc(job.branchName)} · ${job.scenarioCount} estimates</span></span>
@@ -142,6 +159,7 @@ if (root && dataEl && mount) {
             <span class="pill pill-grey">${money(job.estimatedValue)}</span>
             <span class="pill pill-grey">${job.estimatedMargin.toFixed(0)}% margin</span>
           </span>
+          ${reviewBar()}
         </summary>
         <div class="ea-job-body">
           <dl class="ea-detail-grid">
@@ -170,7 +188,7 @@ if (root && dataEl && mount) {
 
   function officeNode(office: Office, oi: number): string {
     return `
-      <details class="ea-office" data-office="${esc(office.office)}"${data.offices.length <= 2 ? " open" : ""}>
+      <details class="ea-office" data-cc-scope data-cc-path="${esc(pk(office.office))}" data-office="${esc(office.office)}"${data.offices.length <= 2 ? " open" : ""}>
         <summary>
           <span class="ea-chev" aria-hidden="true">›</span>
           <span class="ea-office-name">${esc(office.office)}</span>
@@ -180,6 +198,7 @@ if (root && dataEl && mount) {
             <div><strong>${office.proposalYes}/${office.jobCount}</strong><span>Proposal</span></div>
             <div><strong>${office.measurementYes}/${office.jobCount}</strong><span>Measured</span></div>
           </span>
+          ${reviewBar()}
         </summary>
         <div class="ea-office-body">${office.jobs.map((j, ji) => jobNode(j, oi, ji)).join("")}</div>
       </details>`;
@@ -189,6 +208,13 @@ if (root && dataEl && mount) {
     mount.innerHTML = data.offices.map((o, oi) => officeNode(o, oi)).join("");
   }
   render();
+
+  // Hierarchical review progress: leaf = line, rolls up category → estimate → job → office.
+  const progress = initProgressTree({
+    root: mount,
+    storageKey: "ea:lines-reviewed:v1",
+    label: (d, t, p) => `${d}/${t} · ${p}%`,
+  });
 
   /* ---- editing (event delegation) ---- */
   const get = (el: HTMLElement) => {
@@ -205,6 +231,7 @@ if (root && dataEl && mount) {
     det?.querySelector('[data-s="mpct"]')?.replaceChildren(est.marginPct.toFixed(1) + "%");
     det?.querySelector('[data-s="rev"]')?.replaceChildren(money(est.marginRevenue));
     det?.querySelector('[data-s="price"]')?.replaceChildren(money(est.totalPrice));
+    progress.refresh(); // re-rendered line checkboxes: re-sync + recompute bars
   }
 
   mount.addEventListener("input", (ev) => {

@@ -6,17 +6,20 @@ const data = await loadPriceListReviewHierarchy();
 const money = (n: number | null) => (n == null ? "—" : "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const totalItems = data.offices.reduce((s, o) => s + o.itemCount, 0);
 const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
+// Grand total of branch-level line items (the review leaves) — seeds the top progress bar so it
+// rolls up correctly before any branch is expanded (declared total, not DOM-counted).
+const grandItemTotal = data.offices.reduce((s, o) => s + o.branches.reduce((s2, b) => s2 + b.itemCount, 0), 0);
 ---
 
 <AppShell title="Global Price List" eyebrow="Accounting · Price List Review" activePage="accounting">
-  <section class="plr" id="plr">
+  <section class="plr" id="plr" data-cc-total={grandItemTotal}>
     <header class="plr-head">
       <div>
         <h1>Global Price List</h1>
         <p class="plr-sub">PE Office → Global Price List → Vendor → Branch → Current / Archived agreements. Every price is shown in the item's canonical pricing UOM — the <b>UOM</b> column is the unit for the whole row.</p>
       </div>
       <div class="plr-progress" data-cc-progress>
-        <span class="plr-progress-txt" data-cc-progress-txt>0/0 offices reviewed</span>
+        <span class="plr-progress-txt" data-cc-progress-txt>0/0 items reviewed</span>
         <div class="cc-progress-track"><div class="cc-progress-fill" data-cc-progress-fill></div></div>
       </div>
     </header>
@@ -30,8 +33,10 @@ const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
           <span class="plr-count">{data.offices.length} offices · {totalItems} priced items · {totalBranches} branches</span>
         </div>
 
-        {data.offices.map((o) => (
-          <details class="plr-office" open={data.offices.length <= 2}>
+        {data.offices.map((o) => {
+          const officeItemTotal = o.branches.reduce((s, b) => s + b.itemCount, 0);
+          return (
+          <details class="plr-office" data-cc-scope data-cc-path={o.officeId} data-cc-total={officeItemTotal} open={data.offices.length <= 2}>
             <summary>
               <span class="plr-chev" aria-hidden="true">›</span>
               <b>{o.officeName}</b>
@@ -40,9 +45,10 @@ const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
                 <span class="plr-pill grey">{o.branchCount} branches</span>
                 {o.expiringSoon && <span class="plr-pill bad">renewal needed</span>}
               </span>
-              <label class="plr-reviewed" title="Mark this office reviewed" onclick="event.stopPropagation()">
-                <input type="checkbox" data-cc-check={`office-${o.officeId}`} /> reviewed
-              </label>
+              <span class="plr-bar plr-bar-office" data-cc-progress title="Branch items reviewed in this office">
+                <span class="plr-bar-txt" data-cc-progress-txt>0/{officeItemTotal}</span>
+                <span class="cc-progress-track"><span class="cc-progress-fill" data-cc-progress-fill></span></span>
+              </span>
             </summary>
 
             <div class="plr-section">
@@ -76,7 +82,7 @@ const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
               <h3 class="plr-h3">ABC Supply · Branches <span class="plr-note">expand a branch for its current negotiated price list and archived agreement history</span></h3>
               {o.branches.length === 0 && <p class="plr-empty sm">No branches with negotiated pricing in this territory yet.</p>}
               {o.branches.map((b) => (
-                <details class="plr-branch" data-branch={b.branchNumber} data-search={`${b.branchNumber} ${b.branchName} ${b.city}`.toLowerCase()}>
+                <details class="plr-branch" data-cc-scope data-cc-path={`${o.officeId}/${b.branchNumber}`} data-cc-total={b.itemCount} data-office={o.officeId} data-branch={b.branchNumber} data-search={`${b.branchNumber} ${b.branchName} ${b.city}`.toLowerCase()}>
                   <summary>
                     <span class="plr-chev" aria-hidden="true">›</span>
                     <b>{b.branchName || `Branch #${b.branchNumber}`}</b>
@@ -86,13 +92,18 @@ const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
                       <span class={`plr-pill ${b.currentActive ? "ok" : "bad"}`}>{b.currentActive ? "active" : "expired"}</span>
                       {b.archivedCount > 0 && <span class="plr-pill grey">{b.archivedCount} archived</span>}
                     </span>
+                    <span class="plr-bar plr-bar-branch" data-cc-progress title="Items reviewed in this branch">
+                      <span class="plr-bar-txt" data-cc-progress-txt>0/{b.itemCount}</span>
+                      <span class="cc-progress-track"><span class="cc-progress-fill" data-cc-progress-fill></span></span>
+                    </span>
                   </summary>
                   <div class="plr-branch-body" data-loaded="0"><p class="plr-loading">Loading price list…</p></div>
                 </details>
               ))}
             </div>
           </details>
-        ))}
+          );
+        })}
       </>
     )}
   </section>
@@ -114,7 +125,14 @@ const totalBranches = data.offices.reduce((s, o) => s + o.branchCount, 0);
     .plr-office>summary::-webkit-details-marker,.plr-branch>summary::-webkit-details-marker{display:none}
     .plr-office>summary b{font-size:14px}
     .plr-tags{display:flex;gap:6px;align-items:center;margin-left:6px}
-    .plr-reviewed{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted,#6b7886);cursor:pointer;font-weight:600}
+    .plr-bar{margin-left:auto;display:flex;align-items:center;gap:7px;min-width:150px}
+    .plr-bar-branch{min-width:130px}
+    .plr-bar-txt{font-size:10.5px;color:var(--muted,#6b7886);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:650}
+    .plr-bar .cc-progress-track{flex:1;min-width:54px;height:6px;border-radius:999px;background:var(--grey-bg,#eceff4);overflow:hidden;display:block}
+    .plr-bar .cc-progress-fill{display:block;height:100%;width:0;background:var(--accent,#2f6df6);border-radius:999px;transition:width .2s}
+    .plr-bar.is-complete .cc-progress-fill{background:var(--green,#137a4d)}
+    .plr-rev{display:inline-flex;align-items:center;justify-content:center;width:26px}
+    .plr-rev input{cursor:pointer;width:15px;height:15px}
     .plr-chev{color:var(--muted,#6b7886);transition:transform .15s;font-size:15px}
     .plr-office[open]>summary .plr-chev,.plr-branch[open]>summary .plr-chev{transform:rotate(90deg)}
     .plr-section{padding:4px 13px 14px}

@@ -3,6 +3,11 @@
 // catching pricing issues before invoicing. Read-only; lazy-renders lines on
 // expand. Defaults to ACTIVE orders (archived = invoiced or >60d). Reads
 // ?office=/?branch= to land pre-filtered.
+//
+// Review progress: Order Audit has no DB line disposition, so the leaf is a localStorage
+// "reviewed" checkbox on each line; bars roll up order → branch → office (shared primitive).
+
+import { initProgressTree } from "./progress-checklist";
 
 interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; apiPrice: number | null; apiUom: string; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -35,8 +40,12 @@ if (root && dataEl && mount) {
   };
 
   /* ---- line table (lazy) ---- */
-  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Order Price</th><th class="num">API Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>';
-  function lineRow(l: OrdLine): string {
+  const THEAD = '<thead><tr><th class="iv-rev">✓</th><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Order Price</th><th class="num">API Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th></tr></thead>';
+  // Path-key: paths are slash-delimited, so a segment must not contain "/".
+  const pk = (s: string) => String(s ?? "").replace(/\//g, "_");
+  // Review-progress bar (localStorage leaves) shown at office/branch/order levels.
+  const reviewBar = () => '<span class="iv-bar" data-cc-progress title="Items reviewed"><span class="iv-bar-txt" data-cc-progress-txt></span><span class="iv-bar-track"><span class="iv-bar-fill" data-cc-progress-fill></span></span></span>';
+  function lineRow(l: OrdLine, prefix: string): string {
     // UOM mismatch (schema 121): agreement priced in a different unit than the order line,
     // so the variance is not computed — flag for manual review.
     const negCell = l.uomMismatch
@@ -47,6 +56,7 @@ if (root && dataEl && mount) {
       : `<span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span>`;
     return `
       <tr class="iv-ln${l.covered ? " is-covered" : ""}">
+        <td class="iv-rev"><input type="checkbox" data-cc-check="${esc(prefix)}/${esc(l.lineKey || l.lineId)}" title="Mark this line reviewed"></td>
         <td class="iv-sku">${esc(l.itemNumber)}</td>
         <td>${esc(l.itemDescription) || '<span class="iv-inv-sub">—</span>'}</td>
         <td class="num">${l.qty}</td>
@@ -63,6 +73,7 @@ if (root && dataEl && mount) {
   // ordered by category sort_order. Mirrors invoiceBody() on the Invoice Audit screen.
   function orderBody(ord: Order): string {
     if (ord.lines.length === 0) return '<p class="iv-disp-lead">No lines.</p>';
+    const prefix = `${pk(ord.office)}/${pk(ord.branchCode)}/${pk(ord.orderNumber)}`;
     const groups = new Map<string, OrdLine[]>();
     ord.lines.forEach((l) => {
       const k = l.categoryKey || "uncategorized";
@@ -85,7 +96,7 @@ if (root && dataEl && mount) {
       return `
         <details class="iv-cat" data-cat="${esc(k)}">
           <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span></summary>
-          <table class="iv-table">${THEAD}<tbody>${lines.map(lineRow).join("")}</tbody></table>
+          <table class="iv-table">${THEAD}<tbody>${lines.map((l) => lineRow(l, prefix)).join("")}</tbody></table>
         </details>`;
     }).join("");
 
@@ -106,21 +117,25 @@ if (root && dataEl && mount) {
     const job = ord.matched ? ` · <span class="iv-job">${esc(ord.jobNumber)}${ord.clientName ? " · " + esc(ord.clientName) : ""}${ord.jobCategory ? " · " + esc(ord.jobCategory) : ""}</span>` : "";
     const dates = [ord.orderedOn, ord.deliveryRequestedFor ? "→ " + ord.deliveryRequestedFor : ""].filter(Boolean).join(" ");
     const search = (ord.orderNumber + " " + ord.po + " " + ord.jobNumber + " " + ord.clientName).toLowerCase();
+    const ordPath = `${pk(ord.office)}/${pk(ord.branchCode)}/${pk(ord.orderNumber)}`;
     return `
-      <details class="iv-inv" data-search="${esc(search)}" data-matched="${ord.matched ? "1" : "0"}" data-disp="${ord.disposition}" data-worst="${ord.worstPct}" data-noprice="${ord.uncoveredLines}">
+      <details class="iv-inv" data-cc-scope data-cc-path="${esc(ordPath)}" data-cc-total="${ord.lineCount}" data-search="${esc(search)}" data-matched="${ord.matched ? "1" : "0"}" data-disp="${ord.disposition}" data-worst="${ord.worstPct}" data-noprice="${ord.uncoveredLines}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-inv-no">${esc(ord.orderNumber)}</span> <span class="iv-inv-sub">${dates}${ord.po ? " · PO " + esc(ord.po) : ""}${job}</span></span>
           <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(ord.branchCode)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
           <span class="iv-inv-tags">${orderTags(ord)}</span>
+          ${reviewBar()}
         </summary>
         <div class="iv-inv-body" data-ord="${esc(ord.orderNumber)}"></div>
       </details>`;
   }
 
   function branchNode(br: Branch): string {
+    const branchPath = `${pk(br.office)}/${pk(br.branchCode)}`;
+    const branchLines = br.orders.reduce((s, o) => s + (o.lineCount || 0), 0);
     return `
-      <details class="iv-branch" data-branch="${esc(br.branchCode)}" data-search="${esc((br.branchName + " " + br.branchCode).toLowerCase())}">
+      <details class="iv-branch" data-cc-scope data-cc-path="${esc(branchPath)}" data-cc-total="${branchLines}" data-branch="${esc(br.branchCode)}" data-search="${esc((br.branchName + " " + br.branchCode).toLowerCase())}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-branch-name">${esc(br.branchName)}</span> <span class="iv-inv-sub">#${esc(br.branchCode)}</span></span>
@@ -129,14 +144,17 @@ if (root && dataEl && mount) {
             <span class="pill pill-brand">${br.matched} matched</span>
             ${br.atRisk > 0 ? `<span class="pill pill-red">${money(br.atRisk)} at risk</span>` : '<span class="pill pill-green">✓ in tolerance</span>'}
           </span>
+          ${reviewBar()}
         </summary>
         <div class="iv-branch-body">${br.orders.map(orderNode).join("")}</div>
       </details>`;
   }
 
   function officeNode(off: Office): string {
+    const officePath = pk(off.office);
+    const officeLines = off.branches.reduce((s, b) => s + b.orders.reduce((s2, o) => s2 + (o.lineCount || 0), 0), 0);
     return `
-      <details class="iv-office" data-office="${esc(off.office)}">
+      <details class="iv-office" data-cc-scope data-cc-path="${esc(officePath)}" data-cc-total="${officeLines}" data-office="${esc(off.office)}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-office-name">${esc(off.office)}</span>
@@ -146,12 +164,20 @@ if (root && dataEl && mount) {
             <div><strong>${money(off.atRisk)}</strong><span>At Risk</span></div>
             <div><strong>${off.flaggedLines}</strong><span>Flagged</span></div>
           </span>
+          ${reviewBar()}
         </summary>
         <div class="iv-office-body">${off.branches.map(branchNode).join("")}</div>
       </details>`;
   }
 
   mount.innerHTML = offices.map(officeNode).join("");
+
+  // Hierarchical review progress: leaf = line checkbox, rolls up order → branch → office.
+  const progress = initProgressTree({
+    root: mount,
+    storageKey: "oa:items-reviewed:v1",
+    label: (d, t, p) => `${d}/${t} · ${p}%`,
+  });
 
   // Lazy-render order bodies on first expand.
   const ordByNumber = new Map<string, Order>();
@@ -171,6 +197,7 @@ if (root && dataEl && mount) {
         if (!r.ok) { body.innerHTML = `<p class="iv-disp-lead">Could not load lines: ${esc(r.error_description || r.error || "error")}</p>`; return; }
         ord.lines = r.lines || [];
         body.innerHTML = orderBody(ord);
+        progress.refresh(); // sync just-mounted line checkboxes + recompute order/branch/office bars
       } catch {
         body.innerHTML = '<p class="iv-disp-lead">Could not load lines — network error.</p>';
         body.dataset.rendered = ""; // allow retry on next open
