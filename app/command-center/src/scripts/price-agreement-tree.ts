@@ -2,6 +2,8 @@
 // Lazy-renders a branch's category/item body on first expand. Mirrors the Invoice Audit
 // tree so the two dashboards behave identically.
 
+import { initProgressChecklist } from "./progress-checklist";
+
 interface PaItem { itemNumber: string; description: string; uom: string; unitPrice: number; hasNegotiated: boolean; apiPrice: number | null; apiUom: string; uomMismatch: boolean; variancePct: number | null; changeTier: string; changePct: number | null; changePrior: number | null; imageUrl: string; categoryKey: string; }
 interface PaCategory { key: string; label: string; sortOrder: number; itemCount: number; items: PaItem[]; }
 interface PaBranch {
@@ -101,6 +103,7 @@ if (root && dataEl && mount) {
         <summary>
           <span class="pa-chev" aria-hidden="true">›</span>
           <span class="pa-branch-id"><span class="pa-branch-name">${esc(br.branchName)}</span> <span class="pa-sub">#${esc(br.branchCode)}</span></span>
+          <label class="cc-check" title="Mark this branch reviewed — persists when you leave and return" onclick="event.stopPropagation()"><input type="checkbox" data-cc-check="${esc(br.branchCode)}" /> Reviewed</label>
           ${build}${renew}
           <span class="pa-branch-tags">${branchTags(br)}</span>
         </summary>
@@ -123,11 +126,28 @@ if (root && dataEl && mount) {
             <div><strong>${off.itemCount.toLocaleString()}</strong><span>Items</span></div>
           </span>
         </summary>
-        <div class="pa-office-body">${off.branches.map(branchNode).join("")}</div>
+        <div class="pa-office-body">
+          <div class="cc-progress" data-cc-progress>
+            <div class="cc-progress-head"><b>Review progress</b><span data-cc-progress-txt></span></div>
+            <div class="cc-progress-track"><div class="cc-progress-fill" data-cc-progress-fill style="width:0%"></div></div>
+          </div>
+          ${off.branches.map(branchNode).join("")}
+        </div>
       </details>`;
   }
 
   mount.innerHTML = offices.map(officeNode).join("") || `<p class="pa-empty">No price agreements found.</p>`;
+
+  // Resumable "branches reviewed" progress per office — same bar + checkbox primitive other
+  // multi-step surfaces use; state persists in localStorage so the user can leave and return.
+  mount.querySelectorAll<HTMLElement>(".pa-office").forEach((officeEl) => {
+    const office = officeEl.dataset.office || "";
+    initProgressChecklist({
+      root: officeEl,
+      storageKey: `cc:pa-audit:${office}`,
+      label: (d, t, p) => `${d}/${t} branches reviewed · ${p}%`,
+    });
+  });
 
   // Lazy-render branch bodies on first expand.
   const branchByKey = new Map<string, PaBranch>();
