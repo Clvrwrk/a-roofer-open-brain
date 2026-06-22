@@ -1,0 +1,10 @@
+$ORIGIN proexteriorsus.net.
+$TTL 600
+
+agentmail._domainkey.agentmail	IN	TXT	"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyNadlUsq1w+gjk0rE9kxxiilP52T99jg0Kn2+ji/d3/4bJIy4Cx2AbK2JMbSOv0Jg1TIiTVwhlThcwtKjJolrHXp1XRDKEy4l7CkqSzviJfeYDEri0cOr4ObQWAnpn0vq9/4zXPssJ+ZHemXL5c7Bd2yAMUS6u4Qt+LJvfv0TaIdGzqeejFD/ZfuSaOzC1gW4l8Mtyp6Dgefz8Y2ZYcF73icpEr6n7KrxeyZ+BYVV2JhOlmYeraYMDOVqqbPWtLLUHN+6ks0L1hcdU2c5fLtMdm/bGr33/F/c4Tb5X//yUETJfL3pzH78jFOLyZnqQr1Jje4HsRncfCY5Ve164b6kQIDAQAB"
+mail.agentmail	IN	TXT	"v=spf1 include:amazonses.com -all"
+_dmarc.agentmail	IN	TXT	"v=DMARC1; p=reject; rua=mailto:dmarc@agentmail.proexteriorsus.net"
+
+agentmail	IN	MX	10 inbound-smtp.us-east-1.amazonaws.com.
+mail.agentmail	IN	MX	10 feedback-smtp.us-east-1.amazonses.com.
+

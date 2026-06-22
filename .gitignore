@@ -56,6 +56,13 @@ outputs/
 # Editor/sync duplicate copies, e.g. "excalidraw 2.log", "workspace 2.json"
 * 2.*
 
+# Local working data / client data buckets (may contain PII — keep out of history)
+Estimate Tool - Working Files/
+supabase/Accounting Files/
+supabase/Price Agreements/
+# Map screenshot artifacts at repo root
+vendor-territory-map-*.png
+
 # Claude local (machine-specific permissions)
 .claude/settings.local.json
 integrations/bridges/abc-supply/.price-seed-runs/
