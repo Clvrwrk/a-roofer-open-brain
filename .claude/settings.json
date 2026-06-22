@@ -9,6 +9,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -e '.stop_hook_active == true' >/dev/null 2>&1 && exit 0; bash \"$CLAUDE_PROJECT_DIR/scripts/check-harness-alignment.sh\"",
+            "statusMessage": "Checking harness alignment…"
+          }
+        ]
+      }
     ]
   }
 }

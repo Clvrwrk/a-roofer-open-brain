@@ -38,7 +38,7 @@ The invokable entry point for the **Handoff / Wrap-up** checklist in `CLAUDE.md`
      - `CONVENTIONS.md` — the shared contract (§13 wrap-up)
      - `.cursor/rules/*.mdc` — Cursor
    - **On every wrap-up:** if this session changed a rule, hard rule, memory budget, security/consent boundary, the design-system contract, or this wrap-up procedure, propagate the change to **all** of the files above — and to any new harness file the team has added since (e.g. `.windsurfrules`, `.github/copilot-instructions.md`, `GEMINI.md`). Add the new file to this list when you create it.
-   - Quick drift check: `grep -L "Session wrap-up\|wrapup\|§13" CLAUDE.md AGENTS.md CONVENTIONS.md .cursor/rules/*.mdc` — any file listed is missing the wrap-up contract and must be updated.
+   - Quick drift check: `bash scripts/check-harness-alignment.sh` (exit 0 = aligned, exit 2 = a file is missing the wrap-up contract). This is the same script the **Claude Code Stop hook** runs automatically — a session cannot end while the harness files are out of sync (the hook blocks with the list of offending files). When you add a new harness file type beyond `.cursor/rules/*.mdc`, extend the `FILES` list in that script too.
    - Files may differ in framing/length but must **never contradict** each other or `CONVENTIONS.md` §13. Commit the alignment as part of the same wrap-up.
 
 6. **Report and stop.** Send one message:
