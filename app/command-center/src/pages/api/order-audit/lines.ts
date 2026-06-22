@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { convertPrice, type ItemUomMap } from "@lib/uom";
 
 export const prerender = false;
 
@@ -41,7 +42,22 @@ export const GET: APIRoute = async ({ url, locals }) => {
     for (const r of (apiRows as any[] | null) ?? []) apiByItem.set(r.item_number, { price: num(r.api_price), uom: r.api_uom ?? "" });
   }
 
-  const lines = ((data as any[] | null) ?? []).map((l) => ({
+  // Canonical UOM map for this order's items, so the ABC API price (seeded in its stocking UOM,
+  // e.g. BD) is converted into each line's pricing UOM (e.g. SQ) before display. The line's own
+  // unit_price is already normalized in SQL (migration 121); the API price was not (docs/46).
+  const itemNumbers = Array.from(new Set(((data as any[] | null) ?? []).map((l) => l.item_number).filter(Boolean)));
+  const uomMap: ItemUomMap = new Map();
+  if (itemNumbers.length) {
+    const { data: uomRows } = await client.from("v_item_uom_map").select("item_number,ship_uom,price_uom,units_per_price_uom").in("item_number", itemNumbers);
+    for (const r of (uomRows as any[] | null) ?? []) {
+      uomMap.set(r.item_number, { shipUom: r.ship_uom ?? "", priceUom: r.price_uom ?? "", unitsPerPriceUom: r.units_per_price_uom == null ? null : Number(r.units_per_price_uom) || null });
+    }
+  }
+
+  const lines = ((data as any[] | null) ?? []).map((l) => {
+    const api = apiByItem.get(l.item_number ?? "");
+    const apiConv = api ? convertPrice(api.price, api.uom, l.uom ?? "", l.item_number ?? "", uomMap) : { value: null, aligned: true };
+    return ({
     lineId: l.line_id,
     lineKey: l.line_key ?? "",
     itemNumber: l.item_number ?? "",
@@ -50,8 +66,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     uom: l.uom ?? "",
     unitPrice: num(l.unit_price),
     extendedPrice: num(l.extended_price),
-    apiPrice: apiByItem.get(l.item_number ?? "")?.price ?? null,
-    apiUom: apiByItem.get(l.item_number ?? "")?.uom ?? "",
+    apiPrice: apiConv.value,
+    apiUom: api ? (l.uom ?? "") : "",
     negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
     variancePct: l.variance_pct == null ? null : num(l.variance_pct),
     varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
@@ -59,7 +75,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     uomMismatch: l.uom_mismatch === true,
     negotiatedUom: l.negotiated_uom ?? "",
     categoryKey: l.category_key ?? "uncategorized",
-  })).sort((a, b) => Math.abs(b.variancePct ?? -1) - Math.abs(a.variancePct ?? -1));
+  });
+  }).sort((a, b) => Math.abs(b.variancePct ?? -1) - Math.abs(a.variancePct ?? -1));
 
   return jsonApiResponse({ ok: true, lines });
 };

@@ -6,6 +6,7 @@
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
+import { loadItemUomMap, convertPrice } from "@lib/uom";
 
 export interface InvLine {
   lineId: string;
@@ -139,6 +140,11 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
 
+  // Canonical UOM map so the ABC API price (seeded in its stocking UOM, e.g. BD) is converted
+  // to each line's pricing UOM (e.g. SQ) before it's shown next to the invoice unit price.
+  // Without this the API PRICE column compares across units (docs/46, migrations 119–122).
+  const uomMap = await loadItemUomMap(fetchAll, client);
+
   // API price keyed by item|branch (leading zeros stripped); branch comes from the invoice.
   const normBranch = (b: unknown) => String(b ?? "").replace(/^0+/, "");
   const apiByKey = new Map<string, { price: number; uom: string }>();
@@ -165,6 +171,10 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
     const passed = a?.audit_status === "passed";
     const list = linesByInvoice.get(l.invoice_number) ?? [];
     const api = apiByKey.get(`${l.item_number ?? ""}|${branchByInvoice.get(l.invoice_number) ?? ""}`);
+    // Normalize the API price into the line's pricing UOM. Aligned → show it in the line's UOM
+    // (apples-to-apples with unitPrice); not alignable → null so we render "—" rather than a
+    // misleading cross-unit number (matches the Price Agreement Audit contract).
+    const apiConv = api ? convertPrice(api.price, api.uom, l.uom ?? "", l.item_number ?? "", uomMap) : { value: null, aligned: true };
     list.push({
       lineId: l.line_id,
       itemNumber: l.item_number ?? "",
@@ -174,8 +184,8 @@ export async function loadInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promi
       unitPrice: num(l.unit_price),
       extendedPrice: num(l.extended_price),
       negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
-      apiPrice: api ? api.price : null,
-      apiUom: api ? api.uom : "",
+      apiPrice: apiConv.value,
+      apiUom: api ? (l.uom ?? "") : "",
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
       auditable: l.is_auditable !== false, // default true unless the view says otherwise
