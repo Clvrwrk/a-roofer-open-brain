@@ -18,6 +18,7 @@
 // Vendor-agnostic by item_number; read-write but never sends anything externally.
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { convertPrice, type ItemUomMap } from "@lib/uom";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -180,6 +181,19 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
     for (const r of (apiRows as any[] | null) ?? []) apiPriceByItem.set(r.item_number, { price: num(r.api_price), uom: r.api_uom ?? "" });
   }
 
+  // Canonical UOM map: the API price often arrives in the stocking unit (e.g. BD) while the
+  // worksheet prices items in their pricing unit (e.g. SQ). Convert the API price into each
+  // item's display unit so the row never shows two units (@lib/uom, docs/46). Persisted
+  // prior/proposed prices are NOT touched — only the API comparison column is normalized.
+  const uomMap: ItemUomMap = new Map();
+  {
+    const uomRows = await selectAll<any>(client, "v_item_uom_map", "item_number,ship_uom,price_uom,units_per_price_uom");
+    for (const r of uomRows) {
+      if (!r.item_number) continue;
+      uomMap.set(r.item_number, { shipUom: r.ship_uom ?? "", priceUom: r.price_uom ?? "", unitsPerPriceUom: r.units_per_price_uom == null ? null : Number(r.units_per_price_uom) || null });
+    }
+  }
+
   // Load any persisted draft package for this branch and its item edits.
   const { data: pkgRow } = await client
     .from("agreement_packages")
@@ -231,8 +245,15 @@ export async function loadAgreementBuilder(branchNumber?: string, env: RuntimeEn
       purchases36mo: num(it.purchases_36mo),
       priorPrice: prior.price,
       priorPriceSource: prior.source,
-      apiPrice: apiPriceByItem.get(it.item_number)?.price ?? null,
-      apiUom: apiPriceByItem.get(it.item_number)?.uom ?? "",
+      ...(() => {
+        const apiRaw = apiPriceByItem.get(it.item_number);
+        if (!apiRaw) return { apiPrice: null as number | null, apiUom: "" };
+        const conv = convertPrice(apiRaw.price, apiRaw.uom, it.uom ?? "", it.item_number, uomMap);
+        // Aligned → show in the row's own unit; otherwise keep the API's native unit (honest).
+        return conv.aligned
+          ? { apiPrice: conv.value, apiUom: it.uom ?? "" }
+          : { apiPrice: apiRaw.price, apiUom: apiRaw.uom };
+      })(),
       proposedPrice: p && p.proposed_price != null ? num(p.proposed_price) : null,
       isOverride: !!p?.is_override,
       excluded: p?.item_status === "excluded",

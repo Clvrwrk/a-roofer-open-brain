@@ -14,6 +14,7 @@
 
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
+import { loadItemUomMap, convertPrice } from "@lib/uom";
 
 export interface EstimateLine {
   lineId: string;
@@ -141,6 +142,10 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
+
+  // Canonical UOM map — used to convert the ABC API price into each estimate line's own
+  // display unit so the row never shows the API price in a different unit (see @lib/uom, docs/46).
+  const uomMap = await loadItemUomMap(fetchAll, client);
 
   // Operator edit overlay (schema 112): estimate-level margin + line edits/adds/deletes.
   const marginEdit = new Map<string, number>();
@@ -280,7 +285,17 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     for (const opt of job.estimates) for (const line of opt.lines) {
       if (!line.abcItemNumber) continue;
       const api = apiByKey.get(`${line.abcItemNumber}|${bn}`);
-      if (api) { line.apiPrice = api.price; line.apiUom = api.uom; }
+      if (!api) continue;
+      // Normalize the API price into THIS line's display unit so the row shows ONE unit.
+      // If the units can't be aligned, keep the API's own unit rather than fabricate a number.
+      const conv = convertPrice(api.price, api.uom, line.uom, line.abcItemNumber, uomMap);
+      if (conv.aligned && conv.value != null) {
+        line.apiPrice = conv.value;
+        line.apiUom = line.uom;
+      } else {
+        line.apiPrice = api.price;
+        line.apiUom = api.uom;
+      }
     }
   }
 
