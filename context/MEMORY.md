@@ -3,7 +3,7 @@
 
 ## ▶ Pick up here
 **Handoff: `docs/handoffs/current.md` + daily log.** **Invoice-audit overhaul + P4 DONE (06-22), all on origin/main.** P1–P3: one-UOM-per-row + correct variance on ALL price surfaces (`@lib/uom`, docs46) + API-price UOM-normalize fix on invoice+order audit (no per-cell /SQ suffix; UOM col is the unit). **P4 = Global Price List review hierarchy** (`/accounting/price-list/review`, nav "Global Price List"): PE Office→Global→Vendor→Branch→Current/Archived. Migs 143–144: `v_price_list_global`, `v_price_list_branch_pricing` (current + immediate-prior price), `v_price_list_branch_agreements` (newest→oldest), `v_pl_branch_office`. Server-renders office+global; lazy per-branch detail; reuses progress primitive. Branches have 1 agreement gen → prior-price/archived EMPTY until next ABC generation (views future-proof). Locked: 2hr=office isochrone (schema70); open=`ar_status='open'`.
-**OPEN:** rotate Sentry `sntrys_` build token (chat-exposed)→Coolify; nightly-sync Sentry on agent host; [GPA] Denver/Dallas promote · price crons (2026-07); **ABC FULL prod-sync owed — run on agent host (sandbox caps block it)**.
+**OPEN:** [GPA] Denver/Dallas promote · price crons (2026-07); **ABC FULL prod-sync owed — run on agent host (sandbox caps block it; DB shows no full pull since 06-05)**. (Done 06-23: Sentry build token rotated + nightly sync, agent host.)
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
