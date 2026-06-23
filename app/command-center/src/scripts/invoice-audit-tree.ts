@@ -8,6 +8,25 @@ interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: strin
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
+interface CommunicationMessagePreview {
+  id: string;
+  channel_type: "slack" | "email";
+  subject: string;
+  body_html: string;
+  body_text: string;
+  recipients: string[];
+  attachments: Array<{ label: string; href: string }>;
+  validation_state: "pending" | "ready" | "failed";
+  validation_errors: string[];
+}
+interface CommunicationPreviewPayload {
+  threadId: string;
+  status: string;
+  subject: string;
+  validationState: "pending" | "ready" | "failed";
+  validationErrors: string[];
+  messages: CommunicationMessagePreview[];
+}
 
 const root = document.querySelector(".iv") as HTMLElement | null;
 const dataEl = document.getElementById("iv-data");
@@ -117,6 +136,137 @@ if (root && dataEl && mount) {
     }
   }
 
+  function parsePreview(raw: any): CommunicationPreviewPayload {
+    const messages = Array.isArray(raw?.messages) ? raw.messages : [];
+    return {
+      threadId: String(raw?.threadId ?? ""),
+      status: String(raw?.status ?? "draft"),
+      subject: String(raw?.subject ?? ""),
+      validationState: raw?.validationState === "failed" ? "failed" : raw?.validationState === "ready" ? "ready" : "pending",
+      validationErrors: Array.isArray(raw?.validationErrors) ? raw.validationErrors.map((v: unknown) => String(v)) : [],
+      messages: messages.map((msg: any) => ({
+        id: String(msg.id ?? ""),
+        channel_type: msg.channel_type === "email" ? "email" : "slack",
+        subject: String(msg.subject ?? ""),
+        body_html: String(msg.body_html ?? ""),
+        body_text: String(msg.body_text ?? ""),
+        recipients: Array.isArray(msg.recipients) ? msg.recipients.map((v: unknown) => String(v)) : [],
+        attachments: Array.isArray(msg.attachments) ? msg.attachments.map((a: any) => ({ label: String(a?.label ?? "Attachment"), href: String(a?.href ?? "#") })) : [],
+        validation_state: msg.validation_state === "failed" ? "failed" : msg.validation_state === "ready" ? "ready" : "pending",
+        validation_errors: Array.isArray(msg.validation_errors) ? msg.validation_errors.map((v: unknown) => String(v)) : [],
+      })),
+    };
+  }
+
+  function sanitizeClientHtml(input: string) {
+    return String(input ?? "")
+      .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+      .replace(/\son\w+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, "")
+      .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, " $1=\"#\"");
+  }
+
+  async function createPreview(inv: Invoice, l: InvLine, action: Action): Promise<CommunicationPreviewPayload | null> {
+    try {
+      const status = action.group === "credit" ? "disputed" : "passed";
+      const res = await fetch("/api/invoice-audit/communications/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          invoiceLineId: l.lineId,
+          invoiceNumber: inv.invoiceNumber,
+          itemNumber: l.itemNumber,
+          itemDescription: l.itemDescription,
+          triggerAction: action.id,
+          auditStatus: status,
+          note: action.label,
+          unitPrice: l.unitPrice,
+          negotiatedPrice: l.negotiatedPrice,
+          variancePct: l.variancePct,
+          varianceExt: l.varianceExt,
+        }),
+      });
+      const payload = await res.json();
+      if (!payload?.ok) {
+        toast("Preview failed: " + (payload?.error_description || payload?.error || "error"));
+        return null;
+      }
+      return parsePreview(payload.preview);
+    } catch {
+      toast("Preview failed - network error");
+      return null;
+    }
+  }
+
+  async function runCommunicationAction(threadId: string, action: string, payload: Record<string, unknown> = {}) {
+    const res = await fetch("/api/invoice-audit/communications/action", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ threadId, action, ...payload }),
+    });
+    return res.json();
+  }
+
+  function openWysiwygModal(title: string, initialHtml: string, onSubmit: (html: string, text: string) => Promise<void>) {
+    const overlay = document.createElement("div");
+    overlay.className = "iv-modal";
+    overlay.innerHTML = `
+      <div class="iv-modal-card">
+        <div class="iv-modal-head">
+          <strong>${esc(title)}</strong>
+          <button class="iv-modal-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="iv-wysiwyg-tools">
+          <button type="button" data-cmd="bold"><b>B</b></button>
+          <button type="button" data-cmd="italic"><i>I</i></button>
+          <button type="button" data-cmd="insertUnorderedList">• List</button>
+          <button type="button" data-cmd="createLink">Link</button>
+        </div>
+        <div class="iv-wysiwyg" contenteditable="true"></div>
+        <div class="iv-modal-actions">
+          <button type="button" class="iv-modal-btn" data-role="cancel">Cancel</button>
+          <button type="button" class="iv-modal-btn iv-modal-btn-primary" data-role="save">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const editor = overlay.querySelector(".iv-wysiwyg") as HTMLElement;
+    editor.innerHTML = initialHtml;
+    const close = () => overlay.remove();
+    overlay.querySelector(".iv-modal-close")?.addEventListener("click", close);
+    overlay.querySelector('[data-role="cancel"]')?.addEventListener("click", close);
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close();
+    });
+    overlay.querySelectorAll<HTMLButtonElement>(".iv-wysiwyg-tools [data-cmd]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const cmd = button.dataset.cmd || "";
+        if (cmd === "createLink") {
+          const href = window.prompt("Link URL");
+          if (!href) return;
+          const trimmed = href.trim();
+          const isRelative = trimmed.startsWith("/");
+          const isHttp = /^https?:\/\/[^\s]+$/i.test(trimmed);
+          if (!isRelative && !isHttp) {
+            toast("Links must be http(s) or relative URLs");
+            return;
+          }
+          document.execCommand(cmd, false, trimmed);
+          return;
+        }
+        document.execCommand(cmd, false);
+      }),
+    );
+    overlay.querySelector('[data-role="save"]')?.addEventListener("click", async () => {
+      const html = editor.innerHTML.trim();
+      const text = (editor.textContent || "").trim();
+      if (!html) {
+        toast("Content is required");
+        return;
+      }
+      await onSubmit(html, text);
+      close();
+    });
+  }
+
   function reRenderInvoice(inv: Invoice) {
     const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(inv.invoiceNumber)}"]`) as HTMLElement | null;
     const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
@@ -140,27 +290,185 @@ if (root && dataEl && mount) {
     det.querySelectorAll<HTMLButtonElement>("[data-mark]").forEach((b) =>
       b.addEventListener("click", (ev) => { ev.stopPropagation(); recordAudit(inv, inv.lines[+b.dataset.line!], { status: "passed", note: "Manually passed" }); }));
     const dispReset = '<div class="iv-disp-lead">Select a line item above to disposition it, or use “Mark passed”.</div>';
+    let selectedLine: InvLine | null = null;
+    let selectedAction: Action | null = null;
+    let previewState: CommunicationPreviewPayload | null = null;
+
+    const drawPreview = () => {
+      if (!selectedLine || !selectedAction) {
+        disp.querySelector<HTMLElement>('[data-panel="preview"]')!.innerHTML = '<div class="iv-disp-lead">Choose an action in the Actions tab to generate a communication preview.</div>';
+        return;
+      }
+      const panel = disp.querySelector<HTMLElement>('[data-panel="preview"]')!;
+      if (!previewState) {
+        panel.innerHTML = '<div class="iv-disp-lead">Generating preview…</div>';
+        return;
+      }
+      const msgs = previewState.messages
+        .map((msg) => {
+          const recipientLabel = msg.channel_type === "slack" ? "Channel" : "Recipients";
+          const recipientValue = msg.recipients.length ? msg.recipients.join(", ") : "Not resolved";
+          const attachments = msg.attachments.length
+            ? `<ul class="iv-attachments">${msg.attachments.map((a) => `<li><a href="${esc(a.href)}" target="_blank" rel="noopener">${esc(a.label)}</a></li>`).join("")}</ul>`
+            : '<p class="iv-msg-muted">No attachments</p>';
+          const valClass = msg.validation_state === "ready" ? "pill-green" : msg.validation_state === "failed" ? "pill-red" : "pill-yellow";
+          const valErrors = msg.validation_errors.length
+            ? `<div class="iv-msg-errors">${msg.validation_errors.map((err) => `<span class="pill pill-red">${esc(err)}</span>`).join("")}</div>`
+            : "";
+          return `
+            <article class="iv-msg-card" data-channel="${msg.channel_type}">
+              <header><span class="pill ${valClass}">${esc(msg.channel_type.toUpperCase())}</span> <strong>${esc(msg.subject)}</strong></header>
+              <div class="iv-msg-row"><b>${recipientLabel}:</b> ${esc(recipientValue)}</div>
+              <div class="iv-msg-body">${sanitizeClientHtml(msg.body_html)}</div>
+              <div class="iv-msg-row"><b>Attachments:</b>${attachments}</div>
+              ${valErrors}
+            </article>`;
+        })
+        .join("");
+      const validationPills = previewState.validationErrors.length
+        ? previewState.validationErrors.map((err) => `<span class="pill pill-red">${esc(err)}</span>`).join("")
+        : '<span class="pill pill-green">All validation checks passed</span>';
+      panel.innerHTML = `
+        <div class="iv-preview-head">
+          <div><strong>${esc(previewState.subject)}</strong></div>
+          <div class="iv-msg-muted">Thread ${esc(previewState.threadId.slice(0, 8))} · ${esc(previewState.status)}</div>
+        </div>
+        <div class="iv-preview-validation">${validationPills}</div>
+        <div class="iv-msg-grid">${msgs || '<div class="iv-disp-lead">No channel drafts returned.</div>'}</div>
+        <div class="iv-exec-row">
+          <button class="iv-exec approve" data-exec="approve">Approved</button>
+          <button class="iv-exec edit" data-exec="edit">Edit (WYSIWYG)</button>
+          <button class="iv-exec reject" data-exec="reject">Rejected (reason)</button>
+          <button class="iv-exec delete" data-exec="delete">Delete</button>
+        </div>`;
+      panel.querySelectorAll<HTMLButtonElement>(".iv-exec").forEach((button) =>
+        button.addEventListener("click", async () => {
+          if (!previewState || !selectedLine || !selectedAction) return;
+          const mode = button.dataset.exec || "";
+          if (mode === "approve") {
+            const response = await runCommunicationAction(previewState.threadId, "approve");
+            if (!response?.ok) {
+              toast("Approve failed: " + (response?.error_description || response?.error || "error"));
+              return;
+            }
+            const status = selectedAction.group === "credit" ? "disputed" : "passed";
+            selectedLine.audited = status === "passed";
+            selectedLine.auditStatus = status;
+            selectedLine.auditedBy = response?.result?.auditRecord?.approved_by || "operator";
+            selectedLine.auditNote = selectedAction.label;
+            selectedLine.auditSource = "manual";
+            selectedLine.auditedAt = String(response?.result?.auditRecord?.decided_at || "").slice(0, 10);
+            inv.auditedLines = inv.lines.filter((x) => x.audited).length;
+            inv.pendingLines = inv.lines.length - inv.auditedLines;
+            reRenderInvoice(inv);
+            toast("Communication approved and queued for release");
+            return;
+          }
+          if (mode === "delete") {
+            const response = await runCommunicationAction(previewState.threadId, "delete");
+            if (!response?.ok) {
+              toast("Delete failed: " + (response?.error_description || response?.error || "error"));
+              return;
+            }
+            previewState = null;
+            drawPreview();
+            toast("Draft deleted");
+            return;
+          }
+          if (mode === "reject") {
+            openWysiwygModal("Reject reason", "<p>Reason required…</p>", async (html, text) => {
+              const response = await runCommunicationAction(previewState!.threadId, "reject", {
+                reasonHtml: html,
+                reasonText: text,
+              });
+              if (!response?.ok) {
+                toast("Reject failed: " + (response?.error_description || response?.error || "error"));
+                return;
+              }
+              previewState = null;
+              drawPreview();
+              toast("Draft rejected");
+            });
+            return;
+          }
+          if (mode === "edit") {
+            const editable = previewState.messages.find((m) => m.channel_type === "email") || previewState.messages[0];
+            if (!editable) {
+              toast("No draft available to edit");
+              return;
+            }
+            openWysiwygModal(`Edit ${editable.channel_type.toUpperCase()} draft`, editable.body_html, async (html, text) => {
+              const response = await runCommunicationAction(previewState!.threadId, "edit", {
+                channelType: editable.channel_type,
+                subject: editable.subject,
+                bodyHtml: html,
+                bodyText: text,
+              });
+              if (!response?.ok) {
+                toast("Edit failed: " + (response?.error_description || response?.error || "error"));
+                return;
+              }
+              const valid = await runCommunicationAction(previewState!.threadId, "validate");
+              if (!valid?.ok) {
+                toast("Validation failed: " + (valid?.error_description || valid?.error || "error"));
+              }
+              const refreshed = await createPreview(inv, selectedLine!, selectedAction!);
+              if (refreshed) {
+                previewState = refreshed;
+                drawPreview();
+              }
+              toast("Draft updated");
+            });
+          }
+        }));
+    };
+
     det.querySelectorAll<HTMLElement>(".iv-ln").forEach((row) =>
       row.addEventListener("click", () => {
         // Click an already-active line to deselect + collapse the disposition
         // panel (keeps long invoices from running off-screen).
         const wasSel = row.classList.contains("sel");
         det.querySelectorAll(".iv-ln").forEach((r) => r.classList.remove("sel"));
-        if (wasSel) { disp.innerHTML = dispReset; return; }
+        if (wasSel) { disp.innerHTML = dispReset; selectedLine = null; selectedAction = null; previewState = null; return; }
         row.classList.add("sel");
         const l = inv.lines[+row.dataset.line!];
+        selectedLine = l;
+        selectedAction = null;
+        previewState = null;
         const accepts = actions.filter((a) => a.group === "accept");
         const credits = actions.filter((a) => a.group === "credit");
         const btn = (a: Action) => `<button class="iv-act ${a.group}" data-action="${a.id}" data-group="${a.group}" data-label="${esc(a.label)}"><span class="t">${esc(a.label)}</span><span class="h">${esc(a.hint)}</span></button>`;
         disp.innerHTML = `
           <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.negotiatedPrice == null ? "No Price" : money2(l.negotiatedPrice)}${l.variancePct != null ? ` · <span class="pill ${tolCls(l.variancePct)}">${pct(l.variancePct)} ${tolLab(l.variancePct)}</span>` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.auditedBy)}</span>` : ""}</div>
-          <div class="iv-grid2"><div class="iv-grp">Accept pricing</div>${accepts.map(btn).join("")}<div class="iv-grp">Dispute — generate credit memo</div>${credits.map(btn).join("")}</div>`;
+          <div class="iv-disp-tabs">
+            <button type="button" data-tab="actions" class="is-active">Actions</button>
+            <button type="button" data-tab="preview">Communications Preview</button>
+          </div>
+          <div class="iv-disp-panel" data-panel="actions">
+            <div class="iv-grid2"><div class="iv-grp">Accept pricing</div>${accepts.map(btn).join("")}<div class="iv-grp">Dispute — generate credit memo</div>${credits.map(btn).join("")}</div>
+          </div>
+          <div class="iv-disp-panel is-hidden" data-panel="preview"></div>`;
+        const setTab = (tab: "actions" | "preview") => {
+          disp.querySelectorAll<HTMLButtonElement>(".iv-disp-tabs [data-tab]").forEach((button) =>
+            button.classList.toggle("is-active", button.dataset.tab === tab));
+          disp.querySelectorAll<HTMLElement>(".iv-disp-panel").forEach((panel) =>
+            panel.classList.toggle("is-hidden", panel.dataset.panel !== tab));
+        };
+        disp.querySelectorAll<HTMLButtonElement>(".iv-disp-tabs [data-tab]").forEach((button) =>
+          button.addEventListener("click", () => setTab((button.dataset.tab as "actions" | "preview") || "actions")));
         disp.querySelectorAll<HTMLButtonElement>(".iv-act").forEach((b) =>
-          b.addEventListener("click", () => {
+          b.addEventListener("click", async () => {
             disp.querySelectorAll(".iv-act").forEach((x) => x.classList.remove("chosen"));
             b.classList.add("chosen");
-            const status = b.dataset.group === "credit" ? "disputed" : "passed";
-            recordAudit(inv, l, { status, decision: b.dataset.action, note: b.dataset.label! });
+            selectedAction = actions.find((a) => a.id === b.dataset.action) || null;
+            if (!selectedAction) return;
+            setTab("preview");
+            previewState = null;
+            drawPreview();
+            const preview = await createPreview(inv, l, selectedAction);
+            if (!preview) return;
+            previewState = preview;
+            drawPreview();
           }));
       }));
   }

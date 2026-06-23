@@ -8,6 +8,8 @@
     "build": "astro build",
     "preview": "astro preview --host 127.0.0.1",
     "check": "astro build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "node runtime/start-command-center.mjs",
     "start:web": "node dist/server/entry.mjs",
     "slack:runtime": "node --import ./runtime/sentry-instrument.mjs runtime/slack-socket-runtime.mjs",
@@ -26,6 +28,10 @@
     "@workos-inc/node": "^10.2.0",
     "astro": "^6.4.4",
     "pdf-lib": "^1.17.1",
+    "sanitize-html": "^2.17.5",
     "svix": "^1.95.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
   }
 }

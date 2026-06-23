@@ -61,3 +61,15 @@ surface, deep-link back to the originating record.
 - [[verify-against-live-db]] · SOUL approval boundary · `HumanUnblockerDashboard.astro`.
 - Recurs across: Price Agreement Audit (renewals), Invoice Audit (credit memos), Agreement
   Builder (#6 submit-on-review-complete also needs this).
+
+## Implementation snapshot (2026-06-23)
+
+Invoice Audit now has a first-pass communications preview workflow:
+
+- Actions tab + Communications Preview tab in invoice disposition.
+- Channel drafts (Slack/email), subject line, WYSIWYG edit/reject flow.
+- Approval gate writes immutable `communication_events`.
+- Internal-only release queue writes `communication_delivery_attempts` and mirrors Slack via `slack_mirror_events`.
+- DB-backed routing now resolves via `communication_routes`.
+
+This is the first vertical slice only (Invoice Audit). Fleet/Tools remain placeholder surfaces for now.

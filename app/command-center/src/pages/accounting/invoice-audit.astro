@@ -175,6 +175,10 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, catego
   .iv-disp{margin-top:10px;padding:12px;background:var(--panel2);border-radius:9px}
   .iv-disp-lead{font-size:12.5px;color:var(--muted);margin-bottom:10px}
   .iv-disp-lead b{color:var(--ink)}
+  .iv-disp-tabs{display:flex;gap:8px;margin-bottom:10px}
+  .iv-disp-tabs button{appearance:none;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer}
+  .iv-disp-tabs button.is-active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .iv-disp-panel.is-hidden{display:none}
   .iv-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .iv-grp{grid-column:1/-1;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-top:2px}
   .iv-act{text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px 12px;cursor:pointer;font-family:inherit;color:inherit}
@@ -185,6 +189,35 @@ const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, catego
   .iv-act.credit{grid-column:1/-1;border-color:color-mix(in srgb, var(--red) 35%, var(--line))}
   .iv-act.credit .t{color:var(--red)}
   .iv-act.chosen{border-color:var(--brand);background:var(--brand-bg)}
+  .iv-preview-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .iv-msg-muted{font-size:11px;color:var(--muted)}
+  .iv-preview-validation{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .iv-msg-grid{display:grid;grid-template-columns:1fr;gap:10px}
+  .iv-msg-card{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px}
+  .iv-msg-card header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .iv-msg-row{font-size:12px;margin-bottom:7px}
+  .iv-msg-body{font-size:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:8px}
+  .iv-msg-body p{margin:0 0 8px}
+  .iv-msg-body p:last-child{margin-bottom:0}
+  .iv-msg-errors{display:flex;gap:6px;flex-wrap:wrap}
+  .iv-attachments{margin:6px 0 0 16px}
+  .iv-exec-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .iv-exec{appearance:none;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);font-size:12px;font-weight:700;cursor:pointer}
+  .iv-exec.approve{color:var(--green);border-color:color-mix(in srgb, var(--green) 35%, var(--line))}
+  .iv-exec.edit{color:var(--brand)}
+  .iv-exec.reject{color:var(--red);border-color:color-mix(in srgb, var(--red) 35%, var(--line))}
+  .iv-exec.delete{color:var(--muted)}
+
+  .iv-modal{position:fixed;inset:0;background:rgba(11,17,25,.55);display:flex;align-items:center;justify-content:center;z-index:90;padding:16px}
+  .iv-modal-card{width:min(760px,100%);max-height:80vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+  .iv-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .iv-modal-close{appearance:none;border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:2px 9px;font-size:18px;cursor:pointer;color:var(--muted)}
+  .iv-wysiwyg-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .iv-wysiwyg-tools button{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer}
+  .iv-wysiwyg{border:1px solid var(--line);border-radius:10px;min-height:180px;padding:10px;font-size:13px;background:var(--panel2)}
+  .iv-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+  .iv-modal-btn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-weight:700}
+  .iv-modal-btn-primary{background:var(--brand);border-color:var(--brand);color:#fff}
 
   .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.25)}
   .ia-toast.show{opacity:1}
