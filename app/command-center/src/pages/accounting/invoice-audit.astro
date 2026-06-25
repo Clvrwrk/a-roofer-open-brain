@@ -4,7 +4,11 @@ import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
 
 const perfMetrics: PerfMetric[] = [];
-const data = await timeAsync("invoice_audit.summary", () => loadInvoiceAuditSummary(), perfMetrics);
+const forceLiveRefresh = Astro.url.searchParams.has("refresh") || Astro.url.searchParams.has("live");
+let data = await timeAsync("invoice_audit.summary", () => loadInvoiceAuditSummary(undefined, { force: forceLiveRefresh }), perfMetrics);
+if (!forceLiveRefresh && (data.status !== "live" || data.totals.invoices === 0)) {
+  data = await timeAsync("invoice_audit.summary.force", () => loadInvoiceAuditSummary(undefined, { force: true }), perfMetrics);
+}
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";

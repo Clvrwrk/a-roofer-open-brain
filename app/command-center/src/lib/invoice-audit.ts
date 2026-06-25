@@ -115,7 +115,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     let from = 0;
     const rows: any[] = [];
     for (;;) {
-      const { data } = await make().range(from, from + PAGE - 1);
+      const { data, error } = await make().range(from, from + PAGE - 1);
+      if (error) {
+        throw new Error(`invoice audit query failed: ${error.message}`);
+      }
       const batch = (data as any[] | null) ?? [];
       rows.push(...batch);
       if (batch.length < PAGE) break;
@@ -392,6 +395,10 @@ const INVOICE_AUDIT_SUMMARY_MAX_STALE_MS = 24 * 60 * 60_000;
 let invoiceAuditSummaryCache: { expiresAt: number; data: InvoiceAuditData } | null = null;
 let invoiceAuditSummaryInflight: Promise<InvoiceAuditData> | null = null;
 
+interface InvoiceAuditSummaryOptions {
+  force?: boolean;
+}
+
 function emptyInvoiceAuditData(): InvoiceAuditData {
   return {
     status: "unconfigured",
@@ -411,6 +418,10 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
       paidInvoices: 0,
     },
   };
+}
+
+function isUsefulInvoiceAuditSummary(data: InvoiceAuditData) {
+  return data.status === "live" && data.totals.invoices > 0 && data.offices.length > 0;
 }
 
 function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[]): InvoiceAuditData {
@@ -534,7 +545,10 @@ async function fetchAllForInvoiceAudit(make: () => any): Promise<any[]> {
   let from = 0;
   const rows: any[] = [];
   for (;;) {
-    const { data } = await make().range(from, from + PAGE - 1);
+    const { data, error } = await make().range(from, from + PAGE - 1);
+    if (error) {
+      throw new Error(`invoice audit query failed: ${error.message}`);
+    }
     const batch = (data as any[] | null) ?? [];
     rows.push(...batch);
     if (batch.length < PAGE) break;
@@ -574,13 +588,19 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
   return summarizeInvoiceRows(invRows, [], [], catRows, []);
 }
 
-export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
+export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
   const now = Date.now();
-  if (invoiceAuditSummaryCache && invoiceAuditSummaryCache.expiresAt > now) return invoiceAuditSummaryCache.data;
-  if (!invoiceAuditSummaryInflight) {
+  if (!options.force && invoiceAuditSummaryCache && invoiceAuditSummaryCache.expiresAt > now) return invoiceAuditSummaryCache.data;
+  if (!invoiceAuditSummaryInflight || options.force) {
     invoiceAuditSummaryInflight = loadFreshInvoiceAuditSummary(env)
       .then((data) => {
-        invoiceAuditSummaryCache = { expiresAt: Date.now() + INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS, data };
+        if (isUsefulInvoiceAuditSummary(data)) {
+          invoiceAuditSummaryCache = { expiresAt: Date.now() + INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS, data };
+        } else if (invoiceAuditSummaryCache && isUsefulInvoiceAuditSummary(invoiceAuditSummaryCache.data)) {
+          return invoiceAuditSummaryCache.data;
+        } else {
+          invoiceAuditSummaryCache = null;
+        }
         return data;
       })
       .finally(() => {
@@ -588,7 +608,7 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv())
       });
     invoiceAuditSummaryInflight.catch(() => undefined);
   }
-  if (invoiceAuditSummaryCache && invoiceAuditSummaryCache.expiresAt + INVOICE_AUDIT_SUMMARY_MAX_STALE_MS > now) {
+  if (!options.force && invoiceAuditSummaryCache && invoiceAuditSummaryCache.expiresAt + INVOICE_AUDIT_SUMMARY_MAX_STALE_MS > now) {
     return invoiceAuditSummaryCache.data;
   }
   return invoiceAuditSummaryInflight;
@@ -682,4 +702,3 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   };
   return invoice;
 }
-

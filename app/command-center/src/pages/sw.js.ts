@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260625d";
+const VERSION = "cc-page-cache-v20260625e";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -142,9 +142,9 @@ self.addEventListener("fetch", (event) => {
 
 async function staleWhileRevalidateHtml(event, request, pathname) {
   const cache = await caches.open(pageCacheName());
-  const cached = await cache.match(request);
+  const cached = await cache.match(pathname);
   const refresh = fetch(request).then(async (response) => {
-    await maybeCacheHtmlResponse(cache, request, response, pathname);
+    await maybeCacheHtmlResponse(cache, pathname, response, pathname);
     return response;
   });
 

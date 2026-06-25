@@ -605,7 +605,7 @@ if (root && dataEl && mount) {
     if (inv.linesLoaded || inv.lines.length > 0) return true;
     let inflight = invoiceDetailInflight.get(inv.invoiceNumber);
     if (!inflight) {
-      inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { headers: { accept: "application/json" } })
+      inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { cache: "no-store", credentials: "same-origin", headers: { accept: "application/json" } })
         .then(async (response) => {
           const payload = await response.json();
           if (!response.ok || !payload?.ok || !payload.invoice) throw new Error(payload?.error_description || payload?.error || "invoice detail failed");
@@ -631,27 +631,33 @@ if (root && dataEl && mount) {
   function prefetchInvoiceDetails(invoices: Invoice[], limit = 6) {
     const pending = invoices.filter((inv) => !inv.linesLoaded && !inv.lines.length).slice(0, limit);
     if (!pending.length) return;
-    setTimeout(() => {
-      pending.forEach((inv) => void loadInvoiceLines(inv));
-    }, 150);
+    pending.forEach((inv, index) => {
+      window.setTimeout(() => void loadInvoiceLines(inv), 250 + index * 140);
+    });
+  }
+
+  async function renderInvoiceDetail(det: HTMLDetailsElement, body: HTMLElement, inv: Invoice): Promise<boolean> {
+    const siblingInvoices = Array.from(det.parentElement?.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]") || [])
+      .map((node) => invByNumber.get(node.dataset.inv || ""))
+      .filter(Boolean) as Invoice[];
+    prefetchInvoiceDetails(siblingInvoices.filter((candidate) => candidate.invoiceNumber !== inv.invoiceNumber), 2);
+    if (!(await ensureInvoiceLines(inv, body))) return false;
+    body.innerHTML = invoiceBody(inv);
+    body.dataset.rendered = "1";
+    bindInvoice(det, inv);
+    document.dispatchEvent(new CustomEvent("command-center:render-ready"));
+    return true;
   }
 
   mount.querySelectorAll<HTMLDetailsElement>(".iv-inv").forEach((det) => {
     det.addEventListener("toggle", async () => {
       if (!det.open) return;
       const body = det.querySelector(".iv-inv-body") as HTMLElement;
-      if (body.dataset.rendered) return;
       const inv = invByNumber.get(body.dataset.inv!);
       if (!inv) return;
-      const siblingInvoices = Array.from(det.parentElement?.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]") || [])
-        .map((node) => invByNumber.get(node.dataset.inv || ""))
-        .filter(Boolean) as Invoice[];
-      prefetchInvoiceDetails(siblingInvoices.filter((candidate) => candidate.invoiceNumber !== inv.invoiceNumber), 4);
-      if (!(await ensureInvoiceLines(inv, body))) return;
-      body.innerHTML = invoiceBody(inv);
-      body.dataset.rendered = "1";
-      bindInvoice(det, inv);
-      document.dispatchEvent(new CustomEvent("command-center:render-ready"));
+      if (body.dataset.rendered && inv.lines.length > 0) return;
+      if (body.dataset.rendered && !inv.lines.length) delete body.dataset.rendered;
+      await renderInvoiceDetail(det, body, inv);
     });
   });
 
@@ -659,7 +665,12 @@ if (root && dataEl && mount) {
     const body = det.querySelector(".iv-inv-body") as HTMLElement | null;
     if (!body?.dataset.rendered) return;
     const inv = invByNumber.get(body.dataset.inv || "");
-    if (inv?.lines?.length) bindInvoice(det, inv);
+    if (inv?.lines?.length) {
+      bindInvoice(det, inv);
+      return;
+    }
+    delete body.dataset.rendered;
+    if (det.open && inv) void renderInvoiceDetail(det, body, inv);
   });
 
   mount.querySelectorAll<HTMLDetailsElement>(".iv-office,.iv-branch").forEach((det) => {
@@ -668,11 +679,11 @@ if (root && dataEl && mount) {
       const invoices = Array.from(det.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]"))
         .map((node) => invByNumber.get(node.dataset.inv || ""))
         .filter(Boolean) as Invoice[];
-      prefetchInvoiceDetails(invoices, det.classList.contains("iv-office") ? 8 : 6);
+      prefetchInvoiceDetails(invoices, det.classList.contains("iv-office") ? 4 : 3);
     });
   });
 
-  prefetchInvoiceDetails(Array.from(invByNumber.values()), 8);
+  prefetchInvoiceDetails(Array.from(invByNumber.values()), 3);
 
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;
@@ -740,6 +751,34 @@ if (root && dataEl && mount) {
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */
   const params = new URLSearchParams(window.location.search);
+  if ((params.has("refresh") || params.has("live")) && offices.length > 0) {
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("refresh");
+    clean.searchParams.delete("live");
+    window.history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
+  }
+
+  const rootText = root.textContent?.toLowerCase() || "";
+  const needsLiveRefresh = offices.length === 0 || rootText.includes("supabase pending") || rootText.includes("no invoices found in the live pipeline");
+  if (needsLiveRefresh && !params.has("refresh") && !params.has("live")) {
+    const key = "invoiceAuditLiveRefreshAt";
+    let shouldRefresh = true;
+    try {
+      const last = Number(window.sessionStorage.getItem(key) || "0");
+      shouldRefresh = !Number.isFinite(last) || Date.now() - last > 30_000;
+      if (shouldRefresh) window.sessionStorage.setItem(key, String(Date.now()));
+    } catch {
+      shouldRefresh = true;
+    }
+    if (shouldRefresh) {
+      window.setTimeout(() => {
+        const live = new URL(window.location.href);
+        live.searchParams.set("refresh", String(Date.now()));
+        window.location.replace(live.pathname + live.search + live.hash);
+      }, 250);
+    }
+  }
+
   const wantOffice = params.get("office");
   const wantBranch = params.get("branch");
   if (wantOffice || wantBranch) {

@@ -43,7 +43,7 @@ const warmTargets: Array<{ name: string; run: () => Promise<unknown> }> = [
   { name: "vendor_territories", run: () => loadVendorTerritorySurface() },
   { name: "weekly_snapshot", run: () => loadWeeklySnapshot() },
   { name: "agreement_gaps", run: () => loadAgreementGapSurface() },
-  { name: "invoice_audit_summary", run: () => loadInvoiceAuditSummary() },
+  { name: "invoice_audit_summary", run: () => loadInvoiceAuditSummary(undefined, { force: true }) },
   { name: "price_list_review", run: () => loadPriceListReviewHierarchy() },
   { name: "order_audit_active", run: () => loadOrderAudit(undefined, "active") },
   { name: "estimate_audit", run: () => loadEstimateAudit() },
