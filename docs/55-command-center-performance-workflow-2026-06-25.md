@@ -29,6 +29,7 @@ Critical routes in the smoke set:
 - Invoice Audit summary responses are cached in-process for 5 minutes; full audit detail remains bounded to one invoice.
 - Invoice expand detail no longer blocks on ABC API price/UOM enrichment; it returns negotiated/unit/variance audit detail first.
 - Command Center caches warm on process boot, can be warmed manually through `/api/performance/warm`, and now reschedule from first-party human activity rather than third-party session replay.
+- `/api/vendor-territories` now serves the warmed territory surface instead of rebuilding directly, and returns a compact map payload that omits heavy office boundary geometry and unused branch audit fields.
 - Human WorkOS/local-operator page and API activity schedules an after-session warm once the app is idle; service/named-agent traffic is counted but does not move the human cadence.
 - Daily warm time defaults to 5 AM local server time and shifts to one hour before the most commonly observed human usage hour. Configure with `COMMAND_CENTER_DAILY_WARM_HOUR`, `COMMAND_CENTER_HUMAN_SESSION_IDLE_MS`, and `COMMAND_CENTER_MIN_SCHEDULED_WARM_GAP_MS` if needed.
 
@@ -45,7 +46,7 @@ Environment: local dev server on `http://127.0.0.1:4324`, sourced from the exist
 | `/operations/estimate-audit` | 5ms | Warm estimate audit cache. |
 | `/weekly-snapshot` | 6ms | Under budget. |
 | `/accounting/vendor-regions` | 13ms | Warm territory + price-list coverage cache. |
-| `/api/vendor-territories` | 171ms | Under budget, but payload is 1.6MB and should be compacted next. |
+| `/api/vendor-territories` | 6ms | Warm cached compact payload, about 754KB locally after trimming boundary geometry and unused branch fields. |
 | Invoice detail expand | 165-199ms | Lazy API payload about 2.4KB for sampled invoice `2001064636-001`. |
 
 All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/view construction is still reported separately and should be fixed at the view/materialization layer rather than hidden.
@@ -55,7 +56,7 @@ All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/vi
 - `v_invoice_audit_invoice` is still too slow for cold page load even when selecting only summary columns. Next DB-side step: create a materialized or cache table for invoice summary rollups with office/branch grouping fields and refresh it after invoice imports/audit writes.
 - `v_estimate_audit_*` paths are the largest remaining cold bottleneck and should be measured per underlying query before UI changes. The UI now benefits from a 5-minute loader cache, but the DB shape still needs work.
 - `price-list/review` and `vendor-regions` are payload-heavy. Next step is to split list summaries from item/detail rows and avoid embedding megabyte JSON in SSR HTML.
-- `api/vendor-territories` is fast enough but returns 1.6MB; compacting map payload fields will help mobile and repeated map interactions.
+- `api/vendor-territories` is now cached and compacted for the interactive map; future work can split branch popup contact/detail data behind an explicit click if mobile network timing still needs more margin.
 
 ## Policy/Security Result
 

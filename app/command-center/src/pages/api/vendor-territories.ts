@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, serializeActor } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
-import { loadVendorTerritoryMapPayload } from "@lib/vendor-territories";
+import { compactVendorTerritoryMapPayload, loadVendorTerritorySurface } from "@lib/vendor-territories";
 
 export const prerender = false;
 
@@ -19,5 +19,5 @@ export const GET: APIRoute = async ({ locals }) => {
     );
   }
 
-  return jsonApiResponse(await loadVendorTerritoryMapPayload());
+  return jsonApiResponse(compactVendorTerritoryMapPayload(await loadVendorTerritorySurface()));
 };

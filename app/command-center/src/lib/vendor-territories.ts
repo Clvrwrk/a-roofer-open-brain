@@ -372,6 +372,77 @@ export interface VendorTerritoryMapPayload {
 
 export type VendorTerritorySurface = VendorTerritoryMapPayload;
 
+function compactAgreementForMap(agreement: PriceAgreementSummary | null): PriceAgreementSummary | null {
+  if (!agreement) return null;
+  return {
+    agreementNumber: agreement.agreementNumber,
+    expiryDate: agreement.expiryDate,
+  } as PriceAgreementSummary;
+}
+
+function compactWaterfallForMap(waterfall: PriceWaterfallSummary): PriceWaterfallSummary {
+  return {
+    itemCount: waterfall.itemCount,
+    uniqueSkuCount: waterfall.uniqueSkuCount,
+  } as PriceWaterfallSummary;
+}
+
+export function compactVendorTerritoryMapPayload(surface: VendorTerritoryMapPayload): VendorTerritoryMapPayload {
+  return {
+    ...surface,
+    offices: surface.offices.map((office) => ({
+      id: office.id,
+      name: office.name,
+      officeType: office.officeType,
+      regionId: office.regionId,
+      regionCode: office.regionCode,
+      regionName: office.regionName,
+      address: office.address,
+      city: office.city,
+      state: office.state,
+      postalCode: office.postalCode,
+      latitude: office.latitude,
+      longitude: office.longitude,
+      driveTimeMinutes: office.driveTimeMinutes,
+      boundary: null,
+      boundaryMethod: null,
+      boundaryComputedAt: null,
+      activePriceAgreements: [],
+      branchCounts: office.branchCounts,
+    })),
+    branches: surface.branches.map((branch) => ({
+      id: branch.id,
+      vendorName: branch.vendorName,
+      vendorSlug: branch.vendorSlug,
+      branchNumber: branch.branchNumber,
+      branchName: branch.branchName,
+      address: branch.address,
+      city: branch.city,
+      state: branch.state,
+      phone: branch.phone,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
+      pricingStatus: branch.pricingStatus,
+      markerPriority: branch.markerPriority,
+      assignedOfficeId: branch.assignedOfficeId,
+      assignedOfficeName: branch.assignedOfficeName,
+      suggestedOfficeId: branch.suggestedOfficeId,
+      suggestedOfficeName: branch.suggestedOfficeName,
+      candidateOffices: [],
+      currentAgreement: compactAgreementForMap(branch.currentAgreement),
+      agreementOnFile: compactAgreementForMap(branch.agreementOnFile),
+      pricingWaterfall: compactWaterfallForMap(branch.pricingWaterfall),
+      invoiceGateStatus: branch.invoiceGateStatus,
+      territoryDecidedBy: branch.territoryDecidedBy,
+      territoryDecidedAt: branch.territoryDecidedAt,
+      managerName: branch.managerName ?? null,
+      managerEmail: branch.managerEmail ?? null,
+      salesRepName: branch.salesRepName ?? null,
+    }) as VendorBranchMapNode),
+    reviewBranches: [],
+  };
+}
+
 export function createVendorTerritoryShellSurface(): VendorTerritorySurface {
   return {
     status: "unconfigured",
