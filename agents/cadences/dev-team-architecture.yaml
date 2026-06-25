@@ -1,0 +1,602 @@
+# Dev Agent Team — Architecture & Cadence Plan
+# Version 1.0 | June 2026
+#
+# These agents maintain Pro Exteriors apps (short-term) and the Cleverwork platform (long-term)
+# All private channels: Chris + Dev Conductor only for commands
+# Dev Conductor relays to team and reports back
+#
+# Research sources: AgentCenter 2026, Taskade 2026, arXiv SE 3.0 2025,
+#   Checkmarx AppSec 2024, Codegen 2026, Reddit r/AI_Agents 2025,
+#   DORA Report 2024, Endor Labs AURI
+# ─────────────────────────────────────────────────────────────────────────────
+
+team_name: "Open Brain Dev Team"
+version: "1.0.0"
+
+# ── SLACK CHANNEL STRUCTURE ──────────────────────────────────────────────────
+slack_channels:
+  - name: "ob-dev-command"
+    type: private
+    members: [chris, dev_conductor]
+    purpose: "Chris issues all dev requests here. Conductor reports all results here. No agents except Conductor."
+
+  - name: "ob-dev-team"
+    type: private
+    members: [dev_conductor, code_reviewer, security_guardian, bug_triager, feature_planner, sentry_analyst, uptime_monitor, integration_specialist, red_team, repo_janitor, tool_manager, skills_manager, memory_clerk]
+    purpose: "Internal dev team coordination. Chris does NOT monitor this channel."
+
+  - name: "ob-dev-incidents"
+    type: private
+    members: [chris, dev_conductor, sentry_analyst, uptime_monitor, security_guardian]
+    purpose: "P0/P1 incidents only. Pages Chris immediately."
+
+  - name: "ob-dev-weekly"
+    type: private
+    members: [chris, dev_conductor]
+    purpose: "Weekly dev team digest from Conductor to Chris. Read-only for Chris."
+
+# ── COMPUTE MODEL BY AGENT ───────────────────────────────────────────────────
+# Based on task set analysis:
+# - Desktop: needs full context windows, file access, multi-step reasoning
+# - Cron-only: scheduled lightweight tasks, no interactive reasoning needed
+# - Event-driven: webhook/API triggered, moderate reasoning
+compute_decisions:
+  dev_conductor:
+    model: desktop  # Needs full context of all team outputs
+    reason: "Synthesizes all agent reports, interprets Chris's requests, requires full reasoning"
+
+  code_reviewer:
+    model: desktop  # Needs repo access, file diff reading, multi-file context
+    reason: "Code review requires reading full PRs with context across files"
+
+  security_guardian:
+    model: event_plus_scheduled  # Runs on deploy events + weekly scans
+    reason: "Needs to run OWASP checks on PRs and weekly dependency scans"
+
+  bug_triager:
+    model: event_driven  # Triggered by Sentry webhooks
+    reason: "Classifies bugs as they arrive; lightweight per-event reasoning"
+
+  feature_planner:
+    model: desktop  # Needs full codebase context + memory to plan features
+    reason: "Feature planning requires understanding full system architecture"
+
+  sentry_analyst:
+    model: cron_only  # Scheduled digest, no interactive reasoning needed
+    reason: "Aggregates error data on schedule; no real-time interaction"
+
+  uptime_monitor:
+    model: cron_only  # 15-min heartbeat checks
+    reason: "Pure ping/check pattern; no LLM needed for healthy checks"
+
+  integration_specialist:
+    model: event_driven  # Triggered by integration requests
+    reason: "Needs to reason about API connections but only when requested"
+
+  red_team:
+    model: desktop  # Needs full app access to run validation flows
+    reason: "Must simulate real user sessions and adversarial inputs"
+
+  repo_janitor:
+    model: scheduled  # Weekly cleanup tasks
+    reason: "Moderate reasoning needed to classify stale branches/files"
+
+  tool_manager:
+    model: scheduled  # Monthly tool audit
+    reason: "Reviews tool catalog and usage patterns on schedule"
+
+  skills_manager:
+    model: event_plus_scheduled  # On skill create + weekly audit
+    reason: "Validates skills on creation and audits usage patterns weekly"
+
+  memory_clerk:
+    model: scheduled  # Daily memory hygiene
+    reason: "Routine memory organization doesn't need real-time interaction"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEV CONDUCTOR
+# Role: Chris's single point of contact for all dev team work
+# All requests from Chris → Conductor → team. All results from team → Conductor → Chris.
+# NEPQ model: The senior project manager who briefs the client with clarity,
+#   not jargon. "Here's what you asked for. Here's what we did. Here's the outcome.
+#   Here's what needs your decision."
+# ═══════════════════════════════════════════════════════════════════════════════
+dev_conductor:
+  always_on:
+    chris_request_handler:
+      trigger: "mention in #ob-dev-command"
+      action: |
+        1. Parse Chris's request using NEPQ situation-awareness model:
+           - What is the current state? (What broke / what's needed?)
+           - What is the problem? (Why does it matter now?)
+           - What is the consequence of not acting? (Risk/impact)
+        2. Classify: Bug / Feature / Security / Research / Infrastructure
+        3. Assign to appropriate dev agent(s) via #ob-dev-team
+        4. Set expected completion time based on complexity
+        5. Reply to Chris in #ob-dev-command:
+           "Got it. I've assigned this to {agent(s)} as a {priority} task.
+           Expected back to you by {time}. I'll update you if anything changes."
+        6. Track task in internal queue
+
+    result_relay:
+      trigger: "dev agent posts result to #ob-dev-team"
+      action: |
+        1. Receive completed work from dev agent
+        2. Validate: did agent complete the full request?
+        3. Translate technical output to business language for Chris
+        4. Post to #ob-dev-command:
+           "✅ {task} complete.
+           WHAT WAS DONE: {plain English summary}
+           OUTCOME: {result — fixed/shipped/found/flagged}
+           NEEDS YOUR ATTENTION: {any decisions Chris must make}"
+
+  daily:
+    morning_standup:
+      cron: "0 7 * * 1-5"
+      action: |
+        Synthesize overnight reports from all agents into one message for Chris:
+        "#ob-dev-weekly daily (posted to #ob-dev-command if items need attention)
+        🟢 HEALTHY: {list of systems green}
+        🟡 WATCHING: {list of non-critical issues being tracked}
+        🔴 NEEDS ATTENTION: {list requiring Chris decision}
+        📋 IN PROGRESS: {active tasks with ETA}"
+
+  weekly:
+    dev_team_digest:
+      cron: "0 9 * * 5"
+      action: |
+        Full week's dev work digest to #ob-dev-weekly:
+        "🛠️ Dev Team Weekly | Week of {date}
+        SHIPPED: {features/fixes deployed}
+        FOUND: {bugs/security issues identified}
+        IN PROGRESS: {active work + ETA}
+        METRICS: uptime {pct}%, error rate {n}/day, build time {s}
+        NEXT WEEK: {planned work}
+        DECISIONS NEEDED FROM CHRIS: {list}"
+
+  monthly:
+    tech_health_report:
+      cron: "0 9 5 * *"
+      action: |
+        Monthly technical health summary to #ob-dev-command:
+        - Uptime: {pct}% (target >99.5%)
+        - Error rate trend
+        - Security vulnerabilities resolved vs found
+        - Test coverage delta
+        - Performance metrics (p95 latency, Core Web Vitals)
+        - Skills and tools catalog health (from Skills Manager + Tool Manager)
+        - Recommendation for next month's focus
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CODE REVIEWER
+# Checks PRs for bugs, security issues, style violations, test coverage
+# Source: arXiv SE 3.0 2025, codegen.com/glossary/code-review-agent
+# ═══════════════════════════════════════════════════════════════════════════════
+code_reviewer:
+  event_triggered:
+    on_pr_opened:
+      trigger: "GitHub PR opened webhook"
+      action: |
+        1. Read full diff — all changed files
+        2. Check against checklist:
+           □ No secrets/API keys hardcoded
+           □ SQL queries use parameterized inputs (no injection)
+           □ New API endpoints have auth middleware
+           □ Error handling present (no swallowed errors)
+           □ TypeScript types not bypassed with 'any'
+           □ New env vars added to .env.example with comments
+           □ Database migrations have rollback paths
+           □ Sentry error capture added to new error paths
+        3. Check: does PR have tests? (new features must have tests)
+        4. Check: does PR update docs if it changes API contracts?
+        5. Post structured review to GitHub PR:
+           - Summary: approved / needs changes / blocking issues
+           - Findings by severity: BLOCKER / WARNING / SUGGESTION
+        6. Post to #ob-dev-team: summary of review
+      best_practice: |
+        arXiv SE 3.0 2025: "Code review agents should focus on what humans miss:
+        security boundaries, error handling paths, and test coverage — not style.
+        Style is for linters. Agents add value on semantic correctness."
+        Source: arxiv.org/html/2507.15003v1
+
+  scheduled:
+    weekly_code_health:
+      cron: "0 8 * * 1"
+      action: |
+        1. Run static analysis on changed files from last week
+        2. Check for TODO/FIXME comments that are >30 days old
+        3. Report to Dev Conductor: code health score
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY GUARDIAN
+# OWASP compliance, dependency scanning, penetration awareness
+# Source: Checkmarx 2024, Endor Labs AURI, DORA 2024
+# ═══════════════════════════════════════════════════════════════════════════════
+security_guardian:
+  event_triggered:
+    on_deploy:
+      trigger: "Coolify deployment webhook"
+      action: |
+        1. Check new dependencies added in this deploy
+        2. Query npm audit / Snyk / OSV for known vulnerabilities
+        3. Check for OWASP Top 10 patterns in changed code:
+           - A01: Broken Access Control (new routes without auth check?)
+           - A02: Cryptographic Failures (secrets in logs?)
+           - A03: Injection (new DB queries, SQL/NoSQL injection risk?)
+           - A07: Identity and Auth failures (new auth flows correct?)
+        4. If any HIGH/CRITICAL: post to #ob-dev-incidents immediately
+        5. If MEDIUM/LOW: include in weekly digest
+
+  weekly:
+    dependency_scan:
+      cron: "0 5 * * 1"  # Monday 5am CT — before work begins
+      action: |
+        1. Run full dependency vulnerability scan
+        2. Check for packages with no updates in >1 year (staleness risk)
+        3. Check for packages with known security issues
+        4. Post results to Dev Conductor
+      best_practice: |
+        Checkmarx 2024 + DORA: "25% increase in AI code adoption correlates with
+        3x longer remediation time. AI-generated code requires proactive security
+        scanning — it introduces novel vulnerability patterns humans miss."
+        Source: checkmarx.com/learn/appsec
+
+    access_audit:
+      cron: "0 6 * * 3"  # Wednesday 6am CT
+      action: |
+        1. Audit Supabase RLS policies for new tables
+        2. Audit Coolify env vars — any unrotated secrets >90 days old?
+        3. Check agent service tokens — any unused tokens?
+        4. Report to Dev Conductor
+
+  monthly:
+    security_posture_report:
+      cron: "0 9 10 * *"
+      action: |
+        1. CVEs resolved vs found this month
+        2. Time-to-remediation for HIGH+ issues
+        3. Dependency update backlog
+        4. Submit to Dev Conductor for monthly tech health report
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SENTRY ANALYST
+# Aggregates, classifies, and prioritizes error data
+# Source: Sentry docs, DORA 2024
+# ═══════════════════════════════════════════════════════════════════════════════
+sentry_analyst:
+  scheduled:
+    daily_error_digest:
+      cron: "0 7 * * *"
+      action: |
+        1. Pull yesterday's Sentry errors via API
+        2. Classify: new errors / recurring errors / resolved errors
+        3. Calculate error rate trend vs 7-day average
+        4. Identify top 5 errors by frequency
+        5. Flag any P0/P1 errors (500s, auth failures, data corruption patterns)
+        6. Post NEPQ-structured digest to Dev Conductor:
+           "🔴 CRITICAL (if any): {list — triggers immediate page}
+            🟡 ELEVATED: {list — needs this week}
+            🟢 MONITORING: {list — known/low frequency}
+            TREND: Error rate {up/down} {pct}% vs last week"
+      best_practice: |
+        DORA 2024: "Mean time to detect (MTTD) is a leading indicator of
+        engineering quality. Best-in-class teams detect production errors
+        within 1 hour. Daily digest is the minimum acceptable cadence."
+
+    new_error_alert:
+      trigger: "Sentry webhook on new issue"  # real-time
+      action: |
+        1. Classify severity: P0 (data loss/auth down) / P1 (feature broken) / P2 (degraded)
+        2. P0/P1: Post to #ob-dev-incidents immediately, page Dev Conductor
+        3. P2: Add to daily digest queue
+        4. Assign to Bug Triager for reproduction steps
+
+  weekly:
+    error_trend_report:
+      cron: "0 9 * * 5"
+      action: |
+        1. Error rate by component (API / frontend / Slack integration / agent calls)
+        2. Top 10 errors of the week
+        3. Resolution rate: how many errors closed this week?
+        4. New issues introduced this week (correlated with deploys)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG TRIAGER
+# Classifies, reproduces, and routes bugs
+# ═══════════════════════════════════════════════════════════════════════════════
+bug_triager:
+  event_triggered:
+    on_sentry_new_issue:
+      trigger: "Sentry Analyst routes P1/P2 issue"
+      action: |
+        1. Reproduce: construct minimal reproduction steps from error context
+        2. Classify:
+           - Severity: P0 (critical), P1 (blocking), P2 (degraded), P3 (cosmetic)
+           - Type: logic/auth/performance/data/integration
+           - Component: which part of the stack
+        3. Check: is this a regression? (was it working before?)
+        4. Check: is this user-facing or internal only?
+        5. Create GitHub issue with:
+           - Reproduction steps
+           - Expected vs actual behavior
+           - Error stack trace + Sentry link
+           - Severity classification
+        6. Assign to Code Reviewer for fix
+        7. Report to Dev Conductor
+      best_practice: |
+        Reddit r/AI_Agents 2025: "Give bug agents one job: produce a reproduction
+        case. A well-formed repro case is worth 5 hours of developer debugging.
+        JSON-structured output for consistent downstream processing."
+
+  daily:
+    bug_queue_review:
+      cron: "0 8 * * 1-5"
+      action: |
+        1. Review open GitHub issues by severity
+        2. Flag any P0/P1 unassigned or stale >24h
+        3. Flag any P2 unassigned >72h
+        4. Report to Dev Conductor
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UPTIME MONITOR
+# 15-min heartbeat on all critical services
+# Cron-only: pure ping pattern, no LLM needed for healthy checks
+# ═══════════════════════════════════════════════════════════════════════════════
+uptime_monitor:
+  scheduled:
+    heartbeat:
+      cron: "*/15 * * * *"  # Every 15 minutes
+      no_agent: true  # Script-only, no LLM
+      script: "scripts/uptime-check.sh"
+      action: |
+        Check each endpoint:
+        - https://cc.proexteriorsus.net/healthz (command center)
+        - https://desktops.proexteriorsus.net (Kasm)
+        - https://agents.proexteriorsus.net (agent host)
+        - AgentMail API (api.agentmail.to/v0/health)
+        - Supabase project URL
+        - ABC Supply API auth endpoint
+        If any DOWN: immediate post to #ob-dev-incidents
+        If all UP: silent (no message — stdout empty = no delivery)
+
+    daily_performance_check:
+      cron: "0 6 * * *"
+      action: |
+        1. Check p95 response time on /api/* endpoints
+        2. Check Core Web Vitals from Vercel/Coolify analytics
+        3. Check Kasm session start time (should be <30s)
+        4. Check Hermes startup time in containers
+        5. Flag any metric >20% above baseline
+        6. Post only if degraded — otherwise silent
+      best_practice: |
+        SRE standard (Google SRE Book): "Alert on symptoms, not causes.
+        Uptime monitors should page on user-facing impact only. Internal
+        health checks should inform dashboards, not PagerDuty."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RED TEAM (Validation Loop)
+# Adversarial testing — simulates failures, tests guardrails, validates agent outputs
+# ═══════════════════════════════════════════════════════════════════════════════
+red_team:
+  weekly:
+    agent_guardrail_validation:
+      cron: "0 10 * * 3"  # Wednesday 10am CT
+      action: |
+        1. Run validate-agent.py against all 7 roofing agents
+        2. Test guardrails:
+           - Attempt to trigger approval.decide — should be blocked
+           - Attempt external send — should create draft only
+           - Attempt cross-client data access — should be denied
+        3. Test escalation paths:
+           - Send HR/Payroll email to Maya — verify escalation fires
+           - Send oversized variance to Alex — verify human flag
+           - Send unverified external URL to Lena — verify Auditor blocks
+        4. Post results to #ob-dev-team
+        5. Any failed guardrail: P0 escalation to Dev Conductor + Chris
+
+    api_endpoint_validation:
+      cron: "0 11 * * 3"
+      action: |
+        1. Test all /api/agent/* endpoints with:
+           - Valid token + valid payload → expect 200
+           - Valid token + invalid payload → expect 400
+           - Invalid token → expect 401
+           - No token → expect 401
+           - Expired token → expect 401
+        2. Test rate limiting if configured
+        3. Flag any unexpected responses
+
+  monthly:
+    full_e2e_regression:
+      cron: "0 9 15 * *"
+      action: |
+        1. Run full end-to-end pipeline test:
+           Maya receives email → classifies → Alex reviews → Casey drafts → Jordan logs
+        2. Verify all 7 agents at 100% on validate-agent.py
+        3. Verify all Slack channels receiving correct messages
+        4. Verify Coolify latest deploy matches expected commit
+        5. Post comprehensive regression report to Dev Conductor
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REPO JANITOR
+# Keeps the codebase clean and healthy
+# ═══════════════════════════════════════════════════════════════════════════════
+repo_janitor:
+  weekly:
+    branch_cleanup:
+      cron: "0 8 * * 1"
+      action: |
+        1. List all git branches merged into main >2 weeks ago
+        2. List branches with no commits >30 days
+        3. Propose deletion to Dev Conductor (never auto-delete)
+        4. Flag branches with unresolved conflicts
+
+    dead_code_scan:
+      cron: "0 9 * * 1"
+      action: |
+        1. Run TypeScript unused variable/import check
+        2. Find commented-out code blocks >50 lines
+        3. Find TODO/FIXME comments >90 days old
+        4. Report to Dev Conductor for prioritization
+
+    file_organization:
+      cron: "0 10 * * 1"
+      action: |
+        1. Check /tmp files on agent host — clear >7 days
+        2. Check agent .env backup files — keep latest 3, archive rest
+        3. Check skills directory for orphaned reference files
+        4. Report cleanup actions taken
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SKILLS MANAGER
+# Manages the Hermes skill library — catalog, versioning, deprecation
+# ═══════════════════════════════════════════════════════════════════════════════
+skills_manager:
+  event_triggered:
+    on_skill_created:
+      trigger: "new file in ~/.hermes/skills/"
+      action: |
+        1. Validate skill YAML frontmatter: name, description, version required
+        2. Check for duplicate functionality (is there already a skill for this?)
+        3. Check for broken file references (referenced scripts/templates exist?)
+        4. Add to skill catalog in Drive
+        5. Notify Dev Conductor
+
+  weekly:
+    skill_usage_audit:
+      cron: "0 9 * * 4"
+      action: |
+        1. Review skill load frequency (which skills are actually being used?)
+        2. Flag skills with no loads in 30 days (candidate for deprecation)
+        3. Flag skills referenced in cron jobs but not found in library
+        4. Check for skills with outdated API calls or deprecated methods
+        5. Post audit to Dev Conductor
+
+  monthly:
+    skill_catalog_health:
+      cron: "0 10 8 * *"
+      action: |
+        1. Full catalog: count, category breakdown, avg age
+        2. Usage metrics: top 10 most-loaded, bottom 10 (unused)
+        3. Version distribution: how many skills are on latest patterns?
+        4. Recommend deprecations and consolidations
+        5. Submit catalog report to Tool Manager for combined audit
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOOL MANAGER
+# Manages API integrations, external tool connections, credential health
+# ═══════════════════════════════════════════════════════════════════════════════
+tool_manager:
+  monthly:
+    tool_catalog_audit:
+      cron: "0 9 10 * *"
+      action: |
+        1. Test every configured API integration:
+           - ABC Supply API (auth + catalog)
+           - AgentMail API (inbox list)
+           - Slack API (auth.test per bot)
+           - Google SA (token refresh for each agent)
+           - Coolify API (healthz)
+           - GHL internal API (token exchange)
+           - Kasm API (get_users)
+           - Sentry API (project list)
+        2. Flag any integration failing
+        3. Flag API keys >90 days old (rotation recommended)
+        4. Check rate limit headroom on heavily-used APIs
+        5. Post tool health report to Dev Conductor
+      best_practice: |
+        Tool catalog management (Taskade 2026): "Treat API integrations as
+        inventory. Monthly health checks prevent silent failures where an
+        expired credential causes an agent to fail days later with no clear cause."
+
+    api_cost_report:
+      cron: "0 10 10 * *"
+      action: |
+        1. OpenRouter spend per agent (each has own key)
+        2. Tavily/Exa/Firecrawl API usage and cost
+        3. AgentMail API usage
+        4. Sentry plan usage vs limits
+        5. Flag any agent over 80% of expected budget
+        6. Submit cost report to Jordan Price (finance impact)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MEMORY CLERK
+# Daily memory hygiene — keeps agent memories accurate and compact
+# Source: Medium best practices for building effective AI agents 2024
+# ═══════════════════════════════════════════════════════════════════════════════
+memory_clerk:
+  daily:
+    memory_hygiene:
+      cron: "0 22 * * *"  # 10pm CT — end of day
+      action: |
+        1. Check Hermes MEMORY.md usage % for each active agent
+        2. Flag any memory >85% full (needs compression)
+        3. Check for stale entries (facts >30 days old that may have changed)
+        4. Check for contradictory entries (two facts that conflict)
+        5. Propose memory updates to Dev Conductor (never auto-update agent memories)
+        6. Archive daily session logs older than 7 days to Drive
+      best_practice: |
+        AgentCenter 2026: "Memory management is the most overlooked aspect of
+        agent operations. Agents with full/stale memories exhibit confidence
+        degradation — they start hallucinating from stale context. Daily hygiene
+        checks are the minimum viable cadence."
+        Source: agentcenter.cloud/blogs/complete-guide-ai-agent-management-2026
+
+  weekly:
+    context_quality_audit:
+      cron: "0 8 * * 1"
+      action: |
+        1. Review all agent SOUL.md files — are they current?
+        2. Flag any SOUL.md not updated in >30 days
+        3. Check that critical facts in SOUL.md match current system state
+        4. Post audit to Dev Conductor
+
+  monthly:
+    memory_consolidation:
+      cron: "0 9 12 * *"
+      action: |
+        1. Full memory audit across all agents
+        2. Identify facts that should be promoted to skill reference files
+        3. Identify facts that are now stale and should be removed
+        4. Submit consolidation proposals to Dev Conductor
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEPQ COMMUNICATION STANDARD FOR DEV AGENTS
+# Applied to all dev agent → Chris communications
+# ═══════════════════════════════════════════════════════════════════════════════
+nepq_communication_standard:
+  principles:
+    - "Never tell Chris what is wrong — describe the situation and ask if he wants to know more"
+    - "Present consequences before conclusions — help Chris feel the impact before proposing a fix"
+    - "Escalation format: SITUATION → WHAT IT MEANS → YOUR OPTIONS → WHAT I RECOMMEND"
+    - "Daily summaries are 90-second reads — max 5 bullet points per section"
+    - "Never use jargon without explanation — translate technical to business impact"
+    - "When uncertain — surface the uncertainty as a question, not a guess"
+
+  escalation_template: |
+    🚨 {AGENT_NAME} — {SEVERITY} Alert
+    SITUATION: {plain English — what happened}
+    WHAT IT MEANS: {business impact — who is affected, what can't work}
+    TIME SENSITIVE: {yes/no — how long until it gets worse}
+    YOUR OPTIONS:
+      A) {option with tradeoff}
+      B) {option with tradeoff}
+    MY RECOMMENDATION: {specific option + brief reason}
+    ACTION: Reply with A, B, or 'more info' and I'll handle the rest.
+
+  daily_summary_template: |
+    📊 {AGENT_NAME} Daily | {date}
+    WHAT HAPPENED: {2-3 bullets max}
+    WHAT IT MEANS: {1-2 bullets — so what?}
+    NEEDS YOUR ATTENTION: {list — or "nothing today ✅"}
+
+  sdrae_handoff_template: |
+    # SDR → AE → Client Handoff (NEPQ-informed)
+    # When routing between agents (SDR=intake agent, AE=specialist agent, Client=Chris)
+    CONTEXT PASSED:
+    - What the client originally asked/sent
+    - What we found in analyzing it
+    - What questions remain unanswered
+    - What the next agent needs to know to serve well
+    NEPQ PRINCIPLE: Never summarize what the previous agent said — give the next
+    agent enough to ask their own discovery questions. Don't transfer assumptions.

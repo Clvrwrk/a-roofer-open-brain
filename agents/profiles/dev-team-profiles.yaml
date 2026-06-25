@@ -1,0 +1,504 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Dev Team Agent Profiles — All 12 agents
+# Follows the same _schema.yaml as roofing agents, with dev-specific fields
+# No Google Workspace email needed — Slack + API only
+# ─────────────────────────────────────────────────────────────────────────────
+
+# These profiles differ from roofing agents:
+# - No google_workspace (no GW email accounts)
+# - No Kasm desktop for cron-only agents
+# - Service tokens scoped to dev operations, not accounting
+# - Private Slack channels only (Chris + Dev Conductor)
+# ─────────────────────────────────────────────────────────────────────────────
+
+dev_team_profiles:
+
+  dev_conductor:
+    identity:
+      id: "dev-conductor"
+      display_name: "Dev Conductor"
+      role: "dev-team-coordinator"
+      persona_description: "Chris's single point of contact for all dev team work. Receives all requests from Chris, routes to specialized agents, translates results into plain business language, and owns the weekly dev digest."
+    platform:
+      client_id: "pro-exteriors"
+      workspace_domain: "cc.proexteriorsus.net"
+      agent_host: "5.78.146.161"
+      command_center_url: "https://cc.proexteriorsus.net"
+      kasm_base_url: "https://desktops.proexteriorsus.net"
+    kasm:
+      desktop_enabled: true
+      desktop_name: "pe-dev-conductor"
+      kasm_username: "dev-conductor@cc.proexteriorsus.net"  # virtual — no GW account, uses SA
+      image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+      network_policy: "standard"
+    slack:
+      bot_display_name: "Dev Conductor"
+      app_name: "Dev Conductor"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-command"
+          purpose: "Private — Chris + Dev Conductor only. All dev requests and results."
+        - name: "ob-dev-team"
+          purpose: "Internal dev team. Conductor routes tasks here."
+        - name: "ob-dev-incidents"
+          purpose: "P0/P1 incidents. Pages Chris immediately."
+        - name: "ob-dev-weekly"
+          purpose: "Weekly digest to Chris."
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, groups:write, groups:read, files:read, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [web, file, terminal]
+      skills: [nepq-agent-communication, deploy-agent, agent-profile-builder]
+      cadence: "always-on"
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "P0/P1 incident detected — page Chris immediately"
+        - "Security Guardian finds CRITICAL vulnerability"
+        - "Red Team validation fails a guardrail — stop all agent ops"
+        - "Any agent goes offline unexpectedly during business hours"
+        - "Chris's request cannot be fulfilled within stated SLA"
+
+  code_reviewer:
+    identity:
+      id: "code-reviewer"
+      display_name: "Code Reviewer"
+      role: "pr-review-quality"
+      persona_description: "Automated code review on every PR — checks security boundaries, error handling, test coverage, and API contract integrity. Posts structured findings to GitHub and routes blockers to Dev Conductor."
+    platform:
+      client_id: "pro-exteriors"
+      workspace_domain: "cc.proexteriorsus.net"
+      agent_host: "5.78.146.161"
+      command_center_url: "https://cc.proexteriorsus.net"
+      kasm_base_url: "https://desktops.proexteriorsus.net"
+    kasm:
+      desktop_enabled: true  # needs full repo context
+      desktop_name: "pe-code-reviewer"
+      kasm_username: "code-reviewer-virtual"
+      image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+      network_policy: "standard"
+    slack:
+      bot_display_name: "Code Reviewer"
+      app_name: "Code Reviewer"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Posts PR review summaries"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [file, terminal, web]
+      skills: [nepq-agent-communication]
+      cadence: "event-triggered"
+    integrations:
+      github: true
+      sentry: false
+      coolify: false
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Hardcoded secret or API key found in PR"
+        - "SQL injection vulnerability pattern detected"
+        - "Authentication middleware bypassed on new endpoint"
+        - "No tests added for new feature (blocking)"
+        - "PR touches production deployment config without security review"
+
+  security_guardian:
+    identity:
+      id: "security-guardian"
+      display_name: "Security Guardian"
+      role: "appsec-compliance"
+      persona_description: "OWASP Top 10 compliance monitor, dependency vulnerability scanner, and access control auditor. Runs on every deploy and weekly. Escalates HIGH/CRITICAL findings immediately."
+    platform:
+      client_id: "pro-exteriors"
+      workspace_domain: "cc.proexteriorsus.net"
+      agent_host: "5.78.146.161"
+      command_center_url: "https://cc.proexteriorsus.net"
+      kasm_base_url: "https://desktops.proexteriorsus.net"
+    kasm:
+      desktop_enabled: false
+      kasm_username: null
+    slack:
+      bot_display_name: "Security Guardian"
+      app_name: "Security Guardian"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Weekly security scans"
+        - name: "ob-dev-incidents"
+          purpose: "HIGH/CRITICAL findings immediately"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, groups:write, groups:read, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication]
+      cadence: "scheduled"
+      cron_schedule: "0 5 * * 1"  # Monday 5am CT + event-triggered on deploy
+    integrations:
+      github: true
+      coolify: true
+      sentry: false
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "CRITICAL CVE found in production dependency"
+        - "Unrotated secret >90 days old"
+        - "New endpoint accessible without authentication"
+        - "Data exposure in error messages (PII in Sentry)"
+        - "Admin panel accessible from public internet"
+
+  bug_triager:
+    identity:
+      id: "bug-triager"
+      display_name: "Bug Triager"
+      role: "bug-classification-routing"
+      persona_description: "Receives Sentry alerts, reproduces bugs, classifies by severity, and creates well-formed GitHub issues with reproduction steps. Makes debugging 5x faster by doing the classification work upfront."
+    kasm:
+      desktop_enabled: false
+      kasm_username: null
+    slack:
+      bot_display_name: "Bug Triager"
+      app_name: "Bug Triager"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Bug reports and triage results"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication]
+      cadence: "event-triggered"
+    integrations:
+      sentry: true
+      github: true
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "P0 bug: data loss, auth failure, or financial calculation error"
+        - "Bug reproduces consistently in production"
+        - "Bug affects all users (not edge case)"
+        - "Bug introduced by latest deploy (rollback candidate)"
+
+  sentry_analyst:
+    identity:
+      id: "sentry-analyst"
+      display_name: "Sentry Analyst"
+      role: "error-monitoring-digest"
+      persona_description: "Daily error digest and real-time P0/P1 alert routing from Sentry. Turns raw error data into prioritized action items. The 'triage nurse' for production errors."
+    kasm:
+      desktop_enabled: false
+      kasm_username: null
+    slack:
+      bot_display_name: "Sentry Analyst"
+      app_name: "Sentry Analyst"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Daily error digest"
+        - name: "ob-dev-incidents"
+          purpose: "P0/P1 immediate alerts"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, groups:write, groups:read, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"  # Daily digest — no heavy reasoning needed
+      toolsets: [terminal, web]
+      skills: [nepq-agent-communication]
+      cadence: "scheduled"
+      cron_schedule: "0 7 * * *"
+    integrations:
+      sentry: true
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "P0 error: immediate page to Dev Conductor + Chris"
+        - "Error rate >3x above 7-day baseline"
+        - "New error type not seen before in 30 days"
+        - "Sentry quota approaching limit"
+
+  uptime_monitor:
+    identity:
+      id: "uptime-monitor"
+      display_name: "Uptime Monitor"
+      role: "infrastructure-heartbeat"
+      persona_description: "Silent watcher — checks all critical endpoints every 15 minutes, alerts only when something is down. No news is good news."
+    kasm:
+      desktop_enabled: false
+      kasm_username: null
+    slack:
+      bot_display_name: "Uptime Monitor"
+      app_name: "Uptime Monitor"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-incidents"
+          purpose: "Down alerts only — silent when healthy"
+      bot_scopes: [chat:write, channels:read, groups:write, groups:read]
+      socket_mode_enabled: false  # cron-only, no event listening
+    hermes:
+      model: null  # no_agent=true — pure script
+      provider: null
+      tier: null
+      toolsets: []
+      cadence: "scheduled"
+      cron_schedule: "*/15 * * * *"
+      no_agent: true  # stdout=alert, empty=silent
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Any monitored endpoint returns non-200 for 2 consecutive checks"
+        - "Response time >10s on any endpoint"
+        - "SSL certificate expiring within 14 days"
+
+  integration_specialist:
+    identity:
+      id: "integration-specialist"
+      display_name: "Integration Specialist"
+      role: "api-integration-builder"
+      persona_description: "Designs, builds, and maintains API integrations between the Open Brain platform and external services. When a new integration is needed or an existing one breaks, this agent owns the solution."
+    kasm:
+      desktop_enabled: false
+      kasm_username: null
+    slack:
+      bot_display_name: "Integration Specialist"
+      app_name: "Integration Specialist"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Integration work and status"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication, abc-supply-api]
+      cadence: "event-triggered"
+    integrations:
+      github: true
+      coolify: true
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Integration requires credentials outside current permission set"
+        - "New external service has compliance/privacy implications"
+        - "Integration touches financial data paths (Jordan/Alex scope)"
+
+  red_team:
+    identity:
+      id: "red-team"
+      display_name: "Red Team"
+      role: "adversarial-validation"
+      persona_description: "Adversarial validator — simulates failures, tests guardrails, and runs full E2E regression monthly. The quality gate that ensures the system works as designed, not just as tested."
+    kasm:
+      desktop_enabled: true  # needs full app access to run validation flows
+      desktop_name: "pe-red-team"
+      kasm_username: "red-team-virtual"
+      image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+      network_policy: "standard"
+    slack:
+      bot_display_name: "Red Team"
+      app_name: "Red Team"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Validation results"
+        - name: "ob-dev-incidents"
+          purpose: "Guardrail failures — P0 always"
+      bot_scopes: [chat:write, channels:read, channels:history, channels:join, groups:write, groups:read, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication, deploy-agent, agent-profile-builder]
+      cadence: "scheduled"
+      cron_schedule: "0 10 * * 3"  # Wednesday 10am CT weekly
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Any guardrail fails — immediate P0 to Dev Conductor"
+        - "Agent validation score drops below 90%"
+        - "New agent passes deployment but fails E2E"
+
+  repo_janitor:
+    identity:
+      id: "repo-janitor"
+      display_name: "Repo Janitor"
+      role: "codebase-hygiene"
+      persona_description: "Keeps the codebase clean — stale branches, dead code, old TODOs, temp files, and secrets hygiene. Never deletes anything without proposing to Dev Conductor first."
+    kasm:
+      desktop_enabled: false
+    slack:
+      bot_display_name: "Repo Janitor"
+      app_name: "Repo Janitor"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Weekly cleanup reports"
+      bot_scopes: [chat:write, channels:read, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"
+      toolsets: [terminal, file]
+      skills: [nepq-agent-communication]
+      cadence: "scheduled"
+      cron_schedule: "0 8 * * 1"
+    integrations:
+      github: true
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Proposed deletion touches production config"
+        - "Branch has uncommitted work from another team member"
+        - "Cleanup would affect >10 files (too broad — human review)"
+
+  tool_manager:
+    identity:
+      id: "tool-manager"
+      display_name: "Tool Manager"
+      role: "api-integration-catalog"
+      persona_description: "Maintains the catalog of all API integrations, tests them monthly, tracks costs, and flags credential rotation needs. The 'inventory manager' for the agent tool stack."
+    kasm:
+      desktop_enabled: false
+    slack:
+      bot_display_name: "Tool Manager"
+      app_name: "Tool Manager"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Monthly tool health reports"
+      bot_scopes: [chat:write, channels:read, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication, credential-handling-patterns, abc-supply-api]
+      cadence: "scheduled"
+      cron_schedule: "0 9 10 * *"
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Any API integration failing — immediate alert"
+        - "API key >90 days old — rotation needed"
+        - "OpenRouter spend >150% of expected for any agent"
+        - "Rate limit hit on critical API (ABC Supply, AgentMail)"
+
+  skills_manager:
+    identity:
+      id: "skills-manager"
+      display_name: "Skills Manager"
+      role: "hermes-skills-catalog"
+      persona_description: "Validates new skills on creation, audits usage weekly, and proposes deprecations for skills that are stale or redundant. Ensures the skill library is accurate and useful."
+    kasm:
+      desktop_enabled: false
+    slack:
+      bot_display_name: "Skills Manager"
+      app_name: "Skills Manager"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Skill catalog updates"
+      bot_scopes: [chat:write, channels:read, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"
+      toolsets: [file, terminal]
+      skills: [nepq-agent-communication]
+      cadence: "scheduled"
+      cron_schedule: "0 9 * * 4"
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Skill referenced in a cron job not found in library"
+        - "Skill validation fails (broken references, invalid YAML)"
+        - "Duplicate skills found with conflicting instructions"
+
+  memory_clerk:
+    identity:
+      id: "memory-clerk"
+      display_name: "Memory Clerk"
+      role: "agent-memory-hygiene"
+      persona_description: "Daily memory hygiene across all agents — checks fullness, staleness, and contradictions. Proposes updates but never auto-writes. The institutional knowledge custodian."
+    kasm:
+      desktop_enabled: false
+    slack:
+      bot_display_name: "Memory Clerk"
+      app_name: "Memory Clerk"
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+          purpose: "Memory health alerts"
+      bot_scopes: [chat:write, channels:read, channels:join, app_mentions:read]
+      socket_mode_enabled: true
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"
+      toolsets: [file, terminal]
+      skills: [nepq-agent-communication]
+      cadence: "scheduled"
+      cron_schedule: "0 22 * * *"
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+      no_public_internet: false
+      escalation_triggers:
+        - "Agent memory >90% full — immediate compression needed"
+        - "SOUL.md contradicts known system state (e.g. wrong API URL)"
+        - "Agent memory references credential that has changed"
