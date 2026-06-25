@@ -171,9 +171,6 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-cat-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .iv-cat-sub{font-variant-numeric:tabular-nums;font-weight:650;font-size:12px;color:var(--muted)}
   .iv-cat .iv-table{margin:0 8px 8px}
-  /* In "to-audit only" mode, hide categories with nothing pending */
-  .iv-pending-only .iv-cat[data-pend="0"]{display:none}
-
   .iv-table{width:100%;border-collapse:collapse;margin-top:6px}
   .iv-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
   .iv-table td{padding:7px 9px;border-bottom:1px solid var(--line);font-size:12.5px}
@@ -237,7 +234,6 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-mark{appearance:none;border:1px solid var(--green);background:var(--green-bg);color:var(--green);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:650;cursor:pointer;font-family:inherit}
   .iv-mark:hover{filter:brightness(.96)}
   .iv-ln.is-audited{opacity:.62}
-  .iv.iv-pending-only .iv-ln.is-audited{display:none}
   .iv-audit-cell{white-space:nowrap}
   .iv-job{color:var(--brand);font-weight:600}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} }

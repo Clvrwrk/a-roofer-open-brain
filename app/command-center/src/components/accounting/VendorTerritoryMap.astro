@@ -206,6 +206,31 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         replaceOptions(stateFilter, "Full US", payload.states || [], (state) => state, (state) => state);
       }
 
+      function renderMapFallback(message) {
+        const branches = visibleBranches().slice(0, 16);
+        const rows = branches.map((branch) => `
+          <li>
+            <strong>${escapeHtml(branch.branchName || branch.branchNumber || "Vendor branch")}</strong>
+            <span>${escapeHtml([branch.vendorName, branch.city, branch.state].filter(Boolean).join(" / "))}</span>
+            <em>${escapeHtml(branch.assignedOfficeName || branch.suggestedOfficeName || "Unassigned")}</em>
+          </li>`).join("");
+        const branchCount = (payload.branches || []).length;
+        const officeCount = (payload.offices || []).length;
+        mapEl.innerHTML = `
+          <div class="vendor-map-fallback">
+            <div>
+              <strong>Territory data view</strong>
+              <span>${escapeHtml(message)}</span>
+            </div>
+            <div class="vendor-map-fallback-stats">
+              <span><b>${numberText(branchCount)}</b> branches</span>
+              <span><b>${numberText(officeCount)}</b> PE offices</span>
+            </div>
+            <ol>${rows || "<li><strong>No branches match the current filters.</strong><span>Adjust filters to review territory data.</span></li>"}</ol>
+          </div>`;
+        if (branches[0]) renderBranchDetail(branches[0]);
+      }
+
       async function loadDeferredPayload() {
         if (root.dataset.deferLoad !== "1") return;
         if (mapEl) mapEl.innerHTML = '<div class="vendor-map-empty"><strong>Loading territory data</strong><span>Rendering the map shell first, then fetching branch coverage.</span></div>';
@@ -763,8 +788,16 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           await loadDeferredPayload();
           await loadMapsApi();
         } catch (error) {
-          const message = error?.message === "missing-key" ? "GOOGLE_MAPS_BROWSER_KEY is not configured." : error?.message === "territory-load-failed" ? "Territory data failed to load." : error?.message || "Maps JavaScript failed to load for this origin.";
-          mapEl.innerHTML = `<div class="vendor-map-empty"><strong>Map unavailable</strong><span>${escapeHtml(message)}</span></div>`;
+          const message = error?.message === "missing-key"
+            ? "Google Maps is not configured for this environment, so the territory data is shown as a list."
+            : error?.message === "territory-load-failed"
+              ? "Territory data failed to load."
+              : "Google Maps was blocked by this browser or origin, so the territory data is shown as a list.";
+          if (error?.message === "territory-load-failed") {
+            mapEl.innerHTML = `<div class="vendor-map-empty"><strong>Territory data failed to load</strong><span>${escapeHtml(message)}</span></div>`;
+          } else {
+            renderMapFallback(message);
+          }
           return;
         }
 
