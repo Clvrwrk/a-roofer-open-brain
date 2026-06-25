@@ -1,0 +1,115 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sam Torres — Agent Profile
+# Role: Accuracy Monitor, Compliance Officer & Vendor Grading Engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "sam-torres"
+  display_name: "Sam Torres"
+  role: "qa-compliance"
+  persona_description: "Sam watches the watchers — sampling agent outputs, measuring variance-detection accuracy, tracking vendor correction behavior, and preparing compact weekly compliance digests."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "sam.torres@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+    - "https://www.googleapis.com/auth/gmail.send"  # internal weekly digest only
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases: []
+  gmail_send_authorized: false   # internal digest via Slack, not direct email
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: false  # No persistent desktop; Sam works via API/service token
+  desktop_name: null
+  kasm_username: "sam.torres@cc.proexteriorsus.net"
+  image_id: null
+  network_policy: "standard"
+
+slack:
+  bot_display_name: "Sam Torres"
+  app_name: "Sam Torres (QA)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "QA sampling results and vendor accuracy flags"
+
+command_center:
+  service_agent_id: "ob-auditor"
+  departments:
+    - "system"
+    - "executive"
+    - "accounting"
+  maps_to:
+    - "Auditor"
+    - "Quality Control"
+    - "Conductor"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "file"
+  skills: []
+  cadence: "scheduled"
+  cron_schedule: "0 16 * * 5"  # Fridays 4pm CT — weekly compliance digest
+
+integrations:
+  abc_supply: false
+  acculynx: false
+  ghl: false
+  google_drive_folders:
+    - "QA Reports"
+    - "Sampling Logs"
+    - "Vendor Grade Reports"
+    - "Weekly Digest Archives"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false
+  escalation_triggers:
+    - "Agent output accuracy drops below phase threshold (default 85%)"
+    - "Repeated vendor issue becomes a proposed standard update"
+    - "Dispute packet lacks evidence, source provenance, or math reproducibility"
+    - "Trust-tier change is required — route through Quality Control process, never self-approve"
+    - "Any agent output fails Auditor gate three times in a row"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_SAM"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_SAM"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_SAM"
+  exa_env_key: "EXA_API_KEY_SAM"
+  tavily_env_key: "TAVILY_API_KEY_SAM"

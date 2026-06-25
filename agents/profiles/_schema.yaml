@@ -1,0 +1,345 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Open Brain Agent Profile Schema — _schema.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Every field listed here with required: true must be present in every agent
+# profile YAML before deploy-agent will run. The agent-profile-builder skill
+# validates against this schema and blocks deployment on any missing field.
+#
+# Secrets are NEVER stored in profile YAMLs. Credentials section stores only
+# the ENV KEY NAMES pointing to values in .env / Agent Credentials.xlsx.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "1.0.0"
+
+# Platform-wide defaults shared by all agents on this client instance.
+# Individual profiles override these where needed.
+platform_defaults:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  agent_host_ssh_key: "~/.ssh/a_roofers_open_brain_ed25519"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+  google_sa_key_path: "/opt/openbrain/agents/google-service-account.json"
+  kasm_image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  kasm_profile_root: "/mnt/kasm_profiles"
+  hermes_model: "anthropic/claude-sonnet-4-20250514"
+  hermes_provider: "openrouter"
+  slack_team_id: "T0B8QEGPVQW"
+  coolify_cc_uuid: "og0rmt02rff8qti9nlfk3nr7"
+  coolify_api_base: "http://5.78.124.10:8000"
+  agentmail_domain: "agentmail.proexteriorsus.net"
+  # Shared Slack channels every agent joins
+  platform_slack_channels:
+    - name: "ob-agent-audit-log"
+      id: "__resolve_at_deploy__"
+      purpose: "All agent actions logged here"
+    - name: "ob-conductor-digest"
+      id: "__resolve_at_deploy__"
+      purpose: "Daily/weekly digests"
+
+fields:
+  # ── IDENTITY ─────────────────────────────────────────────────────────────
+  identity.id:
+    type: string
+    required: true
+    description: "kebab-case ID. Must exactly match id in NAMED_AGENT_IDENTITIES (access-control.ts)"
+    example: "maya-chen"
+  identity.display_name:
+    type: string
+    required: true
+    example: "Maya Chen"
+  identity.role:
+    type: string
+    required: true
+    description: "Role slug matching access-control.ts NamedAgentIdentity.role"
+    allowed: [document-intake, pricing-catalog, vendor-draft, finance-reporting, marketing-proof, external-research, qa-compliance]
+    example: "document-intake"
+  identity.persona_description:
+    type: string
+    required: true
+    description: "One-sentence summary from persona doc. Used in SOUL.md intro."
+
+  # ── PLATFORM ─────────────────────────────────────────────────────────────
+  platform.client_id:
+    type: string
+    required: true
+    default: "pro-exteriors"
+  platform.workspace_domain:
+    type: string
+    required: true
+    default: "cc.proexteriorsus.net"
+  platform.agent_host:
+    type: string
+    required: true
+    description: "IP or hostname of Hetzner agent host"
+  platform.command_center_url:
+    type: string
+    required: true
+  platform.kasm_base_url:
+    type: string
+    required: true
+
+  # ── GOOGLE WORKSPACE ─────────────────────────────────────────────────────
+  google_workspace.email:
+    type: string
+    required: true
+    description: "Must be @{workspace_domain}. This is both the GW email and the WorkOS login."
+    example: "maya.chen@cc.proexteriorsus.net"
+  google_workspace.domain:
+    type: string
+    required: true
+    description: "Always cc.proexteriorsus.net — NOT proexteriorsus.com"
+  google_workspace.service_account_key_path:
+    type: string
+    required: true
+    default: "/opt/openbrain/agents/google-service-account.json"
+    description: "Shared SA key; impersonation set per agent via subject= parameter"
+  google_workspace.gmail_scopes:
+    type: list
+    required: true
+    description: "Minimal required scopes for this agent"
+  google_workspace.drive_scopes:
+    type: list
+    required: false
+    description: "Only include if agent needs Drive access"
+  google_workspace.email_aliases:
+    type: list
+    required: false
+    description: "Aliases that route to this agent's inbox. Maya has 7."
+    example: ["invoices@cc.proexteriorsus.net", "ap@cc.proexteriorsus.net"]
+  google_workspace.email_alias_routing:
+    type: dict
+    required: false
+    description: "alias_address -> {classification, priority, slack_channel_id}"
+  google_workspace.gmail_send_authorized:
+    type: bool
+    required: true
+    description: "false = drafts only. No agent has external send authority in v1."
+    default: false
+  google_workspace.external_send_authorized:
+    type: bool
+    required: true
+    default: false
+    description: "Always false for all agents in v1. Humans send."
+
+  # ── KASM DESKTOP ─────────────────────────────────────────────────────────
+  kasm.desktop_enabled:
+    type: bool
+    required: true
+    description: "Must match desktopEnabled in access-control.ts NAMED_AGENT_IDENTITIES"
+  kasm.desktop_name:
+    type: string
+    required: false
+    description: "Required if desktop_enabled=true. Format: pe-{id}"
+  kasm.kasm_username:
+    type: string
+    required: true
+    description: "Always same as google_workspace.email"
+  kasm.image_id:
+    type: string
+    required: false
+    default: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+    description: "openbrain-hermes-chrome:1.18.0-20260606"
+  kasm.network_policy:
+    type: string
+    required: true
+    allowed: [standard, external-only, internal-only]
+    description: "external-only for Rowan Vale (Researcher). standard for all others."
+
+  # ── SLACK ─────────────────────────────────────────────────────────────────
+  slack.bot_display_name:
+    type: string
+    required: true
+    description: "Agent's friendly name in Slack. e.g. Maya Chen"
+  slack.app_name:
+    type: string
+    required: true
+    description: "Slack app name. Format: {DisplayName} ({Role})"
+    example: "Maya Chen (Accounting)"
+  slack.team_id:
+    type: string
+    required: true
+    default: "T0B8QEGPVQW"
+    description: "pe-command-center Slack workspace ID"
+  slack.channels:
+    type: list
+    required: true
+    description: "Role-specific channels. Each: {name, id_env_key, purpose}"
+  slack.bot_scopes:
+    type: list
+    required: true
+    default: [chat:write, channels:read, channels:history, channels:join, files:read, app_mentions:read]
+    description: "channels:join required for headless self-join"
+  slack.socket_mode_enabled:
+    type: bool
+    required: true
+    default: true
+
+  # ── COMMAND CENTER ────────────────────────────────────────────────────────
+  command_center.service_agent_id:
+    type: string
+    required: true
+    description: "Matches SERVICE_AGENT_IDENTITIES id that this named agent uses for machine-path API calls"
+    example: "ob-accounting"
+  command_center.departments:
+    type: list
+    required: true
+    description: "Must match departmentAccess in NAMED_AGENT_IDENTITIES"
+    example: ["accounting", "system"]
+  command_center.maps_to:
+    type: list
+    required: true
+    description: "13-agent roles this persona maps to"
+    example: ["@ob-accounting", "Capture"]
+  command_center.permissions:
+    type: list
+    required: true
+    description: "From NAMED_AGENT_PERMISSIONS. approval.decide is NEVER included."
+  command_center.approval_decide:
+    type: bool
+    required: true
+    default: false
+    description: "MUST be false for all agents. Agents surface work; humans decide."
+
+  # ── HERMES ────────────────────────────────────────────────────────────────
+  hermes.model:
+    type: string
+    required: true
+    default: "anthropic/claude-sonnet-4-20250514"
+    description: "Default workhorse model. Override per agent where needed."
+  hermes.provider:
+    type: string
+    required: true
+    default: "openrouter"
+  hermes.tier:
+    type: string
+    required: true
+    allowed: [workhorse, reasoning, fast]
+    description: "workhorse=claude-sonnet, reasoning=claude-opus, fast=claude-haiku"
+  hermes.toolsets:
+    type: list
+    required: true
+    description: "Hermes toolsets to enable. e.g. [web, terminal, file]"
+  hermes.skills:
+    type: list
+    required: false
+    description: "Hermes skills to load. From agents/vertical|horizontal/*/skills.md"
+  hermes.cadence:
+    type: string
+    required: true
+    allowed: [always-on, scheduled, event-triggered]
+    description: "always-on: continuous inbox watch. scheduled: cron. event-triggered: webhook."
+  hermes.cron_schedule:
+    type: string
+    required: false
+    description: "Required if cadence=scheduled. Cron expression (America/Chicago)."
+  hermes.soul_md_template:
+    type: string
+    required: false
+    description: "Path to SOUL.md template. Auto-generated from profile if not specified."
+
+  # ── INTEGRATIONS ─────────────────────────────────────────────────────────
+  integrations.abc_supply:
+    type: bool
+    required: true
+    description: "Read access to ABC Supply API (catalog, pricing, invoices)"
+  integrations.acculynx:
+    type: bool
+    required: true
+    description: "AccuLynx bridge access"
+  integrations.ghl:
+    type: bool
+    required: true
+    description: "GoHighLevel API access"
+  integrations.agentmail_inbox:
+    type: string
+    required: false
+    description: "AgentMail inbox address if this agent receives external email via AgentMail"
+    example: "ob-accounting@agentmail.proexteriorsus.net"
+  integrations.google_drive_folders:
+    type: list
+    required: false
+    description: "Named Drive folders this agent reads/writes. Human creates folders; IDs added here."
+
+  # ── GUARDRAILS ────────────────────────────────────────────────────────────
+  guardrails.no_external_send:
+    type: bool
+    required: true
+    default: true
+    description: "All agent emails are draft-only in v1. Never false without explicit A3 approval."
+  guardrails.no_approval_decide:
+    type: bool
+    required: true
+    default: true
+    description: "Agents surface work; humans approve. Always true."
+  guardrails.no_supabase_service_role:
+    type: bool
+    required: true
+    default: true
+    description: "Agents use service tokens (/api/agent/*), not service-role key."
+  guardrails.no_public_internet:
+    type: bool
+    required: true
+    description: "True for Historian, Capture (internal-only). False for Researcher, named agents."
+  guardrails.escalation_triggers:
+    type: list
+    required: true
+    description: "Conditions from ROLE.md 'Escalates when' section. Min 3 items."
+
+  # ── CREDENTIALS (env key names only — no values in YAML) ─────────────────
+  credentials.openrouter_env_key:
+    type: string
+    required: true
+    description: "Name of the env var holding this agent's OpenRouter API key"
+    example: "OPENROUTER_API_KEY_MAYA"
+  credentials.gw_password_source:
+    type: string
+    required: true
+    default: "Agent Credentials.xlsx"
+    description: "Where the Google Workspace password is read from at deploy time"
+  credentials.fal_env_key:
+    type: string
+    required: false
+    description: "FAL API key env var name (for image-gen capable agents)"
+  credentials.firecrawl_env_key:
+    type: string
+    required: false
+  credentials.exa_env_key:
+    type: string
+    required: false
+  credentials.tavily_env_key:
+    type: string
+    required: false
+
+validation_rules:
+  - id: kasm_desktop_name_required
+    rule: "if kasm.desktop_enabled == true then kasm.desktop_name must be set"
+    error: "kasm.desktop_name is required when desktop_enabled=true (format: pe-{id})"
+  - id: no_approval_decide_ever
+    rule: "command_center.approval_decide must always be false"
+    error: "Agents cannot have approval.decide permission. This is a hard guardrail."
+  - id: external_send_false
+    rule: "google_workspace.external_send_authorized must be false in v1"
+    error: "No agent has external send authority in v1. Use gmail_send_authorized for draft-only."
+  - id: email_domain_matches_workspace
+    rule: "google_workspace.email must end with @{platform.workspace_domain}"
+    error: "Agent email must use workspace domain cc.proexteriorsus.net (NOT proexteriorsus.com)"
+  - id: kasm_username_matches_email
+    rule: "kasm.kasm_username must equal google_workspace.email"
+    error: "Kasm username must be identical to GW email so passwords sync correctly"
+  - id: cron_required_when_scheduled
+    rule: "if hermes.cadence == scheduled then hermes.cron_schedule must be set"
+    error: "hermes.cron_schedule is required when cadence=scheduled"
+  - id: escalation_triggers_minimum
+    rule: "guardrails.escalation_triggers must have at least 3 items"
+    error: "Each agent must have at least 3 documented escalation triggers from their ROLE.md"
+  - id: channels_have_required_fields
+    rule: "each slack.channels item must have name, id_env_key, and purpose"
+    error: "Every Slack channel entry requires name, id_env_key, and purpose"
+  - id: rowan_external_only_network
+    rule: "if identity.id == rowan-vale then kasm.network_policy must be external-only"
+    error: "Rowan Vale (Researcher) must use external-only network. Security boundary enforced at credential level."
+  - id: historian_no_public_internet
+    rule: "Historian must have guardrails.no_public_internet = true"
+    error: "Historian is internal-only. No public internet access ever."

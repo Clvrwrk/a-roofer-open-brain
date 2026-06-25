@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Alex Rivers — Agent Profile
+# Role: Pricing Variance Analyst & Pattern Intelligence
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "alex-rivers"
+  display_name: "Alex Rivers"
+  role: "pricing-catalog"
+  persona_description: "Alex is the pricing detective — he reviews invoice lines against agreement terms, branch/region context, UOM conversions, SKU aliases, and historical price observations to identify and quantify overcharges."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "alex.rivers@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases: []
+  gmail_send_authorized: false
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-alex-rivers"
+  kasm_username: "alex.rivers@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "standard"
+  resources:
+    ram_gb: 8
+    cpu: 2
+    disk_gb: 16
+
+slack:
+  bot_display_name: "Alex Rivers"
+  app_name: "Alex Rivers (Pricing)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-product-catalog-review"
+      id: "C0BCYNW98RL"
+      purpose: "Price agreement review and variance analysis"
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "Invoice audit results and discrepancy flags"
+
+command_center:
+  service_agent_id: "ob-accounting"
+  departments:
+    - "accounting"
+    - "operations"
+    - "system"
+  maps_to:
+    - "@ob-accounting"
+    - "@ob-ops"
+    - "Auditor"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "web"
+    - "file"
+    - "terminal"
+  skills:
+    - "abc-supply-api"
+    - "google-workspace"
+  cadence: "scheduled"
+  cron_schedule: "0 7 * * 1-5"  # Weekdays 7am CT — review overnight ABC syncs
+
+integrations:
+  abc_supply: true
+  acculynx: true
+  ghl: false
+  google_drive_folders:
+    - "Price Agreements"
+    - "SKU Equivalency Files"
+    - "Branch Region Maps"
+    - "Variance Exports"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false  # read-only vendor product/pricing pages
+  escalation_triggers:
+    - "Product lacks a fixed price agreement with start/end date"
+    - "Branch, ship-to, bill-to, or region mapping conflicts"
+    - "Invoiced price has material variance but agreement evidence is missing or expired"
+    - "SKU appears in invoice but has no catalog match after alias resolution"
+    - "Variance exceeds configurable threshold (default: $500/line or $2,000/invoice)"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_ALEX"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_ALEX"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_ALEX"
+  exa_env_key: "EXA_API_KEY_ALEX"
+  tavily_env_key: "TAVILY_API_KEY_ALEX"

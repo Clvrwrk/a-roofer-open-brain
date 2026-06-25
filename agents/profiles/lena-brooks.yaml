@@ -1,0 +1,121 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Lena Brooks — Agent Profile
+# Role: EEAT, Reputation & Local Content Producer
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "lena-brooks"
+  display_name: "Lena Brooks"
+  role: "marketing-proof"
+  persona_description: "Lena is the public-trust builder — organizing proof through reviews, before/after photos, manufacturer badges, location pages, and local project evidence to build search authority and earned trust."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "lena.brooks@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+    - "https://www.googleapis.com/auth/gmail.send"  # internal marketing drafts only
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases: []
+  gmail_send_authorized: false  # no auto-publish; all external content human-approved
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-lena-brooks"
+  kasm_username: "lena.brooks@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "standard"
+  resources:
+    ram_gb: 8
+    cpu: 2
+    disk_gb: 16
+
+slack:
+  bot_display_name: "Lena Brooks"
+  app_name: "Lena Brooks (Marketing)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-product-catalog-review"
+      id: "C0BCYNW98RL"
+      purpose: "Marketing content review and EEAT draft approvals"
+
+command_center:
+  service_agent_id: "ob-marketing"
+  departments:
+    - "marketing"
+  maps_to:
+    - "@ob-marketing"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "web"
+    - "browser"
+    - "file"
+  skills:
+    - "google-workspace"
+  cadence: "scheduled"
+  cron_schedule: "0 9 * * 2"  # Tuesdays 9am CT — EEAT harvest and content review
+
+integrations:
+  abc_supply: false
+  acculynx: true   # reads job close events for EEAT content triggers
+  ghl: false
+  google_drive_folders:
+    - "Media Assets"
+    - "Review Screenshots"
+    - "Job Stories"
+    - "Brand Assets"
+    - "Publish Approvals"
+    - "Editorial Calendars"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false  # needs Google Business Profile, YouTube, Search Console
+  escalation_triggers:
+    - "Publish action involves customer photos, property identifiers, or reviews without explicit consent"
+    - "Platform requires payment, ad spend, admin rights, or domain ownership changes"
+    - "Content references insurance claims, legal disputes, or competitor comparisons"
+    - "eeat_signal.publishable_with_consent or consent_flags.publishable_external is not true — block immediately"
+    - "Client one-click approval rate falls below 50% for two consecutive months"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_LENA"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_LENA"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_LENA"
+  exa_env_key: "EXA_API_KEY_LENA"
+  tavily_env_key: "TAVILY_API_KEY_LENA"
