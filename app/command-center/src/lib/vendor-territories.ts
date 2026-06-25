@@ -1640,7 +1640,7 @@ export async function loadVendorTerritoryMapPayload(
 
 const TERRITORY_SURFACE_LIVE_TTL_MS = 30_000;
 const TERRITORY_SURFACE_DEGRADED_TTL_MS = 5_000;
-const TERRITORY_SURFACE_MAX_STALE_MS = 10 * 60_000;
+const TERRITORY_SURFACE_MAX_STALE_MS = 24 * 60 * 60_000;
 let territorySurfaceCache: { expiresAt: number; payload: VendorTerritoryMapPayload } | null = null;
 let territorySurfaceInflight: Promise<VendorTerritoryMapPayload> | null = null;
 

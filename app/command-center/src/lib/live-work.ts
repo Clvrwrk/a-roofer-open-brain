@@ -1290,7 +1290,7 @@ async function loadFreshCommandCenterSurface(env: RuntimeEnv): Promise<LiveComma
   };
 }
 
-const SURFACE_MAX_STALE_MS = 10 * 60_000;
+const SURFACE_MAX_STALE_MS = 24 * 60 * 60_000;
 
 export async function loadCommandCenterSurface(env: RuntimeEnv = getRuntimeEnv()): Promise<LiveCommandCenterSurface> {
   const now = Date.now();

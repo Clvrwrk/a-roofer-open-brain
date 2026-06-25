@@ -29,8 +29,10 @@ Critical routes in the smoke set:
 - Invoice Audit summary responses are cached in-process for 5 minutes; full audit detail remains bounded to one invoice.
 - Invoice expand detail no longer blocks on ABC API price/UOM enrichment; it returns negotiated/unit/variance audit detail first.
 - Command Center caches warm on process boot, can be warmed manually through `/api/performance/warm`, and now reschedule from first-party human activity rather than third-party session replay.
+- Browser navigation now uses a same-origin service worker plus AppShell prefetch so previously loaded Command Center pages are served immediately from the user-specific browser cache while the network refresh updates behind the scenes.
 - `/api/vendor-territories` now serves the warmed territory surface instead of rebuilding directly, and returns a compact map payload that omits heavy office boundary geometry and unused branch audit fields.
 - Human WorkOS/local-operator page and API activity schedules an after-session warm once the app is idle; service/named-agent traffic is counted but does not move the human cadence.
+- Expired server-side surface caches now serve stale data for up to the daily warm window while refreshing in the background, so an expired in-memory cache should not make the human click wait on Supabase.
 - Daily warm time defaults to 5 AM local server time and shifts to one hour before the most commonly observed human usage hour. Configure with `COMMAND_CENTER_DAILY_WARM_HOUR`, `COMMAND_CENTER_HUMAN_SESSION_IDLE_MS`, and `COMMAND_CENTER_MIN_SCHEDULED_WARM_GAP_MS` if needed.
 
 ## Latest Local Timing Snapshot
@@ -65,3 +67,4 @@ All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/vi
 - No third-party local stdio/Node MCP was enabled.
 - TruConversion was not installed for cache cadence; first-party WorkOS-resolved activity provides enough signal with lower egress/privacy risk.
 - Existing secret variable references were not changed; no raw secret values were added.
+- Browser cache entries are scoped by resolved actor id and cleared on logout; `/auth/*` and login redirects are not cached.

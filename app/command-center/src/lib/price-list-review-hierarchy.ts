@@ -167,6 +167,7 @@ async function loadFreshPriceListReviewHierarchy(env: RuntimeEnv = getRuntimeEnv
 }
 
 const PRICELISTREVIEWHIERARCHY_CACHE_TTL_MS = 5 * 60_000;
+const PRICELISTREVIEWHIERARCHY_MAX_STALE_MS = 24 * 60 * 60_000;
 const loadPriceListReviewHierarchyCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>> }>();
 const loadPriceListReviewHierarchyInflight = new Map<string, ReturnType<typeof loadFreshPriceListReviewHierarchy> | Promise<Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>>>>();
 
@@ -193,6 +194,7 @@ export async function loadPriceListReviewHierarchy(...args: Parameters<typeof lo
     loadPriceListReviewHierarchyInflight.set(cacheKey, inflight);
     (inflight as Promise<unknown>).catch(() => undefined);
   }
+  if (cached && cached.expiresAt + PRICELISTREVIEWHIERARCHY_MAX_STALE_MS > now) return cached.data as Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>>;
   return inflight;
 }
 

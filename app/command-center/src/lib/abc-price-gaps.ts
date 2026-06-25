@@ -615,7 +615,7 @@ export function formatNumber(value: number) {
 
 const GAP_SURFACE_LIVE_TTL_MS = 30_000;
 const GAP_SURFACE_DEGRADED_TTL_MS = 5_000;
-const GAP_SURFACE_MAX_STALE_MS = 10 * 60_000;
+const GAP_SURFACE_MAX_STALE_MS = 24 * 60 * 60_000;
 let gapSurfaceCache: { expiresAt: number; surface: AgreementGapSurface } | null = null;
 let gapSurfaceInflight: Promise<AgreementGapSurface> | null = null;
 

@@ -33,7 +33,7 @@ prewarmSurfaceCaches();
  * - /api/price-agreement/submit/*  token-gated vendor submission endpoint
  */
 const PUBLIC_PREFIXES = ["/auth/", "/.well-known/", "/agent/", "/oauth2/", "/_astro/", "/_image", "/submit-agreement/", "/api/price-agreement/submit/"];
-const PUBLIC_EXACT = new Set(["/auth.md", "/healthz", "/api/agentmail/webhook"]);
+const PUBLIC_EXACT = new Set(["/auth.md", "/healthz", "/sw.js", "/api/agentmail/webhook"]);
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_EXACT.has(pathname)) return true;

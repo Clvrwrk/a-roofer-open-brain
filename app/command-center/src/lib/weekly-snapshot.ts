@@ -148,7 +148,7 @@ const SHORT_DATE = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "sh
 const PAGE_SIZE = 1000;
 const SNAPSHOT_CACHE_TTL_MS = 60_000;
 const DEGRADED_SNAPSHOT_CACHE_TTL_MS = 5_000;
-const SNAPSHOT_MAX_STALE_MS = 10 * 60_000;
+const SNAPSHOT_MAX_STALE_MS = 24 * 60 * 60_000;
 
 let weeklySnapshotCache:
   | {

@@ -331,6 +331,7 @@ async function loadFreshEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Promis
 }
 
 const ESTIMATEAUDIT_CACHE_TTL_MS = 5 * 60_000;
+const ESTIMATEAUDIT_MAX_STALE_MS = 24 * 60 * 60_000;
 const loadEstimateAuditCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshEstimateAudit>> }>();
 const loadEstimateAuditInflight = new Map<string, ReturnType<typeof loadFreshEstimateAudit> | Promise<Awaited<ReturnType<typeof loadFreshEstimateAudit>>>>();
 
@@ -357,6 +358,7 @@ export async function loadEstimateAudit(...args: Parameters<typeof loadFreshEsti
     loadEstimateAuditInflight.set(cacheKey, inflight);
     (inflight as Promise<unknown>).catch(() => undefined);
   }
+  if (cached && cached.expiresAt + ESTIMATEAUDIT_MAX_STALE_MS > now) return cached.data as Awaited<ReturnType<typeof loadFreshEstimateAudit>>;
   return inflight;
 }
 

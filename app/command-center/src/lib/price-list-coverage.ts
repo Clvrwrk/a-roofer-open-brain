@@ -208,6 +208,7 @@ async function loadFreshPriceListCoverage(env: RuntimeEnv = getRuntimeEnv()): Pr
 }
 
 const PRICELISTCOVERAGE_CACHE_TTL_MS = 5 * 60_000;
+const PRICELISTCOVERAGE_MAX_STALE_MS = 24 * 60 * 60_000;
 const loadPriceListCoverageCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshPriceListCoverage>> }>();
 const loadPriceListCoverageInflight = new Map<string, ReturnType<typeof loadFreshPriceListCoverage> | Promise<Awaited<ReturnType<typeof loadFreshPriceListCoverage>>>>();
 
@@ -234,6 +235,7 @@ export async function loadPriceListCoverage(...args: Parameters<typeof loadFresh
     loadPriceListCoverageInflight.set(cacheKey, inflight);
     (inflight as Promise<unknown>).catch(() => undefined);
   }
+  if (cached && cached.expiresAt + PRICELISTCOVERAGE_MAX_STALE_MS > now) return cached.data as Awaited<ReturnType<typeof loadFreshPriceListCoverage>>;
   return inflight;
 }
 

@@ -258,6 +258,7 @@ async function loadFreshOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "ac
 }
 
 const ORDERAUDIT_CACHE_TTL_MS = 5 * 60_000;
+const ORDERAUDIT_MAX_STALE_MS = 24 * 60 * 60_000;
 const loadOrderAuditCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshOrderAudit>> }>();
 const loadOrderAuditInflight = new Map<string, ReturnType<typeof loadFreshOrderAudit> | Promise<Awaited<ReturnType<typeof loadFreshOrderAudit>>>>();
 
@@ -284,6 +285,7 @@ export async function loadOrderAudit(...args: Parameters<typeof loadFreshOrderAu
     loadOrderAuditInflight.set(cacheKey, inflight);
     (inflight as Promise<unknown>).catch(() => undefined);
   }
+  if (cached && cached.expiresAt + ORDERAUDIT_MAX_STALE_MS > now) return cached.data as Awaited<ReturnType<typeof loadFreshOrderAudit>>;
   return inflight;
 }
 

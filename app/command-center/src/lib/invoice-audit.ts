@@ -388,6 +388,7 @@ export function compactInvoiceAuditForInitialPayload(data: InvoiceAuditData): In
 }
 
 const INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS = 5 * 60_000;
+const INVOICE_AUDIT_SUMMARY_MAX_STALE_MS = 24 * 60 * 60_000;
 let invoiceAuditSummaryCache: { expiresAt: number; data: InvoiceAuditData } | null = null;
 let invoiceAuditSummaryInflight: Promise<InvoiceAuditData> | null = null;
 
@@ -586,6 +587,9 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv())
         invoiceAuditSummaryInflight = null;
       });
     invoiceAuditSummaryInflight.catch(() => undefined);
+  }
+  if (invoiceAuditSummaryCache && invoiceAuditSummaryCache.expiresAt + INVOICE_AUDIT_SUMMARY_MAX_STALE_MS > now) {
+    return invoiceAuditSummaryCache.data;
   }
   return invoiceAuditSummaryInflight;
 }

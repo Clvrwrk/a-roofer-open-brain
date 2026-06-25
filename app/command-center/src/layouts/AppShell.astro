@@ -13,13 +13,15 @@ interface Props {
 }
 
 const { title, eyebrow = "Command Center", activePage = "command", layoutMode = "default" } = Astro.props;
-const user = getCommandCenterUser(Astro.locals.actor);
+const actor = Astro.locals.actor;
+const user = getCommandCenterUser(actor);
 const workOsReady = isWorkOsConfigured();
 const workOsSession = user.authMode === "workos";
 
 const pathname = Astro.url.pathname;
 const homeActive = isLeafActive(navHome, pathname);
 const openDepartment = activeDepartmentId(pathname);
+const actorCacheId = actor?.id ?? user.email ?? user.name ?? "local-operator";
 
 // Topical line icons (24x24, stroke = currentColor → inherits --accent).
 const icons: Record<string, string> = {
@@ -144,6 +146,77 @@ const deptIcon = (id: string) =>
           }
         });
       }
+    </script>
+
+    <script define:vars={{ actorCacheId }}>
+      (() => {
+        const pageRoutes = [
+          "/",
+          "/accounting/invoice-audit",
+          "/accounting/price-list/review",
+          "/operations/order-audit",
+          "/operations/estimate-audit",
+          "/weekly-snapshot",
+          "/accounting/vendor-regions",
+          "/accounting",
+          "/operations",
+          "/sales",
+          "/marketing",
+          "/executive",
+          "/system",
+        ];
+        const cacheVersion = "cc-page-cache-v20260625c";
+        const safeActor = String(actorCacheId || "unknown").toLowerCase().replace(/[^a-z0-9._-]+/g, "_").slice(0, 80) || "unknown";
+        const pageCacheName = `${cacheVersion}:pages:${safeActor}`;
+
+        function postToWorker(message) {
+          const worker = navigator.serviceWorker?.controller;
+          if (worker) worker.postMessage(message);
+        }
+
+        async function browserPrecache() {
+          if (!("caches" in window)) return;
+          const cache = await caches.open(pageCacheName);
+          for (const route of pageRoutes) {
+            try {
+              const request = new Request(route, { credentials: "include", headers: { accept: "text/html" } });
+              const response = await fetch(request);
+              const finalUrl = new URL(response.url);
+              if (response.ok && finalUrl.pathname === route && (response.headers.get("content-type") || "").includes("text/html")) {
+                await cache.put(route, response.clone());
+              }
+            } catch {
+              // Browser-side cache warming is opportunistic; navigation still works without it.
+            }
+          }
+        }
+
+        async function registerCacheWorker() {
+          if (!("serviceWorker" in navigator)) return;
+          try {
+            const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+            const ready = await navigator.serviceWorker.ready;
+            const worker = ready.active || registration.active || registration.waiting || registration.installing;
+            worker?.postMessage({ type: "SET_ACTOR", actorId: actorCacheId });
+            worker?.postMessage({ type: "PRECACHE", urls: pageRoutes });
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+              postToWorker({ type: "SET_ACTOR", actorId: actorCacheId });
+              postToWorker({ type: "PRECACHE", urls: pageRoutes });
+            });
+          } catch {
+            // Cache worker is an accelerator only; never block the app shell on it.
+          }
+        }
+
+        window.addEventListener("load", () => {
+          void registerCacheWorker();
+          setTimeout(() => void browserPrecache(), 750);
+        });
+
+        document.querySelector(".logout-form")?.addEventListener("submit", () => {
+          postToWorker({ type: "CLEAR" });
+        });
+      })();
     </script>
   </body>
 </html>
