@@ -59,7 +59,7 @@ const num = (v: unknown) => (v == null ? null : Number(v));
 const n0 = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const d10 = (v: unknown) => (v ? String(v).slice(0, 10) : "");
 
-export async function loadPriceListReviewHierarchy(env: RuntimeEnv = getRuntimeEnv()): Promise<PriceListReviewHierarchy> {
+async function loadFreshPriceListReviewHierarchy(env: RuntimeEnv = getRuntimeEnv()): Promise<PriceListReviewHierarchy> {
   const empty: PriceListReviewHierarchy = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [] };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
@@ -165,3 +165,34 @@ export async function loadPriceListReviewHierarchy(env: RuntimeEnv = getRuntimeE
 
   return { status: "live", generatedAt: new Date().toISOString(), offices };
 }
+
+const PRICELISTREVIEWHIERARCHY_CACHE_TTL_MS = 5 * 60_000;
+const loadPriceListReviewHierarchyCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>> }>();
+const loadPriceListReviewHierarchyInflight = new Map<string, ReturnType<typeof loadFreshPriceListReviewHierarchy> | Promise<Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>>>>();
+
+export function invalidatePriceListReviewHierarchyCache() {
+  loadPriceListReviewHierarchyCache.clear();
+  loadPriceListReviewHierarchyInflight.clear();
+}
+
+export async function loadPriceListReviewHierarchy(...args: Parameters<typeof loadFreshPriceListReviewHierarchy>): ReturnType<typeof loadFreshPriceListReviewHierarchy> {
+  const cacheKey = String("default");
+  const now = Date.now();
+  const cached = loadPriceListReviewHierarchyCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.data as Awaited<ReturnType<typeof loadFreshPriceListReviewHierarchy>>;
+  let inflight = loadPriceListReviewHierarchyInflight.get(cacheKey) as ReturnType<typeof loadFreshPriceListReviewHierarchy> | undefined;
+  if (!inflight) {
+    inflight = loadFreshPriceListReviewHierarchy(...args)
+      .then((data) => {
+        loadPriceListReviewHierarchyCache.set(cacheKey, { expiresAt: Date.now() + PRICELISTREVIEWHIERARCHY_CACHE_TTL_MS, data });
+        return data;
+      })
+      .finally(() => {
+        loadPriceListReviewHierarchyInflight.delete(cacheKey);
+      }) as ReturnType<typeof loadFreshPriceListReviewHierarchy>;
+    loadPriceListReviewHierarchyInflight.set(cacheKey, inflight);
+    (inflight as Promise<unknown>).catch(() => undefined);
+  }
+  return inflight;
+}
+

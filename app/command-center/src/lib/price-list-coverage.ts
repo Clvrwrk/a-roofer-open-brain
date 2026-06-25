@@ -136,7 +136,7 @@ export function buildPriceListCoverage(surface: VendorTerritorySurface | null): 
  * + price_refresh_request. Falls back to the sample builder when the
  * DB is unconfigured. See docs/39 + schemas 95-97.
  * ------------------------------------------------------------------ */
-export async function loadPriceListCoverage(env: RuntimeEnv = getRuntimeEnv()): Promise<PriceListCoverage> {
+async function loadFreshPriceListCoverage(env: RuntimeEnv = getRuntimeEnv()): Promise<PriceListCoverage> {
   const { client } = createServerSupabaseClient(env);
   if (!client) return buildPriceListCoverage(null);
 
@@ -206,3 +206,34 @@ export async function loadPriceListCoverage(env: RuntimeEnv = getRuntimeEnv()): 
   const vendors: CoverageVendor[] = Array.from(vmap, ([vendor, list]) => ({ vendor, branches: list }));
   return { vendors, years: PLC_YEARS, yearFactors: PLC_YEAR_FACTORS, today: PLC_TODAY };
 }
+
+const PRICELISTCOVERAGE_CACHE_TTL_MS = 5 * 60_000;
+const loadPriceListCoverageCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshPriceListCoverage>> }>();
+const loadPriceListCoverageInflight = new Map<string, ReturnType<typeof loadFreshPriceListCoverage> | Promise<Awaited<ReturnType<typeof loadFreshPriceListCoverage>>>>();
+
+export function invalidatePriceListCoverageCache() {
+  loadPriceListCoverageCache.clear();
+  loadPriceListCoverageInflight.clear();
+}
+
+export async function loadPriceListCoverage(...args: Parameters<typeof loadFreshPriceListCoverage>): ReturnType<typeof loadFreshPriceListCoverage> {
+  const cacheKey = String("default");
+  const now = Date.now();
+  const cached = loadPriceListCoverageCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.data as Awaited<ReturnType<typeof loadFreshPriceListCoverage>>;
+  let inflight = loadPriceListCoverageInflight.get(cacheKey) as ReturnType<typeof loadFreshPriceListCoverage> | undefined;
+  if (!inflight) {
+    inflight = loadFreshPriceListCoverage(...args)
+      .then((data) => {
+        loadPriceListCoverageCache.set(cacheKey, { expiresAt: Date.now() + PRICELISTCOVERAGE_CACHE_TTL_MS, data });
+        return data;
+      })
+      .finally(() => {
+        loadPriceListCoverageInflight.delete(cacheKey);
+      }) as ReturnType<typeof loadFreshPriceListCoverage>;
+    loadPriceListCoverageInflight.set(cacheKey, inflight);
+    (inflight as Promise<unknown>).catch(() => undefined);
+  }
+  return inflight;
+}
+

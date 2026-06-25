@@ -126,7 +126,7 @@ async function selectAll<T = any>(client: SupabaseClient, table: string, columns
 // which is the page default and keeps load fast. "all" pulls archived too (heavier; only
 // when the user explicitly opens archived/all). Lines are scoped to the loaded orders so we
 // never fetch the full 18.6k-line set just to render a summary tree.
-export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "active" | "all" = "active"): Promise<OrderAuditData> {
+async function loadFreshOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "active" | "all" = "active"): Promise<OrderAuditData> {
   const empty: OrderAuditData = {
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
@@ -256,3 +256,34 @@ export async function loadOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "
     },
   };
 }
+
+const ORDERAUDIT_CACHE_TTL_MS = 5 * 60_000;
+const loadOrderAuditCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshOrderAudit>> }>();
+const loadOrderAuditInflight = new Map<string, ReturnType<typeof loadFreshOrderAudit> | Promise<Awaited<ReturnType<typeof loadFreshOrderAudit>>>>();
+
+export function invalidateOrderAuditCache() {
+  loadOrderAuditCache.clear();
+  loadOrderAuditInflight.clear();
+}
+
+export async function loadOrderAudit(...args: Parameters<typeof loadFreshOrderAudit>): ReturnType<typeof loadFreshOrderAudit> {
+  const cacheKey = String(args[1] ?? "active");
+  const now = Date.now();
+  const cached = loadOrderAuditCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.data as Awaited<ReturnType<typeof loadFreshOrderAudit>>;
+  let inflight = loadOrderAuditInflight.get(cacheKey) as ReturnType<typeof loadFreshOrderAudit> | undefined;
+  if (!inflight) {
+    inflight = loadFreshOrderAudit(...args)
+      .then((data) => {
+        loadOrderAuditCache.set(cacheKey, { expiresAt: Date.now() + ORDERAUDIT_CACHE_TTL_MS, data });
+        return data;
+      })
+      .finally(() => {
+        loadOrderAuditInflight.delete(cacheKey);
+      }) as ReturnType<typeof loadFreshOrderAudit>;
+    loadOrderAuditInflight.set(cacheKey, inflight);
+    (inflight as Promise<unknown>).catch(() => undefined);
+  }
+  return inflight;
+}
+

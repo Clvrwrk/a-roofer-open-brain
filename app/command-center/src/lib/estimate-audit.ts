@@ -112,7 +112,7 @@ function tierLabels(options: EstimateOption[]): void {
   });
 }
 
-export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<EstimateAuditData> {
+async function loadFreshEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<EstimateAuditData> {
   const { client } = createServerSupabaseClient(env);
   if (!client) return { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { jobs: 0, estimates: 0, lines: 0, proposals: 0 } };
 
@@ -329,3 +329,34 @@ export async function loadEstimateAudit(env: RuntimeEnv = getRuntimeEnv()): Prom
     },
   };
 }
+
+const ESTIMATEAUDIT_CACHE_TTL_MS = 5 * 60_000;
+const loadEstimateAuditCache = new Map<string, { expiresAt: number; data: Awaited<ReturnType<typeof loadFreshEstimateAudit>> }>();
+const loadEstimateAuditInflight = new Map<string, ReturnType<typeof loadFreshEstimateAudit> | Promise<Awaited<ReturnType<typeof loadFreshEstimateAudit>>>>();
+
+export function invalidateEstimateAuditCache() {
+  loadEstimateAuditCache.clear();
+  loadEstimateAuditInflight.clear();
+}
+
+export async function loadEstimateAudit(...args: Parameters<typeof loadFreshEstimateAudit>): ReturnType<typeof loadFreshEstimateAudit> {
+  const cacheKey = String("default");
+  const now = Date.now();
+  const cached = loadEstimateAuditCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.data as Awaited<ReturnType<typeof loadFreshEstimateAudit>>;
+  let inflight = loadEstimateAuditInflight.get(cacheKey) as ReturnType<typeof loadFreshEstimateAudit> | undefined;
+  if (!inflight) {
+    inflight = loadFreshEstimateAudit(...args)
+      .then((data) => {
+        loadEstimateAuditCache.set(cacheKey, { expiresAt: Date.now() + ESTIMATEAUDIT_CACHE_TTL_MS, data });
+        return data;
+      })
+      .finally(() => {
+        loadEstimateAuditInflight.delete(cacheKey);
+      }) as ReturnType<typeof loadFreshEstimateAudit>;
+    loadEstimateAuditInflight.set(cacheKey, inflight);
+    (inflight as Promise<unknown>).catch(() => undefined);
+  }
+  return inflight;
+}
+

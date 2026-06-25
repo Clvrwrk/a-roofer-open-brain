@@ -2,6 +2,7 @@
 const base = (process.env.COMMAND_CENTER_BASE_URL || "http://127.0.0.1:4321").replace(/\/$/, "");
 const budgetMs = Number(process.env.COMMAND_CENTER_PERF_BUDGET_MS || 500);
 const failOnBudget = process.env.PERF_SMOKE_FAIL === "1";
+const warmupRounds = Number(process.env.COMMAND_CENTER_PERF_WARMUP || 0);
 const serviceToken = process.env.COMMAND_CENTER_SERVICE_TOKEN || "";
 
 const paths = [
@@ -48,11 +49,17 @@ async function timeFetch(path) {
   }
 }
 
+if (warmupRounds > 0) {
+  for (let round = 0; round < warmupRounds; round += 1) {
+    for (const path of paths) await timeFetch(path);
+  }
+}
+
 const rows = [];
 for (const path of paths) rows.push(await timeFetch(path));
 for (const row of rows) row.overBudget = row.status > 0 && row.status < 500 && row.durationMs > budgetMs;
 
 console.table(rows.map((row) => ({ path: row.path, status: row.status, ms: row.durationMs, bytes: row.bytes, over: row.overBudget, serverTiming: row.serverTiming })));
-console.log(JSON.stringify({ base, budgetMs, rows }, null, 2));
+console.log(JSON.stringify({ base, budgetMs, warmupRounds, rows }, null, 2));
 
 if (failOnBudget && rows.some((row) => row.overBudget || row.status >= 500 || row.status === 0)) process.exit(1);
