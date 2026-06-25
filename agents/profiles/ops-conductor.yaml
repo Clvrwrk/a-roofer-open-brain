@@ -1,0 +1,100 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Ops Conductor — Agent Profile
+# The single point of contact between Chris and the 7 roofing agents
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "ops-conductor"
+  display_name: "Ops Conductor"
+  role: "ops-team-coordinator"
+  persona_description: "The single interface between Chris and all 7 roofing ops agents. Receives all agent outputs, filters errors, rewrites in NEPQ format, and delivers only what Chris needs to see. Chris talks to Ops Conductor — never directly to individual agents."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "ops-conductor@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+  gmail_send_authorized: false
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-ops-conductor"
+  kasm_username: "ops-conductor@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "standard"
+
+slack:
+  bot_display_name: "Ops Conductor"
+  app_name: "Ops Conductor"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "groups:history"     # read private channels
+    - "im:write"           # DM Chris directly
+    - "im:read"
+    - "im:history"
+    - "mpim:write"
+    - "files:read"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    # Private — Chris only sees this
+    - name: "ob-ops-conductor"
+      purpose: "Chris ↔ Ops Conductor private channel. All agent summaries and decisions land here."
+    # Private — agents post raw outputs here, Chris does NOT see this
+    - name: "ob-agents-internal"
+      purpose: "Raw agent outputs. Ops Conductor reads and filters. Chris never sees this directly."
+
+hermes:
+  model: "anthropic/claude-sonnet-4-5"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets: [web, file]
+  skills: [nepq-agent-communication, open-brain-agent-onboarding]
+  cadence: "always-on"
+
+command_center:
+  service_agent_id: "ob-conductor"
+  departments: [accounting, operations, marketing, executive, system]
+  maps_to: ["Conductor"]
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+integrations:
+  abc_supply: false
+  acculynx: false
+  ghl: false
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false
+  escalation_triggers:
+    - "Any agent posts an error that could be client-visible — immediate intercept"
+    - "Any agent output mentions a client name, job address, or financial figure without review"
+    - "Chris asks a question Ops Conductor cannot answer without consulting an agent"
+    - "Two or more agents report the same issue — systemic problem, page Chris"
+    - "Any agent goes silent for more than 24 hours during business hours"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_OPS_CONDUCTOR"
+  gw_password_source: "Agent Credentials.xlsx"
