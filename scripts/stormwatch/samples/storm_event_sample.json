@@ -1,0 +1,11 @@
+{
+  "event_id": "hailrecon-live-2026-06-24-h",
+  "storm_name": "North Texas Hail Cell A",
+  "alert_received_at": "2026-06-25T02:00:00Z",
+  "center": {
+    "lat": 32.985,
+    "lng": -96.75
+  },
+  "radius_miles": 50,
+  "target_state": "TX"
+}

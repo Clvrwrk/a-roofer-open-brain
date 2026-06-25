@@ -1,0 +1,48 @@
+{
+  "properties": [
+    {
+      "id": "seed-prop-001",
+      "property_name": "CBRE Managed Asset - Downtown Dallas",
+      "property_street": "2121 N Pearl St Ste 300",
+      "property_city": "Dallas",
+      "property_state": "Texas",
+      "property_zip": "75201",
+      "property_country": "United States",
+      "lat": 32.793,
+      "lng": -96.8,
+      "building_owner_company": "CBRE",
+      "building_owner_email": "info@cbre.com",
+      "building_owner_phone": "(212) 824-2150",
+      "management_company": "CBRE",
+      "management_email": "info@cbre.com",
+      "management_phone": "(212) 824-2150",
+      "maintenance_company": "CBRE",
+      "maintenance_email": "facilities@cbre.com",
+      "maintenance_phone": "(212) 824-2150",
+      "company_website": "https://www.cbre.com",
+      "confidence": 92
+    },
+    {
+      "id": "seed-prop-002",
+      "property_name": "JLL Managed Asset - Irving",
+      "property_street": "2000 W Airport Fwy",
+      "property_city": "Irving",
+      "property_state": "Texas",
+      "property_zip": "75062",
+      "property_country": "United States",
+      "lat": 32.82,
+      "lng": -96.98,
+      "building_owner_company": "JLL",
+      "building_owner_email": "info@jll.com",
+      "building_owner_phone": "(312) 782-5800",
+      "management_company": "JLL",
+      "management_email": "info@jll.com",
+      "management_phone": "(312) 782-5800",
+      "maintenance_company": "JLL",
+      "maintenance_email": "facilities@jll.com",
+      "maintenance_phone": "(312) 782-5800",
+      "company_website": "https://www.jll.com",
+      "confidence": 84
+    }
+  ]
+}
