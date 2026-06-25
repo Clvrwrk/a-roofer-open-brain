@@ -30,6 +30,8 @@ Critical routes in the smoke set:
 - Invoice expand detail no longer blocks on ABC API price/UOM enrichment; it returns negotiated/unit/variance audit detail first.
 - Command Center caches warm on process boot, can be warmed manually through `/api/performance/warm`, and now reschedule from first-party human activity rather than third-party session replay.
 - Browser navigation now uses a same-origin service worker plus AppShell prefetch so previously loaded Command Center pages are served immediately from the user-specific browser cache while the network refresh updates behind the scenes.
+- The browser cache now stores the last complete rendered page, not merely the latest server HTML. AppShell snapshots the current DOM after load, user interactions, and lazy-detail renders; the service worker rejects incomplete fallback states such as "Supabase pending", "No invoices found", loading messages, WorkOS login pages, or map failure screens so they cannot overwrite a useful view.
+- Invoice Audit keeps its lazy-loaded invoice-line payload in sync with the embedded page JSON and prefetches likely sibling invoice details after office/branch/invoice expansion. A user should see the last full tree they were working in immediately, while detail APIs warm slightly ahead of the next nested click.
 - `/api/vendor-territories` now serves the warmed territory surface instead of rebuilding directly, and returns a compact map payload that omits heavy office boundary geometry and unused branch audit fields.
 - Human WorkOS/local-operator page and API activity schedules an after-session warm once the app is idle; service/named-agent traffic is counted but does not move the human cadence.
 - Expired server-side surface caches now serve stale data for up to the daily warm window while refreshing in the background, so an expired in-memory cache should not make the human click wait on Supabase.
@@ -53,6 +55,25 @@ Environment: local dev server on `http://127.0.0.1:4324`, sourced from the exist
 
 All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/view construction is still reported separately and should be fixed at the view/materialization layer rather than hidden.
 
+## Latest Cache Regression Check
+
+Environment: local dev server on `http://127.0.0.1:4331`, sourced from the root `.env`. Commands: `npm run build`; `COMMAND_CENTER_BASE_URL=http://127.0.0.1:4331 npm run perf:warm`; `COMMAND_CENTER_BASE_URL=http://127.0.0.1:4331 PERF_SMOKE_FAIL=1 npm run perf:smoke`; fetched `/sw.js` and syntax-checked it with `new Function(...)`.
+
+Smoke result after the warm job:
+
+| Surface | Timing | Notes |
+| --- | ---: | --- |
+| `/` | 25ms | Under user-click budget. |
+| `/accounting/invoice-audit` | 9ms | Empty/pending local data state was present but is now non-cacheable. |
+| `/accounting/price-list/review` | 31ms | Under user-click budget; still a large HTML payload. |
+| `/operations/order-audit` | 7ms | Under user-click budget. |
+| `/operations/estimate-audit` | 5ms | Under user-click budget. |
+| `/weekly-snapshot` | 8ms | Under user-click budget. |
+| `/accounting/vendor-regions` | 16ms | Under user-click budget. |
+| `/api/vendor-territories` | 6ms | Warm cached compact payload. |
+
+The warm job itself took about 18s locally because it refreshes slow Supabase-backed surfaces in the background. That cost is intentionally moved off the user's navigation path.
+
 ## Supabase/View Notes
 
 - `v_invoice_audit_invoice` is still too slow for cold page load even when selecting only summary columns. Next DB-side step: create a materialized or cache table for invoice summary rollups with office/branch grouping fields and refresh it after invoice imports/audit writes.
@@ -68,3 +89,4 @@ All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/vi
 - TruConversion was not installed for cache cadence; first-party WorkOS-resolved activity provides enough signal with lower egress/privacy risk.
 - Existing secret variable references were not changed; no raw secret values were added.
 - Browser cache entries are scoped by resolved actor id and cleared on logout; `/auth/*` and login redirects are not cached.
+- Incomplete SSR results are explicitly blocked from the browser page cache, so a transient empty/pending render should not replace the user's last complete working screen.

@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260625c";
+const VERSION = "cc-page-cache-v20260625d";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -34,16 +34,46 @@ function apiCacheName() {
   return VERSION + ":api:" + actorCacheKey;
 }
 
-function isCacheableHtml(response, requestedPath) {
-  if (!response || !response.ok) return false;
-  const type = response.headers.get("content-type") || "";
-  if (!type.includes("text/html")) return false;
+function responsePathMatches(response, requestedPath) {
   try {
     const finalUrl = new URL(response.url);
     return finalUrl.origin === self.location.origin && finalUrl.pathname === requestedPath;
   } catch {
     return false;
   }
+}
+
+function htmlLooksComplete(html) {
+  if (!html || html.length < 2000) return false;
+  const lowered = html.toLowerCase();
+  if (lowered.includes("supabase pending")) return false;
+  if (lowered.includes("no invoices found in the live pipeline")) return false;
+  if (lowered.includes("loading invoice detail")) return false;
+  if (lowered.includes("territory data failed to load")) return false;
+  if (lowered.includes("map unavailable")) return false;
+  if (lowered.includes("workos-authenticated command center session")) return false;
+  return true;
+}
+
+function isCacheableHtml(response, requestedPath) {
+  if (!response || !response.ok) return false;
+  const type = response.headers.get("content-type") || "";
+  return type.includes("text/html") && responsePathMatches(response, requestedPath);
+}
+
+async function maybeCacheHtmlResponse(cache, key, response, requestedPath) {
+  if (!isCacheableHtml(response, requestedPath)) return;
+  const copy = response.clone();
+  const html = await copy.text();
+  if (htmlLooksComplete(html)) {
+    await cache.put(key, new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }));
+  }
+}
+
+async function cacheRenderedHtml(path, html) {
+  if (!path || !htmlLooksComplete(html)) return;
+  const cache = await caches.open(pageCacheName());
+  await cache.put(path, new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }));
 }
 
 function isCacheableJson(response) {
@@ -55,7 +85,7 @@ async function cacheHtmlRoute(path) {
   const cache = await caches.open(pageCacheName());
   const request = new Request(path, { credentials: "include", headers: { accept: "text/html" } });
   const response = await fetch(request);
-  if (isCacheableHtml(response, path)) await cache.put(path, response.clone());
+  await maybeCacheHtmlResponse(cache, path, response, path);
 }
 
 async function cacheApiRoute(path) {
@@ -88,6 +118,7 @@ self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "SET_ACTOR") actorCacheKey = safeActorKey(data.actorId || data.actorEmail || data.actorName);
   if (data.type === "PRECACHE") event.waitUntil(precache(data.urls));
+  if (data.type === "CACHE_RENDERED_PAGE") event.waitUntil(cacheRenderedHtml(data.path, data.html));
   if (data.type === "CLEAR") event.waitUntil(clearCommandCenterCaches());
 });
 
@@ -113,7 +144,7 @@ async function staleWhileRevalidateHtml(event, request, pathname) {
   const cache = await caches.open(pageCacheName());
   const cached = await cache.match(request);
   const refresh = fetch(request).then(async (response) => {
-    if (isCacheableHtml(response, pathname)) await cache.put(request, response.clone());
+    await maybeCacheHtmlResponse(cache, request, response, pathname);
     return response;
   });
 

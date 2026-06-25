@@ -165,31 +165,53 @@ const deptIcon = (id: string) =>
           "/executive",
           "/system",
         ];
-        const cacheVersion = "cc-page-cache-v20260625c";
-        const safeActor = String(actorCacheId || "unknown").toLowerCase().replace(/[^a-z0-9._-]+/g, "_").slice(0, 80) || "unknown";
-        const pageCacheName = `${cacheVersion}:pages:${safeActor}`;
-
+        let cacheWorker = null;
         function postToWorker(message) {
-          const worker = navigator.serviceWorker?.controller;
+          const worker = navigator.serviceWorker?.controller || cacheWorker;
           if (worker) worker.postMessage(message);
+        }
+
+        function pageLooksComplete() {
+          const bodyText = document.body?.textContent?.toLowerCase() || "";
+          if (bodyText.includes("supabase pending")) return false;
+          if (bodyText.includes("no invoices found in the live pipeline")) return false;
+          if (bodyText.includes("loading invoice detail")) return false;
+          if (bodyText.includes("territory data failed to load")) return false;
+          if (bodyText.includes("map unavailable")) return false;
+          return document.documentElement.outerHTML.length > 2000;
+        }
+
+        function renderedHtmlSnapshot() {
+          const clone = document.documentElement.cloneNode(true);
+          clone.dataset.commandCenterSnapshot = "last-complete-render";
+          return "<!doctype html>\\n" + clone.outerHTML;
+        }
+
+        function cacheCurrentRendering() {
+          if (!pageLooksComplete()) return;
+          postToWorker({ type: "CACHE_RENDERED_PAGE", path: location.pathname, html: renderedHtmlSnapshot() });
         }
 
         async function browserPrecache() {
           if (!("caches" in window)) return;
-          const cache = await caches.open(pageCacheName);
           for (const route of pageRoutes) {
             try {
-              const request = new Request(route, { credentials: "include", headers: { accept: "text/html" } });
-              const response = await fetch(request);
-              const finalUrl = new URL(response.url);
-              if (response.ok && finalUrl.pathname === route && (response.headers.get("content-type") || "").includes("text/html")) {
-                await cache.put(route, response.clone());
-              }
+              await fetch(route, { credentials: "include", headers: { accept: "text/html" } });
             } catch {
               // Browser-side cache warming is opportunistic; navigation still works without it.
             }
           }
         }
+
+        function debounce(fn, wait) {
+          let timer;
+          return () => {
+            clearTimeout(timer);
+            timer = setTimeout(fn, wait);
+          };
+        }
+
+        const scheduleRenderCache = debounce(cacheCurrentRendering, 900);
 
         async function registerCacheWorker() {
           if (!("serviceWorker" in navigator)) return;
@@ -197,10 +219,14 @@ const deptIcon = (id: string) =>
             const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
             const ready = await navigator.serviceWorker.ready;
             const worker = ready.active || registration.active || registration.waiting || registration.installing;
+            cacheWorker = worker || null;
             worker?.postMessage({ type: "SET_ACTOR", actorId: actorCacheId });
+            cacheCurrentRendering();
             worker?.postMessage({ type: "PRECACHE", urls: pageRoutes });
             navigator.serviceWorker.addEventListener("controllerchange", () => {
+              cacheWorker = navigator.serviceWorker.controller;
               postToWorker({ type: "SET_ACTOR", actorId: actorCacheId });
+              cacheCurrentRendering();
               postToWorker({ type: "PRECACHE", urls: pageRoutes });
             });
           } catch {
@@ -210,8 +236,19 @@ const deptIcon = (id: string) =>
 
         window.addEventListener("load", () => {
           void registerCacheWorker();
-          setTimeout(() => void browserPrecache(), 750);
+          setTimeout(cacheCurrentRendering, 1200);
+          setTimeout(() => void browserPrecache(), 1500);
         });
+
+        document.addEventListener("click", scheduleRenderCache, true);
+        document.addEventListener("input", scheduleRenderCache, true);
+        document.addEventListener("change", scheduleRenderCache, true);
+        document.addEventListener("toggle", scheduleRenderCache, true);
+        document.addEventListener("command-center:render-ready", scheduleRenderCache);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden") cacheCurrentRendering();
+        });
+        window.addEventListener("pagehide", cacheCurrentRendering);
 
         document.querySelector(".logout-form")?.addEventListener("submit", () => {
           postToWorker({ type: "CLEAR" });

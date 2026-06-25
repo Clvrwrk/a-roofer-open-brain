@@ -33,7 +33,10 @@ const dataEl = document.getElementById("iv-data");
 const mount = document.getElementById("iv-tree");
 
 if (root && dataEl && mount) {
-  const { offices, actions, categories } = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; actions: Action[]; categories: Category[] };
+  const payload = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; actions: Action[]; categories: Category[] };
+  const offices = payload.offices ?? [];
+  const actions = payload.actions ?? [];
+  const categories = payload.categories ?? [];
   const catList: Category[] = (categories ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
   const catLabel = new Map(catList.map((c) => [c.key, c.label]));
 
@@ -44,6 +47,10 @@ if (root && dataEl && mount) {
   const worstCls = (w: number) => (w > 6 ? "pill-red" : w > 3 ? "pill-orange" : w > 0.01 ? "pill-yellow" : "pill-green");
   const tolCls = (p: number | null) => { if (p == null) return "pill-grey"; const a = Math.abs(p); return a < 0.01 ? "pill-green" : a <= 3 ? "pill-yellow" : a <= 6 ? "pill-orange" : "pill-red"; };
   const tolLab = (p: number | null) => { if (p == null) return "No Price"; const a = Math.abs(p); return a < 0.01 ? "In Tolerance" : a <= 3 ? "Minor" : a <= 6 ? "Moderate" : "Major"; };
+
+  function syncPayloadSnapshot() {
+    dataEl.textContent = JSON.stringify({ offices, actions, categories }).replace(/</g, "\\u003c");
+  }
 
   /* ---- line + disposition (lazy) ---- */
   function auditCell(l: InvLine): string {
@@ -129,6 +136,7 @@ if (root && dataEl && mount) {
       l.auditedAt = (r.record?.decided_at || "").slice(0, 10);
       inv.auditedLines = inv.lines.filter((x) => x.audited).length;
       inv.pendingLines = inv.lines.length - inv.auditedLines;
+      syncPayloadSnapshot();
       reRenderInvoice(inv);
       toast("Audit recorded: " + body.note);
     } catch (e) {
@@ -275,6 +283,8 @@ if (root && dataEl && mount) {
     bindInvoice(det, inv);
     refreshInvoiceTags(det, inv);
     applyFilter();
+    syncPayloadSnapshot();
+    document.dispatchEvent(new CustomEvent("command-center:render-ready"));
   }
 
   function refreshInvoiceTags(det: HTMLElement, inv: Invoice) {
@@ -580,25 +590,50 @@ if (root && dataEl && mount) {
       </details>`;
   }
 
-  mount.innerHTML = offices.map(officeNode).join("");
+  const isRenderedSnapshot = document.documentElement.dataset.commandCenterSnapshot === "last-complete-render";
+  if (!isRenderedSnapshot || !mount.children.length) {
+    mount.innerHTML = offices.map(officeNode).join("");
+  }
 
   // Lazy-load invoice detail on first expand; the initial payload carries summaries only.
   const invByNumber = new Map<string, Invoice>();
   offices.forEach((o) => o.branches.forEach((b) => b.invoices.forEach((i) => invByNumber.set(i.invoiceNumber, i))));
 
+  const invoiceDetailInflight = new Map<string, Promise<boolean>>();
+
+  async function loadInvoiceLines(inv: Invoice): Promise<boolean> {
+    if (inv.linesLoaded || inv.lines.length > 0) return true;
+    let inflight = invoiceDetailInflight.get(inv.invoiceNumber);
+    if (!inflight) {
+      inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { headers: { accept: "application/json" } })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok || !payload?.ok || !payload.invoice) throw new Error(payload?.error_description || payload?.error || "invoice detail failed");
+          Object.assign(inv, payload.invoice, { linesLoaded: true });
+          syncPayloadSnapshot();
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => invoiceDetailInflight.delete(inv.invoiceNumber));
+      invoiceDetailInflight.set(inv.invoiceNumber, inflight);
+    }
+    return inflight;
+  }
+
   async function ensureInvoiceLines(inv: Invoice, body: HTMLElement): Promise<boolean> {
     if (inv.linesLoaded || inv.lines.length > 0) return true;
     body.innerHTML = '<p class="iv-disp-lead">Loading invoice detail...</p>';
-    try {
-      const response = await fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { headers: { accept: "application/json" } });
-      const payload = await response.json();
-      if (!response.ok || !payload?.ok || !payload.invoice) throw new Error(payload?.error_description || payload?.error || "invoice detail failed");
-      Object.assign(inv, payload.invoice, { linesLoaded: true });
-      return true;
-    } catch (error) {
-      body.innerHTML = `<p class="iv-disp-lead">Invoice detail failed to load: ${esc(error instanceof Error ? error.message : "network error")}</p>`;
-      return false;
-    }
+    const ok = await loadInvoiceLines(inv);
+    if (!ok) body.innerHTML = '<p class="iv-disp-lead">Invoice detail failed to load: network error</p>';
+    return ok;
+  }
+
+  function prefetchInvoiceDetails(invoices: Invoice[], limit = 6) {
+    const pending = invoices.filter((inv) => !inv.linesLoaded && !inv.lines.length).slice(0, limit);
+    if (!pending.length) return;
+    setTimeout(() => {
+      pending.forEach((inv) => void loadInvoiceLines(inv));
+    }, 150);
   }
 
   mount.querySelectorAll<HTMLDetailsElement>(".iv-inv").forEach((det) => {
@@ -608,12 +643,36 @@ if (root && dataEl && mount) {
       if (body.dataset.rendered) return;
       const inv = invByNumber.get(body.dataset.inv!);
       if (!inv) return;
+      const siblingInvoices = Array.from(det.parentElement?.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]") || [])
+        .map((node) => invByNumber.get(node.dataset.inv || ""))
+        .filter(Boolean) as Invoice[];
+      prefetchInvoiceDetails(siblingInvoices.filter((candidate) => candidate.invoiceNumber !== inv.invoiceNumber), 4);
       if (!(await ensureInvoiceLines(inv, body))) return;
       body.innerHTML = invoiceBody(inv);
       body.dataset.rendered = "1";
       bindInvoice(det, inv);
+      document.dispatchEvent(new CustomEvent("command-center:render-ready"));
     });
   });
+
+  mount.querySelectorAll<HTMLDetailsElement>(".iv-inv").forEach((det) => {
+    const body = det.querySelector(".iv-inv-body") as HTMLElement | null;
+    if (!body?.dataset.rendered) return;
+    const inv = invByNumber.get(body.dataset.inv || "");
+    if (inv?.lines?.length) bindInvoice(det, inv);
+  });
+
+  mount.querySelectorAll<HTMLDetailsElement>(".iv-office,.iv-branch").forEach((det) => {
+    det.addEventListener("toggle", () => {
+      if (!det.open) return;
+      const invoices = Array.from(det.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]"))
+        .map((node) => invByNumber.get(node.dataset.inv || ""))
+        .filter(Boolean) as Invoice[];
+      prefetchInvoiceDetails(invoices, det.classList.contains("iv-office") ? 8 : 6);
+    });
+  });
+
+  prefetchInvoiceDetails(Array.from(invByNumber.values()), 8);
 
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;
