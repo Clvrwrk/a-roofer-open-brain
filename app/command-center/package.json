@@ -18,7 +18,8 @@
     "price-agreements:audit:fail": "node scripts/audit-price-agreement-items.mjs --fail-on-gaps",
     "vendor:reconcile": "node scripts/reconcile-vendor-branches.mjs",
     "vendor:reconcile:write": "node scripts/reconcile-vendor-branches.mjs --write",
-    "perf:smoke": "node scripts/perf-smoke.mjs"
+    "perf:smoke": "node scripts/perf-smoke.mjs",
+    "perf:warm": "node scripts/warm-command-center.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^10.1.3",
