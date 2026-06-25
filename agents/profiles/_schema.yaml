@@ -37,6 +37,12 @@ platform_defaults:
     - name: "ob-conductor-digest"
       id: "__resolve_at_deploy__"
       purpose: "Daily/weekly digests"
+    - name: "agent-deploy-validation"
+      id: "C0BD7L43PC2"
+      purpose: "Deployment validation reports for all agents"
+    - name: "agent-profile-builder"
+      id: "C0BD7L0M02W"
+      purpose: "Agent introductions and profile announcements"
 
 fields:
   # ── IDENTITY ─────────────────────────────────────────────────────────────
