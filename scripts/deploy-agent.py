@@ -118,8 +118,9 @@ def phase2_kasm_user(profile, env, creds):
 
     # Check if user exists
     status, data = kasm("get_users", {"target_user": {"username": email}}, env)
-    users = data.get("users", [])
-    existing = next((u for u in users if u.get("username") == email), None)
+    # data["users"] is a list; find the matching user
+    users = data.get("users", []) if isinstance(data, dict) else []
+    existing = next((u for u in users if isinstance(u, dict) and u.get("username") == email), None)
 
     if existing:
         user_id = existing["user_id"]
