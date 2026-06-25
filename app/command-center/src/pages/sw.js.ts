@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260625e";
+const VERSION = "cc-page-cache-v20260625f";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -52,6 +52,7 @@ function htmlLooksComplete(html) {
   if (lowered.includes("territory data failed to load")) return false;
   if (lowered.includes("map unavailable")) return false;
   if (lowered.includes("workos-authenticated command center session")) return false;
+  if (lowered.includes('data-rendered="1"') && !lowered.includes('class="iv-ln')) return false;
   return true;
 }
 

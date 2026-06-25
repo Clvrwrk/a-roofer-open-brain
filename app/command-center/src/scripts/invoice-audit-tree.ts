@@ -601,14 +601,26 @@ if (root && dataEl && mount) {
 
   const invoiceDetailInflight = new Map<string, Promise<boolean>>();
 
+  function bodyHasLineRows(body: HTMLElement) {
+    return body.querySelector(".iv-ln") !== null;
+  }
+
+  function invoiceNeedsLineFetch(inv: Invoice) {
+    return !inv.lines.length && (inv.lineCount > 0 || !inv.linesLoaded);
+  }
+
   async function loadInvoiceLines(inv: Invoice): Promise<boolean> {
-    if (inv.linesLoaded || inv.lines.length > 0) return true;
+    if (inv.lines.length > 0) return true;
+    if (inv.linesLoaded && inv.lineCount <= 0) return true;
     let inflight = invoiceDetailInflight.get(inv.invoiceNumber);
     if (!inflight) {
       inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { cache: "no-store", credentials: "same-origin", headers: { accept: "application/json" } })
         .then(async (response) => {
           const payload = await response.json();
           if (!response.ok || !payload?.ok || !payload.invoice) throw new Error(payload?.error_description || payload?.error || "invoice detail failed");
+          if ((payload.invoice.lines?.length ?? 0) === 0 && (payload.invoice.lineCount ?? inv.lineCount ?? 0) > 0) {
+            throw new Error("invoice detail returned no line rows");
+          }
           Object.assign(inv, payload.invoice, { linesLoaded: true });
           syncPayloadSnapshot();
           return true;
@@ -621,7 +633,7 @@ if (root && dataEl && mount) {
   }
 
   async function ensureInvoiceLines(inv: Invoice, body: HTMLElement): Promise<boolean> {
-    if (inv.linesLoaded || inv.lines.length > 0) return true;
+    if (!invoiceNeedsLineFetch(inv)) return true;
     body.innerHTML = '<p class="iv-disp-lead">Loading invoice detail...</p>';
     const ok = await loadInvoiceLines(inv);
     if (!ok) body.innerHTML = '<p class="iv-disp-lead">Invoice detail failed to load: network error</p>';
@@ -641,6 +653,9 @@ if (root && dataEl && mount) {
       .map((node) => invByNumber.get(node.dataset.inv || ""))
       .filter(Boolean) as Invoice[];
     prefetchInvoiceDetails(siblingInvoices.filter((candidate) => candidate.invoiceNumber !== inv.invoiceNumber), 2);
+    if (body.dataset.rendered && !bodyHasLineRows(body)) {
+      body.innerHTML = '<p class="iv-disp-lead">Refreshing invoice line detail...</p>';
+    }
     if (!(await ensureInvoiceLines(inv, body))) return false;
     body.innerHTML = invoiceBody(inv);
     body.dataset.rendered = "1";
@@ -655,8 +670,8 @@ if (root && dataEl && mount) {
       const body = det.querySelector(".iv-inv-body") as HTMLElement;
       const inv = invByNumber.get(body.dataset.inv!);
       if (!inv) return;
-      if (body.dataset.rendered && inv.lines.length > 0) return;
-      if (body.dataset.rendered && !inv.lines.length) delete body.dataset.rendered;
+      if (body.dataset.rendered && inv.lines.length > 0 && bodyHasLineRows(body)) return;
+      if (body.dataset.rendered && (!inv.lines.length || !bodyHasLineRows(body))) delete body.dataset.rendered;
       await renderInvoiceDetail(det, body, inv);
     });
   });
@@ -665,7 +680,7 @@ if (root && dataEl && mount) {
     const body = det.querySelector(".iv-inv-body") as HTMLElement | null;
     if (!body?.dataset.rendered) return;
     const inv = invByNumber.get(body.dataset.inv || "");
-    if (inv?.lines?.length) {
+    if (inv?.lines?.length && bodyHasLineRows(body)) {
       bindInvoice(det, inv);
       return;
     }

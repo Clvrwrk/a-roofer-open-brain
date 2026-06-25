@@ -78,6 +78,8 @@ The warm job itself took about 18s locally because it refreshes slow Supabase-ba
 
 Follow-up fix after live QA: forced Invoice Audit refresh on local Supabase-backed data returned `Supabase live`, 14 offices, and 975 open invoices. Browser QA opened the first office, branch, and invoice via chevrons; the detail body rendered 3 line rows, 2 category groups, no stuck loading state, no failed-detail message, and no console errors.
 
+Second follow-up: cached invoice detail bodies that had the disposition panel but no `.iv-ln` line rows are now treated as incomplete, repaired by refetching detail, and blocked from future service-worker snapshots.
+
 ## Supabase/View Notes
 
 - `v_invoice_audit_invoice` is still too slow for cold page load even when selecting only summary columns. Next DB-side step: create a materialized or cache table for invoice summary rollups with office/branch grouping fields and refresh it after invoice imports/audit writes.

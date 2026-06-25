@@ -178,6 +178,7 @@ const deptIcon = (id: string) =>
           if (bodyText.includes("loading invoice detail")) return false;
           if (bodyText.includes("territory data failed to load")) return false;
           if (bodyText.includes("map unavailable")) return false;
+          if (document.querySelector(".iv-inv-body[data-rendered='1']") && !document.querySelector(".iv-ln")) return false;
           return document.documentElement.outerHTML.length > 2000;
         }
 

@@ -603,6 +603,12 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(),
         }
         return data;
       })
+      .catch(() => {
+        if (invoiceAuditSummaryCache && isUsefulInvoiceAuditSummary(invoiceAuditSummaryCache.data)) {
+          return invoiceAuditSummaryCache.data;
+        }
+        return emptyInvoiceAuditData();
+      })
       .finally(() => {
         invoiceAuditSummaryInflight = null;
       });
