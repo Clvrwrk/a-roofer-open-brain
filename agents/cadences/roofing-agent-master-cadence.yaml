@@ -1,0 +1,825 @@
+# Pro Exteriors Open Brain — Agent Cadence & Task Master Plan
+# Version 1.0 | Research-backed | June 2026
+#
+# Sources: ServiceTitan 2024/2026, CFMA, NRCA, IAS Solutions 2026, TotalScope,
+# Supplement Experts, DocuSketch, Spendflo 2026, AgentCenter 2026, Taskade 2026,
+# Profitability Partners, IBHS, Construction CPAs (KatzAbosch), Intuit Enterprise,
+# NEPQ 7th Level Framework (Jeremy Miner 2024)
+#
+# NEPQ COMMUNICATION STANDARD (applies to all agents):
+# Every agent communicates using the NEPQ "doctor" model:
+# - Never assert conclusions — ask clarifying questions first
+# - Surface internal tension through questions, not statements
+# - Escalations structured as: SITUATION → PROBLEM → CONSEQUENCE → YOUR OPTIONS
+# - Daily summaries: WHAT HAPPENED → WHAT IT MEANS → WHAT NEEDS YOUR ATTENTION
+# - Never "tell" Chris what to do — surface the decision with full context
+# ─────────────────────────────────────────────────────────────────────────────
+
+schema_version: "1.0.0"
+last_updated: "2026-06-25"
+applies_to: "pro-exteriors"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAYA CHEN — Document Intake & Extraction
+# Role: The front door for all supplier documents
+# NEPQ analog: The intake "nurse" — documents symptoms before the doctor sees them
+# ═══════════════════════════════════════════════════════════════════════════════
+maya_chen:
+  always_on:
+    gmail_poll:
+      trigger: "every 60s continuous"
+      scope: "in:anywhere for all 7 aliases"
+      action: |
+        For each unread message:
+        1. Classify by alias (invoices/ap/creditmemos/priceagreement/ar/hr/payroll)
+        2. Extract: vendor, invoice#, date, amount, due_date, line_items
+        3. Check attachment type — PDF, Excel, image scan
+        4. Flag SPAM-labeled messages for human review before processing
+        5. Create dashboard_work_item via POST /api/agent/intake
+        6. Post to appropriate Slack channel
+      best_practice: |
+        CFMA: "Invoice receipt-to-approval cycle should be under 3 business days.
+        Automated capture at receipt point is the first control in a 3-way match."
+        Source: cfma.org/uptospeed
+
+  daily:
+    morning_inbox_audit:
+      cron: "0 7 * * 1-5"  # 7am CT weekdays
+      action: |
+        1. Count unprocessed messages by alias category
+        2. Flag any invoice past 30 days unprocessed (risk: missing early-pay discount)
+        3. Flag any HR/Payroll document from prior day (PII — ensure human reviewed)
+        4. Post to #accounting-vendor-intake:
+           "📥 Maya's Morning Audit | {date}
+           - Invoices unprocessed: {n}
+           - AP (urgent): {n}
+           - Credit memos: {n}
+           - Needs your attention: {list}"
+      best_practice: |
+        Construction AP best practice (Spendflo 2026): Daily inbox review at opening
+        prevents invoice aging. 2-3 day vendor processing window is industry standard.
+
+    daily_summary:
+      cron: "0 17 * * 1-5"  # 5pm CT weekdays
+      action: |
+        NEPQ-structured summary to #accounting-vendor-intake:
+        "📊 Maya's End-of-Day | {date}
+        WHAT HAPPENED TODAY:
+        - Documents processed: {n} ({breakdown by type})
+        - Work items created in dashboard: {n}
+        - Avg extraction confidence: {pct}%
+        WHAT IT MEANS:
+        - {any trends — e.g. 'ABC Supply invoice volume up 40% vs last week'}
+        NEEDS YOUR ATTENTION:
+        - {list of items flagged for human review}
+        - {items where vendor couldn't be matched}
+        - {any HR/payroll items processed — always surfaces for awareness}"
+      best_practice: |
+        NEPQ: Daily summary is not a report dump — it's a situation→meaning→decision
+        structure. Chris should be able to read it in 90 seconds and know what to do.
+
+  weekly:
+    vendor_aging_report:
+      cron: "0 8 * * 1"  # Monday 8am CT
+      action: |
+        1. Pull all open invoices from work queue by vendor
+        2. Age them: 0-30, 31-60, 61-90, 90+ days
+        3. Flag vendors with invoices >60 days unresolved
+        4. Identify vendors with repeated extraction failures
+        5. Post aging summary to #accounting-vendor-intake
+      best_practice: |
+        CFMA standard: Accounts payable aging reviewed weekly minimum.
+        DSO target for construction AP: <45 days. Source: cfma.org
+
+    document_quality_audit:
+      cron: "0 9 * * 5"  # Friday 9am CT
+      action: |
+        1. Review extraction confidence scores for the week
+        2. Identify document types with <80% confidence
+        3. Log recurrent failure patterns (e.g. specific vendor PDF format)
+        4. Post to Sam Torres for QA review
+
+  monthly:
+    vendor_onboarding_review:
+      cron: "0 9 1 * *"  # 1st of month
+      action: |
+        1. List all vendors seen for first time this month
+        2. Check if they have price agreements in Drive
+        3. Flag new vendors without agreements to Alex Rivers
+        4. Summarize vendor diversity and document volume trends
+
+    extraction_accuracy_report:
+      cron: "0 10 1 * *"
+      action: |
+        1. Pull all work items Maya created this month
+        2. Cross-check against any human corrections made
+        3. Calculate accuracy rate by document type
+        4. Submit to Sam Torres for QA digest
+
+  quarterly:
+    vendor_relationship_audit:
+      cron: "0 9 1 1,4,7,10 *"
+      action: |
+        1. List top 20 vendors by invoice volume
+        2. Flag any vendor with >5% extraction failure rate
+        3. Flag any vendor with recurring discrepancy patterns (feed to Alex)
+        4. Post to Jordan Price for finance packet
+
+  annual:
+    intake_system_review:
+      cron: "0 9 15 1 *"  # Jan 15
+      action: |
+        1. Full year extraction accuracy report
+        2. Vendor count delta year-over-year
+        3. Document volume by alias/category trend
+        4. Recommend alias additions/removals based on traffic patterns
+        5. Submit to Dev Conductor for system improvement proposals
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ALEX RIVERS — Pricing Variance Analyst
+# Role: The pricing detective
+# NEPQ analog: The forensic investigator — surfaces discrepancies with evidence,
+#   not accusations. "Here's what we found. Here's what the agreement says.
+#   Here's the variance. What would you like to do?"
+# ═══════════════════════════════════════════════════════════════════════════════
+alex_rivers:
+  scheduled_daily:
+    morning_abc_sync:
+      cron: "0 7 * * 1-5"  # 7am CT weekdays
+      action: |
+        1. Pull all invoices flagged by Maya since yesterday 5pm
+        2. For each line item, resolve SKU against ABC catalog
+        3. Apply UOM conversion (each→square, bundle→square, etc.)
+        4. Match to active price agreement (date-range check: agreement_start <= invoice_date <= agreement_end)
+        5. Apply branch/region pricing tier if applicable
+        6. Calculate variance: (invoiced_price - agreement_price) * qty
+        7. Flag variances >$50/line or >$200/invoice for review
+        8. Create credit_memo_candidate work items for Casey
+      best_practice: |
+        IAS Solutions 2026: "Document-first approach — every supplement or dispute
+        must be backed by: (1) the agreement, (2) the invoice, (3) the calculation.
+        Verbal agreements and estimates are not disputable."
+        Source: iasolutions.claims/blog/roofing-insurance-supplements-2026-guide
+
+    variance_daily_summary:
+      cron: "0 17 * * 1-5"
+      action: |
+        NEPQ-structured post to #accounting-product-catalog-review:
+        "🔍 Alex's Pricing Report | {date}
+        WHAT I FOUND:
+        - Invoices reviewed: {n} | Lines checked: {n}
+        - Total variance identified: ${amount}
+        - Disputes queued for Casey: {n}
+        WHAT IT MEANS:
+        - {top 3 vendors with recurring overcharges}
+        - {most common overcharge type: UOM/price/surcharge}
+        NEEDS YOUR ATTENTION:
+        - {any variance >$500 on a single line — need human eyes before Casey sends}
+        - {any vendor where the price agreement may have expired}"
+
+  weekly:
+    abc_catalog_sync:
+      cron: "0 6 * * 1"  # Monday 6am CT — runs before morning audit
+      action: |
+        1. Full ABC Supply catalog refresh via API (pageNumber pagination)
+        2. Reconcile new SKUs against existing products table
+        3. Flag SKUs on invoices with no catalog match (Casey needs different approach)
+        4. Update SKU→canonical mapping table in Drive
+        5. Alert if >10 new SKUs appeared (potential new product line from vendor)
+      best_practice: |
+        Construction AP best practice: "Catalog data freshness — vendor catalog
+        should be refreshed weekly minimum. Stale pricing causes systematic
+        underpayment disputes." Source: precoro.com/blog/accounts-payable-internal-controls
+
+    price_agreement_expiration_check:
+      cron: "0 8 * * 1"
+      action: |
+        1. Pull all price agreements from Drive
+        2. Flag any expiring in next 30 days
+        3. Flag any already expired (still being applied to invoices = dispute risk)
+        4. Post alert to Casey + Jordan if expiring agreements found
+
+    variance_weekly_digest:
+      cron: "0 9 * * 5"
+      action: |
+        1. Aggregate week's variance findings
+        2. Rank vendors by total overcharge amount
+        3. Calculate acceptance rate of prior disputes (Casey's outcomes)
+        4. Post to #accounting-product-catalog-review
+        5. Submit variance data packet to Jordan Price for P&L impact
+
+  monthly:
+    vendor_performance_scorecard:
+      cron: "0 9 2 * *"  # 2nd of month
+      action: |
+        1. Score each vendor: pricing accuracy, agreement compliance, invoice quality
+        2. Flag any vendor with <85% pricing accuracy for Casey escalation
+        3. Calculate monthly overcharge recovery rate
+        4. Submit to Sam Torres for QA
+      best_practice: |
+        Vendor audit best practice (IIA/AvidXchange): "Vendor scorecards should be
+        generated monthly and shared with vendors annually. Consistent scoring
+        creates behavior change." Source: theiia.org/globalassets/vendor-audit
+
+    price_list_validation:
+      cron: "0 10 2 * *"
+      action: |
+        1. Download current ABC price list via API
+        2. Compare to price agreements in Drive
+        3. Flag any line item where catalog price ≠ agreement price (legitimate delta)
+        4. Alert Alex/Jordan when material price changes affect job costing
+
+  quarterly:
+    contract_renewal_prep:
+      cron: "0 9 1 3,6,9,12 *"
+      action: |
+        1. Pull all price agreements expiring next quarter
+        2. Calculate YTD spend with each vendor
+        3. Summarize overcharge history for negotiation leverage
+        4. Post to Jordan Price: "Here's the data for your vendor conversations"
+      best_practice: |
+        CFMA: "Quarterly contract review cycle is standard for construction companies
+        spending >$500K annually with a single vendor." Source: cfma.org/uptospeed
+
+  annual:
+    vendor_audit_deep_dive:
+      cron: "0 9 15 1 *"
+      action: |
+        1. Full year price variance analysis by vendor
+        2. Calculate total overcharges identified vs recovered
+        3. ROI calculation on the pricing intelligence function
+        4. Submit to Jordan Price for year-end finance packet
+        5. Recommend price agreement structure improvements
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CASEY MORGAN — Vendor Communications & Challenge Draft
+# Role: Turns discrepancy packets into professional dispute letters
+# NEPQ analog: The SDR who qualifies and opens the conversation — not aggressive,
+#   but precise. Uses NEPQ consequence framing:
+#   "Here's what the agreement says. Here's what was charged. Here's the
+#   difference. We'd like to understand how this happened."
+# ═══════════════════════════════════════════════════════════════════════════════
+casey_morgan:
+  event_triggered:
+    on_dispute_packet_ready:
+      trigger: "work_item created by Alex with classification=credit_memo_candidate"
+      action: |
+        1. Pull full dispute packet from work queue
+        2. Look up vendor contact from vendor master (Drive)
+        3. Check prior dispute history with this vendor (pattern or first time?)
+        4. Draft email using NEPQ consequence framing:
+           - Open: Acknowledge relationship / reference agreement
+           - Situation: State what the agreement says
+           - Problem: State what was invoiced
+           - Consequence: Note the variance and request explanation
+           - Close: "Please advise within 10 business days"
+        5. Create draft in Gmail (never auto-send)
+        6. Post to #accounting-credit-memos:
+           "✉️ Dispute Draft Ready | Vendor: {vendor} | Amount: ${amount}
+            Please review and send when ready. Draft in Gmail."
+      best_practice: |
+        NEPQ 7th Level 2024: "Never tell the vendor they overcharged you.
+        Ask them to explain the difference. The question triggers their own
+        recognition and is less adversarial than an accusation."
+        Construction AP (Spendflo 2026): "Professional dispute letters should
+        reference the specific contract clause, invoice number, line item,
+        and calculated variance. Vague disputes have <20% acceptance rate."
+
+  daily:
+    draft_status_check:
+      cron: "0 8 * * 1-5"
+      action: |
+        1. Check Gmail drafts folder for unsent dispute letters
+        2. Flag any draft >3 business days old (aging reminder)
+        3. Check for vendor replies to prior disputes
+        4. Post to #accounting-credit-memos:
+           "📋 Casey's Daily | {date}
+           Drafts awaiting send: {n} | Oldest: {n} days old
+           Vendor replies received: {n}
+           Needs your attention: {list}"
+
+    vendor_reply_processing:
+      cron: "0 12 * * 1-5"
+      action: |
+        1. Check for vendor replies to dispute emails
+        2. Classify reply: accepted/rejected/partial/request_more_info
+        3. If accepted: create credit_memo_received work item for Jordan
+        4. If rejected: escalate to human with vendor's reasoning
+        5. If partial: calculate remaining gap, flag for human decision
+        6. If more_info: draft follow-up with Alex's supporting documentation
+
+  weekly:
+    dispute_pipeline_review:
+      cron: "0 9 * * 5"
+      action: |
+        1. Open disputes by vendor, amount, age
+        2. Close rate this week (vendor accepted vs total sent)
+        3. Average dispute resolution time
+        4. Flag disputes >30 days unresolved for escalation
+        5. Post to #accounting-credit-memos
+
+    credit_memo_tracking:
+      cron: "0 10 * * 5"
+      action: |
+        1. Track all accepted credit memos: have they been applied?
+        2. Cross-reference with AP aging (credit applied = open invoice reduced)
+        3. Flag credit memos received but not applied after 15 days
+
+  monthly:
+    vendor_communication_audit:
+      cron: "0 9 3 * *"
+      action: |
+        1. Acceptance rate by vendor (which vendors cooperate most?)
+        2. Average dollar recovery per dispute letter
+        3. Most effective dispute framing (A/B learning from prior accepted letters)
+        4. Submit learnings to Sam Torres for QA process improvement
+
+  quarterly:
+    communication_template_refresh:
+      cron: "0 9 1 3,6,9,12 *"
+      action: |
+        1. Review dispute letter templates against recent outcomes
+        2. Update framing language for vendors with low acceptance
+        3. Add new vendor-specific tone if pattern established
+        4. Submit to Chris for approval before using new templates
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# JORDAN PRICE — Finance, Job P&L & Commission Engine
+# Role: Translates documents into financial truth
+# Best practice sources: CFMA, KatzAbosch CPA, Intuit Enterprise Construction
+# ═══════════════════════════════════════════════════════════════════════════════
+jordan_price:
+  scheduled:
+    weekly_finance_packet:
+      cron: "0 7 * * 1"  # Monday 7am CT
+      action: |
+        1. Pull all invoices processed by Maya last week
+        2. Pull all credit memos accepted by Casey last week
+        3. Calculate net AP activity by vendor
+        4. Pull AccuLynx job data: any jobs closed last week?
+        5. For each closed job: calculate job P&L (contract - material cost - labor)
+        6. Post to #accounting-vendor-intake:
+           "💰 Jordan's Weekly Finance | {date}
+           AP this week: ${amount} across {n} vendors
+           Credit memos applied: ${amount}
+           Jobs closed: {n} | Net margin: {avg}%
+           Needs your attention: {list}"
+      best_practice: |
+        CFMA: "Weekly job cost review is the #1 differentiator between profitable
+        and unprofitable construction companies. Companies that review job costs
+        weekly have 20% higher gross margins." Source: cfma.org/uptospeed
+        Intuit Enterprise: "Reconcile WIP schedules with financials every month.
+        Underwriters cross-reference both." Source: intuit.com/enterprise/blog/construction
+
+    monthly_wip_schedule:
+      cron: "0 6 28 * *"  # 28th of month — before month-end close
+      action: |
+        1. Pull all open jobs from AccuLynx with estimated completion %
+        2. Calculate: contract value × completion % = earned revenue
+        3. Calculate: costs to date / total estimated costs = cost completion %
+        4. Flag jobs where cost % > revenue % (over-billing risk)
+        5. Flag jobs where revenue % > cost % (under-billing — cash flow risk)
+        6. Generate WIP schedule formatted for CPA review
+        7. Post to Chris + Jordan's Finance folder in Drive
+      best_practice: |
+        KatzAbosch CPA: "WIP schedules should be prepared by the 5th business day
+        after month-end. Early preparation allows corrections before financial
+        statements are finalized." Source: katzabosch.com/preparing-construction-year-end-wip
+        Acumatica: "Monitor three numbers at all times: Budget vs Committed vs
+        Actual. Early variance detection prevents margin erosion."
+
+    ar_aging_weekly:
+      cron: "0 8 * * 3"  # Wednesday 8am CT
+      action: |
+        1. Pull all outstanding invoices from AccuLynx (customer-facing AR)
+        2. Age: current / 31-60 / 61-90 / 90+
+        3. Flag any 90+ day receivable for immediate escalation
+        4. Calculate DSO (days sales outstanding) — target <45 days
+        5. Post to #accounting-vendor-intake
+
+    commission_calculation:
+      cron: "0 9 * * 5"  # Friday 9am CT
+      action: |
+        1. Pull all jobs with status=closed this week from AccuLynx
+        2. Apply commission formula from config (% of gross profit or revenue)
+        3. Cross-check: insurance final payment received before commission calculated?
+        4. Draft commission calculation for each salesperson
+        5. Post to Chris as draft (never direct to salesperson — always human-approved)
+
+  monthly:
+    month_end_close_support:
+      cron: "0 7 1 * *"  # 1st of month
+      action: |
+        1. Summarize prior month: revenue, COGS, gross profit by job type
+        2. Calculate variance vs budget (if budget exists in system)
+        3. Flag any job with negative margin
+        4. Insurance supplement status: ACV received, RCV pending by job
+        5. Post full month-end packet to Drive + notify Chris
+
+    vendor_spend_analysis:
+      cron: "0 9 2 * *"
+      action: |
+        1. Top 10 vendors by spend this month
+        2. Compare to same month prior year (if data available)
+        3. Material cost as % of revenue trend
+        4. Flag any vendor where spend increased >20% month-over-month
+
+  quarterly:
+    q_finance_review:
+      cron: "0 9 1 4,7,10,1 *"
+      action: |
+        1. Quarterly P&L by job type (residential retail/insurance, commercial)
+        2. Close rate impact on revenue (with Alex's supplement data)
+        3. Supplement acceptance rate revenue contribution
+        4. Cash flow projection: next quarter's expected inflows/outflows
+        5. Present to Chris as decision-support document
+
+  annual:
+    year_end_financial_summary:
+      cron: "0 9 10 1 *"  # Jan 10
+      action: |
+        1. Full year P&L, job count, revenue per job
+        2. Year-over-year growth metrics
+        3. Top 10 jobs by profitability
+        4. Top 10 vendors by spend vs credit recovery
+        5. Supplement recovery rate: what % of ACV gaps were recovered
+        6. KPIs: DSO, supplement acceptance rate, job margin, close rate
+      best_practice: |
+        ServiceTitan 2026: Top roofing KPIs annually: revenue per job (target $10-15K
+        residential), close rate (target 35-45% from set appointment), supplement
+        acceptance rate (target >65%), job margin (target 35-50% gross).
+        Source: servicetitan.com/blog/roofing-kpis
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SAM TORRES — QA, Accuracy Monitor & Vendor Grading
+# Role: Watches the watchers — ensures agent outputs are trustworthy
+# NEPQ analog: The "second opinion" doctor — doesn't override, but flags for
+#   re-examination when confidence is low
+# ═══════════════════════════════════════════════════════════════════════════════
+sam_torres:
+  weekly:
+    agent_output_sampling:
+      cron: "0 9 * * 3"  # Wednesday 9am CT — mid-week check
+      action: |
+        1. Random sample 10% of Maya's extractions from the week
+        2. Verify: vendor match, amount, date, line items
+        3. Random sample 10% of Alex's variance calculations
+        4. Verify: agreement lookup, UOM conversion, variance math
+        5. Random sample 5 of Casey's dispute drafts
+        6. Verify: tone appropriate, amount correct, agreement cited
+        7. Calculate accuracy rate per agent
+        8. Post to #accounting-vendor-intake:
+           "🔬 Sam's Mid-Week QA | {date}
+           Maya accuracy: {pct}% ({n} samples)
+           Alex accuracy: {pct}% ({n} samples)
+           Casey tone/accuracy: {pct}% ({n} samples)
+           Flags: {list}"
+      best_practice: |
+        Multi-agent AI best practices (Taskade 2026, AgentCenter 2026):
+        "Quality control agents should sample continuously, not just on failure.
+        Sampling rate of 10-15% provides statistical confidence with manageable overhead.
+        Accuracy below 85% threshold should trigger process review, not just correction."
+
+    vendor_grade_update:
+      cron: "0 10 * * 5"  # Friday 10am CT
+      action: |
+        1. Update vendor scorecard based on week's disputes and outcomes
+        2. Track: invoice accuracy rate, dispute acceptance rate, response time
+        3. Grade vendors: A (>95% accurate), B (90-95%), C (85-90%), D (<85%)
+        4. D-grade vendors: automatically flag to Casey for enhanced scrutiny
+        5. Post vendor grade changes to #accounting-vendor-intake
+
+    weekly_compliance_digest:
+      cron: "0 16 * * 5"  # Friday 4pm CT
+      action: |
+        NEPQ-structured digest to #accounting-vendor-intake:
+        "📊 Sam's Weekly Compliance Digest | Week of {date}
+        SYSTEM HEALTH:
+        - Overall agent accuracy: {pct}%
+        - Vendor disputes sent: {n} | Accepted: {n} | Pending: {n}
+        - Work items in queue: {n} (target <50)
+        - Items >7 days old: {n} (needs attention if >5)
+        EMERGING PATTERNS:
+        - {list of any trends detected this week}
+        PROCESS IMPROVEMENTS PROPOSED:
+        - {list — goes to Dev Conductor for backlog}
+        NEEDS YOUR DECISION:
+        - {list items where Sam can't auto-resolve}"
+
+  monthly:
+    agent_accuracy_report:
+      cron: "0 9 5 * *"
+      action: |
+        1. Full month accuracy metrics per agent
+        2. Trend vs prior month
+        3. Root cause analysis of accuracy drops
+        4. Submit to Chris + Dev Conductor (if systemic issue = dev task)
+
+    process_improvement_proposals:
+      cron: "0 10 5 * *"
+      action: |
+        1. Review all process improvement notes from the month
+        2. Format as A3 proposals (NRCA/lean construction format):
+           - Problem statement
+           - Current state metric
+           - Root cause
+           - Proposed countermeasure
+           - Expected improvement
+        3. Submit to Chris for prioritization
+
+  quarterly:
+    qbr_quality_report:
+      cron: "0 9 1 4,7,10,1 *"
+      action: |
+        1. Quarterly agent accuracy trend (are we improving?)
+        2. Vendor grade distribution (getting better or worse?)
+        3. Dispute recovery rate trend
+        4. Process improvements implemented vs proposed
+        5. Submit to Chris for QBR conversation
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROWAN VALE — External Research & Source Intelligence
+# Role: Outside-world scout — external-only network, no brain access
+# NEPQ analog: The researcher who briefs the sales team before calls —
+#   "Here's what I found. Here's what it means for your situation."
+# ═══════════════════════════════════════════════════════════════════════════════
+rowan_vale:
+  event_triggered:
+    on_research_request:
+      trigger: "work_item with classification=research_request from any vertical agent"
+      action: |
+        1. Parse research intent: manufacturer spec / code update / competitor / carrier
+        2. Execute web search (Tavily/Exa configured sources)
+        3. Structure result as candidate atom payload:
+           - source_url (required)
+           - retrieved_at (required)
+           - trust_tier: evidence
+           - era_of_practice (if code-era-specific)
+        4. Return to requesting agent — never write to brain directly
+        5. Flag any conflict with known brain content
+
+  weekly:
+    abc_market_price_monitor:
+      cron: "0 6 * * 2"  # Tuesday 6am CT
+      action: |
+        1. Monitor ABC Supply catalog for price changes vs prior week
+        2. Flag any material category with >5% price movement
+        3. Cross-reference with active price agreements (Alex needs this)
+        4. Post to #accounting-product-catalog-review
+      best_practice: |
+        Construction materials pricing volatility 2024-2026: Asphalt shingles
+        experienced 8-15% price swings quarterly. Weekly monitoring essential
+        for bid accuracy. Source: blueteamcorp.com storm/commercial research
+
+    competitor_market_scan:
+      cron: "0 7 * * 2"
+      action: |
+        1. Monitor top 5 competitor websites for pricing/offer changes
+        2. Check Google Business Profile review velocity for competitors
+        3. Flag any new competitor marketing claims for Lena
+        4. Note: all data marked trust_tier=evidence, consent_flags.publishable_external=false
+
+    manufacturer_cert_monitor:
+      cron: "0 8 * * 3"
+      action: |
+        1. Check GAF Master Elite verification portal for Pro Exteriors status
+        2. Check Owens Corning Platinum Preferred status
+        3. Flag any certification renewal dates within 90 days
+        4. Alert: if certification status changed = urgent escalation to Chris
+      best_practice: |
+        GAF Master Elite requires annual recertification. Only 3% of roofing
+        contractors achieve this designation — it's a marketing differentiator.
+        Monitor proactively. Source: gaf.com/en-us/roofing-contractors/master-elite
+
+    carrier_bulletin_scan:
+      cron: "0 9 * * 4"
+      action: |
+        1. Check major carrier websites for updated claims guidelines
+        2. Monitor Xactimate price list publication dates (monthly updates)
+        3. Flag any carrier policy changes affecting storm supplement strategy
+        4. Return findings to @ob-sales agent
+      best_practice: |
+        IAS Solutions 2026: "Xactimate price lists update monthly. Never submit
+        a supplement without first verifying you're using the current price list
+        for the correct region and date. Example: WAVA8X_APR24 = Vancouver WA, April 2024."
+        Source: iasolutions.claims/blog/roofing-insurance-supplements-2026-guide
+
+    storm_event_monitor:
+      cron: "0 6 * * *"  # Daily 6am CT — CAT response is time-critical
+      action: |
+        1. Check NOAA storm reports for service area (Travis County, Williamson County TX)
+        2. Check NWS severe weather alerts
+        3. Check carrier CAT designations for Texas
+        4. If storm event: IMMEDIATE escalation to @ob-sales + Chris
+        5. Prepare canvassing zone list (addresses in hail path)
+      best_practice: |
+        Storm canvassing best practices 2024: "First-mover advantage in CAT events
+        is measurable — companies that canvas within 48 hours of a storm event
+        have 3x higher conversion than those waiting 7+ days. Speed wins."
+        Source: profitabilitypartners.io/sell-roofing-business (PE buyer diligence data)
+
+  monthly:
+    code_update_scan:
+      cron: "0 9 1 * *"
+      action: |
+        1. Check IRC/IBC update bulletins for Texas jurisdictions
+        2. Check City of Austin Building Services for permit requirement changes
+        3. Check Round Rock Building Inspection for local amendments
+        4. Return as dated external atoms with regulatory_snapshot_id
+
+    insurance_market_intelligence:
+      cron: "0 10 1 * *"
+      action: |
+        1. Pull latest carrier supplement acceptance rate data (public sources)
+        2. Monitor state insurance department bulletins for Texas
+        3. Check for new or deprecated Xactimate line item codes
+        4. Return findings to Jordan Price + @ob-sales
+
+  quarterly:
+    technology_landscape_scan:
+      cron: "0 9 1 4,7,10,1 *"
+      action: |
+        1. Research new roofing technology (materials, installation methods)
+        2. Scan competitor technology adoption
+        3. Check new software integrations (EagleView, AccuLynx updates, CompanyCam)
+        4. Submit to Innovator agent (horizontal) for A3 proposal consideration
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LENA BROOKS — EEAT, Reputation & Local Content
+# Role: Public-trust builder — before/after photos, reviews, cert badges, local pages
+# Best practice sources: TheeDigital, OneClickCode SEO, CIWebGroup, amraandelma stats
+# ═══════════════════════════════════════════════════════════════════════════════
+lena_brooks:
+  event_triggered:
+    on_job_closed:
+      trigger: "AccuLynx job.closed webhook"
+      delay: "72 hours (3-day post-completion)"
+      action: |
+        1. Pull job data from Historian: scope, neighborhood, crew, photos, homeowner
+        2. Check consent_flags.publishable_external for all atoms
+        3. Draft review request sequence (NEPQ-informed — not pushy):
+           Day 3: Text/email "How's the new roof looking?"
+           Day 5: Review request with specific question "What stood out for you?"
+           Day 14: Final follow-up if no review
+        4. Route through Conductor for human approval before sending
+      best_practice: |
+        Roofing marketing stats 2026 (amraandelma): "Review request sent within
+        3-7 days of job completion has 47% response rate vs 12% at 30+ days.
+        Personalized requests outperform generic by 3x."
+        Source: amraandelma.com/roofing-marketing-statistics
+
+    on_review_received:
+      trigger: "new Google/Yelp review detected by Rowan"
+      action: |
+        1. Classify: positive / negative / neutral / mixed
+        2. Draft response within 24 hours (NEPQ tone: acknowledge → validate → resolve/celebrate)
+        3. Positive: "Thank you for trusting us with your home. We're proud of the work
+           the team did on [specific detail from review]. We look forward to being your
+           go-to roofing team."
+        4. Negative: Acknowledge → offer to make right → take offline
+        5. Route draft to human for approval
+        6. Atomize review as EEAT evidence atom
+      best_practice: |
+        NEPQ de-escalation principle: "Never argue. Never justify. First validate
+        their experience, then offer a path forward. The goal is not to win the
+        review argument — it's to demonstrate professionalism to future readers."
+
+  weekly:
+    eeat_content_harvest:
+      cron: "0 9 * * 2"  # Tuesday 9am CT
+      action: |
+        1. Pull soft atoms from Historian with eeat_signal.value > 0.7
+        2. From completed jobs this week — identify content-worthy moments:
+           - Unusual scope or challenge solved
+           - Exceptional crew performance noted
+           - Homeowner emotional response captured in debrief
+        3. Draft 1-2 project stories (300-500 words each)
+        4. Include schema.org markup draft (LocalBusiness, Service, Review)
+        5. Route to Conductor for one-click approval
+      best_practice: |
+        Google E-E-A-T (2024): Content must demonstrate Experience, Expertise,
+        Authoritativeness, Trustworthiness. For roofing: job-specific details
+        (address neighborhood, specific product, before/after) are non-negotiable
+        for EEAT signals. Generic content ranks poorly.
+        Source: ciwebgroup.com/blog/seo-for-roofers, theedigital.com/blog/seo-for-roofing-company
+
+    photo_curation:
+      cron: "0 10 * * 2"
+      action: |
+        1. Pull CompanyCam photos from jobs completed this week
+        2. Select 3-5 best photos per job: damage evidence, mid-work, finished
+        3. Check consent_flags for each photo (no consent = quarantine)
+        4. Flag photos with neighbor's property / personal items for consent review
+        5. Tag selected photos with job metadata for content library
+
+    reputation_monitoring:
+      cron: "0 8 * * 5"
+      action: |
+        1. Check Google Business Profile for new reviews
+        2. Check Yelp, BBB, Angi, HomeAdvisor for new reviews
+        3. Check Google Maps ranking for target keywords in Austin/Round Rock
+        4. Post weekly rep summary to #accounting-product-catalog-review (shared channel)
+
+  monthly:
+    seo_content_calendar:
+      cron: "0 9 5 * *"
+      action: |
+        1. Plan next month's content: 4 project stories, 1 neighborhood page, 1 FAQ
+        2. Target keywords from Rowan's research (Ahrefs/SEMrush data)
+        3. Map content to neighborhoods where jobs completed (service area expansion)
+        4. Submit calendar to Conductor for human review
+
+    review_velocity_report:
+      cron: "0 10 5 * *"
+      action: |
+        1. Review count this month vs last month vs same month prior year
+        2. Average star rating trend
+        3. Response rate (% of reviews responded to)
+        4. Post to #accounting-product-catalog-review
+
+    certification_badge_refresh:
+      cron: "0 11 5 * *"
+      action: |
+        1. Pull certification status from Rowan's monitor
+        2. Update website certification badge if renewed/changed
+        3. Verify warranty registration count meets GAF/OC tier requirements
+
+  quarterly:
+    local_seo_audit:
+      cron: "0 9 1 4,7,10,1 *"
+      action: |
+        1. Map pack ranking for top 20 target keywords
+        2. Competitor content analysis (what are they publishing that ranks?)
+        3. Schema markup validity check (Auditor handles)
+        4. Submit full audit to Dev team for technical SEO fixes
+      best_practice: |
+        OneClickCode SEO 2024: "For roofing contractors, local SEO wins come from:
+        (1) neighborhood-specific landing pages with completed job data,
+        (2) before/after photos with geotagged metadata,
+        (3) 3.9+ star rating with >50 reviews.
+        Source: oneclickcode.com/blog/a-guide-to-local-seo-for-roofing-contractors"
+
+  annual:
+    brand_audit:
+      cron: "0 9 20 1 *"  # Jan 20
+      action: |
+        1. Full year content performance: which project stories drove traffic?
+        2. Review volume year-over-year
+        3. Top ranking keywords and their trajectory
+        4. Competitive positioning shift
+        5. Submit brand health report to Chris
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CROSS-AGENT COORDINATION
+# How the 7 agents hand off to each other
+# ═══════════════════════════════════════════════════════════════════════════════
+handoff_flows:
+  - from: maya_chen
+    to: alex_rivers
+    trigger: "invoice_work_item created"
+    payload: "vendor, invoice#, line_items[], amounts[], dates"
+
+  - from: alex_rivers
+    to: casey_morgan
+    trigger: "variance identified > $50/line"
+    payload: "discrepancy_packet: agreement_ref, invoice_ref, variance_amount, variance_type"
+
+  - from: casey_morgan
+    to: jordan_price
+    trigger: "credit_memo accepted by vendor"
+    payload: "credit_memo_details, original_invoice, vendor, amount"
+
+  - from: alex_rivers
+    to: jordan_price
+    trigger: "weekly_variance_summary"
+    payload: "total_variance_by_vendor, financial_impact"
+
+  - from: jordan_price
+    to: sam_torres
+    trigger: "monthly accuracy report submission"
+    payload: "agent metrics, discrepancy rates"
+
+  - from: rowan_vale
+    to: alex_rivers
+    trigger: "price_change_detected"
+    payload: "sku, old_price, new_price, effective_date, source_url"
+
+  - from: rowan_vale
+    to: lena_brooks
+    trigger: "competitor_change_detected"
+    payload: "competitor, change_type, evidence_url"
+
+  - from: rowan_vale
+    to: "@ob-sales"
+    trigger: "storm_event_detected"
+    payload: "affected_zip_codes, storm_type, date, carrier_cat_designation"
+
+  - from: sam_torres
+    to: dev_conductor
+    trigger: "process_improvement_proposal"
+    payload: "a3_proposal: problem, metric, root_cause, countermeasure"
+
+  - from: lena_brooks
+    to: sam_torres
+    trigger: "content_published"
+    payload: "url, content_type, consent_verified, schema_markup_included"
