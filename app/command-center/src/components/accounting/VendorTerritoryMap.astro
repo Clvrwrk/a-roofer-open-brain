@@ -6,21 +6,23 @@ import BoundaryNotice from "./BoundaryNotice.astro";
 interface Props {
   surface: VendorTerritorySurface;
   mapsBrowserKey: string;
+  deferLoad?: boolean;
 }
 
-const { surface, mapsBrowserKey } = Astro.props;
+const { surface, mapsBrowserKey, deferLoad = false } = Astro.props;
 const payloadJson = JSON.stringify(surface).replace(/</g, "\\u003c");
 const selectedBranch = surface.reviewBranches[0] ?? surface.branches[0] ?? null;
 const selectedOffice = selectedBranch?.assignedOfficeId
   ? surface.offices.find((office) => office.id === selectedBranch.assignedOfficeId)
   : surface.offices[0] ?? null;
-const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : surface.source;
+const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "previous app snapshot" : surface.source;
 ---
 
 <section
   class="vendor-map-workspace"
   data-vendor-territory-app
   data-maps-key={mapsBrowserKey}
+  data-defer-load={deferLoad ? "1" : "0"}
   aria-label="Vendor territory map"
 >
   <script type="application/json" id="vendor-territories-payload" set:html={payloadJson}></script>
@@ -156,7 +158,7 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       if (!root) return;
 
       const payloadScript = document.getElementById("vendor-territories-payload");
-      const payload = JSON.parse(payloadScript?.textContent || "{}");
+      let payload = JSON.parse(payloadScript?.textContent || "{}");
       const mapsKey = root.dataset.mapsKey || "";
       const mapEl = document.getElementById("vendor-territory-google-map");
       const detailPanel = document.getElementById("vendor-territory-detail-panel");
@@ -183,9 +185,40 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
         selectedBranchId: null, // load-time default = Richardson, TX office, not a branch
       };
 
-      const officeById = new Map((payload.offices || []).map((office) => [office.id, office]));
-      const vendorBySlug = new Map((payload.vendors || []).map((vendor) => [vendor.slug, vendor]));
+      let officeById = new Map();
+      let vendorBySlug = new Map();
       const colorLensSelect = document.getElementById("vt-color-lens");
+
+      function rebuildIndexes() {
+        officeById = new Map((payload.offices || []).map((office) => [office.id, office]));
+        vendorBySlug = new Map((payload.vendors || []).map((vendor) => [vendor.slug, vendor]));
+      }
+
+      function replaceOptions(select, firstLabel, rows, valueFor, labelFor) {
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = `<option value="all">${escapeHtml(firstLabel)}</option>` + rows.map((row) => `<option value="${escapeHtml(valueFor(row))}">${escapeHtml(labelFor(row))}</option>`).join("");
+        select.value = [...select.options].some((option) => option.value === current) ? current : "all";
+      }
+
+      function populateDeferredControls() {
+        replaceOptions(vendorFilter, "All vendors", payload.vendors || [], (vendor) => vendor.slug, (vendor) => `${vendor.name}${vendor.isPlanned ? " · planned" : ""}`);
+        replaceOptions(stateFilter, "Full US", payload.states || [], (state) => state, (state) => state);
+      }
+
+      async function loadDeferredPayload() {
+        if (root.dataset.deferLoad !== "1") return;
+        if (mapEl) mapEl.innerHTML = '<div class="vendor-map-empty"><strong>Loading territory data</strong><span>Rendering the map shell first, then fetching branch coverage.</span></div>';
+        const started = performance.now();
+        const response = await fetch("/api/vendor-territories", { headers: { accept: "application/json" } });
+        const next = await response.json();
+        if (!response.ok) throw new Error(next?.error_description || next?.error || "territory-load-failed");
+        payload = next;
+        if (payloadScript) payloadScript.textContent = JSON.stringify(payload);
+        rebuildIndexes();
+        populateDeferredControls();
+        root.dataset.territoryLoadMs = String(Math.round(performance.now() - started));
+      }
 
       // --- Color lens: one map, three ways to read "where the issues are" ---
       const LENS_GREEN = "#16a34a";
@@ -726,9 +759,12 @@ const sourceLabel = surface.source === "snapshot" ? "previous app snapshot" : su
       async function init() {
         if (!mapEl) return;
         try {
+          rebuildIndexes();
+          await loadDeferredPayload();
           await loadMapsApi();
         } catch (error) {
-          mapEl.innerHTML = `<div class="vendor-map-empty"><strong>Google Maps unavailable</strong><span>${error?.message === "missing-key" ? "GOOGLE_MAPS_BROWSER_KEY is not configured." : "Maps JavaScript failed to load for this origin."}</span></div>`;
+          const message = error?.message === "missing-key" ? "GOOGLE_MAPS_BROWSER_KEY is not configured." : error?.message === "territory-load-failed" ? "Territory data failed to load." : error?.message || "Maps JavaScript failed to load for this origin.";
+          mapEl.innerHTML = `<div class="vendor-map-empty"><strong>Map unavailable</strong><span>${escapeHtml(message)}</span></div>`;
           return;
         }
 

@@ -1,8 +1,10 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
-import { loadInvoiceAudit } from "@lib/invoice-audit";
+import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
+import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
 
-const data = await loadInvoiceAudit();
+const perfMetrics: PerfMetric[] = [];
+const data = await timeAsync("invoice_audit.summary", () => loadInvoiceAuditSummary(), perfMetrics);
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
@@ -19,11 +21,16 @@ const ACTIONS = [
   { id: "credit-noflag", group: "credit", label: "Credit Memo — Do Not Flag", hint: "Generate credit-memo request; invoice remains payable." },
 ];
 
-const payload = JSON.stringify({ offices: data.offices, actions: ACTIONS, categories: data.categories }).replace(/</g, "\\u003c");
+const initialPayload = { offices: data.offices, actions: ACTIONS, categories: data.categories };
+const initialPayloadBytes = payloadBytes(initialPayload);
+perfMetrics.push({ name: "invoice_audit.initial_payload", durationMs: 0, description: `${initialPayloadBytes} bytes` });
+Astro.response.headers.set("server-timing", serverTiming(perfMetrics));
+logPerfMetrics("invoice-audit", perfMetrics);
+const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
 ---
 
 <AppShell title="Invoice Audit" eyebrow="Accounting" activePage="accounting">
-  <section class="iv" data-theme="light" data-pref="system">
+  <section class="iv" data-theme="light" data-pref="system" data-initial-payload-bytes={initialPayloadBytes}>
     <div class="iv-toolbar">
       <input class="iv-input" id="iv-search" type="search" placeholder="Search invoice, item, branch…" autocomplete="off" />
       <select class="iv-select" id="iv-office">

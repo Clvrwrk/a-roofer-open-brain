@@ -19,6 +19,7 @@ The deployable template for a single roofing company's persistent, property-firs
 9. **10x ROI gate.** No new agent skill without an approved A3 (`proposals/`). Mission-grade infrastructure and high-error-cost tasks are the only exemptions.
 10. **No profanity. Clean, professional content** in docs, prompts, comments, seed data.
 11. **Live ⇄ Dev alignment.** Never start app work on a stale or uncommitted tree, and never let local dev and the deployed `cc.proexteriorsus.net` drift into separate branch lineages. Branch from the deployed branch, commit early, merge features back into it. See **Live ⇄ Dev alignment** below.
+12. **Third-party agent tool gate.** No external skill/plugin/MCP/agent wrapper/memory tool/installer becomes part of the brain or global workflow until it has A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. Current decisions: [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
 
 ## Licensing & attribution
 

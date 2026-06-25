@@ -372,6 +372,35 @@ export interface VendorTerritoryMapPayload {
 
 export type VendorTerritorySurface = VendorTerritoryMapPayload;
 
+export function createVendorTerritoryShellSurface(): VendorTerritorySurface {
+  return {
+    status: "unconfigured",
+    source: "none",
+    generatedAt: new Date().toISOString(),
+    missingConfig: [],
+    errors: [],
+    vendors: [],
+    states: [],
+    offices: [],
+    branches: [],
+    reviewBranches: [],
+    counts: {
+      offices: 0,
+      branches: 0,
+      branchesWithCoordinates: 0,
+      missingCoordinates: 0,
+      covered: 0,
+      overlapPending: 0,
+      outOfBoundary: 0,
+      unclassified: 0,
+      pricingApproved: 0,
+      needsOfficeRoute: 0,
+      missingBranchPricing: 0,
+      vendorBrand: 0,
+    },
+  };
+}
+
 const PAGE_SIZE = 1000;
 const EXPECTED_PRICE_AGREEMENT_SKU_MIN = 200;
 const EXPECTED_PRICE_AGREEMENT_SKU_MAX = 350;

@@ -4,7 +4,7 @@
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -504,7 +504,7 @@ if (root && dataEl && mount) {
       ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
       : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
     return `
-      <details class="iv-inv" data-search="${esc((inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}">
+      <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${job}</span></span>
@@ -554,7 +554,7 @@ if (root && dataEl && mount) {
 
   function branchNode(br: Branch): string {
     // A branch has a price list iff at least one of its lines resolved a negotiated price.
-    const branchHasPriceList = br.invoices.some((i) => i.lines.some((l) => l.negotiatedPrice != null));
+    const branchHasPriceList = br.invoices.some((i) => i.hasPriceList || i.lines.some((l) => l.negotiatedPrice != null));
     return `
       <details class="iv-branch" data-branch="${esc(br.branchCode)}" data-search="${esc((br.branchName + " " + br.branchCode).toLowerCase())}">
         <summary>
@@ -582,16 +582,33 @@ if (root && dataEl && mount) {
 
   mount.innerHTML = offices.map(officeNode).join("");
 
-  // Lazy-render invoice bodies on first expand.
+  // Lazy-load invoice detail on first expand; the initial payload carries summaries only.
   const invByNumber = new Map<string, Invoice>();
   offices.forEach((o) => o.branches.forEach((b) => b.invoices.forEach((i) => invByNumber.set(i.invoiceNumber, i))));
+
+  async function ensureInvoiceLines(inv: Invoice, body: HTMLElement): Promise<boolean> {
+    if (inv.linesLoaded || inv.lines.length > 0) return true;
+    body.innerHTML = '<p class="iv-disp-lead">Loading invoice detail...</p>';
+    try {
+      const response = await fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { headers: { accept: "application/json" } });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !payload.invoice) throw new Error(payload?.error_description || payload?.error || "invoice detail failed");
+      Object.assign(inv, payload.invoice, { linesLoaded: true });
+      return true;
+    } catch (error) {
+      body.innerHTML = `<p class="iv-disp-lead">Invoice detail failed to load: ${esc(error instanceof Error ? error.message : "network error")}</p>`;
+      return false;
+    }
+  }
+
   mount.querySelectorAll<HTMLDetailsElement>(".iv-inv").forEach((det) => {
-    det.addEventListener("toggle", () => {
+    det.addEventListener("toggle", async () => {
       if (!det.open) return;
       const body = det.querySelector(".iv-inv-body") as HTMLElement;
       if (body.dataset.rendered) return;
       const inv = invByNumber.get(body.dataset.inv!);
       if (!inv) return;
+      if (!(await ensureInvoiceLines(inv, body))) return;
       body.innerHTML = invoiceBody(inv);
       body.dataset.rendered = "1";
       bindInvoice(det, inv);

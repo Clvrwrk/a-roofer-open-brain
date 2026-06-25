@@ -22,6 +22,7 @@ These rules mirror `CLAUDE.md` and `AGENTS.md` so Cursor agents behave identical
 - Property-first and era-aware: place atoms carry `property_id`; code/material/practice atoms carry `era_of_practice`.
 - Clean, professional language everywhere.
 - Live⇄Dev: branch from the deployed/live branch (do not assume `main`), commit early, converge back — never fork lineages.
+- Third-party agent tool gate: no external skill/plugin/MCP/agent wrapper/memory tool/installer becomes global or gets copied into the brain without A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. Current decisions: `docs/54-third-party-agent-tool-gate-2026-06-25.md`.
 
 ## Session wrap-up / handoff — canonical: `CONVENTIONS.md` §13
 Trigger: user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"tie off"* — or context ~50%. Run in order, don't stop until the tree is clean and converged:

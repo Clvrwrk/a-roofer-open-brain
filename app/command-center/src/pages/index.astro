@@ -2,16 +2,16 @@
 import VendorTerritoryMap from "../components/accounting/VendorTerritoryMap.astro";
 import AppShell from "../layouts/AppShell.astro";
 import { getRuntimeEnv } from "@lib/runtime-env";
-import { loadVendorTerritorySurface } from "@lib/vendor-territories";
+import { createVendorTerritoryShellSurface } from "@lib/vendor-territories";
 
 // The territory map is the home of the Command Center — roofing is regional,
 // so the map is the primary navigation surface: color shows where the issues
 // are, and selecting a state / PE office / vendor branch is how you get into
 // the work (popup + matching side card → two paths to the dashboards).
-const territorySurface = await loadVendorTerritorySurface();
+const territorySurface = createVendorTerritoryShellSurface();
 const mapsBrowserKey = getRuntimeEnv().GOOGLE_MAPS_BROWSER_KEY ?? "";
 ---
 
 <AppShell title="Territory Map" eyebrow="Command Center" activePage="territories" layoutMode="map">
-  <VendorTerritoryMap surface={territorySurface} mapsBrowserKey={mapsBrowserKey} />
+  <VendorTerritoryMap surface={territorySurface} mapsBrowserKey={mapsBrowserKey} deferLoad />
 </AppShell>

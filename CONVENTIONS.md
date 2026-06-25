@@ -106,6 +106,11 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 - **Auditor** enforces the current standard per work product. **Quality Control** sets/changes standards (DMAIC on 3+ repeats). They are separate roles; do not merge them.
 - **Maintenance** runs 5S on the brain and never deletes, never edits provenance, never changes `trust_tier`, never publishes.
 
+
+## 10a. Third-party agent tool gate
+
+No external skill, plugin, MCP server, agent wrapper, memory tool, or installer repo may be installed, copied into the brain, enabled globally, or recommended as a standard workflow until it passes the third-party agent tool gate. Required evidence: A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. This does not create an exception to the MCP rule: MCPs remain containerized on Hetzner only, with no local stdio MCP servers and no local Node MCPs. Current decisions live in [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
+
 ## 11. Design system (one source of truth for every visual asset)
 
 - Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
