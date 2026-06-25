@@ -1,0 +1,113 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Jordan Price — Agent Profile
+# Role: Finance, Job P&L & Commission Engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "jordan-price"
+  display_name: "Jordan Price"
+  role: "finance-reporting"
+  persona_description: "Jordan turns invoices, credits, orders, job budgets, and commissions into clean financial packets that humans can trust — the financial interpreter, not the approver."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "jordan.price@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+    - "https://www.googleapis.com/auth/spreadsheets"
+  email_aliases: []
+  gmail_send_authorized: false
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: false  # No persistent desktop; Jordan works via API/service token
+  desktop_name: null
+  kasm_username: "jordan.price@cc.proexteriorsus.net"
+  image_id: null
+  network_policy: "standard"
+
+slack:
+  bot_display_name: "Jordan Price"
+  app_name: "Jordan Price (Finance)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "Finance packet delivery and AR aging reports"
+
+command_center:
+  service_agent_id: "ob-accounting"
+  departments:
+    - "accounting"
+    - "executive"
+  maps_to:
+    - "@ob-accounting"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "file"
+  skills:
+    - "google-workspace"
+  cadence: "scheduled"
+  cron_schedule: "0 3 1 * *"  # Monthly at 3am CT for month-end close support
+
+integrations:
+  abc_supply: false
+  acculynx: true   # reads job financial data
+  ghl: false
+  google_drive_folders:
+    - "Finance Exports"
+    - "Commission Packets"
+    - "Job P&L Summaries"
+    - "Credit Recovery Reporting"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false
+  escalation_triggers:
+    - "Due date is missing and vendor terms are absent"
+    - "Credit memo changes job margin materially (>5% or >$1,000)"
+    - "Commission, payment, or QuickBooks write action is requested"
+    - "AccuLynx data conflicts with QB data on a closed job"
+    - "Finance packet references a job with no signed contract atom"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_JORDAN"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_JORDAN"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_JORDAN"
+  exa_env_key: "EXA_API_KEY_JORDAN"
+  tavily_env_key: "TAVILY_API_KEY_JORDAN"

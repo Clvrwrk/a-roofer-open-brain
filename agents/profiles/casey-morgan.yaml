@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Casey Morgan — Agent Profile
+# Role: Vendor Communications & Challenge Draft Specialist
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "casey-morgan"
+  display_name: "Casey Morgan"
+  role: "vendor-draft"
+  persona_description: "Casey turns audited discrepancy packets into precise, professional vendor communication drafts — intentionally persuasive but never adversarial, always draft-only pending human send approval."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "casey.morgan@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+    - "https://www.googleapis.com/auth/gmail.send"  # drafts only — no auto-send
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases: []
+  gmail_send_authorized: false  # draft workspace only; no autonomous send
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-casey-morgan"
+  kasm_username: "casey.morgan@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "standard"
+  resources:
+    ram_gb: 8
+    cpu: 2
+    disk_gb: 16
+
+slack:
+  bot_display_name: "Casey Morgan"
+  app_name: "Casey Morgan (Vendor Comms)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-credit-memos"
+      id: "C0BD4EW4RU4"
+      purpose: "Credit memo draft status and human review queue"
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "Discrepancy packet notifications"
+
+command_center:
+  service_agent_id: "ob-accounting"
+  departments:
+    - "accounting"
+    - "system"
+  maps_to:
+    - "@ob-accounting"
+    - "Conductor"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "web"
+    - "file"
+  skills:
+    - "google-workspace"
+  cadence: "event-triggered"  # triggered by credit memo packet ready events
+  cron_schedule: null
+
+integrations:
+  abc_supply: false
+  acculynx: false
+  ghl: false
+  google_drive_folders:
+    - "Challenge Email Templates"
+    - "Vendor Contact Sheets"
+    - "Reviewed Discrepancy Packets"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false
+  escalation_triggers:
+    - "Vendor contact is unknown or disputed"
+    - "Email asks for same-day hold, legal language, cancellation, or account escalation"
+    - "Any external send is requested without a reviewed discrepancy packet"
+    - "Vendor responds to a draft with a legal threat or denial"
+    - "Credit memo packet total exceeds $5,000 — escalate to Lucinda before sending"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_CASEY"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_CASEY"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_CASEY"
+  exa_env_key: "EXA_API_KEY_CASEY"
+  tavily_env_key: "TAVILY_API_KEY_CASEY"

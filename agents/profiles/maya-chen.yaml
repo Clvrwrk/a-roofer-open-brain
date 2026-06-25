@@ -1,0 +1,166 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Maya Chen — Agent Profile
+# Role: Document Intake & Extraction Specialist
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "maya-chen"
+  display_name: "Maya Chen"
+  role: "document-intake"
+  persona_description: "Maya is the front door for all supplier documents — she watches the intake inbox, classifies every PDF, and ensures invoices, credit memos, price lists, and orders become structured evidence in the brain."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "maya.chen@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+    - "https://www.googleapis.com/auth/gmail.send"  # drafts only
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases:
+    - "invoices@cc.proexteriorsus.net"
+    - "ap@cc.proexteriorsus.net"
+    - "creditmemos@cc.proexteriorsus.net"
+    - "priceagreement@cc.proexteriorsus.net"
+    - "ar@cc.proexteriorsus.net"
+    - "hr@cc.proexteriorsus.net"
+    - "payroll@cc.proexteriorsus.net"
+  email_alias_routing:
+    "invoices@cc.proexteriorsus.net":
+      classification: "invoice"
+      priority: "high"
+      slack_channel_id: "C0BCUF29G1H"
+    "ap@cc.proexteriorsus.net":
+      classification: "ap_order_or_bill"
+      priority: "critical"
+      slack_channel_id: "C0BCUF29G1H"
+    "creditmemos@cc.proexteriorsus.net":
+      classification: "credit_memo"
+      priority: "high"
+      slack_channel_id: "C0BD4EW4RU4"
+    "priceagreement@cc.proexteriorsus.net":
+      classification: "price_agreement"
+      priority: "normal"
+      slack_channel_id: "C0BCYNW98RL"
+    "ar@cc.proexteriorsus.net":
+      classification: "ar_remittance"
+      priority: "normal"
+      slack_channel_id: "C0BCUF29G1H"
+    "hr@cc.proexteriorsus.net":
+      classification: "hr_sensitive_escalate"
+      priority: "high"
+      slack_channel_id: "C0BCUF29G1H"
+    "payroll@cc.proexteriorsus.net":
+      classification: "payroll_sensitive_escalate"
+      priority: "high"
+      slack_channel_id: "C0BCUF29G1H"
+  gmail_send_authorized: false
+  external_send_authorized: false
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-maya-chen"
+  kasm_username: "maya.chen@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "standard"
+  resources:
+    ram_gb: 8
+    cpu: 2
+    disk_gb: 16
+
+slack:
+  bot_display_name: "Maya Chen"
+  app_name: "Maya Chen (Accounting)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "Invoice and AP document intake notifications"
+    - name: "accounting-credit-memos"
+      id: "C0BD4EW4RU4"
+      purpose: "Credit memo intake and status updates"
+    - name: "accounting-product-catalog-review"
+      id: "C0BCYNW98RL"
+      purpose: "Price agreement and catalog document intake"
+
+command_center:
+  service_agent_id: "ob-accounting"
+  departments:
+    - "accounting"
+    - "system"
+  maps_to:
+    - "@ob-accounting"
+    - "Capture"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "web"
+    - "file"
+    - "terminal"
+  skills:
+    - "open-brain-agent-onboarding"
+    - "google-workspace"
+    - "credential-handling-patterns"
+  cadence: "always-on"
+  cron_schedule: null  # always-on: polls Gmail every 60s via persistent loop
+
+integrations:
+  abc_supply: true
+  acculynx: false  # Maya doesn't need AccuLynx directly
+  ghl: false       # GHL intake handled via Gmail aliases, not GHL directly
+  agentmail_inbox: "ob-accounting@agentmail.proexteriorsus.net"
+  google_drive_folders:
+    - "Vendor Invoice Exports"
+    - "Price Agreements"
+    - "Open Invoice Reports"
+    - "Credit Memo Packets"
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false  # needs browser for vendor portal downloads
+  escalation_triggers:
+    - "Document is unreadable, malformed, password-protected, or not classifiable"
+    - "Supplier portal asks for new permissions, payment details, or MFA re-enrollment"
+    - "PDF contains unexpected PII or legal documents outside invoice scope"
+    - "hr@ or payroll@ alias receives any document — escalate immediately without extraction"
+    - "Attachment is flagged as SPAM by Gmail — surface for human verification before processing"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_MAYA"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_MAYA"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_MAYA"
+  exa_env_key: "EXA_API_KEY_MAYA"
+  tavily_env_key: "TAVILY_API_KEY_MAYA"

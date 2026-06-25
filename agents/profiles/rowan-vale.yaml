@@ -1,0 +1,119 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Rowan Vale — Agent Profile
+# Role: External Research & Source Intelligence Scout
+# ─────────────────────────────────────────────────────────────────────────────
+
+identity:
+  id: "rowan-vale"
+  display_name: "Rowan Vale"
+  role: "external-research"
+  persona_description: "Rowan is the outside-world scout — living in public sources, newsletters, manufacturer pages, supplier portals, and code/permit resources. Valuable precisely because he is external-only and never touches the client brain."
+
+platform:
+  client_id: "pro-exteriors"
+  workspace_domain: "cc.proexteriorsus.net"
+  agent_host: "5.78.146.161"
+  command_center_url: "https://cc.proexteriorsus.net"
+  kasm_base_url: "https://desktops.proexteriorsus.net"
+
+google_workspace:
+  email: "rowan.vale@cc.proexteriorsus.net"
+  domain: "cc.proexteriorsus.net"
+  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  gmail_scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+    - "https://www.googleapis.com/auth/gmail.modify"
+  drive_scopes:
+    - "https://www.googleapis.com/auth/drive.readonly"
+    - "https://www.googleapis.com/auth/drive.file"
+  email_aliases: []
+  gmail_send_authorized: false
+  external_send_authorized: false  # no vendor/customer send; approved signup confirmations only
+
+kasm:
+  desktop_enabled: true
+  desktop_name: "pe-rowan-vale"
+  kasm_username: "rowan.vale@cc.proexteriorsus.net"
+  image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+  network_policy: "external-only"  # ⚠️ CRITICAL: external-only network. No internal brain access.
+  resources:
+    ram_gb: 8
+    cpu: 2
+    disk_gb: 16
+
+slack:
+  bot_display_name: "Rowan Vale"
+  app_name: "Rowan Vale (Research)"
+  team_id: "T0B8QEGPVQW"
+  bot_scopes:
+    - "chat:write"
+    - "channels:read"
+    - "channels:history"
+    - "channels:join"
+    - "files:read"
+    - "files:write"
+    - "app_mentions:read"
+  socket_mode_enabled: true
+  channels:
+    - name: "accounting-product-catalog-review"
+      id: "C0BCYNW98RL"
+      purpose: "External research results for pricing and catalog intelligence"
+
+command_center:
+  service_agent_id: "ob-researcher"
+  departments:
+    - "marketing"
+    - "executive"
+    - "system"
+  maps_to:
+    - "Researcher"
+  permissions:
+    - "command_center.read"
+    - "work_queue.read"
+    - "approval.request_more_evidence"
+    - "evidence.attach"
+    - "agent.resume"
+    - "desktop.command_center_ui"
+  approval_decide: false
+
+hermes:
+  model: "anthropic/claude-sonnet-4-20250514"
+  provider: "openrouter"
+  tier: "workhorse"
+  toolsets:
+    - "web"
+    - "browser"
+    - "file"
+  skills:
+    - "google-workspace"
+  cadence: "event-triggered"  # triggered by research queries from vertical agents
+  cron_schedule: null
+
+integrations:
+  abc_supply: false   # ⚠️ Rowan has NO access to internal APIs
+  acculynx: false     # ⚠️ External-only — no internal bridge access
+  ghl: false
+  # ⚠️ Rowan has NO Supabase access. No service token. No brain MCP.
+  # This is enforced at the credential level — do not add any internal creds.
+
+guardrails:
+  no_external_send: true
+  no_approval_decide: true
+  no_supabase_service_role: true
+  no_public_internet: false   # External internet IS Rowan's job
+  no_internal_brain_access: true  # ADDITIONAL GUARDRAIL — never add Supabase creds to Rowan
+  escalation_triggers:
+    - "Signup requires payment, phone verification, sensitive company data, or sales commitment"
+    - "Research crosses into customer or job-specific private information"
+    - "Public source asks for credentials belonging to a human or vendor account"
+    - "Retrieved content contains PII — strip before returning, note the stripping in metadata"
+    - "External result conflicts with a known brain atom — surface conflict, do not resolve"
+
+credentials:
+  openrouter_env_key: "OPENROUTER_API_KEY_ROWAN"
+  gw_password_source: "Agent Credentials.xlsx"
+  fal_env_key: "FAL_API_KEY_ROWAN"
+  firecrawl_env_key: "FIRECRAWL_API_KEY_ROWAN"
+  exa_env_key: "EXA_API_KEY_ROWAN"
+  tavily_env_key: "TAVILY_API_KEY_ROWAN"
+  # ⚠️ NO SUPABASE TOKEN FOR ROWAN. This is intentional and must never be added.
