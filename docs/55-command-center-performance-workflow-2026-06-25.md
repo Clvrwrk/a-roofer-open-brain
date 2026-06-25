@@ -7,6 +7,8 @@ Target: p95 authenticated user action renders under 500ms; cold starts and unavo
 
 - `app/command-center/scripts/perf-smoke.mjs` fetches critical SSR routes and APIs, reports status, duration, payload bytes, and `server-timing`.
 - `npm run perf:smoke` runs the smoke report. Use `COMMAND_CENTER_BASE_URL` to point at local preview/dev, `COMMAND_CENTER_PERF_WARMUP=1` to measure user-facing warm-cache navigation, and `COMMAND_CENTER_SERVICE_TOKEN` when an API route requires bearer auth.
+- `npm run perf:warm` posts to `/api/performance/warm` and refreshes the in-process Command Center surface caches. It accepts `COMMAND_CENTER_SERVICE_TOKEN`, `AGENT_SERVICE_TOKEN`, or the first `AGENT_SERVICE_TOKENS=agent:token` entry.
+- `npm run perf:cadence` reads `/api/performance/cadence` to inspect the first-party warm cadence state without exposing raw identities, secrets, or dynamic record IDs.
 - `@lib/perf` provides shared `timeAsync`, payload byte counts, `server-timing`, and optional `COMMAND_CENTER_PERF_LOG=1` server logs.
 
 Critical routes in the smoke set:
@@ -26,6 +28,9 @@ Critical routes in the smoke set:
 - Invoice Audit now uses a summary loader for the page and a lazy single-invoice detail API at `/api/invoice-audit/invoice?invoiceNumber=...`.
 - Invoice Audit summary responses are cached in-process for 5 minutes; full audit detail remains bounded to one invoice.
 - Invoice expand detail no longer blocks on ABC API price/UOM enrichment; it returns negotiated/unit/variance audit detail first.
+- Command Center caches warm on process boot, can be warmed manually through `/api/performance/warm`, and now reschedule from first-party human activity rather than third-party session replay.
+- Human WorkOS/local-operator page and API activity schedules an after-session warm once the app is idle; service/named-agent traffic is counted but does not move the human cadence.
+- Daily warm time defaults to 5 AM local server time and shifts to one hour before the most commonly observed human usage hour. Configure with `COMMAND_CENTER_DAILY_WARM_HOUR`, `COMMAND_CENTER_HUMAN_SESSION_IDLE_MS`, and `COMMAND_CENTER_MIN_SCHEDULED_WARM_GAP_MS` if needed.
 
 ## Latest Local Timing Snapshot
 
@@ -57,4 +62,5 @@ All smoke-set pages are under the 500ms warm-navigation target. Cold Supabase/vi
 - No third-party repo was installed as a global hook.
 - No local MCP server config was added.
 - No third-party local stdio/Node MCP was enabled.
+- TruConversion was not installed for cache cadence; first-party WorkOS-resolved activity provides enough signal with lower egress/privacy risk.
 - Existing secret variable references were not changed; no raw secret values were added.

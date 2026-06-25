@@ -3,7 +3,21 @@ const base = (process.env.COMMAND_CENTER_BASE_URL || "http://127.0.0.1:4321").re
 const budgetMs = Number(process.env.COMMAND_CENTER_PERF_BUDGET_MS || 500);
 const failOnBudget = process.env.PERF_SMOKE_FAIL === "1";
 const warmupRounds = Number(process.env.COMMAND_CENTER_PERF_WARMUP || 0);
-const serviceToken = process.env.COMMAND_CENTER_SERVICE_TOKEN || "";
+function firstConfiguredServiceToken() {
+  const explicit = process.env.COMMAND_CENTER_SERVICE_TOKEN || process.env.AGENT_SERVICE_TOKEN || "";
+  if (explicit) return explicit;
+
+  const csv = process.env.AGENT_SERVICE_TOKENS || "";
+  for (const rawEntry of csv.split(",")) {
+    const entry = rawEntry.trim();
+    if (!entry) continue;
+    const separator = entry.indexOf(":");
+    if (separator > 0 && separator < entry.length - 1) return entry.slice(separator + 1).trim();
+  }
+
+  return "";
+}
+const serviceToken = firstConfiguredServiceToken();
 
 const paths = [
   "/",

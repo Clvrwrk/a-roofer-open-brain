@@ -15,7 +15,7 @@ function applySentryUser(actor: { id: string; type: string; displayName: string;
   Sentry.setTag("actor.type", actor.type);
 }
 import { getRuntimeEnv } from "@lib/runtime-env";
-import { prewarmSurfaceCaches } from "@lib/prewarm.server";
+import { prewarmSurfaceCaches, recordCommandCenterActivity } from "@lib/prewarm.server";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
 
 prewarmSurfaceCaches();
@@ -110,6 +110,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (serviceActor) {
       locals.actor = serviceActor;
       applySentryUser(serviceActor);
+      recordCommandCenterActivity({ actor: serviceActor, pathname });
       return next();
     }
   }
@@ -119,6 +120,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const actor = localActor();
     locals.actor = actor;
     applySentryUser(actor);
+    recordCommandCenterActivity({ actor, pathname });
     return next();
   }
 
@@ -145,5 +147,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   locals.actor = actor;
   applySentryUser(actor);
+  recordCommandCenterActivity({ actor, pathname });
   return next();
 });

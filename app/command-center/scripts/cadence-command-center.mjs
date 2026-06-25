@@ -20,7 +20,7 @@ const headers = { accept: "application/json" };
 if (serviceToken) headers.authorization = `Bearer ${serviceToken}`;
 
 const started = performance.now();
-const response = await fetch(`${base}/api/performance/warm`, { method: "POST", headers });
+const response = await fetch(`${base}/api/performance/cadence`, { headers });
 const text = await response.text();
 let payload;
 try {
