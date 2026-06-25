@@ -1,38 +1,81 @@
-# Handoff — Open-invoice API-price gap fill · Observability (Sentry + CodeRabbit) live · skill updates
+# Handoff — Agent onboarding automation complete · deploy-agent skill ready · 7 agent profiles validated
 
-**Date:** 2026-06-20 (evening); **wrap-up refresh 2026-06-22.** · **Branch:** `contrib/cleverwork/observability-sentry`.
-✅ **ALIGNED + DEPLOYED: dev (local) = local `main` = `origin/main` = `b6b0169` (+ 2026-06-22 wrap-up commit on top), 0/0.** Coolify auto-builds `origin/main` → `cc.proexteriorsus.net`; confirm current HEAD via `/healthz` buildCommit. **Sentry is live and verified end-to-end** (error → Sentry → Slack `#cc-proexteriors`).
-**2026-06-22 wrap-up:** all stale worktrees pruned (only primary checkout remains), 5 local-only merged branches deleted, memory refreshed. Detail in `context/memory/2026-06-22.md` (Session 2).
-**Full log:** `context/memory/2026-06-20.md` (later sessions). **Prior handoff:** `docs/handoffs/archive/2026-06-20-gpa-buildout.md` (its open items still stand — carried forward below).
+## ⚠️ Stormwatch Pause Notice (still active)
 
-This session did three things: (1) filled open-invoice API-price gaps, (2) stood up **error monitoring** for the Monday alpha, (3) corrected/added skills from what we learned.
+Stormwatch/property-layer implementation is intentionally paused. Do not deploy Stormwatch pipeline changes until Reonomy partnership terms are finalized and the property layer is validated end-to-end with production-grade data quality checks.
 
-## ✅ What shipped (live on prod + `origin/main`)
+---
 
-1. **Open-invoice API-price gap fill** (mig **142** + `integrations/bridges/abc-supply/fill-open-invoice-api-prices.mjs`, commit `a0ab2f3`). 172 open invoices → 418 distinct (item,branch) price points; **110 missing**. Fetched all 110 live from ABC: **69 priced + written** (clean UOM), **41 genuinely un-priceable** (ABC `"Cannot price item … Call for pricing."` — `NS*` special-order metal + CSI items — and transactional charges: DELIVERY/FUEL/JURDEL/Freight/PROMOCREDIT). Root cause of the 69: they lived only in raw `abc_product_catalog`, never promoted to curated `products`. **mig 142 promoted the 68 ABC-priceable items** (supplier→manufacturer alias map, taxonomy via ABC hierarchy, `internal_sku=M{legacy}-{sku}`, base_uom=stocking; fallback `MISCELLANEOUS VENDOR`). Open-invoice priced lines **990 → 1080**.
+## 2026-06-25 Session — Agent Automation & Profile System
 
-2. **Observability — Sentry + CodeRabbit** (commits `9382632`, `72c70dd`). **Live + verified.**
-   - **Sentry**: `@sentry/astro` (web SSR) + `@sentry/node` (Slack runtime via `node --import`; nightly ABC sync staged/guarded). Full tracing, **masked Session Replay**, `setUser(id+email)`, PII scrubbed (`sendDefaultPii:false` + beforeSend). **Literal-DSN fallback** (a DSN is public) → errors+replay need no build-arg. **Source maps upload** (Coolify `SENTRY_AUTH_TOKEN` set `is_buildtime:true`; build creates a release). **Slack alert rule `17213565`** → `#cc-proexteriors` (new + regressed). Verified: deploy live, client SDK in served bundle, test error → Sentry → Slack with Resolve/Archive buttons.
-   - **CodeRabbit**: kept advisory; added path_instructions flagging swallowed errors / missing Sentry capture / PII in error reports.
+**Branch:** `main` · **HEAD:** `76f79a5` · **CC live:** `https://cc.proexteriorsus.net`
 
-3. **Skill updates** (this turn — UNCOMMITTED until the wrap-up commit):
-   - `coolify`: fixed creds location (root `.env` **commented** `# COOLIFY_*`, NOT `.env.agent-passwords`) + documented build-time env vars (`PATCH is_buildtime:true`).
-   - **NEW `sentry` skill** (`.claude/skills/sentry/`): org/project/DSN, the two-token gotcha (`sntrys_`=source-maps only vs `SENTRY_PERSONAL_TOKEN`=full scopes for alerts/issues), architecture, alert-rule API, verify recipe.
-   - `product-catalog-manager`: added the raw→curated promotion procedure.
+### ✅ What shipped (live + committed)
 
-## ▶ WHERE WE LEFT OFF (open, this session)
+#### Agent Onboarding Automation — All 4 One-Time Setups Complete
+All future agent deployments run with zero human steps after these setups:
 
-- **Rotate the `sntrys_` Sentry build token** — it was pasted in chat (transcript exposure). After rotating, update `SENTRY_AUTH_TOKEN` in Coolify (build var; see `coolify` skill).
-- **Sentry → Slack app membership**: the alert posted in testing, but ensure the Sentry app stays a member of `#cc-proexteriors` so real alerts post.
-- **Activate nightly-sync Sentry** on the Hetzner agent host: `npm i @sentry/node` (the `--import` in `scripts/abc-nightly-sync.sh` is guarded and dormant until then).
-- **41 "call for pricing" items**: need an ABC quote conversation if they should ever be audited (no API price by design).
-- **Fix loop is human-in-the-loop**: a Sentry alert → Chris picks which to fix → agent opens PR → CodeRabbit reviews → merge → Coolify deploys.
+1. **Kasm API key** — `KASM_API_KEY` + `KASM_API_KEY_SECRET` in `.env`. Path is `/api/admin/` (NOT `/api/v2/`). Key requires DB permission grant (`permission_id=200`, Administrators group) after creation.
+2. **Slack config token** — `SLACK_APP_CONFIG_TOKEN` (xoxe.xoxp-) + `SLACK_APP_CONFIG_REFRESH_TOKEN` (xoxe-1-). Account-level token from `api.slack.com/authentication/config-tokens` (NOT app-level xapp- token).
+3. **gcloud auth** — `gcloud auth login` + `gcloud auth application-default login` (BOTH required). Project `custom-frame-500419-s3`, org `686389385048`. Org policy `iam.disableServiceAccountKeyCreation` is permanently lifted.
+4. **GHL Firebase token** — `GHL_FIREBASE_REFRESH_TOKEN` (546 chars). Via Chrome extension in `GHL - Claude CLI/chrome-extension/`. Firebase API key baked into source, not env — must extract via Path().read_text().
 
-## ▶ Carried forward from the GPA handoff (still open — see archive)
-Image chip visual-verify · Denver/Dallas promotion in `/accounting/price-agreement/review` · price crons (monthly-15th + 30-day on agent host, next cycle `2026-07`) · Accounting Slack for >6% criticals (`slack_queued`) · ABC account-expansion for ~546 unpriceable branches.
+**Verify**: `python3 ~/.hermes/skills/autonomous-ai-agents/open-brain-agent-onboarding/scripts/verify-automation-setups.py` → 4/4 ✅
 
-## Key files / refs
-- `integrations/bridges/abc-supply/fill-open-invoice-api-prices.mjs` · `schemas/cleverwork-roofer/142-promote-open-invoice-catalog-products.sql`
-- `app/command-center/`: `astro.config.mjs`, `sentry.{client,server}.config.ts`, `runtime/sentry-instrument.mjs`, `src/middleware.ts`, `Dockerfile`
-- Skills: `.claude/skills/{sentry,coolify}/SKILL.md` · `skills/cleverwork-roofer/product-catalog-manager/SKILL.md` · `.coderabbit.yaml`
-- Coolify app uuid `og0rmt02rff8qti9nlfk3nr7` · Sentry org `cleverwork` / project `cc-proexteriorsus`.
+#### Agent Profile System (commit `76f79a5`)
+- `agents/profiles/_schema.yaml` — 58 fields, 44 required, 10 validation rules
+- 7 agent profiles: maya-chen, alex-rivers, casey-morgan, jordan-price, sam-torres, rowan-vale, lena-brooks — all 7/7 valid
+- `~/.hermes/skills/autonomous-ai-agents/agent-profile-builder/scripts/validate-all-profiles.py` — 7/7 ✅
+
+#### New Skills Built (all in `~/.hermes/skills/autonomous-ai-agents/`)
+| Skill | Purpose |
+|---|---|
+| `agent-profile-builder` | Create/validate agent profile YAMLs against schema |
+| `deploy-agent` | 14-phase fully automated agent deployment |
+| `credential-handling-patterns` | Token safety, length verification, write_file pitfall, safe merge |
+| `kasm-workspaces` | Kasm API, Caddy config, session debugging, all pitfalls |
+| `slack-agent-bot` | Slack Manifest API, token types, channel setup |
+| `abc-supply-api` | Correct auth URL, endpoint patterns, pagination params |
+| `ghl-workflow-builder` | GHL internal API, dual .env loading, Firebase key extraction |
+
+#### Maya Chen — Phases 1-11 + 13 Complete
+- Kasm desktop live, Hermes v0.16.0 running
+- Google SA verified (Gmail 14 labels, Drive accessible)
+- AgentMail `ob-accounting@agentmail.proexteriorsus.net` verified
+- Slack bot A0BD0PAEU2E posting to 3 channels
+- Service token `ob-accounting` verified, 225 work items accessible
+- ABC Supply API verified (production, pageNumber+itemsPerPage params)
+- `POST /api/agent/intake` live (commit `eb95d67`)
+- E2E validated: alias routing → Gmail → Slack → dashboard work item
+
+### ▶ Open items / next session start
+
+1. **Run verify + validate scripts first** (confirm 4/4 and 7/7 still passing)
+2. **Build `scripts/deploy-agent.py`** — the actual execution script (deploy-agent skill written, script not yet built)
+3. **`deploy-agent alex-rivers`** — first automated deployment
+4. **Maya Phase 12 (cron)** — always-on Gmail polling loop
+5. **Maya Phase 14 (guardrails)** — final verification pass
+6. **`SLACK_ADMIN_BOT_TOKEN`** — one-time admin OAuth grant for zero-click Slack app installs (last remaining human step; without it Phase 7 logs the install URL but still completes)
+
+### Critical invariants (never break)
+- `command_center.approval_decide: false` on ALL agents — schema-enforced
+- `google_workspace.external_send_authorized: false` on ALL agents — schema-enforced
+- GW emails use `@cc.proexteriorsus.net` (NOT `@proexteriorsus.com`) — schema-enforced
+- Rowan Vale: `network_policy: external-only`, NO Supabase token — schema-enforced
+
+### Key files
+- `agents/profiles/` — canonical agent profiles
+- `~/.hermes/skills/autonomous-ai-agents/` — all deployment skills
+- `config/.env.example` — detailed WHERE/pitfall comments for all automation credentials
+- `/root/hermes-dashboard-credentials.txt` on agent host — Kasm admin password
+
+---
+
+## Previous session context (2026-06-20/22) — still open
+
+- **Rotate `sntrys_` Sentry build token** (was pasted in chat)
+- **Activate nightly-sync Sentry** on Hetzner agent host
+- **41 "call for pricing" ABC items** — need ABC quote conversation
+- Carried: image chip visual-verify · Denver/Dallas promotion · price crons · Accounting Slack criticals · ABC account-expansion
+
+**Full prior context:** `context/memory/2026-06-20.md`, `context/memory/2026-06-22.md`, `context/memory/2026-06-25.md`

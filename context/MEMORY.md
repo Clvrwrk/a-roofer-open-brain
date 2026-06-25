@@ -2,8 +2,8 @@
 # Working Memory
 
 ## ▶ Pick up here
-**Handoff: `docs/handoffs/current.md` + daily log.** **Invoice-audit overhaul + P4 DONE (06-22), all on origin/main.** P1–P3: one-UOM-per-row + correct variance on ALL price surfaces (`@lib/uom`, docs46) + API-price UOM-normalize fix on invoice+order audit (no per-cell /SQ suffix; UOM col is the unit). **P4 = Global Price List review hierarchy** (`/accounting/price-list/review`, nav "Global Price List"): PE Office→Global→Vendor→Branch→Current/Archived. Migs 143–144: `v_price_list_global`, `v_price_list_branch_pricing` (current + immediate-prior price), `v_price_list_branch_agreements` (newest→oldest), `v_pl_branch_office`. Server-renders office+global; lazy per-branch detail; reuses progress primitive. Branches have 1 agreement gen → prior-price/archived EMPTY until next ABC generation (views future-proof). Locked: 2hr=office isochrone (schema70); open=`ar_status='open'`.
-**OPEN:** [GPA] Denver/Dallas promote · price crons (2026-07); **ABC FULL prod-sync owed — run on agent host (sandbox caps block it; DB shows no full pull since 06-05)**. (Done 06-23: Sentry build token rotated + nightly sync, agent host.)
+**Handoff: `docs/handoffs/current.md` + daily log.** Invoice-audit P1–P4 is complete on `origin/main` (see docs/46 + migrations 143–144). Price list hierarchy and UOM normalization are locked.
+**OPEN:** Denver/Dallas GPA promotion, July price crons, and ABC full prod-sync on persistent host. **Stormwatch forensic baseline now published:** `docs/54-stormwatch-forensic-review-2026-06-25.md` + `scripts/stormwatch/stormwatch_preflight.py` + `.codex/skills/stormwatch-live-run-ops/SKILL.md`. **Stormwatch deploy status is PAUSED** pending Reonomy relationship finalization + property-layer validation (see `docs/handoffs/current.md` pause notice).
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
