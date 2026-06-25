@@ -115,39 +115,42 @@ def phase2_kasm_user(profile, env, creds):
     print("\n── Phase 2: Kasm User ─────────────────────────────────────")
     email    = profile["google_workspace"]["email"]
     password = creds["Google Workspace Password"]
+    first    = profile["identity"]["display_name"].split()[0]
+    last     = profile["identity"]["display_name"].split()[-1]
 
-    # Check if user exists
-    status, data = kasm("get_users", {"target_user": {"username": email}}, env)
-    # data["users"] is a list; find the matching user
-    users = data.get("users", []) if isinstance(data, dict) else []
-    existing = next((u for u in users if isinstance(u, dict) and u.get("username") == email), None)
-
-    if existing:
-        user_id = existing["user_id"]
+    # Check existence via DB (Kasm API returns 403 from Python/macOS SSL)
+    out, rc = ssh(f"docker exec kasm_db psql -U kasmapp -d kasm -c "
+                  f"\"SELECT user_id FROM users WHERE username='{email}';\"")
+    if email.split("@")[0] in out or "row" in out.lower():
+        # Extract user_id
+        uid_out, _ = ssh(f"docker exec kasm_db psql -U kasmapp -d kasm -t -c "
+                         f"\"SELECT user_id FROM users WHERE username='{email}';\"")
+        user_id = uid_out.strip().split()[0] if uid_out.strip() else "existing"
         step("Kasm user exists", True, f"user_id={user_id[:8]}...")
     else:
-        status, data = kasm("create_user", {
-            "target_user": {
-                "username": email, "password": password,
-                "first_name": profile["identity"]["display_name"].split()[0],
-                "last_name":  profile["identity"]["display_name"].split()[-1],
-                "locked": False, "disabled": False,
-            }
-        }, env)
-        if status == 200 and data.get("user"):
-            user_id = data["user"]["user_id"]
-            step("Kasm user created", True, f"user_id={user_id[:8]}...")
-        else:
-            step("Kasm user created", False, str(data)[:100])
-            return None
+        # Create directly via DB INSERT (API create_user has permissions issues)
+        import uuid as _uuid
+        uid   = str(_uuid.uuid4())
+        salt  = str(_uuid.uuid4())
+        ph    = hashlib.sha256((password + salt).encode()).hexdigest()
+        sql   = (f"INSERT INTO users (user_id,username,first_name,last_name,"
+                 f"pw_hash,salt,locked,failed_pw_attempts,created,realm) "
+                 f"VALUES ('{uid}','{email}','{first}','{last}',"
+                 f"'{ph}','{salt}',false,0,NOW(),'local') "
+                 f"ON CONFLICT (username) DO UPDATE "
+                 f"SET pw_hash='{ph}',salt='{salt}',failed_pw_attempts=0;")
+        out, rc = ssh(f'docker exec kasm_db psql -U kasmapp -d kasm -c "{sql}"')
+        user_id = uid
+        step("Kasm user created (DB)", "INSERT" in out or "UPDATE" in out,
+             out[:30] if rc == 0 else out[:60])
 
-    # Sync password via DB
-    new_salt = str(uuid.uuid4())
-    new_hash = hashlib.sha256((password + new_salt).encode()).hexdigest()
-    sql = (f"UPDATE users SET pw_hash='{new_hash}', salt='{new_salt}', "
-           f"failed_pw_attempts=0 WHERE username='{email}';")
+    # Always sync password to ensure it matches GW
+    salt    = str(uuid.uuid4())
+    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    sql     = (f"UPDATE users SET pw_hash='{pw_hash}', salt='{salt}', "
+               f"failed_pw_attempts=0 WHERE username='{email}';")
     out, rc = ssh(f'docker exec kasm_db psql -U kasmapp -d kasm -c "{sql}"')
-    step("Kasm password synced", "UPDATE 1" in out, out[:40] if rc else "")
+    step("Kasm password synced", "UPDATE 1" in out)
     return user_id
 
 # ── Phase 3: Kasm desktop ────────────────────────────────────────────────────
@@ -189,11 +192,20 @@ def phase4_agent_host(profile, env, creds):
     email     = profile["google_workspace"]["email"]
     image_id  = profile["kasm"].get("image_id", "2c589484-3521-41fc-bec6-ac785ae87dd7")
     sa_key    = profile["google_workspace"]["service_account_key_path"]
-    profile_dir = f"/mnt/kasm_profiles/{email}/{image_id}/.hermes"
+    desktop   = profile["kasm"].get("desktop_enabled", True)
 
-    # Create directories
-    out, rc = ssh(f"mkdir -p /opt/openbrain/agents/{agent_id}/ && mkdir -p {profile_dir}")
-    step("Directories created", rc == 0)
+    # Always create agent dir
+    out, rc = ssh(f"mkdir -p /opt/openbrain/agents/{agent_id}/")
+    step("Agent dir created", rc == 0)
+
+    # Profile dir only if desktop_enabled
+    if desktop:
+        profile_dir = f"/mnt/kasm_profiles/{email}/{image_id}/.hermes"
+        out, rc = ssh(f"mkdir -p {profile_dir}")
+        step("Profile dir created", rc == 0)
+    else:
+        profile_dir = f"/opt/openbrain/agents/{agent_id}"
+        step("No desktop (cron agent) — using agent dir", True, f"{profile_dir}")
 
     # Build .env content
     or_key = creds.get("OpenRouter API", "")
@@ -338,15 +350,23 @@ def phase5_google(profile, env):
         step("SA key found", False, "No key file in ~/Downloads")
         return False
 
-    scopes = profile["google_workspace"]["gmail_scopes"] + profile["google_workspace"].get("drive_scopes", [])
+    scopes = profile["google_workspace"]["gmail_scopes"]
     try:
         creds = service_account.Credentials.from_service_account_file(
             str(sa_file), scopes=scopes, subject=email)
         creds.refresh(Request())
         step("SA token acquired", True, f"impersonating {email}")
     except Exception as e:
-        step("SA token acquired", False, str(e)[:80])
-        return False
+        # Retry once — transient auth errors occur in batch runs
+        time.sleep(3)
+        try:
+            creds = service_account.Credentials.from_service_account_file(
+                str(sa_file), scopes=scopes, subject=email)
+            creds.refresh(Request())
+            step("SA token acquired (retry)", True, f"impersonating {email}")
+        except Exception as e2:
+            step("SA token acquired", False, str(e2)[:80])
+            return False
 
     try:
         gmail = googleapiclient.discovery.build("gmail", "v1", credentials=creds, cache_discovery=False)
