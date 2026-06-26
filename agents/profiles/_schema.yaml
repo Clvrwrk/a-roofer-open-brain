@@ -23,27 +23,29 @@ platform_defaults:
   google_sa_key_path: "/opt/openbrain/agents/google-service-account.json"
   kasm_image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
   kasm_profile_root: "/mnt/kasm_profiles"
-  hermes_model: "anthropic/claude-sonnet-4-20250514"
+  hermes_model: "anthropic/claude-sonnet-4-5"
   hermes_provider: "openrouter"
   slack_team_id: "T0B8QEGPVQW"
   coolify_cc_uuid: "og0rmt02rff8qti9nlfk3nr7"
   coolify_api_base: "http://5.78.124.10:8000"
   agentmail_domain: "agentmail.proexteriorsus.net"
-  # Shared Slack channels every agent joins
+  # Conductor routing channels — CRITICAL architecture
+  # All cron deliver targets → ob-agents-internal (agents never post direct to client channels)
+  ob_agents_internal_channel_id: "C0BD8U44HL3"   # Roofing agents → Ops Conductor
+  ob_dev_internal_channel_id:    "C0BDJTVMRE0"   # Dev agents → Dev Conductor
+  ob_ops_conductor_channel_id:   "C0BDF8QRF8A"   # Ops Conductor → Chris
+  ob_dev_conductor_channel_id:   "C0BDD623DQW"   # Dev Conductor → Chris
+  # Shared Slack channels
   platform_slack_channels:
     - name: "ob-agent-audit-log"
       id: "__resolve_at_deploy__"
       purpose: "All agent actions logged here"
-    - name: "ob-conductor-digest"
-      id: "__resolve_at_deploy__"
-      purpose: "Daily/weekly digests"
     - name: "agent-deploy-validation"
       id: "C0BD7L43PC2"
-      purpose: "Deployment validation reports for all agents"
+      purpose: "Deployment validation reports"
     - name: "agent-profile-builder"
       id: "C0BD7L0M02W"
-      purpose: "Agent introductions and profile announcements"
-
+      purpose: "Agent introductions"
 fields:
   # ── IDENTITY ─────────────────────────────────────────────────────────────
   identity.id:
