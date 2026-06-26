@@ -37,7 +37,7 @@
 
 ## Git State
 - **Branch:** `main`
-- **Last commit:** `6600516` — "feat(invoice-audit): Invoices To Be Paid CSV export + processed ledger"
+- **Last commit:** `7f193cb` — merge "invoice To-Be-Paid two-phase payment loop" (feature `a0a0d99`)
 - **Uncommitted changes:** none — tree clean.
 - **Worktrees:** one (`/Users/chussey/Documents/a-roofers-open-brain` → `main`).
 
@@ -65,22 +65,24 @@ A parallel Codex session's storm-alert lead pipeline (ZoomInfo → Supabase → 
 - **Skills:** `.codex/skills/stormwatch-live-run-ops`, `.codex/skills/gohighlevel-rest-ops`.
 - Golden path (NON-PUSH first): preflight new `--event-id` → run pipeline (validate) → confirm accepted leads > 0 → only then `--push-ghl`. Known failure modes documented in `docs/54`.
 
-### Track C — Invoice "To Be Paid" CSV + processed ledger  ✅ committed `6600516`
-Continuation of today's invoice-audit work (`baf6f84`/`e12ce51`/`f7ca415`).
-- `isInvoiceToBePaid` = audited & non-credit & unpaid & no pending lines; `toBePaid`/`processedAt` rollups at branch/office/totals.
-- `app/command-center/src/pages/api/invoice-audit/to-be-paid.csv.ts` — access-gated service-role CSV export route.
-- `schemas/cleverwork-roofer/153-invoice-payment-processed-ledger.sql` — additive `invoice_payment_processed` ledger (server-only) so a paid batch is recorded and excluded from later exports.
+### Track C — Invoice "To Be Paid" → two-phase payment loop  ✅ built, verified, on `main` (`a0a0d99`/merge `7f193cb`), migration applied to prod
+Reworked from the original single GET export into a safe two-phase lifecycle (alignment with Chris 2026-06-26).
+- **Lifecycle** (`invoice_payment_processed.status`): `exported` (Awaiting Payment) → `paid` (manual confirm or ABC AR reconcile) → `returned` (re-eligible) / `void`. Export never marks paid.
+- **Routes:** POST `/api/invoice-audit/process-batch` (export, confirm-gated), GET `/api/invoice-audit/batch/[id].csv` (idempotent re-download), POST `/confirm-paid`, POST `/return-batch`, GET/POST `/reconcile`, GET `/batches`. Old `to-be-paid.csv.ts` (GET-with-side-effects) deleted.
+- **CSV:** QuickBooks columns LOCKED against accounting's live import file (`INVOICE_NUMBER,…,Approved to Pay`) — do not reorder/rename without re-confirming. Helpers in `lib/invoice-payment.ts`.
+- **Reconcile:** `v_invoice_payment_reconciliation` view + `/reconcile` auto-confirms exported invoices ABC AR now reports paid; flags `exported_uncleared` / `paid_but_ar_open` drift in the Payments panel.
+- **UI:** Process = POST + confirm dialog + download; Awaiting Payment KPI; Payments management modal. Verified: tsc/build clean, 6 unit tests, prod DB lifecycle test, browser smoke.
 
 ---
 
 ## Next Task — Start Here
 
-**Task:** Verify Track C (invoice) builds/tests, apply pending Supabase migrations, then resolve the 4 open branches.
+**Task:** Apply pending StormWatch migrations, then resolve the 4 open branches. (Track C is DONE — built, verified, deployed.)
 
 **What to check / do:**
-1. **Verify Track C** — from `app/command-center/`: run the unit tests (`invoice-audit.unit.test.ts`) and a typecheck/build. If green, exercise the CSV route on the dev server reading prod DB.
-2. **Apply additive migrations to prod Supabase** if not already applied: schemas `147–153` (StormWatch field contract/ledgers + invoice `153`). All are `IF NOT EXISTS`/idempotent — safe to re-run. Confirm via `list_migrations`/`list_tables`.
-3. **Close the 4 open branches** (see "Open Branches" below) — decide merge-or-delete for each.
+1. **Track C — DONE.** Two-phase payment loop on `main`, migration 153 applied to prod, tsc/build/tests green, browser-smoked. Next-session follow-ups only: (a) optionally wire `/api/invoice-audit/reconcile` POST to a nightly cron (currently on-demand via the Payments panel); (b) first real Process click will export the live to-be-paid set — that's an operational action for accounting, not a test.
+2. **Apply additive StormWatch migrations to prod Supabase** if not already applied: schemas `147–152`. All are `IF NOT EXISTS`/idempotent. Confirm via `list_migrations`/`list_tables`. (153 already applied this session.)
+3. **Close the 4 open branches** (see "Open Branches" below) — decide merge-or-delete for each. `invoice-to-be-paid` is already merged; delete it.
 
 **If the invoice unit tests fail:** the `toBePaid`/`processedAt` fields were added to the rollup interfaces — check `invoice-audit-tree.ts` and the `.astro` consumer for a missing field before touching logic.
 
