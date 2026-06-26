@@ -72,6 +72,12 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memo Requested</span><span class="iv-kpi-val">{money(data.totals.creditMemoRequested)}</span><span class="iv-kpi-sub">audited → credit-memo disposition</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">open · unapplied</span></div>
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">Invoices To Be Paid</span>
+        <span class="iv-kpi-val">{data.totals.toBePaid.toLocaleString()}</span>
+        <span class="iv-kpi-sub">fully reviewed · unprocessed</span>
+        <a class:list={["iv-process-btn", data.totals.toBePaid === 0 && "is-disabled"]} href="/api/invoice-audit/to-be-paid.csv" aria-disabled={data.totals.toBePaid === 0 ? "true" : "false"}>Process</a>
+      </div>
     </div>
 
     {data.totals.invoices === 0 && <p class="iv-empty">No invoices found in the live pipeline.</p>}
@@ -103,6 +109,8 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv .pill-red{background:var(--red-bg);color:var(--red)}
   .iv .pill-grey{background:var(--grey-bg);color:var(--grey)}
   .iv .pill-brand{background:var(--brand-bg);color:var(--brand)}
+  .iv .pill-pay{display:inline-flex;align-items:center;gap:5px;background:var(--green-bg);color:var(--green)}
+  .iv .pill-pay input{width:13px;height:13px;margin:0;accent-color:var(--green)}
 
   .iv-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .iv-input,.iv-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
@@ -122,6 +130,8 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-kpi-sub{font-size:11px;color:var(--muted)}
+  .iv-process-btn{align-self:flex-start;margin-top:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:750;text-decoration:none}
+  .iv-process-btn.is-disabled{pointer-events:none;opacity:.45;filter:grayscale(.2)}
 
   .iv-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
   .iv-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}

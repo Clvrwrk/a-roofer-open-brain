@@ -121,8 +121,11 @@ describe("loadInvoiceAuditSummary", () => {
 
     expect(invoice?.auditedLines).toBe(10);
     expect(invoice?.pendingLines).toBe(0);
+    expect(invoice?.toBePaid).toBe(true);
     expect(data.offices[0]?.pending).toBe(0);
+    expect(data.offices[0]?.toBePaid).toBe(1);
     expect(data.totals.audited).toBe(10);
     expect(data.totals.pending).toBe(0);
+    expect(data.totals.toBePaid).toBe(1);
   });
 });
