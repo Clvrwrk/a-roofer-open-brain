@@ -295,6 +295,14 @@ if (root && dataEl && mount) {
     det.dataset.auditable = String(inv.auditedLines + inv.pendingLines);
   }
 
+  let filtersReady = false;
+  function syncInvoiceProgressToTree(inv: Invoice) {
+    const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(inv.invoiceNumber)}"]`) as HTMLElement | null;
+    const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
+    if (det) refreshInvoiceTags(det, inv);
+    if (filtersReady) applyFilter();
+  }
+
   function bindInvoice(det: HTMLDetailsElement, inv: Invoice) {
     const disp = det.querySelector(".iv-disp") as HTMLElement;
     det.querySelectorAll<HTMLButtonElement>("[data-mark]").forEach((b) =>
@@ -622,6 +630,7 @@ if (root && dataEl && mount) {
             throw new Error("invoice detail returned no line rows");
           }
           Object.assign(inv, payload.invoice, { linesLoaded: true });
+          syncInvoiceProgressToTree(inv);
           syncPayloadSnapshot();
           return true;
         })
@@ -657,6 +666,7 @@ if (root && dataEl && mount) {
       body.innerHTML = '<p class="iv-disp-lead">Refreshing invoice line detail...</p>';
     }
     if (!(await ensureInvoiceLines(inv, body))) return false;
+    syncInvoiceProgressToTree(inv);
     body.innerHTML = invoiceBody(inv);
     body.dataset.rendered = "1";
     bindInvoice(det, inv);
@@ -763,6 +773,7 @@ if (root && dataEl && mount) {
   }
   [search, officeSel, tolSel, statusSel, pendingBox].forEach((el) => el?.addEventListener("input", applyFilter));
   applyFilter();
+  filtersReady = true;
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */
   const params = new URLSearchParams(window.location.search);

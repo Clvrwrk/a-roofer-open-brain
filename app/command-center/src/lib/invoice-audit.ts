@@ -424,7 +424,27 @@ function isUsefulInvoiceAuditSummary(data: InvoiceAuditData) {
   return data.status === "live" && data.totals.invoices > 0 && data.offices.length > 0;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[]): InvoiceAuditData {
+function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
+  const passedLineIds = new Set<string>();
+  for (const a of auditRows) if (a.audit_status === "passed" && a.invoice_line_id) passedLineIds.add(String(a.invoice_line_id));
+
+  const progressByInvoice = new Map<string, { audited: number; pending: number }>();
+  for (const line of lineRows) {
+    const invoiceNumber = String(line.invoice_number ?? "");
+    const lineId = String(line.line_id ?? "");
+    if (!invoiceNumber || !lineId) continue;
+    const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0 };
+    if (passedLineIds.has(lineId)) {
+      progress.audited++;
+    } else if (line.is_auditable !== false) {
+      progress.pending++;
+    }
+    progressByInvoice.set(invoiceNumber, progress);
+  }
+  return progressByInvoice;
+}
+
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = []): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
@@ -432,10 +452,14 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
   for (const a of arRows) arByInvoice.set(a.invoice_number, a);
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
+  const progressByInvoice = buildLineProgressByInvoice(lineRows, auditRows);
 
   const invoices: Array<Invoice & { hasPriceList: boolean; searchText: string }> = rows.map((i) => {
-    const auditedLines = num(i.audited_lines ?? i.passed_lines ?? 0);
-    const pendingLines = Math.max(0, num(i.pending_lines ?? i.flagged_lines) + num(i.no_price_lines) - auditedLines);
+    const progress = progressByInvoice.get(i.invoice_number);
+    const fallbackAuditedLines = num(i.audited_lines ?? i.passed_lines ?? 0);
+    const fallbackPendingLines = Math.max(0, num(i.pending_lines ?? i.flagged_lines) + num(i.no_price_lines) - fallbackAuditedLines);
+    const auditedLines = progress?.audited ?? fallbackAuditedLines;
+    const pendingLines = progress?.pending ?? fallbackPendingLines;
     const paid = arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
       : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
@@ -580,15 +604,19 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
     // lookup is what powers the default "Open invoices" filter.
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    // Progress bars need real audit rollups, but not full line detail. Fetch only the
+    // invoice/line identity and auditable flag, then join to current audit status in memory.
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status")),
   ]);
   if (invRows.length === 0) return empty;
-  return summarizeInvoiceRows(invRows, [], [], catRows, arRows);
+  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows);
 }
 
 export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
