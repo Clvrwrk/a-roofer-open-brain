@@ -66,3 +66,10 @@ vendor-territory-map-*.png
 # Claude local (machine-specific permissions)
 .claude/settings.local.json
 integrations/bridges/abc-supply/.price-seed-runs/
+
+# Python build output
+__pycache__/
+*.pyc
+
+# StormWatch live-run scratch (raw replay SQL/JSON — regenerated per run, never committed)
+tmp_stormwatch_*
