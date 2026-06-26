@@ -75,8 +75,14 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Invoices To Be Paid</span>
         <span class="iv-kpi-val">{data.totals.toBePaid.toLocaleString()}</span>
-        <span class="iv-kpi-sub">fully reviewed · unprocessed</span>
-        <a class:list={["iv-process-btn", data.totals.toBePaid === 0 && "is-disabled"]} href="/api/invoice-audit/to-be-paid.csv" aria-disabled={data.totals.toBePaid === 0 ? "true" : "false"}>Process</a>
+        <span class="iv-kpi-sub">fully reviewed · ready to export</span>
+        <button type="button" class:list={["iv-process-btn", data.totals.toBePaid === 0 && "is-disabled"]} id="iv-process" data-count={data.totals.toBePaid} disabled={data.totals.toBePaid === 0}>Process</button>
+      </div>
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">Awaiting Payment</span>
+        <span class="iv-kpi-val">{data.totals.awaitingPayment.toLocaleString()}</span>
+        <span class="iv-kpi-sub">exported · not yet paid</span>
+        <button type="button" class="iv-process-btn iv-secondary" id="iv-payments">Manage</button>
       </div>
     </div>
 
@@ -130,8 +136,19 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-kpi-sub{font-size:11px;color:var(--muted)}
-  .iv-process-btn{align-self:flex-start;margin-top:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:750;text-decoration:none}
-  .iv-process-btn.is-disabled{pointer-events:none;opacity:.45;filter:grayscale(.2)}
+  .iv-process-btn{align-self:flex-start;margin-top:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:750;text-decoration:none;cursor:pointer;font-family:inherit}
+  .iv-process-btn.is-disabled,.iv-process-btn:disabled{pointer-events:none;opacity:.45;filter:grayscale(.2)}
+  .iv-process-btn.iv-secondary{background:var(--panel);color:var(--brand)}
+  .iv-pay-batch{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)}
+  .iv-pay-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .iv-pay-row strong{font-size:13px}
+  .iv-pay-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .iv-pay-actions button,.iv-pay-actions a{appearance:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:11.5px;font-weight:700;cursor:pointer;background:var(--panel);color:var(--ink);text-decoration:none;font-family:inherit}
+  .iv-pay-actions .is-paid{color:var(--green);border-color:color-mix(in srgb, var(--green) 35%, var(--line))}
+  .iv-pay-actions .is-return{color:var(--red);border-color:color-mix(in srgb, var(--red) 35%, var(--line))}
+  .iv-pay-sec-title{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:14px 0 6px}
+  .iv-pay-exc{border:1px solid color-mix(in srgb, var(--red) 30%, var(--line));border-radius:9px;padding:8px 11px;margin-bottom:6px;font-size:12px}
+  .iv-pay-empty{color:var(--muted);font-size:12.5px;padding:8px 2px}
 
   .iv-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
   .iv-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}

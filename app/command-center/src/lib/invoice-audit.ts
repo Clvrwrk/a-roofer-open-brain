@@ -59,6 +59,8 @@ export interface Invoice {
   paidAt: string;
   processedAt: string;
   toBePaid: boolean;
+  awaitingPayment: boolean;
+  paymentStatus: "" | "exported" | "paid" | "returned" | "void";
   hasPdf: boolean;
   jobNumber: string;
   clientName: string;
@@ -78,6 +80,7 @@ export interface InvBranch {
   flagged: number;
   pending: number;
   toBePaid: number;
+  awaitingPayment: number;
   invoices: Invoice[];
 }
 
@@ -92,6 +95,7 @@ export interface InvOffice {
   flagged: number;
   pending: number;
   toBePaid: number;
+  awaitingPayment: number;
   branches: InvBranch[];
 }
 
@@ -100,7 +104,7 @@ export interface InvoiceAuditData {
   generatedAt: string;
   offices: InvOffice[];
   categories: { key: string; label: string; sortOrder: number }[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; toBePaid: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; toBePaid: number; awaitingPayment: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -108,8 +112,23 @@ const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").repl
 export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt">) =>
   !invoice.paid && !invoice.isCreditMemo && !invoice.processedAt && invoice.pendingLines === 0 && invoice.auditedLines > 0;
 
+// Two-phase payment state derived from the invoice_payment_processed ledger.
+// Only 'exported'/'paid' rows block the To-Be-Paid queue (set processedAt);
+// 'returned'/'void' make the invoice eligible again. 'exported' (and only
+// 'exported') is Awaiting Payment — sent for payment but not yet confirmed paid.
+type PaymentLedgerRow = { processed_at?: string | null; status?: string | null } | null | undefined;
+export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymentStatus" | "processedAt" | "awaitingPayment"> {
+  const status = ((led?.status ?? "") as Invoice["paymentStatus"]);
+  const blocks = status === "exported" || status === "paid";
+  return {
+    paymentStatus: status,
+    processedAt: blocks ? (led?.processed_at ?? "") : "",
+    awaitingPayment: status === "exported",
+  };
+}
+
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, toBePaid: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, toBePaid: 0, awaitingPayment: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -154,7 +173,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
     // Current ABC API price per item per branch (monthly seed, migration 134).
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
-    fetchOptional(() => client.from("invoice_payment_processed").select("invoice_number,processed_at")),
+    fetchOptional(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
@@ -255,7 +274,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       : docByInvoice.get(i.invoice_number)?.paid_at
         ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
         : "",
-    processedAt: processedByInvoice.get(i.invoice_number)?.processed_at ?? "",
+    ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
     jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
@@ -277,7 +296,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     const key = `${inv.office}|${inv.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
-      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, invoices: [] };
+      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, awaitingPayment: 0, invoices: [] };
       branchMap.set(key, br);
     }
     br.invoices.push(inv);
@@ -289,6 +308,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     br.flagged += inv.flaggedLines;
     br.pending += inv.pendingLines;
     if (inv.toBePaid) br.toBePaid++;
+    if (inv.awaitingPayment) br.awaitingPayment++;
   }
 
   const officeMap = new Map<string, InvOffice>();
@@ -298,7 +318,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     br.invoices.sort((a, b) => (a.invoiceDate || "").localeCompare(b.invoiceDate || "") || b.atRisk - a.atRisk);
     let off = officeMap.get(br.office);
     if (!off) {
-      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, branches: [] };
+      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, awaitingPayment: 0, branches: [] };
       officeMap.set(br.office, off);
     }
     off.branches.push(br);
@@ -311,6 +331,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     off.flagged += br.flagged;
     off.pending += br.pending;
     off.toBePaid += br.toBePaid;
+    off.awaitingPayment += br.awaitingPayment;
   }
 
   const offices = Array.from(officeMap.values())
@@ -339,6 +360,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
         openInvoices: openInv.length,
         paidInvoices: invoices.filter((i) => i.paid).length,
         toBePaid: openInv.filter((i) => i.toBePaid).length,
+        awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
       };
     })(),
   };
@@ -446,6 +468,7 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
       openInvoices: 0,
       paidInvoices: 0,
       toBePaid: 0,
+      awaitingPayment: 0,
     },
   };
 }
@@ -495,7 +518,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const paid = arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
       : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
-    const processedAt = processedByInvoice.get(i.invoice_number)?.processed_at ?? "";
+    const paymentState = derivePaymentState(processedByInvoice.get(i.invoice_number));
     const invoice: Invoice & { hasPriceList: boolean; searchText: string } = {
       invoiceNumber: i.invoice_number,
       invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
@@ -521,7 +544,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
         : docByInvoice.get(i.invoice_number)?.paid_at
           ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
           : "",
-      processedAt,
+      ...paymentState,
       toBePaid: false,
       hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
       jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
@@ -543,7 +566,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const key = `${inv.office}|${inv.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
-      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, invoices: [] };
+      br = { branchCode: inv.branchCode, branchName: inv.branchName, office: inv.office, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, awaitingPayment: 0, invoices: [] };
       branchMap.set(key, br);
     }
     br.invoices.push(inv);
@@ -555,6 +578,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     br.flagged += inv.flaggedLines;
     br.pending += inv.pendingLines;
     if (inv.toBePaid) br.toBePaid++;
+    if (inv.awaitingPayment) br.awaitingPayment++;
   }
 
   const officeMap = new Map<string, InvOffice>();
@@ -562,7 +586,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     br.invoices.sort((a, b) => (a.invoiceDate || "").localeCompare(b.invoiceDate || "") || b.atRisk - a.atRisk);
     let off = officeMap.get(br.office);
     if (!off) {
-      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, branches: [] };
+      off = { office: br.office, branchCount: 0, invoiceCount: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, pending: 0, toBePaid: 0, awaitingPayment: 0, branches: [] };
       officeMap.set(br.office, off);
     }
     off.branches.push(br);
@@ -575,6 +599,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     off.flagged += br.flagged;
     off.pending += br.pending;
     off.toBePaid += br.toBePaid;
+    off.awaitingPayment += br.awaitingPayment;
   }
 
   const offices = Array.from(officeMap.values())
@@ -599,6 +624,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       openInvoices: openInv.length,
       paidInvoices: invoices.filter((i) => i.paid).length,
       toBePaid: openInv.filter((i) => i.toBePaid).length,
+      awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
     },
   };
 }
@@ -665,7 +691,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
     // invoice/line identity and auditable flag, then join to current audit status in memory.
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status")),
-    fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at")),
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
   ]);
   if (invRows.length === 0) return empty;
   return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows);
@@ -722,7 +748,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     fetchAllForInvoiceAudit(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path").eq("invoice_number", wanted)),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true).eq("invoice_number", wanted)),
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
-    fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at").eq("invoice_number", wanted)),
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
   ]);
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
@@ -785,7 +811,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     pendingLines: lines.filter((line) => line.auditable && !line.audited).length,
     paid,
     paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",
-    processedAt: processed?.processed_at ?? "",
+    ...derivePaymentState(processed),
     toBePaid: false,
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
