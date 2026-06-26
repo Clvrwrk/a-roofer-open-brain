@@ -4,7 +4,7 @@
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -505,6 +505,7 @@ if (root && dataEl && mount) {
       inv.isCreditMemo ? '<span class="pill pill-grey">Credit Memo</span>' : "",
       inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
       inv.toBePaid ? '<span class="pill pill-pay"><input type="checkbox" checked disabled aria-label="To Be Paid" /> To Be Paid</span>' : "",
+      inv.awaitingPayment ? '<span class="pill pill-brand" title="Exported for payment; not yet confirmed paid">Awaiting Payment</span>' : "",
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
     ].filter(Boolean).join("");
@@ -854,4 +855,98 @@ if (root && dataEl && mount) {
   let timer: number | undefined;
   const toastEl = document.getElementById("iv-toast")!;
   function toast(msg: string) { toastEl.textContent = msg; toastEl.classList.add("show"); window.clearTimeout(timer); timer = window.setTimeout(() => toastEl.classList.remove("show"), 2200); }
+
+  /* ---- payments: export → awaiting → confirm / reconcile ---- */
+  const fmtMoney = (n: number) => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  async function postJson(url: string, body?: unknown): Promise<{ ok: boolean; data: any }> {
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: body ? JSON.stringify(body) : "{}" });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, data };
+    } catch {
+      return { ok: false, data: { error_description: "network error" } };
+    }
+  }
+  function triggerDownload(url: string) {
+    const a = document.createElement("a");
+    a.href = url; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  const processBtn = document.getElementById("iv-process") as HTMLButtonElement | null;
+  processBtn?.addEventListener("click", async () => {
+    const count = parseInt(processBtn.dataset.count || "0", 10);
+    if (!count) return;
+    if (!window.confirm(`Export ${count} fully-reviewed invoice(s) for payment and download the QuickBooks CSV?\n\nThey move to Awaiting Payment — this does NOT mark them paid.`)) return;
+    processBtn.disabled = true;
+    const { ok, data } = await postJson("/api/invoice-audit/process-batch");
+    if (!ok) { toast("Export failed: " + (data?.error_description || data?.error || "error")); processBtn.disabled = false; return; }
+    triggerDownload(data.downloadUrl);
+    toast(`Exported ${data.count} invoice(s) — downloading ${data.fileName}`);
+    window.setTimeout(() => window.location.reload(), 1600);
+  });
+
+  const payBtn = document.getElementById("iv-payments");
+  let payDirty = false;
+  function closePay(overlay: HTMLElement) { overlay.remove(); if (payDirty) window.location.reload(); }
+  async function renderPay(body: HTMLElement) {
+    body.innerHTML = '<p class="iv-pay-empty">Loading…</p>';
+    const [batchesRes, recRes] = await Promise.all([
+      fetch("/api/invoice-audit/batches", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      fetch("/api/invoice-audit/reconcile", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+    ]);
+    const batches: any[] = batchesRes?.batches ?? [];
+    const exceptions: any[] = recRes?.exceptions ?? [];
+    const parts: string[] = [];
+    parts.push(`<div class="iv-pay-row"><button class="iv-process-btn iv-secondary" data-pay="reconcile">Reconcile with ABC AR</button><span class="iv-msg-muted">Auto-confirms exported invoices ABC now reports paid.</span></div>`);
+    parts.push(`<div class="iv-pay-sec-title">Exceptions${exceptions.length ? ` (${exceptions.length})` : ""}</div>`);
+    if (!exceptions.length) parts.push('<p class="iv-pay-empty">No reconciliation exceptions.</p>');
+    for (const e of exceptions) {
+      const lab = e.driftFlag === "exported_uncleared" ? "Exported &gt;14d, ABC still open" : "Marked paid here, ABC shows open";
+      parts.push(`<div class="iv-pay-exc"><strong>${esc(e.invoiceNumber)}</strong> — ${lab} · ${fmtMoney(e.totalDue)} <span class="iv-msg-muted">(${esc(e.ledgerStatus)} / ABC ${esc(e.abcArStatus || "—")})</span></div>`);
+    }
+    parts.push(`<div class="iv-pay-sec-title">Export batches</div>`);
+    if (!batches.length) parts.push('<p class="iv-pay-empty">No export batches yet.</p>');
+    for (const b of batches) {
+      const stamp = b.processedAt ? new Date(b.processedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+      const tags = [b.counts.exported ? `<span class="pill pill-brand">${b.counts.exported} awaiting</span>` : "", b.counts.paid ? `<span class="pill pill-green">${b.counts.paid} paid</span>` : "", b.counts.returned ? `<span class="pill pill-grey">${b.counts.returned} returned</span>` : ""].filter(Boolean).join(" ");
+      const confirmBtn = b.counts.exported > 0 ? `<button class="is-paid" data-pay="confirm" data-batch="${esc(b.batchId)}">Confirm Paid</button>` : "";
+      const returnBtn = (b.counts.exported > 0 || b.counts.paid > 0) ? `<button class="is-return" data-pay="return" data-batch="${esc(b.batchId)}">Return</button>` : "";
+      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${esc(b.fileName || b.batchId)}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions"><a href="/api/invoice-audit/batch/${esc(b.batchId)}.csv" download>Re-download CSV</a>${confirmBtn}${returnBtn}</div></div>`);
+    }
+    body.innerHTML = parts.join("");
+    body.querySelectorAll<HTMLElement>("[data-pay]").forEach((el) => el.addEventListener("click", async () => {
+      const kind = el.dataset.pay;
+      const batchId = el.dataset.batch;
+      if (kind === "reconcile") {
+        const { ok, data } = await postJson("/api/invoice-audit/reconcile");
+        if (!ok) { toast("Reconcile failed: " + (data?.error_description || "error")); return; }
+        payDirty = true; toast(`Reconciled ${data.reconciled} · ${data.counts?.exportedUncleared || 0} uncleared, ${data.counts?.paidButArOpen || 0} drift`); renderPay(body); return;
+      }
+      if (kind === "confirm") {
+        if (!window.confirm("Confirm this batch actually paid? Invoices will be marked Paid.")) return;
+        const { ok, data } = await postJson("/api/invoice-audit/confirm-paid", { batchId });
+        if (!ok) { toast("Confirm failed: " + (data?.error_description || "error")); return; }
+        payDirty = true; toast(`Confirmed ${data.confirmed} invoice(s) paid`); renderPay(body); return;
+      }
+      if (kind === "return") {
+        const reason = window.prompt("Return this batch to the To-Be-Paid queue. Reason (optional):", "");
+        if (reason === null) return;
+        const { ok, data } = await postJson("/api/invoice-audit/return-batch", { batchId, reason });
+        if (!ok) { toast("Return failed: " + (data?.error_description || "error")); return; }
+        payDirty = true; toast(`Returned ${data.returned} invoice(s)`); renderPay(body); return;
+      }
+    }));
+  }
+  payBtn?.addEventListener("click", () => {
+    payDirty = false;
+    const overlay = document.createElement("div");
+    overlay.className = "iv-modal";
+    overlay.innerHTML = `<div class="iv-modal-card"><div class="iv-modal-head"><strong>Invoice Payments</strong><button class="iv-modal-close" aria-label="Close">×</button></div><div class="iv-pay-body"></div></div>`;
+    document.body.appendChild(overlay);
+    const panelBody = overlay.querySelector(".iv-pay-body") as HTMLElement;
+    overlay.querySelector(".iv-modal-close")?.addEventListener("click", () => closePay(overlay));
+    overlay.addEventListener("click", (ev) => { if (ev.target === overlay) closePay(overlay); });
+    renderPay(panelBody);
+  });
 }

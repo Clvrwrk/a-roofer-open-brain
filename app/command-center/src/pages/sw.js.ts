@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260626c";
+const VERSION = "cc-page-cache-v20260626d";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
