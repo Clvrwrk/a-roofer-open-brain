@@ -80,23 +80,37 @@ function formatMoney(value: number | null) {
   return value == null ? "" : value.toFixed(2);
 }
 
-// QuickBooks file stamp: MM-DD-YY-h(AM|PM), America/Denver — matches the live
-// file name accounting already imports (ABC_Supply_invoices_to_be_paid_*.csv).
+// Sortable, filesystem-safe stamp: YYYY-MM-DD-HHMM, America/Denver.
 export function formatFileStamp(date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     day: "2-digit",
-    hour: "numeric",
-    hour12: true,
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
     month: "2-digit",
     timeZone: "America/Denver",
-    year: "2-digit",
+    year: "numeric",
   }).formatToParts(date);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${get("month")}-${get("day")}-${get("year")}-${get("hour")}${get("dayPeriod").toUpperCase()}`;
+  const hour = get("hour") === "24" ? "00" : get("hour"); // some ICU emit 24 for midnight
+  return `${get("year")}-${get("month")}-${get("day")}-${hour}${get("minute")}`;
 }
 
-export function buildFileName(date: Date) {
-  return `ABC_Supply_invoices_to_be_paid_${formatFileStamp(date)}.csv`;
+// Vendor token for the file name: lowercase, hyphen-separated (e.g. "ABC Supply" -> "abc-supply").
+export function vendorSlug(vendor: string) {
+  return (vendor || "vendor").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "vendor";
+}
+
+// Naming convention (accounting): [vendor]-invoices-to-be-paid-[timestamp].csv.
+// One file per vendor — a batch spanning N vendors produces N files.
+export function buildVendorFileName(vendor: string, date: Date) {
+  return `${vendorSlug(vendor)}-invoices-to-be-paid-${formatFileStamp(date)}.csv`;
+}
+
+// Vendor that owns an invoice. Today the invoice-audit pipeline is ABC Supply
+// only; this is the single seam to generalize when other vendor pipelines land.
+export function invoiceVendor(_invoice: Invoice) {
+  return "ABC Supply";
 }
 
 export function csvRows(invoices: Invoice[], detailByInvoice: Map<string, AbcInvoicePayRow>): ProcessedCsvRow[] {
@@ -143,7 +157,7 @@ export function renderCsv(rows: ProcessedCsvRow[]) {
 // return / reconcile routes update status in place (unique on invoice_number).
 export function buildLedgerRows(
   rows: ProcessedCsvRow[],
-  ctx: { batchId: string; fileName: string; processedBy: string; actorPacket: unknown; nowIso: string },
+  ctx: { batchId: string; fileName: string; vendor: string; processedBy: string; actorPacket: unknown; nowIso: string },
 ) {
   return rows.map((row) => ({
     approved_to_pay: true,
@@ -168,6 +182,6 @@ export function buildLedgerRows(
     status: "exported",
     total_due: row.totalDue,
     updated_at: ctx.nowIso,
-    vendor: "ABC Supply",
+    vendor: ctx.vendor,
   }));
 }

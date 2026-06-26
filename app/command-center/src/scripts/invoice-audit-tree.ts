@@ -881,9 +881,10 @@ if (root && dataEl && mount) {
     processBtn.disabled = true;
     const { ok, data } = await postJson("/api/invoice-audit/process-batch");
     if (!ok) { toast("Export failed: " + (data?.error_description || data?.error || "error")); processBtn.disabled = false; return; }
-    triggerDownload(data.downloadUrl);
-    toast(`Exported ${data.count} invoice(s) — downloading ${data.fileName}`);
-    window.setTimeout(() => window.location.reload(), 1600);
+    const files: any[] = data.files ?? [];
+    files.forEach((f, i) => window.setTimeout(() => triggerDownload(f.downloadUrl), i * 500));
+    toast(`Exported ${data.count} invoice(s) — ${files.length} vendor file(s)`);
+    window.setTimeout(() => window.location.reload(), 1700 + files.length * 500);
   });
 
   const payBtn = document.getElementById("iv-payments");
@@ -912,7 +913,10 @@ if (root && dataEl && mount) {
       const tags = [b.counts.exported ? `<span class="pill pill-brand">${b.counts.exported} awaiting</span>` : "", b.counts.paid ? `<span class="pill pill-green">${b.counts.paid} paid</span>` : "", b.counts.returned ? `<span class="pill pill-grey">${b.counts.returned} returned</span>` : ""].filter(Boolean).join(" ");
       const confirmBtn = b.counts.exported > 0 ? `<button class="is-paid" data-pay="confirm" data-batch="${esc(b.batchId)}">Confirm Paid</button>` : "";
       const returnBtn = (b.counts.exported > 0 || b.counts.paid > 0) ? `<button class="is-return" data-pay="return" data-batch="${esc(b.batchId)}">Return</button>` : "";
-      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${esc(b.fileName || b.batchId)}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions"><a href="/api/invoice-audit/batch/${esc(b.batchId)}.csv" download>Re-download CSV</a>${confirmBtn}${returnBtn}</div></div>`);
+      const files: any[] = b.files ?? [];
+      const title = files.length === 1 ? esc(files[0].fileName || files[0].vendor) : `${files.length} vendor files`;
+      const dl = files.map((f) => `<a href="${esc(f.downloadUrl)}" download>⬇ ${esc(f.fileName || f.vendor)}</a>`).join("");
+      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${confirmBtn}${returnBtn}</div></div>`);
     }
     body.innerHTML = parts.join("");
     body.querySelectorAll<HTMLElement>("[data-pay]").forEach((el) => el.addEventListener("click", async () => {
@@ -942,8 +946,11 @@ if (root && dataEl && mount) {
     payDirty = false;
     const overlay = document.createElement("div");
     overlay.className = "iv-modal";
-    overlay.innerHTML = `<div class="iv-modal-card"><div class="iv-modal-head"><strong>Invoice Payments</strong><button class="iv-modal-close" aria-label="Close">×</button></div><div class="iv-pay-body"></div></div>`;
-    document.body.appendChild(overlay);
+    // Self-styled + attached inside `.iv` so the theme CSS variables resolve and
+    // the modal is readable regardless of stylesheet scoping.
+    overlay.style.cssText = "position:fixed;inset:0;z-index:120;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;background:rgba(11,17,25,.55);overflow:auto";
+    overlay.innerHTML = `<div class="iv-modal-card" style="background:var(--panel,#fff);color:var(--ink,#1c2733);border:1px solid var(--line,#e3e8ef);max-width:780px;width:100%;max-height:85vh;overflow:auto;border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.4)"><div class="iv-modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>Invoice Payments</strong><button class="iv-modal-close" aria-label="Close" style="cursor:pointer;background:transparent;border:1px solid var(--line,#e3e8ef);border-radius:8px;padding:2px 9px;font-size:18px;line-height:1;color:inherit">×</button></div><div class="iv-pay-body"></div></div>`;
+    (root || document.body).appendChild(overlay);
     const panelBody = overlay.querySelector(".iv-pay-body") as HTMLElement;
     overlay.querySelector(".iv-modal-close")?.addEventListener("click", () => closePay(overlay));
     overlay.addEventListener("click", (ev) => { if (ev.target === overlay) closePay(overlay); });

@@ -5,7 +5,7 @@
 
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
-import { buildFileName, type ProcessedCsvRow, renderCsv } from "@lib/invoice-payment";
+import { type ProcessedCsvRow, renderCsv } from "@lib/invoice-payment";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -18,7 +18,7 @@ interface LedgerRow {
   invoice_number: string;
 }
 
-export const GET: APIRoute = async ({ locals, params }) => {
+export const GET: APIRoute = async ({ locals, params, url }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
   if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
@@ -27,15 +27,19 @@ export const GET: APIRoute = async ({ locals, params }) => {
 
   const batchId = (params.batchId ?? "").replace(/\.csv$/i, "");
   if (!UUID_RE.test(batchId)) return new Response("Invalid batch id", { status: 400 });
+  const vendor = url.searchParams.get("vendor");
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return new Response(`Supabase unconfigured: ${config.missing.join(", ")}`, { status: 503 });
 
-  const { data, error } = await client
+  // One file per vendor: when a vendor is specified, return only that vendor's
+  // rows so a multi-vendor batch downloads as separate per-vendor CSV files.
+  let query = client
     .from("invoice_payment_processed")
     .select("csv_row,csv_file_name,invoice_number")
-    .eq("batch_id", batchId)
-    .order("invoice_number", { ascending: true });
+    .eq("batch_id", batchId);
+  if (vendor) query = query.eq("vendor", vendor);
+  const { data, error } = await query.order("invoice_number", { ascending: true });
   if (error) return new Response(`invoice_payment_processed: ${error.message}`, { status: 409 });
 
   const ledgerRows = (data ?? []) as LedgerRow[];
@@ -44,7 +48,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
   const rows = ledgerRows
     .map((row) => row.csv_row)
     .filter((row): row is ProcessedCsvRow => !!row && typeof row === "object");
-  const fileName = ledgerRows.find((row) => row.csv_file_name)?.csv_file_name ?? buildFileName(new Date());
+  const fileName = ledgerRows.find((row) => row.csv_file_name)?.csv_file_name ?? "invoices-to-be-paid.csv";
   const csv = renderCsv(rows);
 
   return new Response(csv, {

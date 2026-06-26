@@ -214,4 +214,12 @@ describe("invoice-payment CSV", () => {
     expect(row.startsWith("2011016277-001,2026-06-22,8317.20,KS-169-1,")).toBe(true);
     expect(row.endsWith(",230.87,Yes")).toBe(true);
   });
+
+  it("builds the [vendor]-invoices-to-be-paid-[timestamp] file name (one per vendor)", async () => {
+    const { buildVendorFileName, vendorSlug } = await import("./invoice-payment");
+    expect(vendorSlug("ABC Supply")).toBe("abc-supply");
+    expect(vendorSlug("SRS Distribution, Inc.")).toBe("srs-distribution-inc");
+    const name = buildVendorFileName("ABC Supply", new Date("2026-06-26T15:23:00-06:00"));
+    expect(name).toBe("abc-supply-invoices-to-be-paid-2026-06-26-1523.csv");
+  });
 });

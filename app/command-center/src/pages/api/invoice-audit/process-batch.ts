@@ -12,8 +12,8 @@ import { randomUUID } from "node:crypto";
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission, serializeActor } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
-import { invalidateInvoiceAuditSummaryCache, isInvoiceToBePaid, loadInvoiceAuditSummary } from "@lib/invoice-audit";
-import { type AbcInvoicePayRow, buildFileName, buildLedgerRows, csvRows } from "@lib/invoice-payment";
+import { invalidateInvoiceAuditSummaryCache, type Invoice, isInvoiceToBePaid, loadInvoiceAuditSummary } from "@lib/invoice-audit";
+import { type AbcInvoicePayRow, buildLedgerRows, buildVendorFileName, csvRows, invoiceVendor } from "@lib/invoice-payment";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -47,16 +47,33 @@ export const POST: APIRoute = async ({ locals }) => {
   const now = new Date();
   const nowIso = now.toISOString();
   const batchId = randomUUID();
-  const fileName = buildFileName(now);
-  const rows = csvRows(invoices, detailByInvoice);
+  const actorPacket = serializeActor(actor);
+
+  // One CSV file per vendor: group the to-be-paid set by vendor, then build a
+  // separate ledger row-set + file name for each. A single-vendor batch (today's
+  // ABC-only pipeline) yields one file; multi-vendor yields one file per vendor.
+  const byVendor = new Map<string, Invoice[]>();
+  for (const inv of invoices) {
+    const vendor = invoiceVendor(inv);
+    const list = byVendor.get(vendor) ?? [];
+    list.push(inv);
+    byVendor.set(vendor, list);
+  }
+
+  const ledgerRows: ReturnType<typeof buildLedgerRows> = [];
+  const files: Array<{ vendor: string; fileName: string; count: number; downloadUrl: string }> = [];
+  for (const [vendor, vendorInvoices] of byVendor) {
+    const fileName = buildVendorFileName(vendor, now);
+    const rows = csvRows(vendorInvoices, detailByInvoice);
+    ledgerRows.push(...buildLedgerRows(rows, { actorPacket, batchId, fileName, nowIso, processedBy: actor.displayName, vendor }));
+    files.push({ count: rows.length, downloadUrl: `/api/invoice-audit/batch/${batchId}.csv?vendor=${encodeURIComponent(vendor)}`, fileName, vendor });
+  }
 
   // status='exported' only — no abc_invoices / invoice_documents paid mutation.
   // onConflict=invoice_number lets a previously 'returned' invoice be re-exported.
   const { error: ledgerError } = await client
     .from("invoice_payment_processed")
-    .upsert(buildLedgerRows(rows, { actorPacket: serializeActor(actor), batchId, fileName, nowIso, processedBy: actor.displayName }), {
-      onConflict: "invoice_number",
-    });
+    .upsert(ledgerRows, { onConflict: "invoice_number" });
   if (ledgerError) return jsonApiResponse({ error: "invoice_payment_processed", error_description: ledgerError.message }, { status: 409 });
 
   await client.from("dashboard_action_log").insert({
@@ -66,19 +83,13 @@ export const POST: APIRoute = async ({ locals }) => {
     actor_type: actor.type,
     decision: "export",
     department: "accounting",
-    note: `Exported ${rows.length} invoice(s) for payment as ${fileName}.`,
-    payload: { batchId, fileName, invoiceNumbers, source: "invoice-audit" },
+    note: `Exported ${invoiceNumbers.length} invoice(s) across ${files.length} vendor file(s).`,
+    payload: { batchId, files: files.map((f) => ({ count: f.count, fileName: f.fileName, vendor: f.vendor })), invoiceNumbers, source: "invoice-audit" },
     source_pk: batchId,
     source_table: "invoice_payment_processed",
     workflow: "invoice-payment-export",
   });
 
   invalidateInvoiceAuditSummaryCache();
-  return jsonApiResponse({
-    batchId,
-    count: rows.length,
-    downloadUrl: `/api/invoice-audit/batch/${batchId}.csv`,
-    fileName,
-    invoiceNumbers,
-  });
+  return jsonApiResponse({ batchId, count: invoiceNumbers.length, files, invoiceNumbers });
 };
