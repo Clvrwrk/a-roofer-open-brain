@@ -23,3 +23,5 @@
 When an opportunity hits **won**, Conductor: (1) confirms the `property` + `job` exist in the brain, (2) marks `job.job_phase = won`, (3) triggers AccuLynx job creation (or links an existing one) and stores `job.external_ref` for both systems, (4) from here AccuLynx milestones drive `job_phase` and GHL reverts to nurture-only. This is the one place the two CRMs touch, and it's logged.
 
 See `mapping.md` for the field tables and `_template/contract.md` for the adapter contract every bridge follows.
+
+Operational parity notes imported from the dedicated GHL CLI workspace live in `ghl-cli-capability.md`.
