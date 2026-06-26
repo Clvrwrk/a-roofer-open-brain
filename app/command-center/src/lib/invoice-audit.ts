@@ -580,12 +580,15 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows] = await Promise.all([
+  const [invRows, catRows, arRows] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
+    // Keep the static-first summary honest without loading invoice lines: this slim AR
+    // lookup is what powers the default "Open invoices" filter.
+    fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
   ]);
   if (invRows.length === 0) return empty;
-  return summarizeInvoiceRows(invRows, [], [], catRows, []);
+  return summarizeInvoiceRows(invRows, [], [], catRows, arRows);
 }
 
 export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
