@@ -101,9 +101,14 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
     --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
     --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
     --orange:#a4480d; --orange-bg:#fbe7d6; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; --shadow:0 6px 18px rgba(20,28,40,.08);
+    /* Full-bleed panel: the horizontal bleed MUST equal `.app-main main` horizontal padding
+       (28px) so the panel reaches the column edges exactly — bleeding more pushed it under the
+       left nav and past the right edge (client report 2026-06-28). Re-pad by the same amount. */
+    --iv-bleed:28px;
     background:var(--bg); color:var(--ink);
-    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--gutter, 24px)) calc(-1 * var(--space-6, 24px));
-    padding:18px var(--gutter, 24px) 30px; min-height:70vh; font-family:var(--font-sans, Inter, system-ui, sans-serif);
+    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--iv-bleed)) calc(-1 * var(--space-6, 24px));
+    padding:18px var(--iv-bleed) 30px; min-height:70vh; font-family:var(--font-sans, Inter, system-ui, sans-serif);
+    overflow-x:clip; /* a wider-than-column table scrolls its own wrapper, never the page/nav */
   }
   .iv[data-theme="dark"]{
     --bg:#0f141b; --panel:#161d27; --panel2:#1c2530; --ink:#e6edf5; --muted:#8b98a8; --line:#27313e;
@@ -201,6 +206,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
 
   /* roof-system category sections (collapsible, default-collapsed) */
   .iv-cats{margin-top:6px}
+  .iv-tablewrap{overflow-x:auto;max-width:100%}
   .iv-cat{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel2)}
   .iv-cat>summary{display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;list-style:none}
   .iv-cat>summary::-webkit-details-marker{display:none}

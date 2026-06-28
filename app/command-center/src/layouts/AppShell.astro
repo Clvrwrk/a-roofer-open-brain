@@ -3,6 +3,7 @@ import "../styles/global.css";
 import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
 import { type LiveDepartmentSurface } from "@lib/live-work";
 import { navHome, navDepartments, activeDepartmentId, isLeafActive } from "@lib/nav";
+import { APP_VERSION, APP_VERSION_DATE } from "@lib/version";
 
 interface Props {
   title: string;
@@ -111,9 +112,12 @@ const deptIcon = (id: string) =>
           </div>
 
           <div class="operator-cluster" aria-label="Runtime summary">
-            <div class="runtime-pill" data-tone={workOsSession ? "ready" : "watch"}>
-              <span class="signal-dot" aria-hidden="true"></span>
-              {workOsSession ? "WorkOS session" : workOsReady ? "WorkOS ready" : "Local auth"}
+            <div class="runtime-pill-stack">
+              <div class="runtime-pill" data-tone={workOsSession ? "ready" : "watch"}>
+                <span class="signal-dot" aria-hidden="true"></span>
+                {workOsSession ? "WorkOS session" : workOsReady ? "WorkOS ready" : "Local auth"}
+              </div>
+              <p class="app-version" title="App version · last updated">v{APP_VERSION} · {APP_VERSION_DATE}</p>
             </div>
             <div class="operator-card">
               <strong>{user.name}</strong>

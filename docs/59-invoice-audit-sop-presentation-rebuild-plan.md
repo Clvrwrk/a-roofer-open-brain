@@ -169,6 +169,26 @@ Four fixes after the live walkthrough on cc.proexteriorsus.net (where a human di
 
 All preview-verified vs prod; 28 unit tests pass; astro build clean; no console errors. Prod aligned through migration 159.
 
+### Post-deploy polish round 2 (client feedback 2026-06-28)  ✅ DONE — migration 160
+1. **Sidebar overlap fixed.** The `.iv` full-bleed panel bled 48px but `.app-main main` pads only 28px, so it
+   pushed under the left nav and 20px past the right edge. Bleed now matches main padding (28px) → panel reaches
+   the column edges exactly; `overflow-x:clip` on `.iv` + a scrollable `.iv-tablewrap` keep a wide table off the page.
+2. **App version line** under the runtime pill: `v{APP_VERSION} · {APP_VERSION_DATE}` (thin font), from `@lib/version`
+   (bump both per release). Now `v0.6.0 · 2026-06-28`.
+3. **Reset skipped lines — fixed (the real bug).** `invoice_line_audit.invoice_line_id` has no FK to abc_invoice_lines
+   and audit rows can reference `abc_invoice_lines_full` (API-truncated invoices). The reset RPC JOINed
+   abc_invoice_lines, dropping every `_full` line (auto-matched "Alex" lines survived "Go back"). Now re-pends straight
+   from `v_invoice_line_audit_current` — all non-pending lines, any line table. Verified: 2010333391-001 passed 4→0.
+4. **Credit-memo original price.** org-inv (and recent) cascade subqueries now source from `v_invoice_lines_complete`
+   (covers `_full`), so a CM's original line resolves even when truncated. A **$0.00** benchmark with a positive invoice
+   price now yields **100% variance** (full charge as variance_ext) → routes into the ≥6% at-risk/hold + Slack escalation
+   (docs/57). Verified: CM 2010162348-001 → Org Inv $0.00 / 2025-11-12 / +100% Major / $4,730 at risk.
+
+Migration 160 applied to prod (cascade view DROP+CREATE; reset fn CREATE OR REPLACE). Preview-verified; 28 tests pass;
+build clean; no console errors. Prod aligned through migration 160. **Open:** the $0-original Slack send currently rides
+the morning_abc_sync escalation (not yet a live job, #9) or a human credit-flag disposition — a dedicated immediate
+alert can be added if wanted.
+
 ---
 
 ## 6. Sequencing & dependencies

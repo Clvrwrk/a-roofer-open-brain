@@ -149,7 +149,7 @@ if (root && dataEl && mount) {
       return `
         <details class="iv-cat" data-cat="${esc(k)}" data-pend="${pend}">
           <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span>${catBar}</summary>
-          <table class="iv-table">${thead(inv)}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table>
+          <div class="iv-tablewrap"><table class="iv-table">${thead(inv)}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table></div>
         </details>`;
     }).join("");
 
