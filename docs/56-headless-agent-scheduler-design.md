@@ -195,6 +195,25 @@ which it reads as a bypass. This is by design and is NOT worked around. Conseque
 - Read-only capability checks (curl with the agent's creds) ARE allowed and are how we validate
   credentials/connectivity without the agent loop (used above to find the `.env` gaps).
 
+## 7d. Provisioning fix + Alex now operational (2026-06-28)
+
+`scripts/provision-agent-env.sh` (re-runnable; reads the local `.env`, never echoes secrets,
+backs up each profile, excludes Rowan from brain creds) filled the missing keys. Mapping:
+project `SUPABASE_SERVICE_ROLE_KEY` → agent `SUPABASE_SERVICE_TOKEN`; ABC URLs/scopes from
+`config/.env.example` prod values.
+
+Outcome — the gap was NOT uniform:
+- **alex.rivers** — set Supabase token + 3 ABC values → **now PASSES** both checks (ABC OAuth 200
+  `token=yes`; Supabase read 200 returns a real row). Fully operational.
+- **maya.chen** — already fully provisioned (furthest-along agent).
+- **casey.morgan, lena.brooks** — set Supabase token.
+- **jordan.price, sam.torres** — **NO `.env` at all** (the two `desktopEnabled:false` agents never
+  got a profile). They need profiles created before they can run.
+- **rowan.vale** — skipped (external-only boundary held).
+
+Detail: ABC token endpoint is `<ABC_SUPPLY_AUTH_BASE_URL>/v1/token` (Okta). The `abc-supply-api`
+skill / Alex SOP should use that exact path (the agent's earlier `/connect/token` guess failed).
+
 ## 8. Status log
 
 - 2026-06-28 — Runtime verified dormant; decision = host scheduler + headless Hermes. Proven headless
