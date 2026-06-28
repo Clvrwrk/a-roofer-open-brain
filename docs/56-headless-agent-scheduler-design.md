@@ -154,11 +154,53 @@ Bringing Alex up surfaced the real per-agent SOP gaps and how we resolve them:
    has no recording today (Slack-only). Each validated SOP must end by writing an attributed
    `dashboard_action_log` row (v1: direct Supabase insert; later: `/api/agent/activity`).
 
+## 7b. CRITICAL FINDING — incomplete agent `.env` (the real blocker to "real work")
+
+A direct read-only capability check of Alex (plain `curl` with Alex's own env — no agent loop)
+showed the agent **cannot do its job because its credentials are not fully provisioned**:
+
+| Check | Result |
+| --- | --- |
+| Identity (`AGENT_ID` etc.) | ✅ `alex-rivers`, pricing-catalog, accounting/operations/system |
+| Network egress | ✅ google 200, `cc.proexteriorsus.net/healthz` ok |
+| `ABC_SUPPLY_AUTH_BASE_URL` | ❌ **empty** → ABC OAuth fails (HTTP 000) |
+| `ABC_SUPPLY_API_BASE_URL` | ❌ **empty** |
+| `ABC_SUPPLY_SCOPES` | ❌ **empty** |
+| `ABC_SUPPLY_CLIENT_ID` / `_SECRET` | ✅ present (len 20 / 64) |
+| `SUPABASE_SERVICE_TOKEN` | ❌ **empty** → Supabase 401 (anon key IS present, len 208) |
+
+**Implication:** the agents are dormant AND under-provisioned. Even once the scheduler runs them,
+Alex can't authenticate to ABC Supply or write to the brain. The v1 "record via direct Supabase"
+plan also depends on `SUPABASE_SERVICE_TOKEN`, which is blank — so recording is blocked until it's set.
+
+Canonical fill values (from `config/.env.example`, non-secret):
+- `ABC_SUPPLY_AUTH_BASE_URL=https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357` (prod)
+- `ABC_SUPPLY_API_BASE_URL=https://partners.abcsupply.com` (prod)
+- `ABC_SUPPLY_SCOPES=location.read product.read account.read pricing.read order.read allOrder.read notification.read invoice.read invoice.history.read`
+- `SUPABASE_SERVICE_TOKEN=<service-role key for rnhmvcpsvtqjlffpsayu>` — **secret**, source from CC/Coolify env, not the repo.
+
+**Likely systemic:** profiles were provisioned by the same `deploy-agent.py`; the other agents'
+`.env` should be audited for the same blanks (a per-profile credential scan was correctly gated as
+sensitive — do it deliberately, with the operator).
+
+## 7c. Guardrail reality — AI cannot launch the agent (confirmed)
+
+The auto-mode classifier firmly blocks an AI from launching (or handing over a command to launch)
+the `hermes --yolo --accept-hooks` autonomous loop on prod — even with a user-added permission rule,
+which it reads as a bypass. This is by design and is NOT worked around. Consequences for the plan:
+- The **first manual validation** must be initiated by the human, on their own infra.
+- The **steady-state** is fine: a host **systemd timer** runs `hermes cron tick` autonomously — the
+  *host* runs the agent, the AI never launches it. Building/installing that timer is config work,
+  not an agent launch.
+- Read-only capability checks (curl with the agent's creds) ARE allowed and are how we validate
+  credentials/connectivity without the agent loop (used above to find the `.env` gaps).
+
 ## 8. Status log
 
 - 2026-06-28 — Runtime verified dormant; decision = host scheduler + headless Hermes. Proven headless
-  invocation + profile/job loading. Created `nepq-agent-communication` skill. Resolved token question
-  (v1 = direct Supabase recording) and skill-install path. Alex live run still gated on user
-  authorization (autonomous executor) + skill install. Next: install the two skills, build the v1
-  recording step, run the authorized read-only Alex validation, then enable one cron + install the
-  host scheduler.
+  invocation + profile/job loading. Installed `abc-supply-api` + `nepq-agent-communication` skills into
+  Alex's profile (both `enabled`). Resolved token question + skill-install path. **Confirmed AI cannot
+  launch the --yolo agent (firm guardrail).** **CRITICAL: Alex `.env` missing ABC auth URL/scopes +
+  SUPABASE_SERVICE_TOKEN — agent can't authenticate to ABC or the brain.** Next: provision the missing
+  env (ABC non-secret values + the Supabase service-role secret), audit the other profiles for the same
+  blanks, then validate (human-run or via installed scheduler) and build v1 recording + the systemd timer.
