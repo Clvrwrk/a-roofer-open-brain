@@ -2,7 +2,7 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
-interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
 interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
@@ -62,16 +62,33 @@ if (root && dataEl && mount) {
     }
     return `<button class="iv-mark" data-mark data-line="LIDX">Mark passed</button>`;
   }
-  const THEAD = '<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th class="num">API Price</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>';
+  // The 3rd price column is contextual (docs/59 D5/D7): newest prior invoice for normal
+  // invoices, the referenced original-invoice price for credit memos.
+  const thirdHead = (inv: Invoice) => (inv.isCreditMemo ? "Org Inv Price" : "Most Recent");
+  const thead = (inv: Invoice) =>
+    `<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th class="num">API Price</th><th class="num">${thirdHead(inv)}</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>`;
+  // Which benchmark drove the cascaded Var%/$ (docs/59 D6).
+  const BENCH_LAB: Record<string, string> = { negotiated: "Negotiated", api: "API", recent: "Recent", org_inv: "Org Inv" };
+  const BENCH_CLS: Record<string, string> = { negotiated: "pill-green", api: "pill-brand", recent: "pill-yellow", org_inv: "pill-grey" };
+  function benchBadge(src: string, price: number | null): string {
+    const lab = BENCH_LAB[src];
+    if (!lab) return ""; // 'none' / unknown → no benchmark
+    const tip = price == null ? `Variance vs ${lab}` : `Variance vs ${lab} (${money2(price)})`;
+    return ` <span class="pill ${BENCH_CLS[src]}" title="${esc(tip)}">${lab}</span>`;
+  }
   function lineRow(l: InvLine, li: number): string {
     // UOM mismatch: the agreement is priced in a different unit than the invoice line,
     // so a variance would be meaningless — surface it for manual review instead (schema 120).
     const negCell = l.uomMismatch
       ? `<span class="pill pill-orange" title="Agreement priced per ${esc(l.negotiatedUom || "?")} but invoiced per ${esc(l.uom)} — review">UOM mismatch</span>`
       : (l.negotiatedPrice == null ? '<span class="pill pill-red">No Price</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`);
+    // Var%/$ + tolerance reflect the benchmark cascade (negotiated → API → recent/org-inv).
+    // UOM-mismatched lines have no meaningful price comparison → keep them in manual review.
     const tolCell = l.uomMismatch
       ? '<span class="pill pill-grey">Review (UOM)</span>'
-      : `<span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span>`;
+      : `<span class="pill ${tolCls(l.cascadeVariancePct)}">${tolLab(l.cascadeVariancePct)}</span>`;
+    const varPctCell = l.uomMismatch || l.cascadeVariancePct == null ? "—" : pct(l.cascadeVariancePct) + benchBadge(l.benchmarkSource, l.benchmarkPrice);
+    const varExtCell = l.uomMismatch || l.cascadeVarianceExt == null ? "—" : money2(l.cascadeVarianceExt);
     return `
       <tr class="iv-ln${l.audited ? " is-audited" : ""}" data-line="${li}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
@@ -80,9 +97,10 @@ if (root && dataEl && mount) {
         <td>${esc(l.uom)}</td>
         <td class="num">${money2(l.unitPrice)}</td>
         <td class="num">${l.apiPrice == null ? "—" : money2(l.apiPrice)}</td>
+        <td class="num">${l.thirdPrice == null ? "—" : money2(l.thirdPrice)}</td>
         <td>${negCell}</td>
-        <td class="num">${l.variancePct == null ? "—" : pct(l.variancePct)}</td>
-        <td class="num">${l.varianceExt == null ? "—" : money2(l.varianceExt)}</td>
+        <td class="num">${varPctCell}</td>
+        <td class="num">${varExtCell}</td>
         <td>${tolCell}</td>
         <td class="iv-audit-cell">${auditCell(l).replace("LIDX", String(li))}</td>
       </tr>`;
@@ -116,7 +134,7 @@ if (root && dataEl && mount) {
       return `
         <details class="iv-cat" data-cat="${esc(k)}" data-pend="${pend}">
           <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span>${catBar}</summary>
-          <table class="iv-table">${THEAD}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table>
+          <table class="iv-table">${thead(inv)}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table>
         </details>`;
     }).join("");
 
@@ -463,7 +481,7 @@ if (root && dataEl && mount) {
         const credits = actions.filter((a) => a.group === "credit");
         const btn = (a: Action) => `<button class="iv-act ${a.group}" data-action="${a.id}" data-group="${a.group}" data-label="${esc(a.label)}"><span class="t">${esc(a.label)}</span><span class="h">${esc(a.hint)}</span></button>`;
         disp.innerHTML = `
-          <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.negotiatedPrice == null ? "No Price" : money2(l.negotiatedPrice)}${l.variancePct != null ? ` · <span class="pill ${tolCls(l.variancePct)}">${pct(l.variancePct)} ${tolLab(l.variancePct)}</span>` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.auditedBy)}</span>` : ""}</div>
+          <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.benchmarkPrice != null ? money2(l.benchmarkPrice) : (l.negotiatedPrice == null ? "No benchmark" : money2(l.negotiatedPrice))}${(!l.uomMismatch && l.cascadeVariancePct != null) ? ` · <span class="pill ${tolCls(l.cascadeVariancePct)}">${pct(l.cascadeVariancePct)} ${tolLab(l.cascadeVariancePct)}</span>${benchBadge(l.benchmarkSource, l.benchmarkPrice)}` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.auditedBy)}</span>` : ""}</div>
           <div class="iv-disp-tabs">
             <button type="button" data-tab="actions" class="is-active">Actions</button>
             <button type="button" data-tab="preview">Communications Preview</button>

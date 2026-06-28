@@ -19,8 +19,18 @@ export interface InvLine {
   negotiatedPrice: number | null;
   apiPrice: number | null; // current ABC API price for this item at the invoice's branch (seed)
   apiUom: string;
-  variancePct: number | null;
+  variancePct: number | null; // negotiated-only variance (drives sort + section at-risk rollup)
   varianceExt: number | null;
+  // Benchmark cascade (docs/59 Task 3, v_invoice_audit_line_cascade). Drives the displayed
+  // 3rd price column + Var%/$ + benchmark badge: negotiated → API (only if invoice > API) →
+  // recent (normal) / org_inv (credit memo) → none.
+  recentPrice: number | null;  // newest prior invoice, same item + ship_to + UOM (normal invoices)
+  orgInvPrice: number | null;  // original-invoice price for a credit memo line (D7)
+  thirdPrice: number | null;   // contextual 3rd column value: recentPrice or, for credit memos, orgInvPrice
+  benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | "";
+  benchmarkPrice: number | null;       // the price the cascade variance compares against
+  cascadeVariancePct: number | null;   // cascaded variance % (display)
+  cascadeVarianceExt: number | null;   // cascaded variance $ (display)
   auditable: boolean; // has resolvable qty + extended price; false → never surfaced "to audit"
   uomMismatch: boolean; // agreement priced in a different UOM than the invoice line (schema 120) → variance not computed
   negotiatedUom: string; // the UOM the agreement price is quoted in
@@ -301,6 +311,13 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       apiUom: "",
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
+      recentPrice: null,
+      orgInvPrice: null,
+      thirdPrice: null,
+      benchmarkSource: "",
+      benchmarkPrice: null,
+      cascadeVariancePct: null,
+      cascadeVarianceExt: null,
       auditable: l.is_auditable !== false, // default true unless the view says otherwise
       uomMismatch: l.uom_mismatch === true,
       negotiatedUom: l.negotiated_uom ?? "",
@@ -797,7 +814,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 
   const lineRows = await fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("*").eq("invoice_number", wanted));
   const lineIds = lineRows.map((line) => line.line_id).filter(Boolean);
-  const [auditRows, docRows, acculynxRows, arRows, processedRows] = await Promise.all([
+  const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows] = await Promise.all([
     lineIds.length
       ? fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date").in("invoice_line_id", lineIds))
       : Promise.resolve([]),
@@ -805,9 +822,13 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     fetchAllForInvoiceAudit(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true).eq("invoice_number", wanted)),
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
+    // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
+    fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
   ]);
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
+  const cascadeByLine = new Map<string, any>();
+  for (const c of cascadeRows) cascadeByLine.set(c.line_id, c);
   const doc = docRows[0] ?? null;
   const ar = arRows[0] ?? null;
   const ax = acculynxRows[0] ?? null;
@@ -815,7 +836,9 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 
   const lines: InvLine[] = lineRows.map((l) => {
     const a = auditByLine.get(l.line_id);
+    const c = cascadeByLine.get(l.line_id);
     const passed = a?.audit_status === "passed";
+    const numOrNull = (v: unknown) => (v == null ? null : num(v));
     return {
       lineId: l.line_id,
       itemNumber: l.item_number ?? "",
@@ -825,10 +848,19 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
       unitPrice: num(l.unit_price),
       extendedPrice: num(l.extended_price),
       negotiatedPrice: l.negotiated_price == null ? null : num(l.negotiated_price),
-      apiPrice: null,
+      // API price comes from the cascade (UOM-aligned; null when units don't match) — the
+      // legacy seed-side apiPrice was never populated. Drives the API Price column + 'api' badge.
+      apiPrice: numOrNull(c?.api_price),
       apiUom: "",
       variancePct: l.variance_pct == null ? null : num(l.variance_pct),
       varianceExt: l.variance_ext == null ? null : num(l.variance_ext),
+      recentPrice: numOrNull(c?.recent_price),
+      orgInvPrice: numOrNull(c?.org_inv_price),
+      thirdPrice: numOrNull(c?.third_price),
+      benchmarkSource: (c?.benchmark_source ?? "") as InvLine["benchmarkSource"],
+      benchmarkPrice: numOrNull(c?.benchmark_price),
+      cascadeVariancePct: numOrNull(c?.variance_pct),
+      cascadeVarianceExt: numOrNull(c?.variance_ext),
       auditable: l.is_auditable !== false,
       uomMismatch: l.uom_mismatch === true,
       negotiatedUom: l.negotiated_uom ?? "",
