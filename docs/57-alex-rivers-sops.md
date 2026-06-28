@@ -277,3 +277,40 @@ indefinitely.
 - **Monthly:** owns **Tier 3 agreement freshness** (refresh all 150 branches; stop beyond). Tasks: `vendor_performance_scorecard`, `price_list_validation`.
 - **Quarterly:** `contract_renewal_prep`.
 - **Annual:** `vendor_audit_deep_dive`.
+
+---
+
+## 7. Amendments — 2026-06-28 (client walkthrough + first full trial run)
+
+**A. Service fees auto-approve (NEW rule, LOCKED).** Any line in the `service_fees` category
+(delivery charges, etc.) is **automatically approved** regardless of variance, and **included in
+the weekly review** (never held, never a credit-memo candidate, never a Jordan coverage gap).
+Rationale validated in the trial: invoice 2008949560-001 carried a **$650 `DELIVERYBR` delivery
+charge** at +650% that would have been a false ≥6% hold — the rule correctly auto-approves it.
+Implementation: in the disposition pass, `category_key='service_fees'` ⇒ `passed` / decision
+`accept-svc` / note "Service fee — auto-approved; weekly review", and service-fee lines are
+excluded from the per-invoice gross-overcharge ACTION threshold.
+
+**B. Weekly review cadence (LOCKED).** The weekly review meeting is **every Friday 11:00 AM CST**,
+attendees **Lucinda · Roberto · Chris**. `weekly_payment_package` (the two CSVs, §3c) and
+`variance_weekly_digest` are therefore generated **Friday** (feeding that review), not Monday.
+(Supersedes the "Monday" trigger in §3c/§6 for the package.)
+
+**C. Inter-agent comms routing (LOCKED).** All agent-to-agent communication is routed
+**Chris ↔ the Conductor**. Alex's handoffs (Casey credit memos, Jordan coverage gaps) are recorded
+as `dashboard_action_log` work items with `payload.queued_via='conductor'` + `awaiting_agent_activation=true`
+— queued, no direct Slack to those agents, pending agent activation. Human-facing accounting posts
+(hold notices, daily summary, weekly digest, weekly package) target **#accounting-invoice-processing**;
+during the trial these are redirected to **Chris's Slack DM**.
+
+### First full trial run (recorded 2026-06-28, simulated week Mon 2026-06-22 → Fri 2026-06-26)
+Manual hand-run of `morning_abc_sync` v3 over the 17-invoice actionable set (no live agent yet, #9):
+- **3 invoices/day Mon–Thu + 5 Fri = 17 dispositioned** (113 lines): 10 held (≥6%), 44 in-tolerance,
+  38 coverage-gap, 12 in 3–6% weekly tier, 9 service-fee auto-approved.
+- **6 invoices HELD** → 6 Casey credit-memo candidates queued (draft, **$563.37** exposure).
+  **11 approved → to-be-paid.**
+- **38 coverage-gap lines** queued to Jordan (5 daily signals, via Conductor).
+- **13 Slack DMs** to Chris (6 hold notices + 5 daily summaries + 1 weekly digest + 1 weekly package),
+  each timestamped to the simulated cadence.
+- Dashboard verified: TO AUDIT 10 (held), INVOICES TO BE PAID 11. Process export + the two CSV
+  deliverables = pending (weekly_payment_package storage/Manage wiring still a build item).
