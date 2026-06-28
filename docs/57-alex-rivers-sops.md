@@ -21,6 +21,7 @@
 | Daily | `morning_abc_sync` | 7:00a Mon–Fri | ✅ paused | ✅ designed (§1) |
 | Daily | `variance_daily_summary` | 5:00p Mon–Fri | ❌ | ✅ designed (§3) |
 | Event + Monthly | `agreement_coverage_verification` **(new)** | on new agreement + monthly full scan | ❌ | ✅ designed (§3a) |
+| Daily | `gap_followup_cadence` **(new)** | daily (7-day gap SLA) | ❌ | ✅ designed (§3b) |
 | Weekly | `abc_catalog_sync` | Mon 6:00a | ✅ paused | TODO |
 | Weekly | `price_agreement_expiration_check` | Mon 8:00a | ✅ paused | TODO |
 | Weekly | `variance_weekly_digest` | Fri 9:00a | ❌ | TODO |
@@ -176,6 +177,30 @@ that *should* have coverage); the **GPA best-vendor/branch benchmark** + toleran
 
 ---
 
+## 3b. `gap_followup_cadence` — 7-day gap SLA → Jordan  ✅ DESIGNED
+
+**Trigger:** daily.
+**Goal:** **no open coverage gap (§3a) goes more than 7 days without another price-agreement request.**
+
+**Process**
+1. Pull open gaps (tracked as work items with `gap_found_at`, `last_request_at`, `status`).
+2. For each open gap where `now − last_request_at ≥ 7 days`: **nudge Jordan** to send another
+   request. Jordan sends → `last_request_at` resets → the 7-day clock restarts. Rolling weekly
+   re-request until the gap closes. (Alex flags; Jordan sends — analyze lane preserved.)
+3. Write a `dashboard_action_log` row per nudge (decision = `gap_followup`, with cycle count + age).
+
+**Close condition (auto):** the gap closes when the next `agreement_ingestion_sweep` sees the item
+is now **covered and in-tolerance** vs the GPA benchmark. Self-resolving from the data — no manual
+close required.
+
+**Escalation:** after **N re-request cycles** with no resolution (default **3 cycles ≈ 21 days**,
+tunable), Alex escalates to **Chris** — the vendor isn't responding — rather than nagging Jordan
+indefinitely.
+
+**Output:** per-gap nudge to Jordan; escalation to Chris at the threshold. Silent if no gap is due.
+
+---
+
 ## 4. Slack approval handler — 3–6% tier  ⚙️ SYSTEM COMPONENT (not a cron) — needs build
 
 When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **immediately**:
@@ -201,6 +226,7 @@ When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **i
 7. **Global price catalog** — the authoritative item set that should have agreement coverage (the §3a baseline).
 8. **GPA best-vendor/branch benchmark + tolerance %** — the reference for "priced-but-out-of-range" gaps (docs/51).
 9. **Jordan request-generation SOP** — Jordan turns Alex's gap list into per-vendor/branch price-agreement requests (Jordan's own SOP, future).
+10. **Gap tracking** — gaps stored as work items with `gap_found_at`, `last_request_at`, `cycle_count`, `status` so §3b can age them, auto-close on coverage, and escalate at N cycles.
 
 ---
 
