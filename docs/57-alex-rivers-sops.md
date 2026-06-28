@@ -313,4 +313,5 @@ Manual hand-run of `morning_abc_sync` v3 over the 17-invoice actionable set (no 
 - **13 Slack DMs** to Chris (6 hold notices + 5 daily summaries + 1 weekly digest + 1 weekly package),
   each timestamped to the simulated cadence.
 - Dashboard verified: TO AUDIT 10 (held), INVOICES TO BE PAID 11. Process export + the two CSV
-  deliverables = pending (weekly_payment_package storage/Manage wiring still a build item).
+  deliverables: Deliverable 1 (pay CSV) via Process; **Deliverable 2 (decision-detail CSV) now wired into
+  the Manage panel** (`/api/invoice-audit/batch/<id>.csv?kind=detail`) — both downloadable per batch.

@@ -71,7 +71,8 @@ export const GET: APIRoute = async ({ locals }) => {
   const batches = Array.from(byBatch.values())
     .sort((a, b) => String(b.processedAt ?? "").localeCompare(String(a.processedAt ?? "")))
     .slice(0, 50)
-    .map((batch) => ({ ...batch, files: Array.from(batch.files.values()) }));
+    // detailUrl = Deliverable 2 (decision-detail CSV) for the batch (docs/57 §3c).
+    .map((batch) => ({ ...batch, files: Array.from(batch.files.values()), detailUrl: `/api/invoice-audit/batch/${batch.batchId}.csv?kind=detail` }));
 
   return jsonApiResponse({ batches });
 };

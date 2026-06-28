@@ -1052,8 +1052,10 @@ if (root && dataEl && mount) {
       const returnBtn = (b.counts.exported > 0 || b.counts.paid > 0) ? `<button class="is-return" data-pay="return" data-batch="${esc(b.batchId)}">Return</button>` : "";
       const files: any[] = b.files ?? [];
       const title = files.length === 1 ? esc(files[0].fileName || files[0].vendor) : `${files.length} vendor files`;
-      const dl = files.map((f) => `<a href="${esc(f.downloadUrl)}" download>⬇ ${esc(f.fileName || f.vendor)}</a>`).join("");
-      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${confirmBtn}${returnBtn}</div></div>`);
+      const dl = files.map((f) => `<a href="${esc(f.downloadUrl)}" download>⬇ ${esc(f.fileName || f.vendor)} (pay file)</a>`).join("");
+      // Deliverable 2 (docs/57 §3c): decision-detail / explainability CSV for the batch.
+      const detailDl = b.detailUrl ? `<a href="${esc(b.detailUrl)}" download>⬇ Decision detail (CSV)</a>` : "";
+      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${detailDl}${confirmBtn}${returnBtn}</div></div>`);
     }
     body.innerHTML = parts.join("");
     body.querySelectorAll<HTMLElement>("[data-pay]").forEach((el) => el.addEventListener("click", async () => {

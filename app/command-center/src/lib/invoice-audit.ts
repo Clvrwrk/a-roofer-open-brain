@@ -7,6 +7,9 @@
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 import { loadItemUomMap, convertPrice } from "@lib/uom";
+import { csvCell } from "@lib/agreement-export";
+
+type ServerSupabaseClient = NonNullable<ReturnType<typeof createServerSupabaseClient>["client"]>;
 
 // docs/59 Task 5 — present audit work as the agent personas (Alex/Maya) or the human
 // who did it. "agent" → an OB agent acted; "human" → a real person; "system" → the
@@ -991,4 +994,54 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   invoice.toBePaid = isInvoiceToBePaid(invoice);
   invoice.actionable = isInvoiceActionable(invoice);
   return invoice;
+}
+
+// docs/57 §3c Deliverable 2 — decision-detail / explainability CSV for a set of invoices
+// (one row per reviewed line: benchmark, variance, disposition, note, agent, decided-at).
+// Downloaded from the Manage panel alongside the QuickBooks pay file (batch ?kind=detail).
+const DECISION_LABEL: Record<string, string> = {
+  "credit-flag": "Hold + credit memo (Casey)",
+  "credit-noflag": "Credit memo (no flag)",
+  "accept-svc": "Service fee — auto-approved (weekly review)",
+  "accept-30d": "Accepted; 3-6% → weekly digest",
+  "accept-nochallenge": "Accepted; no benchmark → Jordan coverage",
+  "accept-neg": "Accepted (within tolerance)",
+  "accept-tbn": "Accepted; to-be-negotiated",
+};
+
+export async function loadDecisionDetailCsv(client: ServerSupabaseClient, invoiceNumbers: string[]): Promise<string> {
+  const header = ["Invoice","Vendor","Office","Branch","Item","Description","Qty","UOM","Invoice Price","Benchmark Price","Benchmark","Variance %","Variance $","Disposition","Decision","Note","Agent","Decided At"];
+  if (!invoiceNumbers.length) return header.join(",");
+
+  const [cascRes, auditRes, invRes] = await Promise.all([
+    client.from("v_invoice_audit_line_cascade").select("line_id,invoice_number,item_number,item_description,price_uom,invoice_price,qty,benchmark_price,benchmark_source,variance_pct,variance_ext").in("invoice_number", invoiceNumbers),
+    client.from("v_invoice_line_audit_current").select("invoice_line_id,decision,approval_note,approved_by,decided_at,audit_status").in("invoice_number", invoiceNumbers),
+    client.from("v_invoice_audit_invoice").select("invoice_number,office,branch_name").in("invoice_number", invoiceNumbers),
+  ]);
+
+  const auditByLine = new Map<string, any>();
+  for (const a of (auditRes.data ?? []) as any[]) auditByLine.set(String(a.invoice_line_id), a);
+  const invByNo = new Map<string, any>();
+  for (const i of (invRes.data ?? []) as any[]) invByNo.set(i.invoice_number, i);
+
+  const rows = ((cascRes.data ?? []) as any[]).sort(
+    (a, b) => String(a.invoice_number).localeCompare(String(b.invoice_number)) || String(a.item_number ?? "").localeCompare(String(b.item_number ?? "")),
+  );
+
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    const a = auditByLine.get(String(r.line_id)) ?? {};
+    const iv = invByNo.get(r.invoice_number) ?? {};
+    const s = (v: unknown) => (v == null ? "" : String(v));
+    lines.push([
+      csvCell(r.invoice_number), csvCell("ABC Supply"), csvCell(iv.office ?? ""), csvCell(iv.branch_name ?? ""),
+      csvCell(r.item_number ?? ""), csvCell(r.item_description ?? ""), csvCell(s(r.qty)), csvCell(r.price_uom ?? ""),
+      csvCell(s(r.invoice_price)), csvCell(s(r.benchmark_price)), csvCell(r.benchmark_source ?? ""),
+      csvCell(s(r.variance_pct)), csvCell(s(r.variance_ext)),
+      csvCell(a.audit_status ?? ""), csvCell(DECISION_LABEL[a.decision] ?? a.decision ?? ""),
+      csvCell(a.approval_note ?? ""), csvCell(a.approved_by ?? ""),
+      csvCell(a.decided_at ? String(a.decided_at).slice(0, 19).replace("T", " ") : ""),
+    ].join(","));
+  }
+  return lines.join("\r\n");
 }
