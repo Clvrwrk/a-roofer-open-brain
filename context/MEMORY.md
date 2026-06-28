@@ -4,7 +4,7 @@
 ## ▶ Pick up here
 **Handoff: `docs/handoffs/current.md` + daily log.** Branch `contrib/cleverwork/headless-agent-scheduler` → `origin/main` this wrapup. Agent fleet verified **DORMANT + under-provisioned** (29 crons paused, no host scheduler). **Headless Hermes proven**: `docker run` baked Kasm img + mounted profile → `hermes cron tick` (img tag in docs/56); Alex ran a full autonomous loop. **Alex now OPERATIONAL** after `scripts/provision-agent-env.sh` filled empty ABC auth URL/scopes + `SUPABASE_SERVICE_TOKEN` (ABC OAuth 200 + Supabase 200). Design: `docs/56` (scheduler) + `docs/57` (Alex SOPs).
 **NEXT:** Alex weekly/monthly/quarterly/annual SOPs (weekly owns Tier-2 2hr freshness + 0-3% digest); then build backlog (agreement ingestion+schema, gap-tracking work items, host systemd scheduler, dashboard recording helper); provision Jordan/Sam profiles (no `.env`).
-**OPEN:** **Guardrail**: AI cannot launch `--yolo` agent on prod (classifier blocks even w/ permission rule) — host timer runs agents, first validation human-run. Fleet `.env` audit + root-cause `deploy-agent.py`. `open-engine/` untracked (Chris). Stormwatch deploy PAUSED.
+**OPEN:** **Guardrail**: AI cannot launch `--yolo` agent on prod (classifier blocks even w/ permission rule) — host timer runs agents, first validation human-run. Fleet `.env` audit + root-cause `deploy-agent.py`. Open Engine = DevTeam plane (`docs/58`). Stormwatch deploy PAUSED.
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**

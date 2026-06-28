@@ -73,3 +73,9 @@ __pycache__/
 
 # StormWatch live-run scratch (raw replay SQL/JSON — regenerated per run, never committed)
 tmp_stormwatch_*
+
+# Open Engine (DevTeam plane) runtime byproducts — context SKILL.md files ARE tracked,
+# but smoke tests / claimed-task working files / local ledger state are regenerated per run
+agents/dev-engine/**/smoke-test*.txt
+agents/dev-engine/**/*.local.*
+agents/dev-engine/**/.runtime/
