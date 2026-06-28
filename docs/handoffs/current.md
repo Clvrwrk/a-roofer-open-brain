@@ -46,10 +46,10 @@
 - `e73da79` feat(audit): benchmark cascade view (migration 154) — **latest, on main + contrib**
 
 ## Git State
-- **Branch:** `contrib/cleverwork/invoice-audit-sop-presentation` (== main == `e73da79`)
-- **Last commit:** `e73da79` — "feat(audit): invoice-audit benchmark cascade view (docs/59 Task 1)"
-- **Uncommitted changes:** none — tree clean.
-- `main == origin/main`. Coolify rebuilt on the docs/migration pushes (app code unchanged).
+- **Branch:** `contrib/cleverwork/invoice-audit-sop-presentation` (= `9882e5e`, 3 commits ahead of main + migration 157 applied to prod)
+- **Last commit:** `9882e5e` — "feat(audit): date1↔date2 filter + Show all (docs/59 Task 4)"
+- **`main`/`origin/main` = `02bd71f`** — contrib NOT merged yet (deploy is Gate 7).
+- **Uncommitted:** ~44 concurrent DevTeam/SEO files (not invoice-audit; left in place per Chris) + `env.d.ts` (astro build artifact). Schemas mirrored through **157**.
 
 ## Task Cut Off
 None — clean boundary. Task 1 committed + converged to main (migration is live in prod, so its source belongs on main).
@@ -58,19 +58,21 @@ None — clean boundary. Task 1 committed + converged to main (migration is live
 
 ## Next Task — Start Here
 
-**Task:** docs/59 **Task 2** — wire the open+60d scope filter into the Invoice Audit data layer, then UI Tasks 3–6.
+**Done since last handoff (all on `contrib/...`, preview-verified vs prod, build clean, 8 tests pass):**
+Task 2 `d7bb284` (actionable scope), Task 3 `6f99fb1` (cascade column + badge), **migration 157** (cascade credit-memo coverage fix — view 154 missed all CMs), Task 4 `9882e5e` (date1↔date2 + "Show all").
+
+**⚠ Tree state:** a concurrent **DevTeam/SEO** session left ~44 uncommitted files in the tree (agents/dev-engine, scripts, proposals, docs/59-endpoint-auth-matrix, schemas 155/156, modified access-control/middleware/prewarm). Per Chris, **commit only invoice-audit files** (explicit paths). Do NOT sweep these into the contrib branch or revert them.
+
+**Task:** docs/59 **Task 5** — Alex/Maya attribution.
 
 **What to check / do:**
-1. On branch `contrib/cleverwork/invoice-audit-sop-presentation` (resume here). `git fetch`; confirm `main == origin/main`.
-2. **Task 2:** apply scope (`date_paid IS NULL` AND `invoice_date ≤ today−60d` AND `NOT is_credit_memo`) in `app/command-center/src/lib/invoice-audit.ts` loaders + the invoice API. Single source of truth.
-3. **Task 3:** add the contextual 3rd price column (Most Recent / **Org Inv** for credit memos) between API and Negotiated in `src/scripts/invoice-audit-tree.ts`, sourced from `v_invoice_audit_line_cascade`; cascade Var%/$ + benchmark badge.
-4. **Task 4:** replace `#iv-status` with `date1↔date2` (default open+60d) + **"Show all"** checkbox.
-5. **Task 5:** Alex/Maya attribution by actor+role + agent/human badge.
-6. **Task 6:** per-invoice "Go back" API (`api/invoice-audit/reset`, WorkOS-gated) — append neutral records, reverse holds + draft credit memos. → **RT-2**.
-7. **RT-3** integration/security, then merge contrib→main, push, Coolify deploy, verify on cc.proexteriorsus.net.
-- Verify UI with the preview tools (not manual). Baseline screenshot the page first (Gate 0.4, not yet done).
+1. On branch `contrib/cleverwork/invoice-audit-sop-presentation` (resume here). `git fetch`; tree still holds the DevTeam WIP — stage only invoice-audit paths.
+2. **Task 5:** map action→persona (variance/audit/holds/credit-memo → **Alex**; intake/surfacing → **Maya**; human → human) from `dashboard_action_log.actor_type` + `action_type`/`source`; add an agent-vs-human badge. The line audit cell (`src/scripts/invoice-audit-tree.ts`, `auditCell`) shows `✓ {auditedBy}` from `v_invoice_line_audit_current` (approved_by/source) — verify whether actor_type is reachable there or needs joining.
+3. **Task 6:** per-invoice "Go back" API (`api/invoice-audit/reset`, WorkOS-gated) — append neutral/pending records, reverse `not-to-be-paid` holds, cancel **draft** credit memos; never touch sent comms; cannot reset paid. Button on invoice header. → **RT-2**.
+4. **Gate 7 — RT-3** integration/security, then merge contrib→main, push, Coolify deploy, verify on cc.proexteriorsus.net. NOTE: deploy must navigate the concurrent DevTeam WIP still in the tree.
+- Verify UI with the preview tools (`command-center` launch config, port 4321, AUTH_MODE=disabled → Local Operator). Screenshot proof per task.
 
-**Prompt to use:** "Read docs/handoffs/current.md and docs/59. Resume the Invoice Audit rebuild on branch contrib/cleverwork/invoice-audit-sop-presentation at Task 2 (open+60d scope in invoice-audit.ts). Consume v_invoice_audit_line_cascade for Task 3."
+**Prompt to use:** "Read docs/handoffs/current.md and docs/59. Resume the Invoice Audit rebuild on branch contrib/cleverwork/invoice-audit-sop-presentation at Task 5 (Alex/Maya attribution). Tasks 2–4 + migration 157 are done. Commit only invoice-audit paths (concurrent DevTeam WIP is in the tree)."
 
 ## Decisions Made This Session
 - **Audit matching is NOT broken** — low coverage was history-vs-recent scope; the daily SOP audits recent/aged invoices, not 36mo of history. Don't "fix" the matching foundation.
