@@ -226,11 +226,13 @@ describe("loadInvoiceAuditSummary", () => {
     // Open/paid counts keep their open-set semantics (3 open incl. CM + recent, 1 paid).
     expect(data.totals.openInvoices).toBe(3);
     expect(data.totals.paidInvoices).toBe(1);
-    // Scope metadata: cutoff = today−60d; default range lower bound = oldest actionable date.
+    // Scope metadata: cutoff = today−60d (actionable age bound). Default date window =
+    // oldest OPEN invoice_date → today (2026-06-28 change). OLD-CM is open (unpaid) at iso(100),
+    // making it the oldest open date even though it is excluded from the actionable set.
     expect(data.scope.minAgeDays).toBe(SCOPE_MIN_AGE_DAYS);
     expect(data.scope.cutoff).toBe(scopeCutoffDate());
-    expect(data.scope.defaultTo).toBe(data.scope.cutoff);
-    expect(data.scope.defaultFrom).toBe(iso(90)); // OLD-OPEN, the only actionable invoice
+    expect(data.scope.defaultTo).toBe(iso(0));
+    expect(data.scope.defaultFrom).toBe(iso(100));
   });
 
   it("two-phase: ledger-paid invoices are neither To-Be-Paid nor Awaiting Payment", async () => {

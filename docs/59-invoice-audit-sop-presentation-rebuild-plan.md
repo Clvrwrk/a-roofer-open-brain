@@ -152,6 +152,23 @@ per-invoice "go back" reset with internal-effect reversal.
   `cc.proexteriorsus.net` (not just localhost). Record deploy in daily log.
 - **Gate:** RT-3 clean; deployed build verified live; daily log updated.
 
+### Post-deploy polish (client feedback 2026-06-28)  ✅ DONE — migration 159
+Four fixes after the live walkthrough on cc.proexteriorsus.net (where a human directly corrects agent work):
+1. **Category collapse = universal deselect.** Collapsing a roof-system section now clears the selected line and
+   resets the disposition panel (it no longer lingers under a nested/collapsed line).
+2. **"Go back" on every open + unpaid worked invoice — credit memos included.** Visibility now keys off a new
+   `hasWork` flag (any line passed *or* disputed), not `auditedLines > 0`, and no longer excludes credit memos.
+   The reset RPC drops its credit-memo refusal (CM audit lines are in `abc_invoice_lines` per the FK, so the
+   append-only re-pend is identical and safe); paid/exported guards unchanged. Verified: guards still block
+   not_found/paid; CM reset re-pends + rolls back cleanly.
+3. **Default date window = oldest OPEN invoice_date → today** (was oldest-actionable → today−60d). Date-input cap
+   lifted to today. Verified live: 2026-04-20 → 2026-06-28 (matches `min(invoice_date)` over open invoices).
+4. **Benchmark date column.** New `third_price_date` in `v_invoice_audit_line_cascade` (migration 159, DROP+CREATE —
+   view holds no data, no dependents) → rendered as **"Most Recent Date"** (normal) / **"Org Inv Date"** (credit memo)
+   between the 3rd-price and Negotiated columns. Verified: $467.00 / 2026-01-19 on a recent-benchmarked line.
+
+All preview-verified vs prod; 28 unit tests pass; astro build clean; no console errors. Prod aligned through migration 159.
+
 ---
 
 ## 6. Sequencing & dependencies

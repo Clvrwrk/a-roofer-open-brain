@@ -12,7 +12,6 @@ export const prerender = false;
 // Never touches communications: sent comms are never reversed here.
 const RESET_ERRORS: Record<string, { status: number; message: string }> = {
   not_found: { status: 404, message: "Invoice not found." },
-  credit_memo_not_resettable: { status: 409, message: "A credit memo cannot be reset." },
   invoice_paid: { status: 409, message: "A paid invoice cannot be reset." },
   invoice_exported: { status: 409, message: "An invoice already exported for payment cannot be reset." },
 };

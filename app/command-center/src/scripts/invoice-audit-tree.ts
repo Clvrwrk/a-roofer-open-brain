@@ -2,9 +2,9 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
-interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -78,8 +78,9 @@ if (root && dataEl && mount) {
   // The 3rd price column is contextual (docs/59 D5/D7): newest prior invoice for normal
   // invoices, the referenced original-invoice price for credit memos.
   const thirdHead = (inv: Invoice) => (inv.isCreditMemo ? "Org Inv Price" : "Most Recent");
+  const thirdDateHead = (inv: Invoice) => (inv.isCreditMemo ? "Org Inv Date" : "Most Recent Date");
   const thead = (inv: Invoice) =>
-    `<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th class="num">API Price</th><th class="num">${thirdHead(inv)}</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>`;
+    `<thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">Inv Price</th><th class="num">API Price</th><th class="num">${thirdHead(inv)}</th><th>${thirdDateHead(inv)}</th><th>Negotiated</th><th class="num">Var %</th><th class="num">Var $</th><th>Tolerance</th><th>Audited</th></tr></thead>`;
   // Which benchmark drove the cascaded Var%/$ (docs/59 D6).
   const BENCH_LAB: Record<string, string> = { negotiated: "Negotiated", api: "API", recent: "Recent", org_inv: "Org Inv" };
   const BENCH_CLS: Record<string, string> = { negotiated: "pill-green", api: "pill-brand", recent: "pill-yellow", org_inv: "pill-grey" };
@@ -111,6 +112,7 @@ if (root && dataEl && mount) {
         <td class="num">${money2(l.unitPrice)}</td>
         <td class="num">${l.apiPrice == null ? "—" : money2(l.apiPrice)}</td>
         <td class="num">${l.thirdPrice == null ? "—" : money2(l.thirdPrice)}</td>
+        <td>${l.thirdPriceDate || "—"}</td>
         <td>${negCell}</td>
         <td class="num">${varPctCell}</td>
         <td class="num">${varExtCell}</td>
@@ -398,6 +400,19 @@ if (root && dataEl && mount) {
     let selectedAction: Action | null = null;
     let previewState: CommunicationPreviewPayload | null = null;
 
+    // Clear any selected line + collapse the disposition panel back to its prompt.
+    const clearSelection = () => {
+      det.querySelectorAll(".iv-ln").forEach((r) => r.classList.remove("sel"));
+      disp.innerHTML = dispReset;
+      selectedLine = null;
+      selectedAction = null;
+      previewState = null;
+    };
+    // Collapsing a category section nests its lines away → universal deselect, so the
+    // disposition panel never lingers under a collapsed line (client request 2026-06-28).
+    det.querySelectorAll<HTMLDetailsElement>(".iv-cat").forEach((cat) =>
+      cat.addEventListener("toggle", () => { if (!cat.open) clearSelection(); }));
+
     const drawPreview = () => {
       if (!selectedLine || !selectedAction) {
         disp.querySelector<HTMLElement>('[data-panel="preview"]')!.innerHTML = '<div class="iv-disp-lead">Choose an action in the Actions tab to generate a communication preview.</div>';
@@ -537,8 +552,8 @@ if (root && dataEl && mount) {
         // Click an already-active line to deselect + collapse the disposition
         // panel (keeps long invoices from running off-screen).
         const wasSel = row.classList.contains("sel");
-        det.querySelectorAll(".iv-ln").forEach((r) => r.classList.remove("sel"));
-        if (wasSel) { disp.innerHTML = dispReset; selectedLine = null; selectedAction = null; previewState = null; return; }
+        clearSelection();
+        if (wasSel) return;
         row.classList.add("sel");
         const l = inv.lines[+row.dataset.line!];
         selectedLine = l;
@@ -615,10 +630,12 @@ if (root && dataEl && mount) {
     const priceListBtn = hasPriceList
       ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
       : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
-    // "Go back" reset (docs/59 Task 6): re-pend every line, reverse not-to-be-paid holds, cancel
-    // any draft credit memo. Hidden for credit memos and for paid / exported invoices — the server
-    // refuses those too, but there is nothing to undo here. Needs prior audit work to be meaningful.
-    const resetBtn = (!inv.isCreditMemo && !inv.paid && !inv.awaitingPayment && inv.auditedLines > 0)
+    // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
+    // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
+    // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
+    // included. cc.proexteriorsus.net is where a human fixes agent work, so the option must be
+    // universal for open+unpaid worked invoices. Hidden only on paid/exported (server refuses those).
+    const resetBtn = (!inv.paid && !inv.awaitingPayment && inv.hasWork === true)
       ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset all lines to pending, reverse not-to-be-paid holds, and cancel any draft credit memo (sent communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `

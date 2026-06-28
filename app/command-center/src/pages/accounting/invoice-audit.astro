@@ -41,11 +41,11 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <option value="">All PE offices</option>
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
-      <label class="iv-daterange" title="Invoice date range (defaults to the actionable open + ≥60-day window)">
+      <label class="iv-daterange" title="Invoice date range (defaults to the oldest open invoice date → today)">
         <span class="iv-daterange-lab">Invoice date</span>
-        <input class="iv-date" id="iv-date1" type="date" value={data.scope.defaultFrom} max={data.scope.cutoff} data-cap={data.scope.cutoff} data-default={data.scope.defaultFrom} aria-label="From date" />
+        <input class="iv-date" id="iv-date1" type="date" value={data.scope.defaultFrom} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultFrom} aria-label="From date" />
         <span class="iv-daterange-sep">→</span>
-        <input class="iv-date" id="iv-date2" type="date" value={data.scope.defaultTo} max={data.scope.cutoff} data-cap={data.scope.cutoff} data-default={data.scope.defaultTo} aria-label="To date" />
+        <input class="iv-date" id="iv-date2" type="date" value={data.scope.defaultTo} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultTo} aria-label="To date" />
       </label>
       <label class="iv-toggle"><input type="checkbox" id="iv-showall" /> Show all</label>
       <select class="iv-select" id="iv-tol">

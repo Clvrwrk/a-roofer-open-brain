@@ -68,6 +68,7 @@ export interface InvLine {
   recentPrice: number | null;  // newest prior invoice, same item + ship_to + UOM (normal invoices)
   orgInvPrice: number | null;  // original-invoice price for a credit memo line (D7)
   thirdPrice: number | null;   // contextual 3rd column value: recentPrice or, for credit memos, orgInvPrice
+  thirdPriceDate: string;      // invoice_date of the recent/org-inv invoice behind thirdPrice (YYYY-MM-DD, "" if none)
   benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | "";
   benchmarkPrice: number | null;       // the price the cascade variance compares against
   cascadeVariancePct: number | null;   // cascaded variance % (display)
@@ -111,6 +112,7 @@ export interface Invoice {
   worstPct: number;
   auditedLines: number;
   pendingLines: number;
+  hasWork: boolean; // any line passed OR disputed — drives the "Go back" reset button (docs/59 Task 6 polish)
   paid: boolean;
   paidAt: string;
   processedAt: string;
@@ -158,9 +160,9 @@ export interface InvOffice {
 
 export interface InvoiceAuditScope {
   minAgeDays: number; // SCOPE_MIN_AGE_DAYS
-  cutoff: string;     // today − minAgeDays (YYYY-MM-DD); upper bound of the default date range
-  defaultFrom: string; // oldest actionable invoice_date (lower bound of the default range), "" if none
-  defaultTo: string;   // == cutoff
+  cutoff: string;     // today − minAgeDays (YYYY-MM-DD); the actionable-scope age bound
+  defaultFrom: string; // oldest OPEN invoice_date (lower bound of the default date range), "" if none
+  defaultTo: string;   // today (upper bound of the default date range + the date-input cap)
 }
 
 export interface InvoiceAuditData {
@@ -194,6 +196,11 @@ export function scopeCutoffDate(today: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
+// today as a YYYY-MM-DD string (date-only, UTC) — upper bound of the default date window.
+export function todayDateStr(today: Date = new Date()): string {
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10);
+}
+
 export const isInvoiceActionable = (
   invoice: Pick<Invoice, "paid" | "isCreditMemo" | "invoiceDate">,
   cutoff: string = scopeCutoffDate(),
@@ -201,7 +208,7 @@ export const isInvoiceActionable = (
 
 function emptyScope(today: Date = new Date()): InvoiceAuditScope {
   const cutoff = scopeCutoffDate(today);
-  return { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom: "", defaultTo: cutoff };
+  return { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom: "", defaultTo: todayDateStr(today) };
 }
 
 // Derive the scope metadata + KPI totals from the full invoice set. Audit-finding KPIs
@@ -220,9 +227,13 @@ export function buildScopeAndTotals(
   const cutoff = scopeCutoffDate(today);
   const actionable = invoices.filter((i) => i.actionable);
   const openInv = invoices.filter((i) => !i.paid);
-  const defaultFrom = actionable.reduce<string>((min, i) => (i.invoiceDate && (!min || i.invoiceDate < min) ? i.invoiceDate : min), "");
+  // Default date window = oldest OPEN invoice_date → today (client request 2026-06-28).
+  // (Previously oldest-actionable → today−60d; the wider span lets a human reach any open
+  // invoice that still needs a "Go back" without first toggling "Show all".)
+  const todayStr = todayDateStr(today);
+  const defaultFrom = openInv.reduce<string>((min, i) => (i.invoiceDate && (!min || i.invoiceDate < min) ? i.invoiceDate : min), "");
   return {
-    scope: { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom, defaultTo: cutoff },
+    scope: { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom, defaultTo: todayStr },
     totals: {
       invoices: invoices.length,
       atRisk: Math.round(actionable.reduce((s, i) => s + i.atRisk, 0)),
@@ -361,6 +372,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       recentPrice: null,
       orgInvPrice: null,
       thirdPrice: null,
+      thirdPriceDate: "",
       benchmarkSource: "",
       benchmarkPrice: null,
       cascadeVariancePct: null,
@@ -405,6 +417,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     worstPct: num(i.worst_pct),
     auditedLines: 0,
     pendingLines: 0,
+    hasWork: false,
     // Open vs paid = ABC AR report (ar_status). Falls back to the internal gate only when an
     // invoice has no AR-report coverage (e.g. brand-new, pre-reconcile).
     paid: arByInvoice.has(i.invoice_number)
@@ -428,6 +441,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // Only auditable lines (resolvable qty + price) can be "pending review" — a line
     // with no qty/price must never surface to audit (Item 6 guard).
     inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
+    // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
+    inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.toBePaid = isInvoiceToBePaid(inv);
     inv.actionable = isInvoiceActionable(inv, cutoff);
     return inv;
@@ -611,19 +626,26 @@ function isUsefulInvoiceAuditSummary(data: InvoiceAuditData) {
 
 function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   const passedLineIds = new Set<string>();
-  for (const a of auditRows) if (a.audit_status === "passed" && a.invoice_line_id) passedLineIds.add(String(a.invoice_line_id));
+  // "Worked" = passed OR disputed (any human/agent decision) → drives the Go-back button.
+  const workedLineIds = new Set<string>();
+  for (const a of auditRows) {
+    if (!a.invoice_line_id) continue;
+    if (a.audit_status === "passed") passedLineIds.add(String(a.invoice_line_id));
+    if (a.audit_status === "passed" || a.audit_status === "disputed") workedLineIds.add(String(a.invoice_line_id));
+  }
 
-  const progressByInvoice = new Map<string, { audited: number; pending: number }>();
+  const progressByInvoice = new Map<string, { audited: number; pending: number; worked: number }>();
   for (const line of lineRows) {
     const invoiceNumber = String(line.invoice_number ?? "");
     const lineId = String(line.line_id ?? "");
     if (!invoiceNumber || !lineId) continue;
-    const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0 };
+    const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0, worked: 0 };
     if (passedLineIds.has(lineId)) {
       progress.audited++;
     } else if (line.is_auditable !== false) {
       progress.pending++;
     }
+    if (workedLineIds.has(lineId)) progress.worked++;
     progressByInvoice.set(invoiceNumber, progress);
   }
   return progressByInvoice;
@@ -648,6 +670,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const fallbackPendingLines = Math.max(0, num(i.pending_lines ?? i.flagged_lines) + num(i.no_price_lines) - fallbackAuditedLines);
     const auditedLines = progress?.audited ?? fallbackAuditedLines;
     const pendingLines = progress?.pending ?? fallbackPendingLines;
+    const hasWork = (progress?.worked ?? auditedLines) > 0;
     const paid = arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
       : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
@@ -671,6 +694,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       worstPct: num(i.worst_pct),
       auditedLines,
       pendingLines,
+      hasWork,
       paid,
       paidAt: arByInvoice.get(i.invoice_number)?.date_paid
         ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
@@ -873,7 +897,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
     // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
-    fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
+    fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,third_price_date,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
   ]);
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
@@ -908,6 +932,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
       recentPrice: numOrNull(c?.recent_price),
       orgInvPrice: numOrNull(c?.org_inv_price),
       thirdPrice: numOrNull(c?.third_price),
+      thirdPriceDate: c?.third_price_date ? String(c.third_price_date).slice(0, 10) : "",
       benchmarkSource: (c?.benchmark_source ?? "") as InvLine["benchmarkSource"],
       benchmarkPrice: numOrNull(c?.benchmark_price),
       cascadeVariancePct: numOrNull(c?.variance_pct),
@@ -951,6 +976,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     worstPct: num(i.worst_pct),
     auditedLines: lines.filter((line) => line.audited).length,
     pendingLines: lines.filter((line) => line.auditable && !line.audited).length,
+    hasWork: lines.some((line) => line.auditStatus === "passed" || line.auditStatus === "disputed"),
     paid,
     paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",
     ...derivePaymentState(processed),
