@@ -107,7 +107,11 @@ per-invoice "go back" reset with internal-effect reversal.
 - **Validation gate (preview):** default cannot select outside open+60d; "Show all" reveals paid/recent/credit-memo invoices;
   default range correct; interacts correctly with office/tolerance/to-audit filters; screenshot proof of both states.
 
-### Task 5 — Alex/Maya attribution (UI + mapping)
+### Task 5 — Alex/Maya attribution (UI + mapping)  ✅ DONE 2026-06-28
+- **Done:** pure `attributeAuditActor(approved_by, source)` mapper in `invoice-audit.ts` (auto_match→Alex agent;
+  named person→human; "Maya Chen" stays human, not the Maya agent; System backfill→system) + per-line
+  `actorLabel/actorKind/actorPersona`; agent/human/system badge in `invoice-audit-tree.ts`. 6 unit tests; verified
+  live (API JSON across all 3 actor types) + rendered DOM ("✓ Alex" + Agent badge); screenshot proof.
 - Map action→persona: variance/audit/holds/credit-memo → **Alex**; intake/surfacing → **Maya**; human actor → human.
   Drive from `dashboard_action_log.actor_type` + `action_type`/`source`. Add an **agent-vs-human badge**.
 - **Validation gate:** agent actions render the correct persona + badge; human (Lucinda/backfill) actions render as human;

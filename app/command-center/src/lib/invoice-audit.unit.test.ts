@@ -276,3 +276,39 @@ describe("invoice-payment CSV", () => {
     expect(name).toBe("abc-supply-invoices-to-be-paid-2026-06-26-1523.csv");
   });
 });
+
+describe("attributeAuditActor (docs/59 Task 5)", () => {
+  it("maps an automated price-agreement match to the Alex agent", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("System", "auto_match")).toEqual({ label: "Alex", kind: "agent", persona: "Alex" });
+  });
+
+  it("treats the System backfill seed as system, not an agent", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("System", "backfill")).toEqual({ label: "System", kind: "system", persona: null });
+  });
+
+  it("renders a named person as a human", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("Lucinda", "backfill")).toEqual({ label: "Lucinda", kind: "human", persona: null });
+    expect(attributeAuditActor("Chris Hussey", "manual")).toEqual({ label: "Chris Hussey", kind: "human", persona: null });
+    expect(attributeAuditActor("accounting@proexteriorsus.com", "manual")).toEqual({ label: "accounting@proexteriorsus.com", kind: "human", persona: null });
+  });
+
+  it("does not confuse the human 'Maya Chen' with the Maya agent", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("Maya Chen", "manual")).toEqual({ label: "Maya Chen", kind: "human", persona: null });
+  });
+
+  it("maps an explicit agent persona write to the right agent", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("Alex", "auto_match")).toEqual({ label: "Alex", kind: "agent", persona: "Alex" });
+    expect(attributeAuditActor("Maya", "agent_intake")).toEqual({ label: "Maya", kind: "agent", persona: "Maya" });
+  });
+
+  it("falls back to system for empty/unknown records", async () => {
+    const { attributeAuditActor } = await import("./invoice-audit");
+    expect(attributeAuditActor("", "")).toEqual({ label: "System", kind: "system", persona: null });
+    expect(attributeAuditActor(null, null)).toEqual({ label: "System", kind: "system", persona: null });
+  });
+});

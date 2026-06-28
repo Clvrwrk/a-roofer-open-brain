@@ -2,7 +2,7 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 
-interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
+interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
 interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
@@ -54,11 +54,24 @@ if (root && dataEl && mount) {
     dataEl.textContent = JSON.stringify({ offices, actions, categories }).replace(/</g, "\\u003c");
   }
 
+  /* ---- actor attribution badge (docs/59 Task 5) ---- */
+  // Agent (Alex/Maya) vs human vs the historical System seed. Persona name is carried in
+  // actorLabel; the badge says which kind of actor it was.
+  const ACTOR_BADGE: Record<string, { lab: string; cls: string; tip: string }> = {
+    agent: { lab: "Agent", cls: "pill-brand", tip: "Automated agent action" },
+    human: { lab: "Human", cls: "pill-grey", tip: "Human action" },
+    system: { lab: "System", cls: "pill-grey", tip: "Historical system import" },
+  };
+  function actorBadge(kind: string): string {
+    const b = ACTOR_BADGE[kind];
+    return b ? ` <span class="pill ${b.cls}" title="${esc(b.tip)}">${b.lab}</span>` : "";
+  }
+
   /* ---- line + disposition (lazy) ---- */
   function auditCell(l: InvLine): string {
     if (l.audited) {
       const meta = [l.auditNote, l.agreementId ? `Agreement #${l.agreementId}${l.agreementCurrent === false ? " (expired " + l.agreementExpiry + ")" : ""}` : "", l.auditedAt].filter(Boolean).join(" · ");
-      return `<span class="iv-audited" title="${esc(meta)}">✓ ${esc(l.auditedBy || "Passed")}</span>`;
+      return `<span class="iv-audited" title="${esc(meta)}">✓ ${esc(l.actorLabel || l.auditedBy || "Passed")}</span>${actorBadge(l.actorKind)}`;
     }
     return `<button class="iv-mark" data-mark data-line="LIDX">Mark passed</button>`;
   }
@@ -154,6 +167,10 @@ if (root && dataEl && mount) {
       l.auditNote = r.record?.approval_note || body.note;
       l.auditSource = "manual";
       l.auditedAt = (r.record?.decided_at || "").slice(0, 10);
+      // Manual mark from the dashboard = a human operator (docs/59 Task 5).
+      l.actorLabel = l.auditedBy;
+      l.actorKind = "human";
+      l.actorPersona = null;
       inv.auditedLines = inv.lines.filter((x) => x.audited).length;
       inv.pendingLines = inv.lines.length - inv.auditedLines;
       refreshToBePaid(inv);
@@ -399,6 +416,10 @@ if (root && dataEl && mount) {
             selectedLine.auditNote = selectedAction.label;
             selectedLine.auditSource = "manual";
             selectedLine.auditedAt = String(response?.result?.auditRecord?.decided_at || "").slice(0, 10);
+            // Disposition applied from the dashboard = a human operator (docs/59 Task 5).
+            selectedLine.actorLabel = selectedLine.auditedBy;
+            selectedLine.actorKind = "human";
+            selectedLine.actorPersona = null;
             inv.auditedLines = inv.lines.filter((x) => x.audited).length;
             inv.pendingLines = inv.lines.length - inv.auditedLines;
             refreshToBePaid(inv);
@@ -481,7 +502,7 @@ if (root && dataEl && mount) {
         const credits = actions.filter((a) => a.group === "credit");
         const btn = (a: Action) => `<button class="iv-act ${a.group}" data-action="${a.id}" data-group="${a.group}" data-label="${esc(a.label)}"><span class="t">${esc(a.label)}</span><span class="h">${esc(a.hint)}</span></button>`;
         disp.innerHTML = `
-          <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.benchmarkPrice != null ? money2(l.benchmarkPrice) : (l.negotiatedPrice == null ? "No benchmark" : money2(l.negotiatedPrice))}${(!l.uomMismatch && l.cascadeVariancePct != null) ? ` · <span class="pill ${tolCls(l.cascadeVariancePct)}">${pct(l.cascadeVariancePct)} ${tolLab(l.cascadeVariancePct)}</span>${benchBadge(l.benchmarkSource, l.benchmarkPrice)}` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.auditedBy)}</span>` : ""}</div>
+          <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.benchmarkPrice != null ? money2(l.benchmarkPrice) : (l.negotiatedPrice == null ? "No benchmark" : money2(l.negotiatedPrice))}${(!l.uomMismatch && l.cascadeVariancePct != null) ? ` · <span class="pill ${tolCls(l.cascadeVariancePct)}">${pct(l.cascadeVariancePct)} ${tolLab(l.cascadeVariancePct)}</span>${benchBadge(l.benchmarkSource, l.benchmarkPrice)}` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.actorLabel || l.auditedBy)}</span>${actorBadge(l.actorKind)}` : ""}</div>
           <div class="iv-disp-tabs">
             <button type="button" data-tab="actions" class="is-active">Actions</button>
             <button type="button" data-tab="preview">Communications Preview</button>

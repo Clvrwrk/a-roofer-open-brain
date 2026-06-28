@@ -8,6 +8,47 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 import { loadItemUomMap, convertPrice } from "@lib/uom";
 
+// docs/59 Task 5 — present audit work as the agent personas (Alex/Maya) or the human
+// who did it. "agent" → an OB agent acted; "human" → a real person; "system" → the
+// one-time historical seed import (neither a live agent nor a person).
+export type AuditActorKind = "agent" | "human" | "system";
+
+export interface AuditAttribution {
+  label: string; // client-facing display name
+  kind: AuditActorKind; // drives the agent/human badge
+  persona: "Alex" | "Maya" | null; // the agent name when kind === "agent"
+}
+
+/**
+ * Map a line audit record (`approved_by` + `source` from v_invoice_line_audit_current)
+ * to a client-facing actor. docs/59 Task 5:
+ *   - variance/audit work (auto_match, or an Alex agent write) → Alex (agent)
+ *   - intake/surfacing (a Maya agent write) → Maya (agent)
+ *   - a named person (Lucinda, Chris Hussey, Maya Chen, accounting@…) → human
+ *   - the one-time System backfill seed → system (NOT attributed to an agent)
+ * Truthful by design: auto-matched lines are the accounting agent's audit work, but
+ * the bulk "System / backfill" import is the historical data seed, not Alex.
+ */
+export function attributeAuditActor(approvedBy?: string | null, source?: string | null): AuditAttribution {
+  const name = (approvedBy ?? "").trim();
+  const src = (source ?? "").trim().toLowerCase();
+  const lower = name.toLowerCase();
+
+  // Explicit agent persona names (an agent write that sets approved_by directly).
+  if (lower === "alex") return { label: "Alex", kind: "agent", persona: "Alex" };
+  if (lower === "maya") return { label: "Maya", kind: "agent", persona: "Maya" };
+
+  if (name === "" || lower === "system") {
+    // Automated price-agreement match = the accounting agent's audit work → Alex.
+    if (src === "auto_match") return { label: "Alex", kind: "agent", persona: "Alex" };
+    // Everything else under "System" (the bulk backfill) is the historical seed.
+    return { label: "System", kind: "system", persona: null };
+  }
+
+  // A named person ("Maya Chen" is a person, distinct from the Maya agent).
+  return { label: name, kind: "human", persona: null };
+}
+
 export interface InvLine {
   lineId: string;
   itemNumber: string;
@@ -41,6 +82,11 @@ export interface InvLine {
   auditNote: string;
   auditSource: string; // auto_match | manual | backfill | ""
   auditedAt: string;
+  // docs/59 Task 5 — client-facing attribution. actorLabel = persona/person name,
+  // actorKind drives the agent/human badge, actorPersona names the agent when agent.
+  actorLabel: string;
+  actorKind: AuditActorKind;
+  actorPersona: "Alex" | "Maya" | null;
   agreementId: number | null;
   agreementCurrent: boolean | null;
   agreementExpiry: string;
@@ -291,6 +337,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   const linesByInvoice = new Map<string, InvLine[]>();
   for (const l of lineRows) {
     const a = auditByLine.get(l.line_id);
+    const actor = attributeAuditActor(a?.approved_by, a?.source);
     const passed = a?.audit_status === "passed";
     const list = linesByInvoice.get(l.invoice_number) ?? [];
     const api = apiByKey.get(`${l.item_number ?? ""}|${branchByInvoice.get(l.invoice_number) ?? ""}`);
@@ -327,6 +374,9 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
       auditedBy: a?.approved_by ?? "",
       auditNote: a?.approval_note ?? "",
       auditSource: a?.source ?? "",
+      actorLabel: actor.label,
+      actorKind: actor.kind,
+      actorPersona: actor.persona,
       auditedAt: a?.decided_at ? String(a.decided_at).slice(0, 10) : "",
       agreementId: a?.price_agreement_id ?? null,
       agreementCurrent: a?.agreement_current ?? null,
@@ -836,6 +886,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 
   const lines: InvLine[] = lineRows.map((l) => {
     const a = auditByLine.get(l.line_id);
+    const actor = attributeAuditActor(a?.approved_by, a?.source);
     const c = cascadeByLine.get(l.line_id);
     const passed = a?.audit_status === "passed";
     const numOrNull = (v: unknown) => (v == null ? null : num(v));
@@ -870,6 +921,9 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
       auditedBy: a?.approved_by ?? "",
       auditNote: a?.approval_note ?? "",
       auditSource: a?.source ?? "",
+      actorLabel: actor.label,
+      actorKind: actor.kind,
+      actorPersona: actor.persona,
       auditedAt: a?.decided_at ? String(a.decided_at).slice(0, 10) : "",
       agreementId: a?.price_agreement_id ?? null,
       agreementCurrent: a?.agreement_current ?? null,
