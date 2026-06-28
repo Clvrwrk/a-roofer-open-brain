@@ -13,6 +13,7 @@ optional_skill_directory_issue_id: PEC-3
 standing_skill_issue_id: PEC-1
 runtime: Autonomous (Hetzner pe-ob-agents)
 local_context_path: agents/dev-engine/pe-cc-agents/SKILL.md
+no_supabase_service_role: true
 ---
 
 # Open Engine — Private Context: pe-cc-agents
@@ -100,6 +101,20 @@ Notes: <none or short blocker>
 - Ask Chris before any customer-facing change
 - External or destructive actions need explicit issue-level approval
 - Never install or adapt an optional standing skill without explicit human approval from Chris
+
+
+## Plane boundary rules (doc 58)
+
+This runtime is on the **DevTeam plane** — it builds and maintains the brain. It must never cross into the Roofing-Ops plane.
+
+| Rule | Requirement |
+|---|---|
+| No brain token | `no_supabase_service_role: true` — this profile must NOT have `SUPABASE_SERVICE_TOKEN` |
+| No roofing channels | Do not post to `#accounting-*`, `#ops-*`, or any roofing Slack channel |
+| No roofing tracking | Never write to `dashboard_action_log` — that is the roofing plane's surface |
+| Claim scope | Only claim Linear issues titled `[agent instructions][pe-cc-agents][task]` |
+
+**pe-cc-hermes seam:** Hermes binary runs on both planes. Dev Hermes = this profile (`agents/dev-engine/pe-cc-hermes/SKILL.md`), brain-less. Roofing Hermes = the `agents/horizontal/maintenance` profile with brain access. They must never share a `.env` or Hermes home directory.
 
 ## Optional skills
 none
