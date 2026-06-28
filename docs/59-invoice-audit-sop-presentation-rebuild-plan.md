@@ -117,7 +117,16 @@ per-invoice "go back" reset with internal-effect reversal.
 - **Validation gate:** agent actions render the correct persona + badge; human (Lucinda/backfill) actions render as human;
   no action mis-attributed; client-facing copy reviewed; screenshot proof.
 
-### Task 6 — Per-invoice "Go back" reset (UI + API)
+### Task 6 — Per-invoice "Go back" reset (UI + API)  ✅ DONE 2026-06-28 (RT-2 passed)
+- **Done:** atomic `invoice_audit_reset()` RPC (migration 158) — APPENDS `pending` audit rows for every
+  non-pending line, cancels only `draft` credit memos (new `cancelled` status), logs one
+  `dashboard_action_log` entry, refuses paid/exported/credit-memo invoices. WorkOS-gated route
+  `api/invoice-audit/reset.ts`; "↩ Go back" button in the invoice header (hidden on paid/CM).
+- **RT-2 verified (live prod, zero permanent mutation):** guards return `not_found` / `credit_memo_not_resettable`
+  / `invoice_paid` with no writes; success path re-pends 10 lines + cancels 1 draft CM; **idempotent** (2nd call →
+  0 lines, 0 CMs, no 2nd log); **atomic** (whole op rolled back cleanly under BEGIN/ROLLBACK — prod restored to
+  10 passed / draft CM / 0 logs); **append-only, no delete path**; button absent on all 803 paid + 230 CM invoices;
+  UI handler round-trip (request body, toast, button removal) verified. astro build clean; 19 unit tests pass.
 - New API route `api/invoice-audit/reset` (WorkOS-gated): for one invoice, **append** neutral/`pending` audit records
   for all its lines (never delete — hard rule 1), reverse `not-to-be-paid` holds, cancel **draft** credit-memo
   candidates; write a `dashboard_action_log` entry. Does **not** touch sent comms. Add the button to the invoice header.

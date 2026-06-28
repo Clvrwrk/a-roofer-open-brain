@@ -182,6 +182,52 @@ if (root && dataEl && mount) {
     }
   }
 
+  // docs/59 Task 6 — per-invoice "Go back". Confirms, calls the WorkOS-gated reset
+  // endpoint, then reloads the invoice from the server so the tree reflects the new
+  // (all-pending) state. Append-only on the server; here we just re-fetch the truth.
+  async function resetInvoice(inv: Invoice, det: HTMLDetailsElement, btn: HTMLButtonElement) {
+    const ok = window.confirm(
+      `Reset invoice ${inv.invoiceNumber}?\n\nThis re-pends every line, reverses not-to-be-paid holds, and cancels any draft credit memo. Prior decisions stay in history and sent communications are not affected.`,
+    );
+    if (!ok) return;
+    const prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Resetting…";
+    try {
+      const res = await fetch("/api/invoice-audit/reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceNumber: inv.invoiceNumber }),
+      });
+      const r = await res.json();
+      if (!r.ok) {
+        toast("Reset failed: " + (r.error_description || r.error || "error"));
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+        return;
+      }
+      toast(
+        `Invoice ${inv.invoiceNumber} reset — ${r.linesReset} line(s) re-pended` +
+          (r.creditMemosCancelled ? `, ${r.creditMemosCancelled} draft credit memo cancelled` : "") + ".",
+      );
+      // Re-fetch the invoice (loadInvoiceLines syncs the summary tags + bar via the tree).
+      inv.lines = [];
+      inv.linesLoaded = false;
+      invoiceDetailInflight.delete(inv.invoiceNumber);
+      await loadInvoiceLines(inv);
+      const body = det.querySelector(".iv-inv-body") as HTMLElement | null;
+      if (body) {
+        delete body.dataset.rendered;
+        if (det.open) await renderInvoiceDetail(det, body, inv);
+      }
+      btn.remove(); // invoice is now all-pending — nothing left to go back to
+    } catch {
+      toast("Reset failed — network error");
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
+
   function parsePreview(raw: any): CommunicationPreviewPayload {
     const messages = Array.isArray(raw?.messages) ? raw.messages : [];
     return {
@@ -569,12 +615,18 @@ if (root && dataEl && mount) {
     const priceListBtn = hasPriceList
       ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
       : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
+    // "Go back" reset (docs/59 Task 6): re-pend every line, reverse not-to-be-paid holds, cancel
+    // any draft credit memo. Hidden for credit memos and for paid / exported invoices — the server
+    // refuses those too, but there is nothing to undo here. Needs prior audit work to be meaningful.
+    const resetBtn = (!inv.isCreditMemo && !inv.paid && !inv.awaitingPayment && inv.auditedLines > 0)
+      ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset all lines to pending, reverse not-to-be-paid holds, and cancel any draft credit memo (sent communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
+      : "";
     return `
       <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-topay="${refreshToBePaid(inv) ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${job}</span></span>
-          <span class="iv-rowbtns">${priceListBtn}${invoiceBtn}</span>
+          <span class="iv-rowbtns">${priceListBtn}${invoiceBtn}${resetBtn}</span>
           <span class="iv-inv-tags">${invoiceTags(inv)}</span>
           ${auditBar()}
         </summary>
@@ -746,6 +798,16 @@ if (root && dataEl && mount) {
     }
     delete body.dataset.rendered;
     if (det.open && inv) void renderInvoiceDetail(det, body, inv);
+  });
+
+  mount.querySelectorAll<HTMLButtonElement>("button.iv-reset[data-reset]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      const det = btn.closest("details.iv-inv") as HTMLDetailsElement | null;
+      const inv = invByNumber.get(btn.dataset.reset || "");
+      if (det && inv) void resetInvoice(inv, det, btn);
+    });
   });
 
   mount.querySelectorAll<HTMLDetailsElement>(".iv-office,.iv-branch").forEach((det) => {

@@ -192,6 +192,10 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-rowbtn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap}
   .iv-rowbtn:hover{border-color:var(--brand);background:var(--brand-bg)}
   .iv-rowbtn.is-disabled{color:var(--muted);background:var(--panel2);border-color:var(--line);opacity:.55;cursor:not-allowed;pointer-events:none}
+  button.iv-rowbtn{cursor:pointer;font-family:inherit}
+  .iv-rowbtn.iv-reset{color:var(--muted);border-style:dashed}
+  .iv-rowbtn.iv-reset:hover{color:var(--red);border-color:var(--red);background:var(--red-bg)}
+  .iv-rowbtn.iv-reset:disabled{opacity:.55;cursor:wait;pointer-events:none}
   .iv-inv-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .iv-inv-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
 
