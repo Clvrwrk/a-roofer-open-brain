@@ -64,7 +64,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       </div>
     </div>
 
-    <p class="iv-kpis-scope">KPIs below cover <strong>open (unpaid) invoices</strong> — the actionable set. Paid/closed are historical record (browse via the “All invoices” filter).</p>
+    <p class="iv-kpis-scope">Audit KPIs cover the <strong>actionable set</strong> — open, unpaid, ≥60&nbsp;days old, excluding credit memos. Paid/recent/credit-memo invoices are historical record (browse via “Show all”).</p>
     <div class="iv-kpis">
       <div class="iv-kpi"><span class="iv-kpi-lab">Open Invoices</span><span class="iv-kpi-val">{data.totals.openInvoices.toLocaleString()}</span><span class="iv-kpi-sub">active · {data.totals.paidInvoices} paid/closed</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">To Audit</span><span class="iv-kpi-val">{data.totals.pending.toLocaleString()}</span><span class="iv-kpi-sub">lines pending review</span></div>

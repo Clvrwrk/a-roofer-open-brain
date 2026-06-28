@@ -60,6 +60,7 @@ export interface Invoice {
   processedAt: string;
   toBePaid: boolean;
   awaitingPayment: boolean;
+  actionable: boolean; // in the open+≥60d, non-credit-memo audit scope (docs/59 Task 2)
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
   hasPdf: boolean;
   jobNumber: string;
@@ -99,18 +100,90 @@ export interface InvOffice {
   branches: InvBranch[];
 }
 
+export interface InvoiceAuditScope {
+  minAgeDays: number; // SCOPE_MIN_AGE_DAYS
+  cutoff: string;     // today − minAgeDays (YYYY-MM-DD); upper bound of the default date range
+  defaultFrom: string; // oldest actionable invoice_date (lower bound of the default range), "" if none
+  defaultTo: string;   // == cutoff
+}
+
 export interface InvoiceAuditData {
   status: "live" | "unconfigured";
   generatedAt: string;
+  scope: InvoiceAuditScope;
   offices: InvOffice[];
   categories: { key: string; label: string; sortOrder: number }[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; toBePaid: number; awaitingPayment: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; toBePaid: number; awaitingPayment: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
 export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt">) =>
   !invoice.paid && !invoice.isCreditMemo && !invoice.processedAt && invoice.pendingLines === 0 && invoice.auditedLines > 0;
+
+// ── Actionable scope (docs/59 Task 2 · docs/57 morning_abc_sync v3) ──────────────
+// The audit "actionable set" is the single source of truth for the default queue and
+// the audit-finding KPIs: an OPEN (unpaid per ABC AR) invoice, at least
+// SCOPE_MIN_AGE_DAYS old on invoice_date, that is NOT a credit memo. Paid / recent /
+// credit-memo invoices stay in the payload as browsable history (revealed by the UI
+// "Show all" escape, Task 4) but are excluded from the default actionable view.
+export const SCOPE_MIN_AGE_DAYS = 60;
+
+// today − SCOPE_MIN_AGE_DAYS as a YYYY-MM-DD string. Date-only arithmetic so it lines
+// up with the string compare against invoice_date (also YYYY-MM-DD) and Postgres
+// CURRENT_DATE − 60. `today` is injectable for tests.
+export function scopeCutoffDate(today: Date = new Date()): string {
+  const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() - SCOPE_MIN_AGE_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
+export const isInvoiceActionable = (
+  invoice: Pick<Invoice, "paid" | "isCreditMemo" | "invoiceDate">,
+  cutoff: string = scopeCutoffDate(),
+) => !invoice.paid && !invoice.isCreditMemo && !!invoice.invoiceDate && invoice.invoiceDate <= cutoff;
+
+function emptyScope(today: Date = new Date()): InvoiceAuditScope {
+  const cutoff = scopeCutoffDate(today);
+  return { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom: "", defaultTo: cutoff };
+}
+
+// Derive the scope metadata + KPI totals from the full invoice set. Audit-finding KPIs
+// (at-risk, credit-memo requested, no-price, flagged, audited, pending) scope to the
+// actionable set; informational + payment KPIs (open/paid/credit-memo counts,
+// to-be-paid, awaiting-payment) keep their open-set semantics — the two-phase payment
+// loop is independent of the 60-day audit age bound. (docs/59 Task 2)
+type ScopeTotalsInvoice = Pick<
+  Invoice,
+  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "toBePaid" | "awaitingPayment"
+>;
+export function buildScopeAndTotals(
+  invoices: ScopeTotalsInvoice[],
+  today: Date = new Date(),
+): { scope: InvoiceAuditScope; totals: InvoiceAuditData["totals"] } {
+  const cutoff = scopeCutoffDate(today);
+  const actionable = invoices.filter((i) => i.actionable);
+  const openInv = invoices.filter((i) => !i.paid);
+  const defaultFrom = actionable.reduce<string>((min, i) => (i.invoiceDate && (!min || i.invoiceDate < min) ? i.invoiceDate : min), "");
+  return {
+    scope: { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom, defaultTo: cutoff },
+    totals: {
+      invoices: invoices.length,
+      atRisk: Math.round(actionable.reduce((s, i) => s + i.atRisk, 0)),
+      creditMemoRequested: Math.round(actionable.reduce((s, i) => s + i.creditMemoRequested, 0)),
+      noPrice: actionable.reduce((s, i) => s + i.noPriceLines, 0),
+      flagged: actionable.reduce((s, i) => s + i.flaggedLines, 0),
+      audited: actionable.reduce((s, i) => s + i.auditedLines, 0),
+      pending: actionable.reduce((s, i) => s + i.pendingLines, 0),
+      creditMemos: openInv.filter((i) => i.isCreditMemo).length,
+      openInvoices: openInv.length,
+      paidInvoices: invoices.filter((i) => i.paid).length,
+      actionableInvoices: actionable.length,
+      toBePaid: openInv.filter((i) => i.toBePaid).length,
+      awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
+    },
+  };
+}
 
 // Two-phase payment state derived from the invoice_payment_processed ledger.
 // Only 'exported'/'paid' rows block the To-Be-Paid queue (set processedAt);
@@ -128,7 +201,7 @@ export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymen
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, toBePaid: 0, awaitingPayment: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, awaitingPayment: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -245,6 +318,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     linesByInvoice.set(l.invoice_number, list);
   }
 
+  const cutoff = scopeCutoffDate();
   const invoices: Invoice[] = invRows.map((i) => ({
     invoiceNumber: i.invoice_number,
     invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
@@ -276,6 +350,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
         : "",
     ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
+    actionable: false,
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
     jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
     clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
@@ -287,6 +362,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // with no qty/price must never surface to audit (Item 6 guard).
     inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
     inv.toBePaid = isInvoiceToBePaid(inv);
+    inv.actionable = isInvoiceActionable(inv, cutoff);
     return inv;
   });
 
@@ -338,31 +414,18 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), creditMemoRequested: Math.round(o.creditMemoRequested), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk) }))
     .sort((a, b) => b.atRisk - a.atRisk);
 
+  // KPI cards: audit-finding metrics reflect the actionable set (open + ≥60d + non-CM);
+  // payment + open/paid/credit-memo counts keep open-set semantics. Paid/recent/credit-memo
+  // invoices remain a browsable historical record (revealed via "Show all"), but don't
+  // inflate the audit headline. Single source of truth = buildScopeAndTotals (docs/59 Task 2).
+  const { scope, totals } = buildScopeAndTotals(invoices);
   return {
     status: "live",
     generatedAt: new Date().toISOString(),
+    scope,
     offices,
     categories,
-    // KPI cards reflect OPEN (unpaid per the ABC AR report) invoices only — the actionable
-    // set for go-live. Paid/closed invoices remain a browsable historical record below the
-    // cards (via the office tree + the "All invoices" filter), but don't inflate the headline.
-    totals: (() => {
-      const openInv = invoices.filter((i) => !i.paid);
-      return {
-        invoices: invoices.length, // total (drives the empty-state guard, not a card)
-        creditMemos: openInv.filter((i) => i.isCreditMemo).length,
-        atRisk: Math.round(openInv.reduce((s, i) => s + i.atRisk, 0)),
-        creditMemoRequested: Math.round(openInv.reduce((s, i) => s + i.creditMemoRequested, 0)),
-        noPrice: openInv.reduce((s, i) => s + i.noPriceLines, 0),
-        flagged: openInv.reduce((s, i) => s + i.flaggedLines, 0),
-        audited: openInv.reduce((s, i) => s + i.auditedLines, 0),
-        pending: openInv.reduce((s, i) => s + i.pendingLines, 0),
-        openInvoices: openInv.length,
-        paidInvoices: invoices.filter((i) => i.paid).length,
-        toBePaid: openInv.filter((i) => i.toBePaid).length,
-        awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
-      };
-    })(),
+    totals,
   };
 }
 
@@ -454,6 +517,7 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
   return {
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
+    scope: emptyScope(),
     offices: [],
     categories: [],
     totals: {
@@ -467,6 +531,7 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
       pending: 0,
       openInvoices: 0,
       paidInvoices: 0,
+      actionableInvoices: 0,
       toBePaid: 0,
       awaitingPayment: 0,
     },
@@ -508,6 +573,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
   const progressByInvoice = buildLineProgressByInvoice(lineRows, auditRows);
   const processedByInvoice = new Map<string, any>();
   for (const p of processedRows) if (!processedByInvoice.has(p.invoice_number)) processedByInvoice.set(p.invoice_number, p);
+  const cutoff = scopeCutoffDate();
 
   const invoices: Array<Invoice & { hasPriceList: boolean; searchText: string }> = rows.map((i) => {
     const progress = progressByInvoice.get(i.invoice_number);
@@ -546,6 +612,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
           : "",
       ...paymentState,
       toBePaid: false,
+      actionable: false,
       hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
       jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
       clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
@@ -558,6 +625,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
         .toLowerCase(),
     };
     invoice.toBePaid = isInvoiceToBePaid(invoice);
+    invoice.actionable = isInvoiceActionable(invoice, cutoff);
     return invoice;
   });
 
@@ -605,27 +673,15 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
   const offices = Array.from(officeMap.values())
     .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), creditMemoRequested: Math.round(o.creditMemoRequested), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk) }))
     .sort((a, b) => b.atRisk - a.atRisk);
-  const openInv = invoices.filter((i) => !i.paid);
 
+  const { scope, totals } = buildScopeAndTotals(invoices);
   return {
     status: "live",
     generatedAt: new Date().toISOString(),
+    scope,
     offices,
     categories,
-    totals: {
-      invoices: invoices.length,
-      creditMemos: openInv.filter((i) => i.isCreditMemo).length,
-      atRisk: Math.round(openInv.reduce((sum, inv) => sum + inv.atRisk, 0)),
-      creditMemoRequested: Math.round(openInv.reduce((sum, inv) => sum + inv.creditMemoRequested, 0)),
-      noPrice: openInv.reduce((sum, inv) => sum + inv.noPriceLines, 0),
-      flagged: openInv.reduce((sum, inv) => sum + inv.flaggedLines, 0),
-      audited: openInv.reduce((sum, inv) => sum + inv.auditedLines, 0),
-      pending: openInv.reduce((sum, inv) => sum + inv.pendingLines, 0),
-      openInvoices: openInv.length,
-      paidInvoices: invoices.filter((i) => i.paid).length,
-      toBePaid: openInv.filter((i) => i.toBePaid).length,
-      awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
-    },
+    totals,
   };
 }
 
@@ -813,6 +869,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",
     ...derivePaymentState(processed),
     toBePaid: false,
+    actionable: false,
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
@@ -820,5 +877,6 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     lines,
   };
   invoice.toBePaid = isInvoiceToBePaid(invoice);
+  invoice.actionable = isInvoiceActionable(invoice);
   return invoice;
 }

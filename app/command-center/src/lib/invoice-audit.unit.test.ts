@@ -35,7 +35,7 @@ describe("loadInvoiceAuditSummary", () => {
         v_invoice_audit_invoice: [
           {
             invoice_number: "OPEN-1",
-            invoice_date: "2026-06-01",
+            invoice_date: "2026-01-15", // ≥60d old → in the actionable scope
             total_amount: 100,
             branch_number: "49",
             branch_name: "Denver, CO",
@@ -49,7 +49,7 @@ describe("loadInvoiceAuditSummary", () => {
           },
           {
             invoice_number: "PAID-1",
-            invoice_date: "2026-06-02",
+            invoice_date: "2026-01-16",
             total_amount: 200,
             branch_number: "49",
             branch_name: "Denver, CO",
@@ -77,6 +77,9 @@ describe("loadInvoiceAuditSummary", () => {
     expect(data.totals.openInvoices).toBe(1);
     expect(data.totals.paidInvoices).toBe(1);
     expect(data.totals.atRisk).toBe(25);
+    expect(data.totals.actionableInvoices).toBe(1); // OPEN-1 only (≥60d, unpaid, non-CM)
+    expect(invoices.find((invoice) => invoice.invoiceNumber === "OPEN-1")?.actionable).toBe(true);
+    expect(invoices.find((invoice) => invoice.invoiceNumber === "PAID-1")?.actionable).toBe(false);
     expect(invoices.find((invoice) => invoice.invoiceNumber === "OPEN-1")?.paid).toBe(false);
     expect(invoices.find((invoice) => invoice.invoiceNumber === "PAID-1")?.paid).toBe(true);
   });
@@ -92,7 +95,7 @@ describe("loadInvoiceAuditSummary", () => {
         v_invoice_audit_invoice: [
           {
             invoice_number: "DONE-1",
-            invoice_date: "2026-06-18",
+            invoice_date: "2026-01-15", // ≥60d old → actionable, so its rollups land in the audit KPIs
             total_amount: 3896,
             branch_number: "49",
             branch_name: "Denver, CO",
@@ -178,6 +181,56 @@ describe("loadInvoiceAuditSummary", () => {
     expect(inv?.awaitingPayment).toBe(false);
     expect(data.totals.toBePaid).toBe(1);
     expect(data.totals.awaitingPayment).toBe(0);
+  });
+
+  it("actionable scope = open + ≥60d + non-credit-memo; KPIs + scope metadata follow it", async () => {
+    const iso = (daysAgo: number) => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - daysAgo);
+      return d.toISOString().slice(0, 10);
+    };
+    const inv = (overrides: Record<string, unknown>) => ({
+      total_amount: 100, branch_number: "49", branch_name: "Denver, CO", office: "Denver",
+      line_count: 1, no_price_lines: 1, flagged_lines: 1, at_risk: 10, credit_memo_amount: 0, worst_pct: 5,
+      ...overrides,
+    });
+    mockCreateServerSupabaseClient.mockReturnValue({
+      client: makeClient({
+        v_invoice_audit_invoice: [
+          inv({ invoice_number: "OLD-OPEN", invoice_date: iso(90), at_risk: 10 }),   // actionable
+          inv({ invoice_number: "RECENT-OPEN", invoice_date: iso(10), at_risk: 20 }), // too new → excluded
+          inv({ invoice_number: "OLD-PAID", invoice_date: iso(120), at_risk: 40 }),   // paid → excluded
+          inv({ invoice_number: "OLD-CM", invoice_date: iso(100), is_credit_memo: true, at_risk: 80 }), // CM → excluded
+        ],
+        roof_system_category: [],
+        abc_invoices: [
+          { invoice_number: "OLD-OPEN", ar_status: "open", date_paid: null },
+          { invoice_number: "RECENT-OPEN", ar_status: "open", date_paid: null },
+          { invoice_number: "OLD-PAID", ar_status: "paid", date_paid: iso(5) },
+          { invoice_number: "OLD-CM", ar_status: "open", date_paid: null },
+        ],
+      }),
+    });
+
+    const { loadInvoiceAuditSummary, SCOPE_MIN_AGE_DAYS, scopeCutoffDate } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const byNo = (n: string) => data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === n);
+
+    expect(byNo("OLD-OPEN")?.actionable).toBe(true);
+    expect(byNo("RECENT-OPEN")?.actionable).toBe(false); // ≥60d gate
+    expect(byNo("OLD-PAID")?.actionable).toBe(false);    // unpaid gate
+    expect(byNo("OLD-CM")?.actionable).toBe(false);      // non-credit-memo gate
+    expect(data.totals.actionableInvoices).toBe(1);
+    // $ At Risk is actionable-scoped → only OLD-OPEN's 10, not the recent/paid/CM risk.
+    expect(data.totals.atRisk).toBe(10);
+    // Open/paid counts keep their open-set semantics (3 open incl. CM + recent, 1 paid).
+    expect(data.totals.openInvoices).toBe(3);
+    expect(data.totals.paidInvoices).toBe(1);
+    // Scope metadata: cutoff = today−60d; default range lower bound = oldest actionable date.
+    expect(data.scope.minAgeDays).toBe(SCOPE_MIN_AGE_DAYS);
+    expect(data.scope.cutoff).toBe(scopeCutoffDate());
+    expect(data.scope.defaultTo).toBe(data.scope.cutoff);
+    expect(data.scope.defaultFrom).toBe(iso(90)); // OLD-OPEN, the only actionable invoice
   });
 
   it("two-phase: ledger-paid invoices are neither To-Be-Paid nor Awaiting Payment", async () => {
