@@ -33,6 +33,28 @@
 - **Zero external sends (v1).** Alex drafts/flags/holds; humans send. Slack-internal posts + dashboard writes are internal.
 - **Record everything.** Every run writes attributed `dashboard_action_log` rows (actor = `alex-rivers`) so the work appears on the Command Center "as if done at a desktop."
 - **Silent when all-clear** (`nepq-agent-communication`): no "nothing to report" posts.
+- **Vendor-agnostic.** The model below is written for ABC but generalizes to any vendor PE buys from; "branch agreement" = the vendor's branch-level negotiated pricing.
+
+### Agreement Priority — branch coverage model (the scope contract)
+
+The cadence tiers govern **how fresh each branch's agreement is kept** — NOT which invoices get
+audited. `morning_abc_sync` audits **all** of yesterday's invoices every day, against whatever
+agreement applies in the canonical DB at its tier's freshness. Scope is **per PE Office, per vendor**:
+
+| Tier | Branch scope | Refresh cadence | Freshness guarantee at audit |
+| --- | --- | --- | --- |
+| 1 | **Main branch** (the branch the office actually buys from) | **Daily** | same-day |
+| 2 | **All branches within 2-hour drive time** of the office | **Weekly** | ≤ 1 week old |
+| 3 | **All 150 branches available for pricing** | **Monthly** | ≤ 1 month old |
+| — | Anything beyond the 150 | **never** | out of scope — do not verify |
+
+- **Main branch is derived from data**, not hardcoded: per office, the branch with the highest
+  invoice spend = its main branch. Self-maintaining; recompute on a slow cadence (≥ weekly).
+- **"Within 2-hour drive time"** is a real drive-time computation from each PE office to each ABC
+  branch — use the Google Maps keys in the agent `.env` (`GOOGLE_MAPS_SERVER_KEY`). Compute once,
+  cache, refresh occasionally (branches/offices change rarely).
+- **Multi-office:** daily scope = N main-branch agreements (one per office). Today: derive N from
+  the data; design for multi-office from the start.
 
 ---
 
@@ -42,8 +64,8 @@
 **Goal:** audit the prior day's invoice lines against negotiated agreements and route by severity.
 
 **Inputs**
-- Invoice lines Maya flagged since yesterday 5:00p (the Maya → Alex handoff; intake work items).
-- **Agreements from the DB canonical layer** (fed by `agreement_ingestion_sweep`, §2). One source of truth at run time.
+- Invoice lines Maya flagged since yesterday 5:00p (the Maya → Alex handoff; intake work items). **All** invoices are audited daily regardless of which branch they came from (the tier only sets agreement freshness, §0).
+- **Agreements from the DB canonical layer** (fed by `agreement_ingestion_sweep`, §2). One source of truth at run time; freshness per branch tier.
 - ABC catalog (for SKU resolution) + `v_item_uom_map` (for UOM alignment).
 
 **Process**
@@ -80,6 +102,7 @@
 
 **Trigger:** ~6:30a CT, Mon–Fri — **before** `morning_abc_sync`.
 **Goal:** consolidate negotiated agreements from all sources into the DB canonical layer so the 7a audit reads one fresh, normalized source.
+**Scope (per Agreement Priority, §0):** the **daily** sweep refreshes **Tier 1 — main-branch agreements only** (one per PE office, branch derived by spend volume). Tier 2 (2hr-radius) is refreshed by the weekly task; Tier 3 (all 150) by the monthly task. The audit always reads the canonical DB, so far-branch invoices are still audited daily — just against an agreement at its tier's freshness.
 
 **Sources → canonical DB**
 - Supabase price layer (already canonical — the merge target).
@@ -133,6 +156,9 @@ When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **i
 ## 5. Dependencies & build backlog surfaced by the daily SOPs
 
 1. **`agreement_ingestion_sweep`** — new daily job + (likely) new canonical agreement schema + Drive/Slack/Dropbox extractors + Dropbox creds in Alex's `.env`.
+1a. **Main-branch derivation** — per-office spend aggregation to pick each office's main branch (Tier 1), recomputed ≥ weekly.
+1b. **Drive-time tiering** — Google Maps drive-time from each PE office to ABC branches to build the Tier 2 (≤2hr) set; cached, refreshed occasionally. Uses `GOOGLE_MAPS_SERVER_KEY`.
+1c. **150-branch pricing list** — the canonical set of branches PE has pricing access to (Tier 3 boundary; "stop" beyond it).
 2. **Slack approval handler** — inbound Slack interaction endpoint → Casey candidate + action-log.
 3. **Track C integration** — `morning_abc_sync` ≥6% must call the invoice payment-state flip to `not-to-be-paid` (reuse the Track C `derivePaymentState` / payment-targets seam).
 4. **Maya → Alex handoff** — confirm the work-item contract Alex consumes (what Maya writes that Alex reads each morning).
@@ -142,7 +168,7 @@ When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **i
 ---
 
 ## 6. TODO — remaining cadences (next walkthroughs)
-- **Weekly:** `abc_catalog_sync`, `price_agreement_expiration_check`, `variance_weekly_digest` (consumes the 0–3% weekly-review bucket).
-- **Monthly:** `vendor_performance_scorecard`, `price_list_validation`.
+- **Weekly:** owns **Tier 2 agreement freshness** (refresh all branches within 2hr drive time of each office). Tasks: `abc_catalog_sync`, `price_agreement_expiration_check`, `variance_weekly_digest` (consumes the 0–3% weekly-review bucket).
+- **Monthly:** owns **Tier 3 agreement freshness** (refresh all 150 branches; stop beyond). Tasks: `vendor_performance_scorecard`, `price_list_validation`.
 - **Quarterly:** `contract_renewal_prep`.
 - **Annual:** `vendor_audit_deep_dive`.
