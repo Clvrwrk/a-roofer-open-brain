@@ -103,6 +103,7 @@ None — clean boundary. Task 1 committed + converged to main (migration is live
 - StormWatch/ZoomInfo lead pipeline (committed, deploy-paused).
 - **Headless agent runtime proven** (docs/56); **Alex SOPs** designed + validated (docs/57); Open Engine = DevTeam plane (docs/58, v1.0.1 AGENTS.md).
 - **Benchmark cascade view** `v_invoice_audit_line_cascade` (migration 154) — foundation for morning_abc_sync v3 + Invoice Audit rebuild (docs/59).
+- **Alex weekly Monday deliverable** designed (docs/57 §3c, `weekly_payment_package`, task #13): daily comms = per-invoice Slack messages; Monday = per-vendor QuickBooks invoices-to-be-paid CSV + NEW detailed decision CSV (per-line pricing/benchmark/variance/decision/logic from the cascade view + `dashboard_action_log`), both posted as Slack download URLs.
 
 ### Key invariants (never violate)
 - Additive/idempotent migrations only; never destructive (hard rule 1).
