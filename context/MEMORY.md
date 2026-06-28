@@ -2,9 +2,9 @@
 # Working Memory
 
 ## ▶ Pick up here
-**Handoff: `docs/handoffs/current.md` (2026-06-26) + daily log.** Both stranded streams converged onto `origin/main`, tree clean: Track A (perf + 7-agent fleet/crons), Track B StormWatch/ZoomInfo committed `31fc04c` (docs 47–54, schemas 147–152), Track C Invoice "To Be Paid" CSV + ledger `6600516` (schema 153). 10 merged branches deleted; perf-review worktree removed.
-**NEXT:** verify Track C (invoice unit tests + build — UNVERIFIED), apply additive migs 147–153 to prod if missing, then close 4 open branches: `db-price-foundation-round4` (apply?), `db-price-foundation-round3` (⊂ round4→delete), `vendor-territory-map` (superseded→delete), `coderabbit-config` (adopt CI or drop).
-**OPEN:** Denver/Dallas GPA promotion, July price crons, ABC full prod-sync on persistent host. **Stormwatch deploy PAUSED** pending Reonomy finalization + property-layer validation (committing artifacts ≠ deploy).
+**Handoff: `docs/handoffs/current.md` + daily log.** Branch `contrib/cleverwork/headless-agent-scheduler` → `origin/main` this wrapup. Agent fleet verified **DORMANT + under-provisioned** (29 crons paused, no host scheduler). **Headless Hermes proven**: `docker run` baked Kasm img + mounted profile → `hermes cron tick` (img tag in docs/56); Alex ran a full autonomous loop. **Alex now OPERATIONAL** after `scripts/provision-agent-env.sh` filled empty ABC auth URL/scopes + `SUPABASE_SERVICE_TOKEN` (ABC OAuth 200 + Supabase 200). Design: `docs/56` (scheduler) + `docs/57` (Alex SOPs).
+**NEXT:** Alex weekly/monthly/quarterly/annual SOPs (weekly owns Tier-2 2hr freshness + 0-3% digest); then build backlog (agreement ingestion+schema, gap-tracking work items, host systemd scheduler, dashboard recording helper); provision Jordan/Sam profiles (no `.env`).
+**OPEN:** **Guardrail**: AI cannot launch `--yolo` agent on prod (classifier blocks even w/ permission rule) — host timer runs agents, first validation human-run. Fleet `.env` audit + root-cause `deploy-agent.py`. `open-engine/` untracked (Chris). Stormwatch deploy PAUSED.
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
