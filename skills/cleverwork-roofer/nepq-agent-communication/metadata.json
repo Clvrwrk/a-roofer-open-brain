@@ -1,0 +1,8 @@
+{
+  "name": "nepq-agent-communication",
+  "version": "0.1.0",
+  "origin": "cleverwork",
+  "license": "MIT",
+  "bound_agents": ["ob-accounting", "ob-ops", "ob-sales", "ob-marketing", "ob-exec", "ob-conductor", "auditor"],
+  "a3_ref": "docs/56-headless-agent-scheduler-design.md"
+}

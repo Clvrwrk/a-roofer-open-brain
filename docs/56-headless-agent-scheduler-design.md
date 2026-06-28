@@ -126,7 +126,39 @@ The actor model already supports this: `dashboard_action_log` stores `actor_id` 
 - **Additive only** — recording schema changes are additive/idempotent; never destructive.
 - **Validate before enable** — a cron job is only resumed after its SOP passes an observed live run.
 
+## 7a. Validation findings & resolved decisions (Alex proof, 2026-06-28)
+
+Bringing Alex up surfaced the real per-agent SOP gaps and how we resolve them:
+
+1. **Headless invocation (RESOLVED, proven).** Run the baked image non-GUI with the profile
+   mounted: `docker run --rm -u 1000:1000 -e HOME=/home/kasm-user -v <profile-root>:/home/kasm-user
+   --entrypoint /usr/local/bin/hermes <image> cron tick`. `load_jobs()` returns Alex's 4 jobs; the
+   earlier empty `cron list` was a red herring — `list_jobs()` hides paused jobs, and all 4 are
+   `enabled:false / state:paused`. Activate with `cron resume <id>` then `cron run <id>` + `cron tick`.
+2. **Crons are paused, not missing (RESOLVED).** The deployed `cron/jobs.json` is the real store and
+   loads fine; jobs are simply disabled. Enable per-agent only after the SOP passes a live run.
+3. **Missing skills (PARTIAL).** Cron jobs reference `abc-supply-api` (exists in repo),
+   `nepq-agent-communication` (did NOT exist → **created this session**, `skills/cleverwork-roofer/
+   nepq-agent-communication/`), and `google-workspace` (Maya only; likely a Hermes hub skill).
+   Install path = `hermes skills install <HTTPS URL to SKILL.md> --category cleverwork-roofer --yes`;
+   our `SKILL.md` format is directly compatible. Open step: a raw URL the host can fetch (private repo).
+   Scheduler loads named skills into the prompt and skips-with-warning if absent (improves reliability,
+   not a hard block).
+4. **Command Center token question (RESOLVED).** Canonical agent→API auth is `Authorization: Bearer
+   <service-token>` (root `.env` `AGENT_SERVICE_TOKENS`, 13 provisioned; Alex → `ob-accounting`). BUT
+   for v1 recording Alex does **not** need a CC bearer token: it already holds `SUPABASE_SERVICE_TOKEN`
+   and `dashboard_action_log` is in the same Supabase, so it records an attributed row via a direct
+   REST insert. The generic `/api/agent/activity` endpoint + provisioned bearer token is the later
+   hardening step (centralized attribution/permission), not a v1 blocker.
+5. **Recording is per-SOP work (OPEN).** `/api/agent/intake` is Gmail-specific; Alex's pricing work
+   has no recording today (Slack-only). Each validated SOP must end by writing an attributed
+   `dashboard_action_log` row (v1: direct Supabase insert; later: `/api/agent/activity`).
+
 ## 8. Status log
 
-- 2026-06-28 — Runtime verified dormant; decision = host scheduler + headless Hermes; doc written;
-  starting Alex proof.
+- 2026-06-28 — Runtime verified dormant; decision = host scheduler + headless Hermes. Proven headless
+  invocation + profile/job loading. Created `nepq-agent-communication` skill. Resolved token question
+  (v1 = direct Supabase recording) and skill-install path. Alex live run still gated on user
+  authorization (autonomous executor) + skill install. Next: install the two skills, build the v1
+  recording step, run the authorized read-only Alex validation, then enable one cron + install the
+  host scheduler.
