@@ -136,10 +136,18 @@ per-invoice "go back" reset with internal-effect reversal.
   authz (who may reset; not on paid/exported invoices); race with in-flight communication or payment export;
   audit-trail completeness; confirm no destructive delete path. Fix all HIGH findings.
 
-### Gate 7 — Integration red-team + deploy
+### Gate 7 — Integration red-team + deploy  ✅ RT-3 PASSED 2026-06-28
 - **🔴 Red-team pass RT-3 (integration/security):** WorkOS auth on every new/changed API route; regression of the
   existing audit→disposition→batch→pay flow; trust-tier/consent boundaries intact; no PII leakage in new columns/badges;
   Live⇄Dev convergence (no stranded work).
+- **RT-3 result (clean — 1 MEDIUM found+fixed, 0 HIGH):** `/reset` is WorkOS/bearer-gated + checks `locals.actor`;
+  `/api/dev/activity-summary` gated + allowlisted (dev-conductor/session-analyst), read-only; `/api/dev/webhooks/github`
+  + `/sentry` public-by-design but HMAC-verified (fail-closed, constant-time, 401 before work, Linear-only — no brain DB).
+  28 tests pass (no regression). No PII in cascade columns/persona badges; `normalizedPath` collapses invoice numbers +
+  magic-link tokens to `:id` before activity-rollup storage (rollups store no user ids). Reset = append-only evidence,
+  no trust upgrades, no cross-client paths. **MEDIUM:** migrations 155/156 were committed but unapplied in prod (the
+  per-request activity rollup needs 155) — applied both (additive); verified the rollup writes a normalized PII-free row.
+  Prod aligned through migration 158.
 - **Deploy:** merge `contrib/...` → confirmed live branch → push `origin` → Coolify build → verify on
   `cc.proexteriorsus.net` (not just localhost). Record deploy in daily log.
 - **Gate:** RT-3 clean; deployed build verified live; daily log updated.
