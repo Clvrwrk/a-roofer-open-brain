@@ -20,6 +20,7 @@
 | Daily | `agreement_ingestion_sweep` **(new)** | ~6:30a Mon–Fri | ❌ | ✅ designed (§2) |
 | Daily | `morning_abc_sync` | 7:00a Mon–Fri | ✅ paused | ✅ designed (§1) |
 | Daily | `variance_daily_summary` | 5:00p Mon–Fri | ❌ | ✅ designed (§3) |
+| Event + Monthly | `agreement_coverage_verification` **(new)** | on new agreement + monthly full scan | ❌ | ✅ designed (§3a) |
 | Weekly | `abc_catalog_sync` | Mon 6:00a | ✅ paused | TODO |
 | Weekly | `price_agreement_expiration_check` | Mon 8:00a | ✅ paused | TODO |
 | Weekly | `variance_weekly_digest` | Fri 9:00a | ❌ | TODO |
@@ -142,6 +143,39 @@ Top recurring: {vendor} ({overcharge type})
 
 ---
 
+## 3a. `agreement_coverage_verification` — catalog coverage + gap → Jordan  ✅ DESIGNED
+
+**Trigger:** **(a) event** — whenever a new agreement is ingested (§2); **(b) periodic** — a full
+catalog-coverage scan **monthly** (runs with the Tier-3 / all-150 refresh to catch drift).
+**Goal:** confirm agreements cover the **entire global price catalog**; route gaps to Jordan so he
+can request the missing/out-of-tolerance coverage from the vendor.
+
+**What is a gap (both kinds go to Jordan):**
+1. **Missing coverage** — a catalog item × vendor/branch (in scope per §0) that has **no agreement price** at all.
+2. **Priced-but-out-of-range** — coverage exists, but the agreed price is **out of tolerance vs the
+   GPA "best vendor/branch" benchmark** (see [docs/51](51-global-price-agreement-best-vendor-and-ocr-ingest.md)).
+
+**Process**
+- **On new agreement:** diff what the agreement covers (vendor/branch × items, in ABC pricing UOM)
+  against the global price catalog → list the items it leaves uncovered or prices out of range.
+- **Monthly full scan:** for every in-scope branch (Tier 3 = the 150), check each catalog item for
+  coverage + tolerance vs the GPA benchmark → consolidated gap list.
+- Compile gaps grouped by **vendor/branch** (Jordan generates one request per out-of-tolerance
+  vendor/branch).
+- Write attributed `dashboard_action_log` rows (decision = `coverage_gap`, payload = the gap set).
+
+**Handoff — Alex → Jordan**
+- Alex delivers the gap list (the analysis). **Jordan generates the price-agreement request** for each
+  out-of-tolerance vendor/branch (the outbound ask). Alex never sends — stays in the analyze lane.
+
+**Outputs:** gap report to Jordan (Slack/work item) + `dashboard_action_log`. **Silent if no gaps.**
+
+**Dependencies (added to backlog):** a defined **global price catalog** (the authoritative item set
+that *should* have coverage); the **GPA best-vendor/branch benchmark** + tolerance % (docs/51);
+**Jordan's request-generation SOP** (Jordan's own SOP, future walkthrough).
+
+---
+
 ## 4. Slack approval handler — 3–6% tier  ⚙️ SYSTEM COMPONENT (not a cron) — needs build
 
 When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **immediately**:
@@ -164,6 +198,9 @@ When Lucinda approves a 3–6% flag in Slack (button/interaction), a handler **i
 4. **Maya → Alex handoff** — confirm the work-item contract Alex consumes (what Maya writes that Alex reads each morning).
 5. **Dashboard recording helper** — `logDashboardAction()` + Alex's write path (direct Supabase via the now-provisioned service token, or `/api/agent/activity`).
 6. **ABC token endpoint** — Alex/abc-supply-api skill must use `<ABC_SUPPLY_AUTH_BASE_URL>/v1/token` (Okta), confirmed working 2026-06-28.
+7. **Global price catalog** — the authoritative item set that should have agreement coverage (the §3a baseline).
+8. **GPA best-vendor/branch benchmark + tolerance %** — the reference for "priced-but-out-of-range" gaps (docs/51).
+9. **Jordan request-generation SOP** — Jordan turns Alex's gap list into per-vendor/branch price-agreement requests (Jordan's own SOP, future).
 
 ---
 
