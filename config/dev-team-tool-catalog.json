@@ -1,0 +1,100 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-06-28",
+  "owner_agent": "tool-manager",
+  "audit_cron": "0 9 10 * *",
+  "source_doc": "docs/knowledge-base/agent-tooling-matrix.md",
+  "mcps": [
+    {
+      "id": "linear",
+      "plane": "dev",
+      "verdict": "allow",
+      "owner": "dev-conductor",
+      "max_per_runtime": 1
+    },
+    {
+      "id": "github",
+      "plane": "dev",
+      "verdict": "allow",
+      "owner": "code-reviewer",
+      "toolsets": ["context", "issues", "pull_requests", "actions"]
+    },
+    {
+      "id": "sentry",
+      "plane": "dev",
+      "verdict": "allow",
+      "owner": "sentry-analyst"
+    },
+    {
+      "id": "supabase",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "integration-specialist",
+      "read_only": true
+    },
+    {
+      "id": "screaming-frog",
+      "plane": "dev",
+      "verdict": "allow",
+      "owner": "seo-engineer"
+    },
+    {
+      "id": "playwright",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "red-team",
+      "a3": "proposals/a3-playwright-mcp-devteam.md"
+    },
+    {
+      "id": "firecrawl",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "seo-engineer",
+      "env_key": "FIRECRAWL_API_KEY_DEV",
+      "a3": "proposals/a3-firecrawl-devteam.md"
+    },
+    {
+      "id": "tavily",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "seo-engineer",
+      "env_key": "TAVILY_API_KEY_DEV"
+    },
+    {
+      "id": "exa",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "feature-planner",
+      "env_key": "EXA_API_KEY_DEV"
+    },
+    {
+      "id": "dataforseo",
+      "plane": "dev",
+      "verdict": "conditional_pilot",
+      "owner": "seo-engineer",
+      "env_keys": ["DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD"],
+      "a3": "proposals/a3-dataforseo-devteam.md",
+      "runner": "scripts/seo-dataforseo-lighthouse.mjs"
+    },
+    {
+      "id": "google-search-console",
+      "plane": "dev",
+      "verdict": "allow",
+      "owner": "seo-engineer",
+      "env_keys": ["GSC_SITE_URL", "GSC_SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"],
+      "a3": "proposals/a3-gsc-devteam.md",
+      "runner": "scripts/seo-gsc-url-inspect.mjs",
+      "scope": "webmasters.readonly"
+    }
+  ],
+  "research_apis": {
+    "firecrawl_env": "FIRECRAWL_API_KEY_DEV",
+    "tavily_env": "TAVILY_API_KEY_DEV",
+    "exa_env": "EXA_API_KEY_DEV",
+    "pagespeed_env": "PAGESPEED_API_KEY",
+    "dataforseo_login_env": "DATAFORSEO_LOGIN",
+    "dataforseo_password_env": "DATAFORSEO_PASSWORD",
+    "gsc_site_url_env": "GSC_SITE_URL",
+    "gsc_credentials_env": "GSC_SERVICE_ACCOUNT_JSON"
+  }
+}

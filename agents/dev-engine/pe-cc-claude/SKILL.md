@@ -1,5 +1,5 @@
 ---
-engine_version: 1.0.0
+engine_version: 1.0.1
 agent_code: pe-cc-claude
 operator: Chris
 linear_team: PE-CC-DevTeam
@@ -22,7 +22,7 @@ no_supabase_service_role: true
 - **Agent code:** `pe-cc-claude`
 - **Operator:** Chris
 - **Runtime:** Claude Code
-- **Engine version:** 1.0.0
+- **Engine version:** 1.0.1
 
 ## Linear configuration
 - **Team:** PE-CC-DevTeam (`f7fd2005-aa04-4de7-a17d-ddae528b5e4a`)
@@ -90,7 +90,7 @@ Automation state: <installed | manual-required | blocked | paused>
 Last heartbeat: <ISO8601 timestamp>
 Last queue result: <checking | none | claimed ISSUE-ID | completed ISSUE-ID | blocked ISSUE-ID | holding ISSUE-ID | resumed ISSUE-ID | failed ISSUE-ID>
 Last successful run: <ISO8601 timestamp or unknown>
-Local context: 1.0.0; none
+Local context: 1.0.1; none
 Optional skills: none
 Notes: <none or short blocker>
 ```

@@ -270,6 +270,20 @@ export const SERVICE_AGENT_IDENTITIES: ServiceAgentIdentity[] = [
     departmentAccess: ["system"],
     roles: ["horizontal", "maintenance", "internal-only"],
   },
+  {
+    id: "dev-conductor",
+    displayName: "Dev Conductor",
+    handle: "@dev-conductor",
+    departmentAccess: ["system"],
+    roles: ["dev-team", "dev-plane"],
+  },
+  {
+    id: "session-analyst",
+    displayName: "Session Analyst",
+    handle: "@session-analyst",
+    departmentAccess: ["system"],
+    roles: ["dev-team", "dev-plane"],
+  },
 ];
 
 function splitCsv(value?: string) {

@@ -151,5 +151,5 @@ Priority actions:
 - Open Engine: https://unlock-ai.natebjones.com/open-engine
 - Open Skills: https://unlock-ai.natebjones.com/open-skills
 - Open Knowledge Format blog: https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing
-- OKF v0.1 spec: https://raw.githubusercontent.com/GoogleCloudPlatform/knowledge-catalog/main/okf/SPEC.md
+- OKF v0.1 spec: [OKF/SPEC.md](../OKF/SPEC.md) (vendored from [Google knowledge-catalog](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf))
 

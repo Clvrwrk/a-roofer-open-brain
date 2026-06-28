@@ -30,6 +30,9 @@ interface ImportMetaEnv {
   readonly AGENTMAIL_WEBHOOK_URL?: string;
   readonly AGENTMAIL_WEBHOOK_SECRET?: string;
   readonly AGENTMAIL_WEBHOOK_SECRETS?: string;
+  readonly LINEAR_API_KEY?: string;
+  readonly GITHUB_WEBHOOK_SECRET?: string;
+  readonly SENTRY_WEBHOOK_SECRET?: string;
 }
 
 interface ImportMeta {

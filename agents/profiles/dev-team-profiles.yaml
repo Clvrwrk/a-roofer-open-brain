@@ -51,7 +51,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "workhorse"
       toolsets: [web, file, terminal]
-      skills: [nepq-agent-communication, deploy-agent, agent-profile-builder]
+      skills: [nepq-agent-communication, deploy-agent, agent-profile-builder, repo-parity-release-audit]
       cadence: "always-on"
     guardrails:
       no_external_send: true
@@ -97,7 +97,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "workhorse"
       toolsets: [file, terminal, web]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, gsd-code-review, ssr-page-audit]
       cadence: "event-triggered"
     integrations:
       github: true
@@ -146,7 +146,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "workhorse"
       toolsets: [terminal, file, web]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, gsd-secure-phase, coolify, third-party-agent-tool-gate]
       cadence: "scheduled"
       cron_schedule: "0 5 * * 1"  # Monday 5am CT + event-triggered on deploy
     integrations:
@@ -188,7 +188,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "workhorse"
       toolsets: [terminal, file, web]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, sentry]
       cadence: "event-triggered"
     integrations:
       sentry: true
@@ -229,7 +229,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "fast"  # Daily digest — no heavy reasoning needed
       toolsets: [terminal, web]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, sentry]
       cadence: "scheduled"
       cron_schedule: "0 7 * * *"
     integrations:
@@ -347,7 +347,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "workhorse"
       toolsets: [terminal, file, web]
-      skills: [nepq-agent-communication, deploy-agent, agent-profile-builder]
+      skills: [nepq-agent-communication, gsd-verify-work, deploy-agent, workos-agent-auth]
       cadence: "scheduled"
       cron_schedule: "0 10 * * 3"  # Wednesday 10am CT weekly
     guardrails:
@@ -382,7 +382,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "fast"
       toolsets: [terminal, file]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, wrapup]
       cadence: "scheduled"
       cron_schedule: "0 8 * * 1"
     integrations:
@@ -419,7 +419,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "fast"
       toolsets: [terminal, file, web]
-      skills: [nepq-agent-communication, credential-handling-patterns, abc-supply-api]
+      skills: [nepq-agent-communication, credential-handling-patterns, third-party-agent-tool-gate, abc-supply-api]
       cadence: "scheduled"
       cron_schedule: "0 9 10 * *"
     guardrails:
@@ -455,7 +455,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "fast"
       toolsets: [file, terminal]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, third-party-agent-tool-gate]
       cadence: "scheduled"
       cron_schedule: "0 9 * * 4"
     guardrails:
@@ -490,7 +490,7 @@ dev_team_profiles:
       provider: "openrouter"
       tier: "fast"
       toolsets: [file, terminal]
-      skills: [nepq-agent-communication]
+      skills: [nepq-agent-communication, meta-memory-write]
       cadence: "scheduled"
       cron_schedule: "0 22 * * *"
     guardrails:
@@ -502,3 +502,96 @@ dev_team_profiles:
         - "Agent memory >90% full — immediate compression needed"
         - "SOUL.md contradicts known system state (e.g. wrong API URL)"
         - "Agent memory references credential that has changed"
+
+  feature_planner:
+    identity:
+      id: "feature-planner"
+      display_name: "Feature Planner"
+      role: "epic-decomposition"
+      persona_description: "Decomposes Chris-requested epics into Linear milestone issues with acceptance criteria. Uses full codebase context; outputs sub-issues for implementation runtimes."
+    platform:
+      client_id: "pro-exteriors"
+      agent_host: "5.78.146.161"
+      command_center_url: "https://cc.proexteriorsus.net"
+    kasm:
+      desktop_enabled: true
+      desktop_name: "pe-feature-planner"
+      kasm_username: "feature-planner-virtual"
+      image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+    slack:
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [file, terminal, web]
+      skills: [nepq-agent-communication, gsd-plan-phase, gsd-spec-phase]
+      cadence: "event-triggered"
+    guardrails:
+      no_external_send: true
+      no_approval_decide: true
+      no_supabase_service_role: true
+
+  seo_engineer:
+    identity:
+      id: "seo-engineer"
+      display_name: "SEO Engineer"
+      role: "technical-seo-cwv"
+      persona_description: "Technical SEO for proexteriorsus.com and cc.proexteriorsus.net — Screaming Frog crawls, PageSpeed 95 gate (PSI + DataForSEO fallback), GSC URL Inspection, schema, sitemaps. Content EEAT handoff to Lena Brooks."
+    platform:
+      agent_host: "5.78.146.161"
+    kasm:
+      desktop_enabled: false
+    slack:
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "workhorse"
+      toolsets: [terminal, file, web]
+      skills: [nepq-agent-communication, pagespeed-95-gate, schema-technical-seo-aeo, indexing-sitemap-health, ssr-page-audit]
+      cadence: "scheduled"
+      cron_schedule: "0 6 * * 1"
+    credentials:
+      firecrawl_env_key: "FIRECRAWL_API_KEY_DEV"
+      tavily_env_key: "TAVILY_API_KEY_DEV"
+      exa_env_key: "EXA_API_KEY_DEV"
+      pagespeed_env_key: "PAGESPEED_API_KEY"
+      dataforseo_login_env_key: "DATAFORSEO_LOGIN"
+      dataforseo_password_env_key: "DATAFORSEO_PASSWORD"
+      gsc_site_url_env_key: "GSC_SITE_URL"
+      gsc_service_account_env_key: "GSC_SERVICE_ACCOUNT_JSON"
+    guardrails:
+      no_external_send: true
+      no_supabase_service_role: true
+
+  session_analyst:
+    identity:
+      id: "session-analyst"
+      display_name: "Session Analyst"
+      role: "ux-friction-analyst"
+      persona_description: "Daily UX friction digest from Sentry replays and Command Center activity rollups. Files ux-friction Linear issues; monitors agent environment health."
+    platform:
+      agent_host: "5.78.146.161"
+      command_center_url: "https://cc.proexteriorsus.net"
+    kasm:
+      desktop_enabled: false
+    slack:
+      team_id: "T0B8QEGPVQW"
+      channels:
+        - name: "ob-dev-team"
+    hermes:
+      model: "anthropic/claude-sonnet-4-20250514"
+      provider: "openrouter"
+      tier: "fast"
+      toolsets: [terminal, web]
+      skills: [nepq-agent-communication, sentry, ssr-page-audit]
+      cadence: "scheduled"
+      cron_schedule: "0 8 * * *"
+    guardrails:
+      no_external_send: true
+      no_supabase_service_role: true

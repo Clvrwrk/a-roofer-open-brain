@@ -1,0 +1,50 @@
+{
+  "version": "1.1.0",
+  "updated": "2026-06-28",
+  "siteUrl": "https://proexteriorsus.com",
+  "searchConsoleSiteUrl": "sc-domain:proexteriorsus.com",
+  "sitemapIndex": "https://proexteriorsus.com/sitemap-index.xml",
+  "domains": {
+    "marketing": "https://proexteriorsus.com",
+    "commandCenter": "https://cc.proexteriorsus.net"
+  },
+  "criticalPages": [
+    "https://proexteriorsus.com/",
+    "https://proexteriorsus.com/roofing-services/",
+    "https://proexteriorsus.com/contact/",
+    "https://proexteriorsus.com/about/",
+    "https://cc.proexteriorsus.net/healthz"
+  ],
+  "indexableRouteGroups": [
+    "/",
+    "/roofing-services/",
+    "/contact/",
+    "/about/"
+  ],
+  "excludedRoutes": [
+    "/api/",
+    "/admin/",
+    "/_astro/"
+  ],
+  "screamingFrog": {
+    "crawlScope": "proexteriorsus.com",
+    "weeklyCron": "0 6 * * 1"
+  },
+  "pageSpeedGate": {
+    "minScore": 0.95,
+    "strategies": ["mobile", "desktop"],
+    "categories": ["performance", "accessibility", "best-practices", "seo"],
+    "primaryProvider": "pagespeed_insights",
+    "fallbackProvider": "dataforseo"
+  },
+  "dataForSeo": {
+    "lighthouseEnabled": true,
+    "serpEnabled": false,
+    "runner": "scripts/seo-dataforseo-lighthouse.mjs"
+  },
+  "googleSearchConsole": {
+    "enabled": true,
+    "urlInspectionBatchSize": 10,
+    "runner": "scripts/seo-gsc-url-inspect.mjs"
+  }
+}

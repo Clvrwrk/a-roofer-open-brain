@@ -1,0 +1,14 @@
+[Unit]
+Description=Open Engine Linear queue runner (pe-cc-agents)
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/opt/openbrain/dev-plane.env
+ExecStart=/usr/bin/node /opt/openbrain/scripts/open-engine-queue-runner.mjs
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

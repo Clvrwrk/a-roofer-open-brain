@@ -1,0 +1,122 @@
+[
+  {
+    "name": "dev-uptime-heartbeat",
+    "schedule": "*/15 * * * *",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [],
+    "skills": [],
+    "no_agent": true,
+    "prompt": "Run scripts/uptime-check.sh on the host. Post to #ob-dev-incidents only if output non-empty.",
+    "channel": "ob-dev-incidents"
+  },
+  {
+    "name": "dev-sentry-digest",
+    "schedule": "0 7 * * *",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "web"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "sentry"
+    ],
+    "prompt": "You are Sentry Analyst. Pull daily error digest from Sentry.\nFile Linear issues [agent instructions][pe-cc-agents][task] for P1/P2 patterns.\nPost summary to #ob-dev-team. Silent if no actionable items.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-security-weekly",
+    "schedule": "0 5 * * 1",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "file"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "gsd-secure-phase",
+      "coolify"
+    ],
+    "prompt": "Security Guardian weekly scan: npm audit in app/command-center,\nreview docs/59-endpoint-auth-matrix.md drift, file Linear tasks for HIGH/CRITICAL.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-red-team-watchlist",
+    "schedule": "0 10 * * 3",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "file",
+      "web"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "gsd-verify-work",
+      "workos-agent-auth"
+    ],
+    "prompt": "Red Team: pick random watchlist item from docs/59-red-team-milestone-protocol.md.\nRun one adversarial cycle; post RED TEAM CYCLE receipt on Linear milestone.\nP0 guardrail failure \u2192 #ob-dev-incidents.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-memory-clerk",
+    "schedule": "0 22 * * *",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "file",
+      "terminal"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "meta-memory-write"
+    ],
+    "prompt": "Memory Clerk: check context/MEMORY.md and USER.md caps, contradictions.\nFile Linear memory-drift issues; never auto-write curated memory.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-repo-janitor",
+    "schedule": "0 8 * * 1",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "file"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "wrapup"
+    ],
+    "prompt": "Repo Janitor: stale branches, old TODOs, memsearch index reminder.\nFile Linear cleanup tasks; never delete without Dev Conductor approval.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-seo-weekly",
+    "schedule": "0 6 * * 1",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "web"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "pagespeed-95-gate",
+      "indexing-sitemap-health"
+    ],
+    "prompt": "SEO Engineer weekly audit (see docs/knowledge-base/runbooks/seo-weekly-audit.md):\n1) PageSpeed 95 gate on seo-maintenance.config.json criticalPages (PSI primary).\n2) DataForSEO Lighthouse fallback: node scripts/seo-dataforseo-lighthouse.mjs\n3) GSC URL Inspection: node scripts/seo-gsc-url-inspect.mjs — report confirmedGoogleIndexScore.\n4) indexing-sitemap-health for robots/sitemap/noindex.\nFile seo-regression Linear issues for sub-95 categories or GSC not-indexed critical URLs.",
+    "channel": "ob-dev-team"
+  },
+  {
+    "name": "dev-session-analyst",
+    "schedule": "0 8 * * *",
+    "agent": "pe-cc-agents@cc.proexteriorsus.net",
+    "toolsets": [
+      "terminal",
+      "web"
+    ],
+    "skills": [
+      "nepq-agent-communication",
+      "sentry",
+      "ssr-page-audit"
+    ],
+    "prompt": "Session Analyst: GET /api/dev/activity-summary with dev service token.\nCross-check Sentry replay friction; file ux-friction Linear issues when thresholds exceeded.",
+    "channel": "ob-dev-team"
+  }
+]

@@ -1,0 +1,40 @@
+# Dev Hermes profile — brain-less Linear-driven dev plane (doc 58 §4)
+# Separate from roofing Maintenance Hermes; never share .env with roofing profiles.
+
+dev_hermes_profile:
+  identity:
+    id: "pe-cc-hermes-dev"
+    display_name: "Dev Hermes (Open Engine)"
+    role: "dev-linear-cron-runner"
+    persona_description: "Brain-less Hermes runtime for DevTeam scheduled crons and Open Engine queue ticks. NO Supabase service token."
+  platform:
+    client_id: "pro-exteriors"
+    workspace_domain: "cc.proexteriorsus.net"
+    agent_host: "5.78.146.161"
+    command_center_url: "https://cc.proexteriorsus.net"
+    kasm_base_url: "https://desktops.proexteriorsus.net"
+  kasm:
+    desktop_enabled: false
+    kasm_username: "pe-cc-hermes-dev@cc.proexteriorsus.net"
+    image_id: "2c589484-3521-41fc-bec6-ac785ae87dd7"
+    network_policy: "standard"
+  hermes:
+    model: "anthropic/claude-sonnet-4-20250514"
+    provider: "openrouter"
+    tier: "workhorse"
+    toolsets: [file, terminal, web]
+    skills:
+      - nepq-agent-communication
+    cadence: "scheduled"
+    open_engine_runtime: "pe-cc-hermes"
+    local_context: "agents/dev-engine/pe-cc-hermes/SKILL.md"
+  guardrails:
+    no_external_send: true
+    no_approval_decide: true
+    no_supabase_service_role: true
+    no_public_internet: false
+    no_dashboard_action_log: true
+    no_roofing_slack: true
+    escalation_triggers:
+      - "SUPABASE_SERVICE_TOKEN detected in .env — P0 plane violation"
+      - "Attempt to write dashboard_action_log"

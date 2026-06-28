@@ -44,5 +44,5 @@ The framework depends on strict naming and version discipline. If a runtime's lo
 
 [1] [Open Engine | Unlock AI](https://unlock-ai.natebjones.com/open-engine)  
 [2] [Linear MCP docs](https://linear.app/docs/mcp)  
-[3] [OKF v0.1 spec](https://raw.githubusercontent.com/GoogleCloudPlatform/knowledge-catalog/main/okf/SPEC.md)
+[3] [OKF v0.1 spec](../OKF/SPEC.md)
 

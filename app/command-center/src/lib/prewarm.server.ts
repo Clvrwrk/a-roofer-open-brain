@@ -1,4 +1,5 @@
 import type { CommandCenterActor } from "@lib/access-control";
+import { persistActivityRollup } from "@lib/activity-rollups.server";
 import { loadAgreementGapSurface } from "@lib/abc-price-gaps";
 import { loadEstimateAudit } from "@lib/estimate-audit";
 import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
@@ -217,12 +218,14 @@ async function warmIfStale(trigger: CacheWarmTrigger, minGapMs: number) {
 export function recordCommandCenterActivity({ actor, pathname }: ActivityInput) {
   if (!actor || pathname.startsWith("/api/performance/")) return;
 
+  const safePath = normalizedPath(pathname);
+  persistActivityRollup(safePath, actor.type);
+
   if (!isHumanActor(actor)) {
     cadenceState.activityCounts.agentRequests += 1;
     return;
   }
 
-  const safePath = normalizedPath(pathname);
   const isApi = pathname.startsWith("/api/");
   if (isApi) cadenceState.activityCounts.humanApiRequests += 1;
   else cadenceState.activityCounts.humanPageViews += 1;

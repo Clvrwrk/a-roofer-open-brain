@@ -1,0 +1,101 @@
+# PEC-3 optional skills registry — mirror for Linear standing issue PEC-3
+# Skills Manager maintains this file; Tool Manager audits against agent-tooling-matrix.md
+version: "1.0.1"
+updated: "2026-06-28"
+standing_issue: PEC-3
+
+skills:
+  - id: standing-preflight
+    path: agents/dev-engine/AGENTS.md
+    version: "1.0.1"
+    scope: all pe-cc-* runtimes
+    risk: low
+
+  - id: nepq-agent-communication
+    path: skills/cleverwork-roofer/nepq-agent-communication/SKILL.md
+    version: "1.0.0"
+    scope: all agents
+    risk: low
+
+  - id: status-ledger-update
+    path: agents/dev-engine/AGENTS.md
+    section: "AGENT STATUS format"
+    version: "1.0.1"
+    scope: all pe-cc-* runtimes
+    risk: low
+
+  - id: endpoint-auth-matrix-review
+    path: docs/59-endpoint-auth-matrix.md
+    version: "1.0.0"
+    scope: security-guardian, red-team, code-reviewer
+    risk: medium
+
+  - id: prompt-injection-review
+    path: app/command-center/src/lib/prompt-injection-canary.test.ts
+    version: "1.0.0"
+    scope: red-team, security-guardian
+    risk: high
+
+  - id: supabase-performance-triage
+    path: .codex/skills/supabase-change-preflight/SKILL.md
+    version: "1.0.0"
+    scope: integration-specialist
+    risk: medium
+
+  - id: release-day-smoke
+    path: docs/knowledge-base/runbooks/release-day.md
+    version: "1.0.0"
+    scope: dev-conductor, seo-engineer
+    risk: high
+
+  - id: pagespeed-95-gate
+    path: .codex/skills/pagespeed-95-gate/SKILL.md
+    version: "1.0.0"
+    scope: seo-engineer
+    risk: low
+    env_keys: [PAGESPEED_API_KEY, DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD]
+    runners: [scripts/seo-dataforseo-lighthouse.mjs]
+
+  - id: schema-technical-seo-aeo
+    path: .codex/skills/schema-technical-seo-aeo/SKILL.md
+    version: "1.0.0"
+    scope: seo-engineer
+    risk: low
+
+  - id: indexing-sitemap-health
+    path: .codex/skills/indexing-sitemap-health/SKILL.md
+    version: "1.0.0"
+    scope: seo-engineer
+    risk: low
+    env_keys: [GSC_SITE_URL, GSC_SERVICE_ACCOUNT_JSON, GOOGLE_APPLICATION_CREDENTIALS]
+    runners: [scripts/seo-gsc-url-inspect.mjs]
+
+  - id: gsd-code-review
+    path: .codex/skills/gsd-code-review/SKILL.md
+    version: "1.0.0"
+    scope: code-reviewer
+    risk: medium
+
+  - id: gsd-secure-phase
+    path: .codex/skills/gsd-secure-phase/SKILL.md
+    version: "1.0.0"
+    scope: security-guardian
+    risk: high
+
+  - id: gsd-verify-work
+    path: .codex/skills/gsd-verify-work/SKILL.md
+    version: "1.0.0"
+    scope: red-team
+    risk: medium
+
+  - id: red-team-milestone-protocol
+    path: docs/59-red-team-milestone-protocol.md
+    version: "1.0.0"
+    scope: red-team, dev-conductor
+    risk: high
+
+  - id: third-party-agent-tool-gate
+    path: skills/cleverwork-roofer/third-party-agent-tool-gate/SKILL.md
+    version: "1.0.0"
+    scope: tool-manager, skills-manager
+    risk: high

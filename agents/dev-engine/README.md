@@ -24,6 +24,20 @@ post a receipt → update the ledger → stop), and its safety boundaries.
   (here) is brain-less and Linear-driven; the roofing **Maintenance/Hermes** profile is a *separate*
   profile with brain access + crons. Same binary, two isolated homes — never one shared `.env`.
 
+## Automation scripts (repo)
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/open-engine-preflight.mjs` | Version + plane boundary checks |
+| `scripts/open-engine-queue-runner.mjs` | One-task Linear heartbeat for `pe-cc-agents` |
+| `scripts/provision-dev-agent-env.sh` | Dev Hermes `.env` (no brain token) |
+| `scripts/deploy-dev-crons.py` | Writes `agents/cadences/dev-team-cron-jobs.json` |
+| `scripts/agent-tick.sh` | Headless Hermes cron tick (host) |
+
+Host install: [`deployment/remote/DEVTEAM-HOST-SETUP.md`](../../deployment/remote/DEVTEAM-HOST-SETUP.md).  
+Routing map: [`docs/knowledge-base/open-engine/runtime-agent-routing-map.md`](../../docs/knowledge-base/open-engine/runtime-agent-routing-map.md).  
+Red Team protocol: [`docs/59-red-team-milestone-protocol.md`](../../docs/59-red-team-milestone-protocol.md).
+
 ## Tracking
 
 The `pe-cc-*/SKILL.md` context files **are** version-controlled (shared team infra; paths are

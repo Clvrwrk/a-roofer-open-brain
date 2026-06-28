@@ -319,6 +319,26 @@ fields:
   credentials.tavily_env_key:
     type: string
     required: false
+  credentials.pagespeed_env_key:
+    type: string
+    required: false
+    description: "PageSpeed Insights API key env var (primary CWV gate)"
+  credentials.dataforseo_login_env_key:
+    type: string
+    required: false
+    description: "DataForSEO API login env var (Lighthouse fallback)"
+  credentials.dataforseo_password_env_key:
+    type: string
+    required: false
+    description: "DataForSEO API password env var"
+  credentials.gsc_site_url_env_key:
+    type: string
+    required: false
+    description: "Google Search Console property URL (sc-domain: or URL-prefix)"
+  credentials.gsc_service_account_env_key:
+    type: string
+    required: false
+    description: "Path env var for GSC service account JSON (read-only URL Inspection)"
 
 validation_rules:
   - id: kasm_desktop_name_required

@@ -1,0 +1,14 @@
+[Unit]
+Description=Open Brain dev Hermes cron tick for %i
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openbrain/scripts/agent-tick.sh %i
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Open Brain dev Hermes tick timer for %i
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
