@@ -1,7 +1,7 @@
 # 57 — Alex Rivers SOPs (Pricing Variance Analyst)
 
 **Date:** 2026-06-28
-**Status:** Daily SOPs **validated against prod 2026-06-28** (one-step walkthrough; corrections folded in below). Weekly / monthly / quarterly / annual = TODO (subsequent walkthroughs).
+**Status:** Daily SOPs **validated against prod 2026-06-28** (one-step walkthrough; corrections folded in below). Weekly Monday final deliverable `weekly_payment_package` designed (§3c, 2026-06-28); rest of weekly / monthly / quarterly / annual = TODO.
 **Owner:** Chris (Cleverwork) + Lucinda (Accounting, human-in-the-loop approver)
 **Agent:** `alex-rivers` (named agent; maps to @ob-accounting / @ob-ops / Auditor). Runtime: headless Hermes, see [`docs/56`](56-headless-agent-scheduler-design.md).
 **Related contracts:** UOM pricing [`docs/46`](46-uom-pricing-normalization.md); invoice "To Be Paid" payment loop (Track C, schema 153); `nepq-agent-communication` skill; `abc-supply-api` skill.
@@ -22,6 +22,7 @@
 | Daily | `variance_daily_summary` | 5:00p Mon–Fri | ❌ | ✅ designed (§3) |
 | Event + Monthly | `agreement_coverage_verification` **(new)** | on new agreement + monthly full scan | ❌ | ✅ designed (§3a) |
 | Daily | `gap_followup_cadence` **(new)** | daily (7-day gap SLA) | ❌ | ✅ designed (§3b) |
+| Weekly | `weekly_payment_package` **(new)** | Mon | ❌ | ✅ designed (§3c) |
 | Weekly | `abc_catalog_sync` | Mon 6:00a | ✅ paused | TODO |
 | Weekly | `price_agreement_expiration_check` | Mon 8:00a | ✅ paused | TODO |
 | Weekly | `variance_weekly_digest` | Fri 9:00a | ❌ | TODO |
@@ -218,6 +219,27 @@ indefinitely.
 
 ---
 
+## 3c. `weekly_payment_package` — Monday deliverable  ✅ DESIGNED 2026-06-28 (NEW — needs build)
+
+**Trigger:** Monday (weekly), after the week's dailies. **Final deliverable of Alex's weekly task.**
+**Goal:** roll the week's per-invoice daily decisions into the two end-files accounting needs, both delivered as **Slack URL download links**.
+
+**Daily vs weekly comms (the cadence contract):**
+- **Daily** — `morning_abc_sync` communicates **per-invoice**: one Slack message per actioned invoice (the ≥6% hold notice + that invoice's decisions). No bulk file daily. (Tests → Chris, not Lucinda.)
+- **Monday** — generate + post the two CSVs below as **Slack download URLs** (link, not inline attachment) to the accounting channel (tests → Chris).
+
+**Deliverable 1 — Invoices-to-be-paid QuickBooks CSV** (existing Track C export)
+- The week's approved `to-be-paid` set as the **locked-column QuickBooks import CSV, one file per vendor** (reuse `process-batch` / `buildVendorFileName`, schema 153). This is the pay file.
+
+**Deliverable 2 — Detailed decision work CSV (NEW file creation)**
+- **Full invoice line-item detail** for every line Alex reviewed that week, carrying the **notes, pricing, and logic behind every decision**. One row per line:
+  - invoice #, vendor, branch/office, item #, description, qty, UOM
+  - invoice price, **benchmark price + `benchmark_source`** (negotiated / API / recent / org_inv / none), variance % and $
+  - **decision/disposition** (hold+credit-memo / weekly / approved / coverage-gap→Jordan), **note/logic** (why the call), agent (Alex), decided-at timestamp
+- Source: `v_invoice_audit_line_cascade` + the week's `dashboard_action_log` decisions (actor `alex-rivers`). This is the explainability / audit-trail file — every call Alex made, defensible per line.
+
+**Outputs:** both CSVs written to storage; one Slack message with the two download URLs; an attributed `dashboard_action_log` row for the weekly package.
+
 ## 4. Slack approval handler — 3–6% tier  ⛔ SUPERSEDED 2026-06-28
 
 > The real-time 3–6% approval tier was **removed** (§1): 3–6% now reports in the weekly digest only, so there is no real-time Slack approval to handle. The only real-time Slack from `morning_abc_sync` is the ≥6% hold notice (no interaction needed). Kept for history; do not build. The ≥6% credit-memo candidate is created directly by `morning_abc_sync`, not by an approval handler.
@@ -246,11 +268,12 @@ indefinitely.
 8. **GPA best-vendor/branch benchmark + tolerance %** — the reference for "priced-but-out-of-range" gaps (docs/51).
 9. **Jordan request-generation SOP** — Jordan turns Alex's gap list into per-vendor/branch price-agreement requests (Jordan's own SOP, future).
 10. **Gap tracking** — gaps stored as work items with `gap_found_at`, `last_request_at`, `cycle_count`, `status` so §3b can age them, auto-close on coverage, and escalate at N cycles.
+11. **`weekly_payment_package` (§3c)** — Monday generator producing (a) the per-vendor QuickBooks invoices-to-be-paid CSV (reuse Track C) and (b) the **NEW detailed decision work CSV** (per-line: pricing, benchmark + source, variance, decision, note/logic, agent — from `v_invoice_audit_line_cascade` + week's `dashboard_action_log`). Writes both to storage, posts Slack message with two download URLs.
 
 ---
 
 ## 6. TODO — remaining cadences (next walkthroughs)
-- **Weekly:** owns **Tier 2 agreement freshness** (refresh all branches within 2hr drive time of each office). Tasks: `abc_catalog_sync`, `price_agreement_expiration_check`, `variance_weekly_digest` (consumes the 0–3% weekly-review bucket).
+- **Weekly:** final deliverable = **`weekly_payment_package`** (Monday) — the two CSVs via Slack URL (§3c, designed). Also owns **Tier 2 agreement freshness** (refresh all branches within 2hr drive time of each office) + tasks `abc_catalog_sync`, `price_agreement_expiration_check`, `variance_weekly_digest` (consumes the 0–3% weekly-review bucket).
 - **Monthly:** owns **Tier 3 agreement freshness** (refresh all 150 branches; stop beyond). Tasks: `vendor_performance_scorecard`, `price_list_validation`.
 - **Quarterly:** `contract_renewal_prep`.
 - **Annual:** `vendor_audit_deep_dive`.
