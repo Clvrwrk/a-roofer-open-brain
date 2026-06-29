@@ -42,6 +42,8 @@ slack:
     - "channels:read"
     - "channels:history"
     - "channels:join"
+    - "groups:read"
+    - "groups:history"
     - "groups:history"     # read private channels
     - "im:write"           # DM Chris directly
     - "im:read"
@@ -50,12 +52,31 @@ slack:
     - "files:read"
     - "app_mentions:read"
   socket_mode_enabled: true
+
+  listen_policy:
+    mode: "all_human_operational_channels"
+    respond_when: "in_sop_scope_or_directly_mentioned"
+    overlap_resolution: "ops_conductor_decides"
+    no_agent_dm: true
+    ambient_response_allowed: true
+    out_of_domain_behavior: "ignore_or_polite_decline"
+    undefined_sop_behavior: "ops_conductor_to_chris_for_instruction_and_sop_improvement"
+    unclear_file_escalation: "ops_conductor_linear_ticket"
   channels:
-    # Private — Chris only sees this
+    - name: "accounting-vendor-intake"
+      id: "C0BCUF29G1H"
+      purpose: "Human-facing operational channel; Ops Conductor listens for overlap and escalation."
+    - name: "accounting-credit-memos"
+      id: "C0BD4EW4RU4"
+      purpose: "Human-facing operational channel; Ops Conductor listens for overlap and escalation."
+    - name: "accounting-product-catalog-review"
+      id: "C0BCYNW98RL"
+      purpose: "Human-facing operational channel; Ops Conductor listens for overlap and escalation."
     - name: "ob-ops-conductor"
-      purpose: "Chris ↔ Ops Conductor private channel. All agent summaries and decisions land here."
-    # Private — agents post raw outputs here, Chris does NOT see this
+      id: "C0BDF8QRF8A"
+      purpose: "Chris ↔ Ops Conductor private channel. Curated agent summaries and decisions land here."
     - name: "ob-agents-internal"
+      id: "C0BD8U44HL3"
       purpose: "Raw agent outputs. Ops Conductor reads and filters. Chris never sees this directly."
 
 hermes:
