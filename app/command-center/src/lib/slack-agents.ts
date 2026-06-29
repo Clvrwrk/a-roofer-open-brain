@@ -32,14 +32,14 @@ export interface SlackAgentIdentity {
 // (from the api.slack.com "Your Apps" list) and must be confirmed by which app
 // actually holds the installed bot token before any duplicate is deleted.
 export const SLACK_AGENTS: Record<string, SlackAgentIdentity> = {
-  alex: { slug: "alex-rivers", displayName: "Alex Rivers", tokenEnvKey: "SLACK_BOT_TOKEN_ALEX", canonicalAppId: "A0BD4C9SUPP" },
-  casey: { slug: "casey-morgan", displayName: "Casey Morgan", tokenEnvKey: "SLACK_BOT_TOKEN_CASEY", canonicalAppId: null },
-  jordan: { slug: "jordan-price", displayName: "Jordan Price", tokenEnvKey: "SLACK_BOT_TOKEN_JORDAN", canonicalAppId: null },
-  maya: { slug: "maya-chen", displayName: "Maya Chen", tokenEnvKey: "SLACK_BOT_TOKEN_MAYA", canonicalAppId: "A0BD0PAEU2E" },
-  lena: { slug: "lena-brooks", displayName: "Lena Brooks", tokenEnvKey: "SLACK_BOT_TOKEN_LENA", canonicalAppId: null },
-  rowan: { slug: "rowan-vale", displayName: "Rowan Vale", tokenEnvKey: "SLACK_BOT_TOKEN_ROWAN", canonicalAppId: null },
-  sam: { slug: "sam-torres", displayName: "Sam Torres", tokenEnvKey: "SLACK_BOT_TOKEN_SAM", canonicalAppId: null },
-  conductor: { slug: "ops-conductor", displayName: "Ops Conductor", tokenEnvKey: "SLACK_BOT_TOKEN_CONDUCTOR", canonicalAppId: "A0BDG2CCCAJ" },
+  alex: { slug: "alex-rivers", displayName: "Alex Rivers", tokenEnvKey: "ALEX_RIVERS_BOT_TOKEN", canonicalAppId: "A0BD4C9SUPP" },
+  casey: { slug: "casey-morgan", displayName: "Casey Morgan", tokenEnvKey: "CASEY_MORGAN_BOT_TOKEN", canonicalAppId: "A0BD85UG23C" },
+  jordan: { slug: "jordan-price", displayName: "Jordan Price", tokenEnvKey: "JORDAN_PRICE_BOT_TOKEN", canonicalAppId: "A0BE2EMAA8Y" },
+  maya: { slug: "maya-chen", displayName: "Maya Chen", tokenEnvKey: "MAYA_CHEN_BOT_TOKEN", canonicalAppId: "A0BD0PAEU2E" },
+  lena: { slug: "lena-brooks", displayName: "Lena Brooks", tokenEnvKey: "LENA_BROOKS_BOT_TOKEN", canonicalAppId: "A0BD1RH3FPD" },
+  rowan: { slug: "rowan-vale", displayName: "Rowan Vale", tokenEnvKey: "ROWAN_VALE_BOT_TOKEN", canonicalAppId: "A0BD1RMHFBM" },
+  sam: { slug: "sam-torres", displayName: "Sam Torres", tokenEnvKey: "SAM_TORRES_BOT_TOKEN", canonicalAppId: "A0BD86ATVHQ" },
+  conductor: { slug: "ops-conductor", displayName: "Ops Conductor", tokenEnvKey: "OPS_CONDUCTOR_BOT_TOKEN", canonicalAppId: "A0BDG2CCCAJ" },
 };
 
 export interface AgentTokenResolution {

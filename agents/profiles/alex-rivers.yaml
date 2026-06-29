@@ -44,6 +44,7 @@ kasm:
 slack:
   bot_display_name: "Alex Rivers"
   app_name: "Alex Rivers (Pricing)"
+  app_id: "A0BD4C9SUPP"   # canonical Slack app (installed bot). Duplicates to delete.
   team_id: "T0B8QEGPVQW"
   bot_scopes:
     - "chat:write"

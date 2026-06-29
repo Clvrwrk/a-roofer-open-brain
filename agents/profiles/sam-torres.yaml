@@ -41,6 +41,7 @@ kasm:
 slack:
   bot_display_name: "Sam Torres"
   app_name: "Sam Torres (QA)"
+  app_id: "A0BD86ATVHQ"   # canonical Slack app (installed bot). Duplicates to delete.
   team_id: "T0B8QEGPVQW"
   bot_scopes:
     - "chat:write"

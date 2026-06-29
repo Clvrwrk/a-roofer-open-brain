@@ -45,6 +45,7 @@ kasm:
 slack:
   bot_display_name: "Casey Morgan"
   app_name: "Casey Morgan (Vendor Comms)"
+  app_id: "A0BD85UG23C"   # canonical Slack app (installed bot). Duplicates to delete.
   team_id: "T0B8QEGPVQW"
   bot_scopes:
     - "chat:write"

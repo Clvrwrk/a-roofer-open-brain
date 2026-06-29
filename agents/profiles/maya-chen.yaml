@@ -81,6 +81,7 @@ kasm:
 slack:
   bot_display_name: "Maya Chen"
   app_name: "Maya Chen (Accounting)"
+  app_id: "A0BD0PAEU2E"   # canonical Slack app (installed bot). Duplicates to delete.
   team_id: "T0B8QEGPVQW"
   bot_scopes:
     - "chat:write"

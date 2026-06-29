@@ -35,6 +35,7 @@ kasm:
 slack:
   bot_display_name: "Ops Conductor"
   app_name: "Ops Conductor"
+  app_id: "A0BDG2CCCAJ"   # canonical Slack app (installed bot). Duplicates to delete.
   team_id: "T0B8QEGPVQW"
   bot_scopes:
     - "chat:write"
