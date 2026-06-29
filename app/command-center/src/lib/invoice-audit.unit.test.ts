@@ -183,7 +183,7 @@ describe("loadInvoiceAuditSummary", () => {
     expect(data.totals.awaitingPayment).toBe(0);
   });
 
-  it("actionable scope = open + ≥60d + non-credit-memo; KPIs + scope metadata follow it", async () => {
+  it("processing scope = all open + non-credit-memo (every age); dueNow = ≥60d; KPIs + scope metadata follow it", async () => {
     const iso = (daysAgo: number) => {
       const d = new Date();
       d.setUTCDate(d.getUTCDate() - daysAgo);
@@ -197,8 +197,8 @@ describe("loadInvoiceAuditSummary", () => {
     mockCreateServerSupabaseClient.mockReturnValue({
       client: makeClient({
         v_invoice_audit_invoice: [
-          inv({ invoice_number: "OLD-OPEN", invoice_date: iso(90), at_risk: 10 }),   // actionable
-          inv({ invoice_number: "RECENT-OPEN", invoice_date: iso(10), at_risk: 20 }), // too new → excluded
+          inv({ invoice_number: "OLD-OPEN", invoice_date: iso(90), at_risk: 10 }),   // actionable + dueNow
+          inv({ invoice_number: "RECENT-OPEN", invoice_date: iso(10), at_risk: 20 }), // actionable, NOT dueNow (<60d)
           inv({ invoice_number: "OLD-PAID", invoice_date: iso(120), at_risk: 40 }),   // paid → excluded
           inv({ invoice_number: "OLD-CM", invoice_date: iso(100), is_credit_memo: true, at_risk: 80 }), // CM → excluded
         ],
@@ -217,12 +217,16 @@ describe("loadInvoiceAuditSummary", () => {
     const byNo = (n: string) => data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === n);
 
     expect(byNo("OLD-OPEN")?.actionable).toBe(true);
-    expect(byNo("RECENT-OPEN")?.actionable).toBe(false); // ≥60d gate
-    expect(byNo("OLD-PAID")?.actionable).toBe(false);    // unpaid gate
+    expect(byNo("RECENT-OPEN")?.actionable).toBe(true); // all open → actionable (processing decoupled from due date)
+    expect(byNo("OLD-PAID")?.actionable).toBe(false);    // paid gate
     expect(byNo("OLD-CM")?.actionable).toBe(false);      // non-credit-memo gate
-    expect(data.totals.actionableInvoices).toBe(1);
-    // $ At Risk is actionable-scoped → only OLD-OPEN's 10, not the recent/paid/CM risk.
-    expect(data.totals.atRisk).toBe(10);
+    expect(data.totals.actionableInvoices).toBe(2);      // both open non-CM invoices
+    // dueNow = ≥60d (payment due): OLD-OPEN only; RECENT-OPEN is processed but not yet due.
+    expect(byNo("OLD-OPEN")?.dueNow).toBe(true);
+    expect(byNo("RECENT-OPEN")?.dueNow).toBe(false);
+    expect(data.totals.dueNow).toBe(1);
+    // $ At Risk is processing-scoped → OLD-OPEN(10) + RECENT-OPEN(20), not the paid/CM risk.
+    expect(data.totals.atRisk).toBe(30);
     // Open/paid counts keep their open-set semantics (3 open incl. CM + recent, 1 paid).
     expect(data.totals.openInvoices).toBe(3);
     expect(data.totals.paidInvoices).toBe(1);

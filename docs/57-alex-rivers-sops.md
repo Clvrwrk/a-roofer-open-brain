@@ -38,7 +38,7 @@
 - **Silent when all-clear** (`nepq-agent-communication`): no "nothing to report" posts.
 - **Vendor-agnostic.** The model below is written for ABC but generalizes to any vendor PE buys from; "branch agreement" = the vendor's branch-level negotiated pricing.
 - **Engine views (validated 2026-06-28).** Variance audit = `v_invoice_audit_line` (UOM-aligned; chain = `abc_invoice_lines` → `abc_price_agreement_branch_matches` → `abc_price_agreements` → `abc_price_list_items`, gated by ship-to branch + `effective_date` + non-`API-%` + UOM). Coverage baseline = `v_price_list_global`; GPA benchmark = `v_office_ground_price`. Recording seam = `dashboard_action_log` (actor `alex-rivers`); work queue = `dashboard_work_items`.
-- **Audit scope = OPEN, unpaid invoices ≥60 days past invoice date** (rolling `run_date − 60d`; not credit memos). Catches overcharges before payment. Because aged invoices rarely match a *current* branch-matched agreement, the audit falls back through a **benchmark cascade** — agreement → ABC API/list price → newest prior same-item/same-branch invoice (see §1).
+- **Audit scope = ALL OPEN, unpaid invoices, every age** (not credit memos) — **docs/63, 2026-06-29**: processing is decoupled from the 60-day payment-due window. Alex audits **every open invoice each day** so accounting can post it to QuickBooks within ~2 weeks of purchase. The **60-day mark (`run_date − 60d`) is now only the "due now" reporting lens** (which invoices are payment-due), not a processing gate. Because aged invoices rarely match a *current* branch-matched agreement, the audit falls back through a **benchmark cascade** — agreement → ABC API/list price → newest prior same-item/same-branch invoice (see §1).
 
 ### Agreement Priority — branch coverage model (the scope contract)
 
@@ -66,13 +66,13 @@ agreement applies in the canonical DB at its tier's freshness. Scope is **per PE
 ## 1. `morning_abc_sync` — daily variance audit  ✅ LOCKED
 
 **Trigger:** daily, 7:00a CT (`0 7 * * *`). Runs the **full in-scope set every run** (idempotent — paid invoices drop out automatically).
-**Goal:** audit **open, unpaid invoices that are ≥60 days past invoice date** against the best available price benchmark and route overcharges by severity — catching them before payment.
+**Goal:** audit **every open, unpaid invoice (any age)** against the best available price benchmark and route overcharges by severity — so accounting can post each invoice to QuickBooks within ~2 weeks of purchase, then pay when due.
 
-**Scope filter (all three AND'd) — validated 2026-06-28:**
+**Scope filter (docs/63, 2026-06-29 — processing decoupled from the 60-day due gate):**
 - **Open / non-paid only** — `abc_invoices.date_paid IS NULL` (ABC AR `ar_status='open'`). Paid invoices are out of scope (no recovery after payment).
-- **Aged ≥60 days** — `invoice_date ≤ run_date − 60 days` (rolling; run 6/29 → `≤2026-04-30`, run 7/6 → `≤2026-05-07`).
+- **All ages** — **no** age gate on processing. Every open invoice is audited the day after it lands via the overnight ABC API pull. (Was `invoice_date ≤ run_date − 60d`; that 60-day mark is now only the **"due now"** reporting lens — which invoices are payment-due — not a processing filter.)
 - **Not a credit memo** (`is_credit_memo = false`).
-- *(Tomorrow's first run = 17 invoices.)* Branch resolved from the invoice `ship_to_number`.
+- **First run = full backlog** (every currently-unprocessed open invoice), then **daily-incremental** on the overnight pull. Branch resolved from the invoice `ship_to_number`.
 
 **Process — per line, take the FIRST benchmark that applies:**
 1. **Check 1 — Vendor/Branch agreement matched?** (existing `v_invoice_audit_line` logic: branch + `effective_date ≤ invoice_date` + UOM). Matched → variance vs **agreement price**. Done.

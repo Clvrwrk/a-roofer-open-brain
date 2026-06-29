@@ -4,7 +4,7 @@
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -643,7 +643,7 @@ if (root && dataEl && mount) {
       ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset all lines to pending, reverse not-to-be-paid holds, and cancel any draft credit memo (sent communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `
-      <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-topay="${refreshToBePaid(inv) ? "1" : "0"}">
+      <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-duenow="${inv.dueNow ? "1" : "0"}" data-topay="${refreshToBePaid(inv) ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${job}</span></span>
@@ -851,8 +851,10 @@ if (root && dataEl && mount) {
   const date2El = document.getElementById("iv-date2") as HTMLInputElement | null;
   const showAllBox = document.getElementById("iv-showall") as HTMLInputElement | null;
   const pendingBox = document.getElementById("iv-pending") as HTMLInputElement;
-  // "Show all" escapes the default open+60-day actionable bound (docs/59 D2): it reveals
-  // paid / recent / credit-memo invoices and lifts the date inputs' ≤cutoff cap.
+  const dueNowBox = document.getElementById("iv-duenow") as HTMLInputElement | null;
+  // Default scope = the processing set (all open, unpaid, non-CM — every age; docs/63).
+  // "Show all" escapes it: reveals paid / recent / credit-memo invoices and lifts the
+  // date inputs' cap. "Due now" narrows to invoices whose payment is due (invoice_date+60d).
   function syncDateBounds() {
     const showAll = !!showAllBox?.checked;
     for (const el of [date1El, date2El]) {
@@ -869,6 +871,7 @@ if (root && dataEl && mount) {
     const date1 = date1El?.value || "";
     const date2 = date2El?.value || "";
     const pendingOnly = pendingBox?.checked;
+    const dueNowOnly = !!dueNowBox?.checked;
     root!.classList.toggle("iv-pending-only", !!pendingOnly); // CSS hides audited line rows
     mount.querySelectorAll<HTMLElement>(".iv-office").forEach((oEl) => {
       const officeOk = !off || oEl.dataset.office === off;
@@ -887,14 +890,16 @@ if (root && dataEl && mount) {
           const toPay = iEl.dataset.topay === "1";
           const invDate = iEl.dataset.date || "";
           const actionable = iEl.dataset.actionable === "1";
+          const dueNow = iEl.dataset.duenow === "1";
           const tolOk = !tol ? true : tol === "noprice" ? noprice > 0 : worst >= parseFloat(tol);
-          // Scope: default = the actionable set (open + ≥60d + non-CM); "Show all" lifts it.
-          // The date range narrows within whichever scope is active (docs/59 D2/Task 4).
+          // Scope: default = the processing set (all open, non-CM, every age; docs/63);
+          // "Show all" lifts it. The date range narrows within whichever scope is active.
           const scopeOk = showAll ? true : actionable;
           const dateOk = (!date1 || invDate >= date1) && (!date2 || invDate <= date2);
           const pendOk = !pendingOnly || pending > 0;
+          const dueOk = !dueNowOnly || dueNow; // "Due now" = invoice_date + 60d ≤ today
           const qOk = !q || (iEl.dataset.search || "").includes(q) || (bEl.dataset.search || "").includes(q);
-          const ok = officeOk && tolOk && scopeOk && dateOk && pendOk && qOk;
+          const ok = officeOk && tolOk && scopeOk && dateOk && pendOk && dueOk && qOk;
           iEl.style.display = ok ? "" : "none";
           setBar(iEl, audited, auditable); // an invoice's own bar reflects its state regardless of filter
           if (ok) branchHas = true;
@@ -924,7 +929,7 @@ if (root && dataEl && mount) {
       setBar(oEl, offRoll.audited, offRoll.auditable);
     });
   }
-  [search, officeSel, tolSel, date1El, date2El, pendingBox].forEach((el) => el?.addEventListener("input", applyFilter));
+  [search, officeSel, tolSel, date1El, date2El, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("input", applyFilter));
   showAllBox?.addEventListener("change", () => { syncDateBounds(); applyFilter(); });
   syncDateBounds();
   applyFilter();

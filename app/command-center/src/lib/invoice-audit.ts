@@ -128,7 +128,8 @@ export interface Invoice {
   processedAt: string;
   toBePaid: boolean;
   awaitingPayment: boolean;
-  actionable: boolean; // in the open+≥60d, non-credit-memo audit scope (docs/59 Task 2)
+  actionable: boolean; // open, unpaid, non-credit-memo (ALL ages) — the daily processing set (docs/63)
+  dueNow: boolean; // actionable AND payment now due (invoice_date + 60d ≤ today) — "Due now" display lens
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
@@ -187,7 +188,7 @@ export interface InvoiceAuditData {
   scope: InvoiceAuditScope;
   offices: InvOffice[];
   categories: { key: string; label: string; sortOrder: number }[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; toBePaid: number; awaitingPayment: number; transferred: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; dueNow: number; toBePaid: number; awaitingPayment: number; transferred: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -217,10 +218,21 @@ export function todayDateStr(today: Date = new Date()): string {
   return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10);
 }
 
+// Processing set (docs/63): every OPEN, unpaid, non-credit-memo invoice — ALL ages.
+// Processing is decoupled from the 60-day payment-due window: Alex processes every open
+// invoice daily so accounting can post it to QuickBooks within ~2 weeks of purchase. The
+// 60-day math now only drives the "due now" display lens (isInvoiceDueNow), not what gets
+// audited/processed.
 export const isInvoiceActionable = (
   invoice: Pick<Invoice, "paid" | "isCreditMemo" | "invoiceDate">,
+) => !invoice.paid && !invoice.isCreditMemo && !!invoice.invoiceDate;
+
+// Display lens: an actionable invoice whose payment is now DUE (invoice_date + 60d ≤ today,
+// i.e. invoice_date ≤ cutoff). Drives the "Due now" filter/badge — never the processing scope.
+export const isInvoiceDueNow = (
+  invoice: Pick<Invoice, "paid" | "isCreditMemo" | "invoiceDate">,
   cutoff: string = scopeCutoffDate(),
-) => !invoice.paid && !invoice.isCreditMemo && !!invoice.invoiceDate && invoice.invoiceDate <= cutoff;
+) => isInvoiceActionable(invoice) && invoice.invoiceDate <= cutoff;
 
 function emptyScope(today: Date = new Date()): InvoiceAuditScope {
   const cutoff = scopeCutoffDate(today);
@@ -234,7 +246,7 @@ function emptyScope(today: Date = new Date()): InvoiceAuditScope {
 // loop is independent of the 60-day audit age bound. (docs/59 Task 2)
 type ScopeTotalsInvoice = Pick<
   Invoice,
-  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "toBePaid" | "awaitingPayment" | "transferred"
+  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "dueNow" | "toBePaid" | "awaitingPayment" | "transferred"
 >;
 export function buildScopeAndTotals(
   invoices: ScopeTotalsInvoice[],
@@ -268,6 +280,7 @@ export function buildScopeAndTotals(
       openInvoices: openInv.length,
       paidInvoices: live.filter((i) => i.paid).length,
       actionableInvoices: actionable.length,
+      dueNow: live.filter((i) => i.dueNow).length,
       toBePaid: openInv.filter((i) => i.toBePaid).length,
       awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
       transferred: transferredCount,
@@ -464,6 +477,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
     actionable: false,
+    dueNow: false,
     transferred: transferredSet.has(i.invoice_number),
     transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -484,7 +498,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.toBePaid = isInvoiceToBePaid(inv);
     // Transferred → Service/Warranty invoices are never actionable in this audit.
-    inv.actionable = !inv.transferred && isInvoiceActionable(inv, cutoff);
+    inv.actionable = !inv.transferred && isInvoiceActionable(inv);
+    inv.dueNow = !inv.transferred && isInvoiceDueNow(inv, cutoff);
     return inv;
   });
 
@@ -748,6 +763,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       ...paymentState,
       toBePaid: false,
       actionable: false,
+      dueNow: false,
       transferred: transferredSet.has(i.invoice_number),
       transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
       hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -766,7 +782,8 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
         .toLowerCase(),
     };
     invoice.toBePaid = isInvoiceToBePaid(invoice);
-    invoice.actionable = !invoice.transferred && isInvoiceActionable(invoice, cutoff);
+    invoice.actionable = !invoice.transferred && isInvoiceActionable(invoice);
+    invoice.dueNow = !invoice.transferred && isInvoiceDueNow(invoice, cutoff);
     return invoice;
   });
 
@@ -1066,6 +1083,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     ...derivePaymentState(processed),
     toBePaid: false,
     actionable: false,
+    dueNow: false,
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
@@ -1078,6 +1096,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   };
   invoice.toBePaid = isInvoiceToBePaid(invoice);
   invoice.actionable = isInvoiceActionable(invoice);
+  invoice.dueNow = isInvoiceDueNow(invoice);
   return invoice;
 }
 
