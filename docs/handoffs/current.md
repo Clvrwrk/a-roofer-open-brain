@@ -8,6 +8,28 @@
 
 ---
 
+## Active Mid-Flight Note — 2026-06-29 OKF + Roofing-Ops runtime work
+
+A newer workstream is in progress after the 2026-06-28 invoice-audit handoff below. Any agent resuming this repo should read this note before following older "Next Task" instructions.
+
+Current active direction from Chris:
+
+1. **Single-folder rule:** Do not create sibling worktree folders unless Chris explicitly asks. All current work has been consolidated back into `/Users/chussey/Documents/a-roofers-open-brain`.
+2. **OKF restructure:** The canonical OKF working bundle is being created under `docs/knowledge-base/the-roofers-open-brain/`. The vendored OKF spec stays under `docs/knowledge-base/OKF/`.
+3. **OKF top-level/sub-bundles:** The skeleton now includes top-level `The Roofers Open Brain`, plus sub-bundles for `proexteriorsus-website`, `cc-proexteriorsus-command-center` (with `feature-set/`), `roofing-agents`, `dev-agents`, `supabase`, `integrations/vendors/abc-supply`, `company-operations`, `security-governance`, `infrastructure`, and `skills-and-sops`.
+4. **Graphify decision:** Do **not** clone/deploy Graphify now. Prior decision in `docs/35-decision-graphify-skipped.md` still stands; use OKF-native navigation first.
+5. **Roofing-Ops Slack/Hermes runtime:** Named app shells, scopes, channel validation, Socket Mode tokens, Hermes install, per-agent Hermes homes, and listeners have been wired on the agent host. Runtime still needs final live human DM/channel validation and hardening.
+6. **Alex scope correction:** Alex owns open vendor invoice audit/pricing questions. Customer AR collections remain Jordan/Accounting. This is now patched in classifier/SOUL and should be captured in the Alex OKF bundle.
+7. **Paused agents:** If any agent was mid-flight on Open Engine, SEO, daily invoice processing, or Roofing-Ops Slack routing, do not create another worktree. Resume in the single canonical repo and check `git status --short` first.
+
+Recent validation:
+
+- `node scripts/validate-okf.mjs` → passed after skeleton creation.
+- `npm test -- roofing-agent-scope.test.ts roofing-agent-runtime-parity.test.ts` → passed after Alex scope patch.
+- `node scripts/verify-roofing-agent-slack-routing.mjs` → passed full channel validation earlier after Ops was removed from Dev channels.
+
+---
+
 ## Accomplished This Session
 
 ### docs/59 Invoice Audit rebuild — COMPLETE & DEPLOYED (Tasks 5–6 + Gate 7 + 2 polish rounds)

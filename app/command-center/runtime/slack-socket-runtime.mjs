@@ -1,6 +1,7 @@
 import { App, LogLevel } from "@slack/bolt";
 import { createClient } from "@supabase/supabase-js";
 import { pathToFileURL } from "node:url";
+import { handleRoofingOpsFileShared, handleRoofingOpsMessage } from "./roofing-ops-agent-router.mjs";
 
 const COMMAND_ROUTES = new Map([
   [
@@ -191,20 +192,6 @@ function buildCommandReply(commandName) {
   ].join("\n");
 }
 
-function buildMentionReply() {
-  return [
-    "I am online as ob-conductor.",
-    "I can receive this Slack event and route it into the Open Brain runtime next.",
-    "For now, I am staying read-only and will not change Supabase records from Slack.",
-  ].join("\n");
-}
-
-function buildDmReply() {
-  return [
-    "I am online and receiving DMs.",
-    "Use `/pe-ob`, `/pe-intake`, `/pe-catalog`, or `/pe-credit` in Slack for the first routed command surfaces.",
-  ].join("\n");
-}
 
 async function respondEphemeral(respond, text) {
   await respond({
@@ -246,6 +233,43 @@ function registerSlashCommands(app, env) {
   }
 }
 
+function startDmPoller(app, env) {
+  if (String(env.ROOFING_OPS_DM_POLL_ENABLED ?? "true") === "false") return null;
+  const seen = new Set();
+  let initialized = false;
+  const pollMs = Number(env.ROOFING_OPS_DM_POLL_MS || 10000);
+  const poll = async () => {
+    try {
+      const list = await app.client.conversations.list({ types: "im", limit: 100 });
+      for (const channel of list.channels ?? []) {
+        if (!channel.id) continue;
+        const hist = await app.client.conversations.history({ channel: channel.id, limit: 3 });
+        for (const msg of (hist.messages ?? []).reverse()) {
+          if (!msg.ts || seen.has(`${channel.id}:${msg.ts}`)) continue;
+          seen.add(`${channel.id}:${msg.ts}`);
+          if (!initialized) continue;
+          if (msg.bot_id || msg.subtype || !msg.user || !msg.text) continue;
+          await handleRoofingOpsMessage({
+            message: { ...msg, channel: channel.id, channel_type: "im" },
+            context: { teamId: env.SLACK_TEAM_ID },
+            client: app.client,
+            env,
+            logger: console,
+          });
+        }
+      }
+      initialized = true;
+    } catch (error) {
+      console.error(JSON.stringify({ service: "slack-socket-runtime", event: "dm_poll_failed", message: error?.message ?? String(error), timestamp: new Date().toISOString() }));
+    }
+  };
+  setTimeout(poll, 2000).unref?.();
+  const timer = setInterval(poll, pollMs);
+  timer.unref?.();
+  logRuntime("dm_poller_started", { pollMs });
+  return timer;
+}
+
 function registerEvents(app, env) {
   app.event("app_mention", async ({ event, context, client, logger }) => {
     const teamId = context.teamId ?? event.team;
@@ -258,40 +282,33 @@ function registerEvents(app, env) {
     });
 
     try {
-      await client.chat.postMessage({
-        channel: event.channel,
-        thread_ts: event.thread_ts ?? event.ts,
-        text: buildMentionReply(),
-      });
+      await handleRoofingOpsMessage({ message: { ...event, channel_type: event.channel_type ?? "channel" }, context, client, env, logger });
     } catch (error) {
-      logger.error("Failed to respond to app mention", error);
+      logger.error("Failed to route app mention", error);
     }
   });
 
   app.message(async ({ message, context, client, logger }) => {
-    if (message.subtype || message.bot_id || message.channel_type !== "im") return;
+    if (message.subtype || message.bot_id) return;
 
     const teamId = context.teamId ?? message.team;
     if (!expectedTeamAllows(teamId, env) || !userAllows(message.user, env)) return;
 
-    logRuntime("direct_message", {
+    logRuntime("message", {
       team: redactId(teamId),
       channel: redactId(message.channel),
       user: redactId(message.user),
+      channelType: message.channel_type,
     });
 
     try {
-      await client.chat.postMessage({
-        channel: message.channel,
-        thread_ts: message.thread_ts ?? message.ts,
-        text: buildDmReply(),
-      });
+      await handleRoofingOpsMessage({ message, context, client, env, logger });
     } catch (error) {
-      logger.error("Failed to respond to direct message", error);
+      logger.error("Failed to route Roofing-Ops message", error);
     }
   });
 
-  app.event("file_shared", async ({ event, context, logger }) => {
+  app.event("file_shared", async ({ event, context, client, logger }) => {
     const teamId = context.teamId ?? event.team_id;
     if (!expectedTeamAllows(teamId, env) || !userAllows(event.user_id, env)) return;
 
@@ -301,7 +318,11 @@ function registerEvents(app, env) {
       user: redactId(event.user_id),
     });
 
-    logger.info("File share received; write-side intake is not enabled in this runtime yet.");
+    try {
+      await handleRoofingOpsFileShared({ event, context, client, env, logger });
+    } catch (error) {
+      logger.error("Failed to route Roofing-Ops file share", error);
+    }
   });
 }
 
@@ -344,6 +365,7 @@ export async function startSlackSocketRuntime(env = process.env) {
   const app = createSlackSocketRuntime(env);
   await app.start();
   startSlackMirrorDrain(app, env);
+  startDmPoller(app, env);
 
   logRuntime("started", {
     socketMode: true,

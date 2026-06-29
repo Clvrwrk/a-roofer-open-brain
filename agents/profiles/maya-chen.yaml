@@ -92,16 +92,26 @@ slack:
     - "files:write"
     - "app_mentions:read"
   socket_mode_enabled: true
+
+  listen_policy:
+    mode: "all_human_operational_channels"
+    respond_when: "in_sop_scope_or_directly_mentioned"
+    overlap_resolution: "ops_conductor_decides"
+    no_agent_dm: true
+    ambient_response_allowed: true
+    out_of_domain_behavior: "ignore_or_polite_decline"
+    undefined_sop_behavior: "ops_conductor_to_chris_for_instruction_and_sop_improvement"
+    unclear_file_escalation: "ops_conductor_linear_ticket"
   channels:
     - name: "accounting-vendor-intake"
       id: "C0BCUF29G1H"
-      purpose: "Invoice and AP document intake notifications"
+      purpose: "Human-facing operational channel; all named Roofing-Ops agents listen for in-scope requests."
     - name: "accounting-credit-memos"
       id: "C0BD4EW4RU4"
-      purpose: "Credit memo intake and status updates"
+      purpose: "Human-facing operational channel; all named Roofing-Ops agents listen for in-scope requests."
     - name: "accounting-product-catalog-review"
       id: "C0BCYNW98RL"
-      purpose: "Price agreement and catalog document intake"
+      purpose: "Human-facing operational channel; all named Roofing-Ops agents listen for in-scope requests."
 
 command_center:
   service_agent_id: "ob-accounting"

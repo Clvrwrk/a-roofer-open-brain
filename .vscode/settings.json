@@ -1,0 +1,36 @@
+{
+  "files.exclude": {
+    ".claude": true,
+    ".codex": true,
+    ".cursor": true,
+    ".hermes": true,
+    ".memsearch": true,
+    ".obsidian": true,
+    ".playwright-mcp": true,
+    ".worktrees": true,
+    "private": true,
+    "tmp": true,
+    "outputs": true,
+    "archive/local-scratch": true,
+    "*.log": true,
+    "tmp_*": true,
+    "probe-time.txt": true,
+    "t.txt": true,
+    "time.txt": true,
+    "* 2.*": true
+  },
+  "search.exclude": {
+    ".claude": true,
+    ".codex": true,
+    ".cursor": true,
+    ".hermes": true,
+    ".memsearch": true,
+    ".obsidian": true,
+    ".playwright-mcp": true,
+    ".worktrees": true,
+    "private": true,
+    "tmp": true,
+    "outputs": true,
+    "archive/local-scratch": true
+  }
+}
