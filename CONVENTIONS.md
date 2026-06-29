@@ -105,6 +105,8 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 - Exempt from the 10x gate: mission-grade infrastructure (debrief pipeline, era-stamping, property model, EEAT) and high-error-cost tasks where avoided-error cost carries the math.
 - **Auditor** enforces the current standard per work product. **Quality Control** sets/changes standards (DMAIC on 3+ repeats). They are separate roles; do not merge them.
 - **Maintenance** runs 5S on the brain and never deletes, never edits provenance, never changes `trust_tier`, never publishes.
+- **Structured source before OCR.** Before building any OCR/parse/extraction step, check whether the vendor API/`raw` JSON already carries the field (verify against the live DB). Don't OCR what's already structured.
+- **Deploys + permission grants are human actions in auto mode.** The classifier blocks the agent from pushing to the live branch, calling the Coolify deploy API, or self-granting that permission in `settings.json`. Commit + converge locally, then hand the user the command (or they add a `Bash` allow-rule first). Canonical: `CLAUDE.md` → Live⇄Dev + the `/coolify` skill.
 
 
 ## 10a. Third-party agent tool gate

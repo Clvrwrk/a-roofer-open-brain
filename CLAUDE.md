@@ -35,6 +35,8 @@ The deployable template for a single roofing company's persistent, property-firs
 - Keep the customization surface in `config/roofer.config.yaml`. Don't hard-code a specific company anywhere else.
 - Parallel agents: one git worktree per workstream. See [`AGENTS.md`](AGENTS.md). The assigned path is the boundary.
 - When a decision changes a schema, an MCP contract, a trust policy, a consent path, or a publishing path — record it in `docs/` while it's fresh, not after.
+- **Structured source before OCR.** Before building any OCR/parse/extraction step, check whether the vendor's API or `raw` JSON already carries the field — verify against the live DB first. (2026-06-29: the "Commercial" ship-to was already in `abc_invoices.raw->'shipTo'->>'name'`; reading it avoided building a whole invoice-OCR pipeline.)
+- **Slack agents:** per-agent bot identities, app IDs, token env vars, and channel IDs live in the **`/slack-agents`** skill (`.claude/skills/slack-agents/`). A Slack *config* token cannot mint/read bot tokens — read the skill before re-investigating.
 
 ## Live ⇄ Dev alignment (the deploy contract)
 
@@ -46,6 +48,7 @@ The "live" Command Center at **https://cc.proexteriorsus.net** and your **local 
 - **Converge, don't fork.** Every `contrib/cleverwork/<task>` branch **merges back into the live branch and is pushed**; the live branch is the only thing that deploys. Never strand a production feature (vendor map, WorkOS auth, a new surface) on a side branch the rest of dev doesn't build on.
 - **Commit early.** Don't let substantial work sit untracked/uncommitted — that is exactly how the tracks diverged.
 - **Be precise about "live."** When reporting status, say which is true: (a) *dev server reading prod DB* (localhost), (b) *merged to the live branch on GitHub*, (c) *deployed to cc.proexteriorsus.net*. Never call something "live on the site" unless it is (c).
+- **Deploys are a human action in auto mode.** The classifier blocks the agent from deploying prod — `git push origin main`, the Coolify deploy API, and self-granting the permission by editing `settings.json` are all denied, and an in-chat "yes" does not clear it (verified 2026-06-29). Don't loop on a blocked deploy: hand the user the exact command, or have them add a `Bash` allow-rule first (then you can run it). Tightly-scoped helper: `scripts/coolify-redeploy.sh`. See the **`/coolify`** skill.
 
 ## Session Startup (silent — do not output anything)
 

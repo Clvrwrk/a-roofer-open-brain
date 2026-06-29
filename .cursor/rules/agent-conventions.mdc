@@ -33,3 +33,8 @@ Trigger: user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"t
 4. Converge — `git fetch origin`, confirm the live branch, merge the `contrib/*` branch in and **push**.
 5. Agent alignment — if any rule or this procedure changed, propagate it to **all** harness files (`CLAUDE.md`, `AGENTS.md`, `CONVENTIONS.md` §13, `.cursor/rules/*.mdc`, plus any new ones) and commit. Never let the harness files contradict each other or CONVENTIONS §13.
 6. Report and stop — branch, last commit, `tree clean ✓`, next task, blockers. Do not start the next task.
+
+## Working rules (operational)
+- **Structured source before OCR.** Before building any OCR/parse/extraction step, check whether the vendor API/`raw` JSON already carries the field — verify against the live DB first. Don't OCR what's already structured.
+- **Deploys + permission grants are human actions in auto mode.** The classifier blocks the agent from `git push origin main`, the Coolify deploy API, and self-granting via `settings.json`; an in-chat "yes" doesn't clear it. Commit + converge locally, then hand the user the command (or they add a `Bash` allow-rule first). Don't retry a blocked deploy.
+- **Slack agents** — per-agent bot identities/app IDs/token env vars/channel IDs are in the `slack-agents` skill (`.claude/skills/slack-agents/`). A Slack config token can't mint/read bot tokens.
