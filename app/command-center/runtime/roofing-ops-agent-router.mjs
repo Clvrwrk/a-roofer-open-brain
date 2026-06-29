@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 
 const HUMAN_OPERATIONAL_CHANNEL_IDS = new Set(["C0BCUF29G1H", "C0BD4EW4RU4", "C0BCYNW98RL"]);
 
@@ -33,7 +37,7 @@ function keywordMatches(body, keyword) {
 }
 
 function fileText(files = []) {
-  return files.map((file) => `${file.name ?? ""} ${file.title ?? ""} ${file.mimetype ?? ""} ${file.filetype ?? ""}`).join(" ");
+  return files.map((file) => `${file.name ?? ""} ${file.title ?? ""} ${file.mimetype ?? ""} ${file.filetype ?? ""} ${file.prettyType ?? ""}`).join(" ");
 }
 
 function classify(text, files = []) {
@@ -91,20 +95,77 @@ function channelTypeFromMessage(message) {
   return message.channel_type === "im" ? "im" : message.channel_type === "mpim" ? "mpim" : message.channel_type === "group" ? "group" : "channel";
 }
 
+function slackFileDir(env) {
+  return env.ROOFING_OPS_SLACK_FILE_DIR || join(tmpdir(), "openbrain-slack-files");
+}
+
+function safeFileName(file) {
+  const raw = file.name || file.title || file.id || "slack-file";
+  const cleaned = basename(String(raw)).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "slack-file";
+  return cleaned.includes(".") || !file.filetype ? cleaned : `${cleaned}.${file.filetype}`;
+}
+
+function fileSummary(file) {
+  return {
+    id: file.id,
+    name: file.name,
+    title: file.title,
+    mimetype: file.mimetype,
+    filetype: file.filetype,
+    prettyType: file.pretty_type,
+    size: file.size,
+    localPath: file.localPath,
+    accessStatus: file.accessStatus,
+    error: file.error,
+  };
+}
+
 function fileSummariesFromMessage(message) {
-  return (message.files ?? []).map((file) => ({ id: file.id, name: file.name, title: file.title, mimetype: file.mimetype, filetype: file.filetype }));
+  return (message.files ?? []).map(fileSummary);
+}
+
+function slackReadToken(env) {
+  return env.SLACK_BOT_TOKEN || getAgentToken(runtimeAgent(env), env) || getAgentToken("ops", env);
+}
+
+async function downloadSlackFile(file, token, env) {
+  if (!file.url_private_download && !file.url_private) return { ...file, accessStatus: "metadata_only", error: "missing_private_url" };
+  const url = file.url_private_download || file.url_private;
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  if (!res.ok) return { ...file, accessStatus: "download_failed", error: `slack_file_http_${res.status}` };
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+  const dir = slackFileDir(env);
+  await mkdir(dir, { recursive: true });
+  const localPath = join(dir, `${digest}-${safeFileName(file)}`);
+  await writeFile(localPath, bytes);
+  return { ...file, localPath, size: file.size ?? bytes.length, accessStatus: "downloaded" };
 }
 
 async function fileSummaryFromSlack(client, env, fileId) {
-  const token = getAgentToken("ops", env);
-  if (!token) return { id: fileId, name: fileId, mimetype: "unknown" };
+  const token = slackReadToken(env);
+  if (!token) return { id: fileId, name: fileId, mimetype: "unknown", accessStatus: "unavailable", error: "missing_slack_read_token" };
   try {
     const info = await client.files.info({ token, file: fileId });
     const file = info.file ?? {};
-    return { id: fileId, name: file.name, title: file.title, mimetype: file.mimetype, filetype: file.filetype };
-  } catch {
-    return { id: fileId, name: fileId, mimetype: "unknown" };
+    const summary = { id: fileId, name: file.name, title: file.title, mimetype: file.mimetype, filetype: file.filetype, pretty_type: file.pretty_type, size: file.size, url_private: file.url_private, url_private_download: file.url_private_download };
+    return await downloadSlackFile(summary, token, env);
+  } catch (error) {
+    return { id: fileId, name: fileId, mimetype: "unknown", accessStatus: "fetch_failed", error: error?.message ?? "files_info_failed" };
   }
+}
+
+async function hydrateMessageFiles(message, client, env) {
+  const files = message.files ?? [];
+  if (!files.length) return message;
+  const hydrated = await Promise.all(
+    files.map(async (file) => {
+      if (file.localPath || file.accessStatus === "downloaded") return file;
+      if (!file.id) return fileSummary(file);
+      return fileSummaryFromSlack(client, env, file.id);
+    }),
+  );
+  return { ...message, files: hydrated };
 }
 
 async function postAsAgent({ client, env, agent, channel, threadTs, text, logger }) {
@@ -188,16 +249,18 @@ function stripHermesCliOutput(output) {
   return kept.join("\n").trim();
 }
 
-function buildHermesPrompt({ agent, message, decision }) {
+export function buildHermesPrompt({ agent, message, decision }) {
+  const files = fileSummariesFromMessage(message);
   return [
     `You are ${agentName(agent)}, a named Roofing-Ops Open Brain agent responding in Slack.`,
     "Answer in a friendly, business-focused voice matching your SOUL.md. Use NEPQ: situation, impact, next step.",
     "Stay strictly inside your SOP/profile lane. If the request is undefined by SOP, say so and route to Ops Conductor for Chris instructions/SOP improvement.",
     "Do not send external communications, approve decisions, publish, or claim research is approved. Rowan must wait for Chris approval before executing research.",
+    "When Slack files are present, inspect the downloaded localPath files directly before answering. PDFs, spreadsheets, images, audio/voice memos, and videos are all expected work inputs; use available file/terminal/vision/video tools to extract their contents. If a file failed to download, state that exact blocker and route to Ops Conductor instead of asking the human to paste the file.",
     `Routing decision: ${decision.kind} / ${decision.reason}`,
     `Slack channel: ${message.channel}`,
     `User text: ${message.text || "(no text)"}`,
-    `Files: ${JSON.stringify(fileSummariesFromMessage(message))}`,
+    `Files: ${JSON.stringify(files)}`,
     "Return only the Slack reply text. No headers, no markdown table unless helpful, no tool transcript.",
   ].join("\n\n");
 }
@@ -207,7 +270,7 @@ async function runHermesForAgent(agent, message, decision, env, logger) {
   const prompt = buildHermesPrompt({ agent, message, decision });
   const childEnv = { ...process.env, ...env, HERMES_HOME: home, PATH: `/usr/local/bin:/opt/node22/bin:${process.env.PATH ?? ""}` };
   return await new Promise((resolve) => {
-    const child = spawn("/usr/local/bin/hermes", ["chat", "-q", prompt, "-t", "file,web,terminal", "--provider", "openrouter", "--model", "anthropic/claude-sonnet-4-5", "--quiet"], {
+    const child = spawn("/usr/local/bin/hermes", ["chat", "-q", prompt, "-t", "file,web,terminal,vision,video", "--provider", "openrouter", "--model", "anthropic/claude-sonnet-4-5", "--quiet"], {
       cwd: "/opt/openbrain/a-roofers-open-brain",
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
@@ -220,6 +283,11 @@ async function runHermesForAgent(agent, message, decision, env, logger) {
     }, Number(env.HERMES_SLACK_TIMEOUT_MS || 120000));
     child.stdout.on("data", (data) => { stdout += data.toString(); });
     child.stderr.on("data", (data) => { stderr += data.toString(); });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      logger?.error?.("Hermes invocation failed to start", { agent, error: error?.message ?? String(error) });
+      resolve({ ok: false, text: "", error: error?.message ?? "hermes_spawn_failed" });
+    });
     child.on("exit", (code) => {
       clearTimeout(timer);
       const text = stripHermesCliOutput(stdout);
@@ -274,7 +342,8 @@ export function buildRoutingMessage(decision) {
 }
 
 export async function handleRoofingOpsMessage({ message, client, env, logger }) {
-  if (message.subtype || message.bot_id) return null;
+  if (message.bot_id || (message.subtype && message.subtype !== "file_share")) return null;
+  message = await hydrateMessageFiles(message, client, env);
   const channelType = channelTypeFromMessage(message);
   const channelId = message.channel;
 

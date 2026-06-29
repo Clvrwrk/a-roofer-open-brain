@@ -248,7 +248,7 @@ function startDmPoller(app, env) {
           if (!msg.ts || seen.has(`${channel.id}:${msg.ts}`)) continue;
           seen.add(`${channel.id}:${msg.ts}`);
           if (!initialized) continue;
-          if (msg.bot_id || msg.subtype || !msg.user || !msg.text) continue;
+          if (msg.bot_id || (msg.subtype && msg.subtype !== "file_share") || !msg.user || (!msg.text && !(msg.files ?? []).length)) continue;
           await handleRoofingOpsMessage({
             message: { ...msg, channel: channel.id, channel_type: "im" },
             context: { teamId: env.SLACK_TEAM_ID },
@@ -289,7 +289,7 @@ function registerEvents(app, env) {
   });
 
   app.message(async ({ message, context, client, logger }) => {
-    if (message.subtype || message.bot_id) return;
+    if (message.bot_id || (message.subtype && message.subtype !== "file_share")) return;
 
     const teamId = context.teamId ?? message.team;
     if (!expectedTeamAllows(teamId, env) || !userAllows(message.user, env)) return;
