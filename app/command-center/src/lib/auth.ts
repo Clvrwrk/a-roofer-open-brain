@@ -17,6 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
   purchasing: "Purchasing",
   accounting: "Accounting",
   viewer: "Viewer",
+  member: "Team Member",
   "named-agent": "Named Agent",
 };
 

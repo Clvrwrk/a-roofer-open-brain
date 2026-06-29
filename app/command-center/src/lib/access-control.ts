@@ -400,6 +400,21 @@ function isViewerDomain(email: string, env: RuntimeEnv) {
     .includes(domain);
 }
 
+/**
+ * Open access — default ON (Chris, 2026-06-29): every WorkOS-authenticated human
+ * gets full Command Center access with no per-user role/department gating, so no
+ * one with a login is excluded from seeing or working any surface. WorkOS sign-in
+ * (org-only) is the sole gate. To re-gate later, set COMMAND_CENTER_OPEN_ACCESS to
+ * "false" (or 0/off/no) and the admin/purchasing/accounting/viewer allowlists below
+ * resume. Does NOT touch named-agent or service-token actors — those keep their
+ * intentionally-scoped permissions (hard rule 5).
+ */
+function isOpenAccessEnabled(env: RuntimeEnv) {
+  const raw = String(env.COMMAND_CENTER_OPEN_ACCESS ?? "").trim().toLowerCase();
+  if (!raw) return true; // unset → open
+  return !["false", "0", "off", "no"].includes(raw);
+}
+
 function getBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -462,8 +477,10 @@ export interface WorkOsSessionIdentity {
 
 /**
  * Map a verified WorkOS session identity to a Command Center actor.
- * Order: named agent roster -> admin allowlist -> purchasing -> accounting -> viewer domain.
- * Returns null for authenticated-but-unauthorized identities (middleware sends those to /auth/denied).
+ * Order: named agent roster -> (open access, default ON: any authenticated human → full access)
+ *        -> admin allowlist -> purchasing -> accounting -> viewer domain.
+ * With open access OFF, returns null for authenticated-but-unauthorized identities
+ * (middleware sends those to /auth/denied).
  *
  * Identity headers (x-workos-user-email and friends) are intentionally NOT consulted
  * anywhere: the only trusted human identity source is the sealed WorkOS session.
@@ -479,6 +496,12 @@ export function resolveActorFromSessionUser(
   if (namedAgent) return namedAgentToActor(namedAgent);
 
   const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || email;
+
+  // Open access (default ON): every authenticated human gets full access, all
+  // departments — no user-gated views. WorkOS sign-in is the gate. See isOpenAccessEnabled.
+  if (isOpenAccessEnabled(env)) {
+    return humanActor(email, displayName, ["human", "member"], HUMAN_PERMISSIONS, "all");
+  }
 
   if (isHumanAdminEmail(email, env)) {
     return humanActor(email, displayName, ["human", "admin", "ceo"], HUMAN_PERMISSIONS, "all");
