@@ -68,14 +68,21 @@ This plan covers **three changes**. A fourth from the same call — Job-box (`or
 - **Thereafter = daily-incremental:** each morning Alex only processes the invoices newly **received/pulled via the overnight ABC API sync** — so "tomorrow" is just tonight's new invoices, not a re-sweep of the backlog.
 - This is both a one-time operational run (execute Alex over the backlog) and the steady-state cadence; the engine change (1a) makes the backlog visible, the run clears it.
 
-**1b. On-demand QuickBooks CSV including do-not-pay invoices.**
-- Broaden the export set from `isInvoiceToBePaid` to a new **`isInvoiceExportable`** = `!paid && !isCreditMemo && !processedAt && pendingLines === 0 && auditedLines > 0` — i.e. *fully dispositioned*, whether or not it's on payment hold. (The Process button already exports "everything not yet exported"; this widens what qualifies.)
-- Per-invoice **`Approved to Pay`** becomes dynamic: `No` when the invoice is held for non-payment (any line dispositioned `credit-flag` / explicit do-not-pay), `Yes` otherwise.
-- Add a **`Disposition`** column to the QuickBooks CSV summarizing the invoice-level outcome (`Passed`, `Credit memo — hold`, `Credit memo — pay`, `Flag — do not pay`, `Transferred to Service`).
-- **Hold is a whole-invoice state** (Q3 resolved): if *any* line is held for non-payment, the entire invoice is `Approved to Pay = No`. No partial-pay of an invoice.
-- An invoice still only becomes exportable once **every auditable line is dispositioned** (`pendingLines === 0`) — unchanged rule, just no longer gated by age.
+**1b. Two CSVs — a register export (all) and a payment export (approved-only)** *(Q2 resolved → Option C)*.
 
-> **Q1 resolved:** the new `Disposition` column + `Approved to Pay = No` rows are safe — Lucinda **manually maps columns** on the QuickBooks import, so extra/added columns are tolerated. We extend the CSV (append `Disposition`; make `Approved to Pay` dynamic) without breaking her import.
+Lucinda needs two distinct things: every invoice **in her QuickBooks/AccuLynx register** within ~2 weeks (regardless of pay decision), and separately a **"pay these now"** list when she cuts checks. So we split the deliverables:
+
+- **Register CSV (new) — every fully-processed invoice, loaded once.**
+  - Export set = new **`isInvoiceExportable`** = `!isCreditMemo && pendingLines === 0 && auditedLines > 0 && !registerExportedAt` — i.e. *fully dispositioned*, whether or not on payment hold, not yet register-exported. Stamp **`register_exported_at`** on export so each invoice loads to QuickBooks exactly once (no double-entry).
+  - Carries a per-invoice dynamic **`Approved to Pay`** (`No` when held for non-payment, else `Yes`) **and** a new **`Disposition`** column (`Passed`, `Credit memo — hold`, `Credit memo — pay`, `Flag — do not pay`, `Transferred to Service`).
+  - **Safe to extend** (Q1): Lucinda **manually maps columns** on import, so the added `Disposition` column and `No` rows don't break her QuickBooks load.
+
+- **Payment CSV (≈ today's locked contract) — approved-to-pay only.**
+  - Stays the per-vendor `isInvoiceToBePaid` set with `Approved to Pay = Yes`, generated when she's ready to pay. Keeps the validated 9-column contract intact — **the new columns and the `No` rows live only on the Register CSV.**
+  - A **held invoice that is later released** (Change 3) re-enters this payment set with `Approved to Pay = Yes` — but is **not** re-register-exported (its `register_exported_at` is already stamped), so it loads to QuickBooks once and pays once.
+
+- **Hold is a whole-invoice state** (Q3): any held line ⇒ the whole invoice is `Approved to Pay = No`. No partial-pay.
+- An invoice only becomes register-exportable once **every auditable line is dispositioned** (`pendingLines === 0`) — unchanged rule, just no longer gated by age.
 
 ### Change 2 — Commercial → Service/Warranty auto-pay
 
@@ -102,8 +109,10 @@ Lucinda's correction to what shipped:
 ## 5. Data / migration impact
 
 - **Mig 164** (next free number; 162 = S/W queue, 163 = PE naming): additive, idempotent (hard rule 1).
-  - Columns/flag for invoice-level **payment hold + release** state (Change 3), and any column needed to persist the `transfer-svc` auto-approval (Change 2) if not derivable.
-  - If `Approved to Pay` / `Disposition` are computed at export time from existing audit state, no schema change may be needed for Change 1b — **verify against the live DB before writing the migration** (standing rule). No destructive changes; archive/deprecate only.
+  - **`register_exported_at`** stamp (per invoice) so the Register CSV loads each invoice to QuickBooks exactly once, independent of the existing payment-export (`processedAt`) state. This is the core new state for the two-CSV model.
+  - Invoice-level **payment hold + release** state (Change 3), and any column needed to persist the `transfer-svc` auto-approval (Change 2) if not derivable.
+  - Optional **`due_policy`** lookup (office/terms → due_days, default 60, `approved_by` gate) for Q4 — can be a later migration (fast follow).
+  - `Approved to Pay` / `Disposition` values are **computed at export time** from existing audit state — no schema needed for the columns themselves. **Verify against the live DB before writing the migration** (standing rule). No destructive changes; archive/deprecate only.
 - **No change** to the variance views (`v_invoice_audit_line`, `v_invoice_audit_line_cascade`) — thresholds untouched.
 
 ---
@@ -116,20 +125,16 @@ Lucinda's correction to what shipped:
 - **Q5 — Backfill — RESOLVED.** First run clears the **entire** unprocessed backlog (per-invoice Slack + a full Monday-style summary); thereafter daily-incremental on tonight's API pull only.
 - **Q6 — Slack two-way agent routing — OUT OF SCOPE.** Separate workstream (`.hermes/…slack-two-way-agent-routing`); not touched here.
 
-- **Q2 — OPEN (clarification needed): how the "register entry" and the "pay it now" events reach QuickBooks.**
-  Every fully-processed invoice exports once as a bill/expense. A held (do-not-pay) invoice exports with `Approved to Pay = No`. The question is what happens **when that held invoice is later released** (credit memo resolved, or Lucinda clears it):
-  - **(A)** It's already in QuickBooks as a bill; Lucinda flips it to payable **inside QuickBooks** — our system never re-exports it (the CSV is a one-time bill-load; `Approved to Pay` is just a hint at load time).
-  - **(B)** Our system **re-exports** the released invoice on a later CSV (now `Approved to Pay = Yes`) so she has an explicit "now pay these" list — risk: it could double-enter in QuickBooks unless keyed/deduped.
-  - **(C)** Two separate outputs: a **register CSV** (all processed invoices, once) **+** a **payment CSV** (approved-to-pay only, when she's ready to cut checks).
-  This determines whether `processedAt` stamps once and we never revisit, or whether released invoices re-surface — and whether it's one CSV or two.
+- **Q2 — RESOLVED → Option C (two CSVs).** A **Register CSV** (every fully-processed invoice, loaded once, `register_exported_at`-stamped, carries `Disposition` + dynamic `Approved to Pay`) **and** a **Payment CSV** (approved-to-pay only, ≈ today's locked 9-col contract, generated when she pays). Released held invoices re-enter the Payment set but are not re-register-exported — load once, pay once. See §4 Change 1b.
+
+**All decisions resolved — plan is ready for implementation sign-off.**
 
 ---
 
 ## 7. Sequencing
 
-1. **Resolve Q2** (register vs payment export model) — last open decision.
-2. **Change 1a** (decouple processing scope) — engine + UI + SOP. Verify the workflow now surfaces all open invoices; KPIs/"due now" view correct.
-3. **Change 1b** (export set + dynamic `Approved to Pay` + `Disposition` column) — shape depends on Q2.
+1. **Change 1a** (decouple processing scope) — engine + UI + SOP. Verify the workflow now surfaces all open invoices; KPIs/"due now" view correct.
+2. **Change 1b** (two CSVs: new Register CSV with `register_exported_at` + `Disposition` + dynamic `Approved to Pay`; Payment CSV unchanged contract) + mig 164.
 4. **Change 2** (S/W auto-pay) — engine + docs/61 + docs/57 §0a.
 5. **Change 3** (CM release-from-hold) — mig 164 + engine.
 6. **First-run backfill (Change 1c):** execute Alex over the full unprocessed backlog (per-invoice Slack + Monday-style summary); confirm steady-state is daily-incremental thereafter.
