@@ -1033,6 +1033,24 @@ if (root && dataEl && mount) {
     window.setTimeout(() => window.location.reload(), 1700 + files.length * 500);
   });
 
+  // Register CSV (docs/63 Change 1b): load every processed invoice (incl. held + transferred)
+  // to the QuickBooks register, once each, with Approved-to-Pay + Disposition columns.
+  const registerBtn = document.getElementById("iv-register");
+  registerBtn?.addEventListener("click", async () => {
+    if (!window.confirm("Load every processed invoice (including do-not-pay holds and Service/Warranty transfers) to the QuickBooks register and download the CSV?\n\nEach invoice loads once; already-loaded invoices are skipped.")) return;
+    (registerBtn as HTMLButtonElement).disabled = true;
+    const { ok, data } = await postJson("/api/invoice-audit/register-batch");
+    if (!ok) {
+      toast(data?.error === "nothing_to_register" ? "Nothing new to load to the register." : "Register export failed: " + (data?.error_description || data?.error || "error"));
+      (registerBtn as HTMLButtonElement).disabled = false;
+      return;
+    }
+    const files: any[] = data.files ?? [];
+    files.forEach((f, i) => window.setTimeout(() => triggerDownload(f.downloadUrl), i * 500));
+    toast(`Loaded ${data.count} invoice(s) to the register — ${files.length} file(s)`);
+    window.setTimeout(() => window.location.reload(), 1700 + files.length * 500);
+  });
+
   const payBtn = document.getElementById("iv-payments");
   let payDirty = false;
   let pendingManageBatch: string | null = null;

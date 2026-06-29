@@ -229,7 +229,10 @@ indefinitely.
 - **Monday** — generate + post the two CSVs below as **Slack download URLs** (link, not inline attachment) to the accounting channel (tests → Chris).
 
 **Deliverable 1 — Invoices-to-be-paid QuickBooks CSV** (existing Track C export)
-- The week's approved `to-be-paid` set as the **locked-column QuickBooks import CSV, one file per vendor** (reuse `process-batch` / `buildVendorFileName`, schema 153). This is the pay file.
+- The week's approved `to-be-paid` set as the **locked-column QuickBooks import CSV, one file per vendor** (reuse `process-batch` / `buildVendorFileName`, schema 153). This is the **payment** file — approved-to-pay only (held/do-not-pay invoices are excluded; docs/63 Change 1b).
+
+**Deliverable 1b — QuickBooks REGISTER CSV** (docs/63 Change 1b, NEW — mig 164)
+- **Every fully-processed invoice loaded to the accounting register once**, regardless of pay decision — incl. **do-not-pay holds** and **Service/Warranty (Commercial) transfers** — so Lucinda posts each invoice to QuickBooks/AccuLynx within ~2 weeks of purchase, then pays when due. Same 9 columns as the pay file **plus** a dynamic `Approved to Pay` (Yes/No) and a `Disposition` label. Built by `register-batch` → `invoice_register_export` (load-once via `register_exported_at`); on-demand via the **Register CSV** button. (`registerCsvRows` / `renderRegisterCsv` / `isInvoiceRegisterExportable`.)
 
 **Deliverable 2 — Detailed decision work CSV (NEW file creation)**
 - **Full invoice line-item detail** for every line Alex reviewed that week, carrying the **notes, pricing, and logic behind every decision**. One row per line:

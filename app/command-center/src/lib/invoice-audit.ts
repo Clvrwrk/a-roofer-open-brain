@@ -137,6 +137,8 @@ export interface Invoice {
   held: boolean; // do-not-pay hold: has a credit-flag line (Casey credit memo; payment withheld) — docs/63 Change 1b
   approvedToPay: boolean; // cleared to pay = !held (transferred → auto-approved, never held)
   disposition: string; // summary label for the QuickBooks register row (Transferred to Service / Hold — credit memo / Approved / …)
+  workedLines: number; // lines with a decision (passed OR disputed) — drives "fully processed" for the register
+  registerExportedAt: string; // when loaded to the QuickBooks register (load-once, mig 164); "" if not yet
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
@@ -220,6 +222,18 @@ export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferr
   if (inv.toBePaid) return "Approved";
   return "In review";
 }
+
+// Fully processed = every reviewable (auditable) line has a DECISION — passed OR disputed/held
+// (not merely "all passed", so a held invoice still counts). Service/Warranty transfers are
+// auto-approved. An invoice with no auditable lines (nothing to review) is ready too. docs/63 Change 1b.
+export const isInvoiceFullyProcessed = (inv: Pick<Invoice, "auditedLines" | "pendingLines" | "workedLines" | "transferred">) =>
+  inv.transferred || inv.workedLines >= inv.auditedLines + inv.pendingLines;
+
+// Register CSV set: fully-processed, not-yet-register-exported, open, non-credit-memo invoices.
+// INCLUDES held (do-not-pay) and transferred — they still load to the QuickBooks register as an
+// incurred expense; the row's approved_to_pay/disposition carries the pay decision. docs/63 Change 1b.
+export const isInvoiceRegisterExportable = (inv: Pick<Invoice, "auditedLines" | "pendingLines" | "workedLines" | "transferred" | "isCreditMemo" | "paid" | "registerExportedAt">) =>
+  !inv.isCreditMemo && !inv.paid && !inv.registerExportedAt && isInvoiceFullyProcessed(inv);
 
 // ── Actionable scope (docs/59 Task 2 · docs/57 morning_abc_sync v3) ──────────────
 // The audit "actionable set" is the single source of truth for the default queue and
@@ -507,6 +521,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     held: false,
     approvedToPay: true,
     disposition: "",
+    workedLines: 0,
+    registerExportedAt: "",
     transferred: transferredSet.has(i.invoice_number),
     transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -527,6 +543,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     if (inv.transferred) inv.pendingLines = 0;
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
+    inv.workedLines = inv.lines.filter((l) => l.auditStatus === "passed" || l.auditStatus === "disputed").length;
     inv.toBePaid = isInvoiceToBePaid(inv);
     // Transferred → Service/Warranty invoices are never actionable in this audit.
     inv.actionable = !inv.transferred && isInvoiceActionable(inv);
@@ -747,7 +764,7 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   return progressByInvoice;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice"): InvoiceAuditData {
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
@@ -767,6 +784,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const auditedLines = progress?.audited ?? fallbackAuditedLines;
     const pendingLines = progress?.pending ?? fallbackPendingLines;
     const hasWork = (progress?.worked ?? auditedLines) > 0;
+    const workedLines = progress?.worked ?? auditedLines; // lines decided (passed OR disputed) — docs/63 Change 1b
     const held = progress?.held ?? false; // do-not-pay hold (credit-flag line) — docs/63 Change 1b
     const paid = arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
@@ -795,6 +813,8 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       held,
       approvedToPay: !held,
       disposition: "",
+      workedLines,
+      registerExportedAt: registerExportedByInvoice.get(i.invoice_number) ?? "",
       paid,
       paidAt: arByInvoice.get(i.invoice_number)?.date_paid
         ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
@@ -943,7 +963,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
@@ -956,10 +976,15 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
     // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
     fetchOptionalForInvoiceAudit(() => client.from("service_warranty_audit_queue").select("invoice_number,status")),
+    // Register export ledger (mig 164) — load-once stamp so an invoice isn't re-loaded to QuickBooks.
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_register_export").select("invoice_number,register_exported_at")),
   ]);
   if (invRows.length === 0) return empty;
   const transferredSet = new Set<string>((swqRows ?? []).map((r) => String(r.invoice_number)));
-  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode);
+  const registerExportedByInvoice = new Map<string, string>(
+    (registerRows ?? []).map((r) => [String(r.invoice_number), r.register_exported_at ? String(r.register_exported_at) : "1"]),
+  );
+  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice);
 }
 
 export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
@@ -1131,6 +1156,8 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     held: false,
     approvedToPay: true,
     disposition: "",
+    workedLines: lines.filter((line) => line.auditStatus === "passed" || line.auditStatus === "disputed").length,
+    registerExportedAt: "",
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",

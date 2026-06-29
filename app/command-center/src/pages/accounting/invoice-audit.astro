@@ -65,6 +65,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       </select>
       <label class="iv-toggle"><input type="checkbox" id="iv-pending" checked /> To-audit only</label>
       <label class="iv-toggle"><input type="checkbox" id="iv-duenow" /> Due now</label>
+      <button type="button" class="iv-process-btn iv-secondary" id="iv-register" title="Load every processed invoice (incl. do-not-pay holds + Service/Warranty transfers) to the QuickBooks register — once each">Register CSV</button>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="iv-count">{generatedAt}</span>

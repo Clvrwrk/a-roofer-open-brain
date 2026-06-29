@@ -185,3 +185,69 @@ export function buildLedgerRows(
     vendor: ctx.vendor,
   }));
 }
+
+// ── Register CSV (docs/63 Change 1b) ─────────────────────────────────────────────
+// The QuickBooks REGISTER export: every fully-processed invoice (incl. do-not-pay holds
+// and Service/Warranty transfers), loaded once as an incurred expense. Same 9 columns as
+// the payment file PLUS a dynamic "Approved to Pay" (Yes/No) and a "Disposition" label.
+// Accounting maps columns manually on import, so the extra column is safe.
+
+export const REGISTER_EXPORT_TABLE = "invoice_register_export";
+
+export interface RegisterCsvRow extends ProcessedCsvRow {
+  disposition: string;
+}
+
+export const REGISTER_CSV_HEADER = [...CSV_HEADER, "Disposition"] as const;
+
+// One register file per vendor: [vendor]-invoices-register-[timestamp].csv.
+export function buildRegisterFileName(vendor: string, date: Date) {
+  return `${vendorSlug(vendor)}-invoices-register-${formatFileStamp(date)}.csv`;
+}
+
+export function registerCsvRows(invoices: Invoice[], detailByInvoice: Map<string, AbcInvoicePayRow>): RegisterCsvRow[] {
+  const base = csvRows(invoices, detailByInvoice);
+  return base.map((row, i) => ({
+    ...row,
+    approvedToPay: invoices[i].approvedToPay ? "Yes" : "No",
+    disposition: invoices[i].disposition || "",
+  }));
+}
+
+export function renderRegisterCsv(rows: RegisterCsvRow[]) {
+  const lines = [REGISTER_CSV_HEADER.join(",")];
+  for (const row of rows) {
+    lines.push([
+      csvCell(row.invoiceNumber),
+      csvCell(row.invoiceDate),
+      formatMoney(row.totalDue ?? null),
+      csvCell(row.poNumber),
+      csvCell(row.discountMessage),
+      csvCell(row.dueDate),
+      csvCell(row.terms),
+      formatMoney(row.discountAmount ?? null),
+      csvCell(row.approvedToPay),
+      csvCell(row.disposition),
+    ].join(","));
+  }
+  return lines.join("\r\n");
+}
+
+// One register-ledger row per exported invoice (load-once, unique on invoice_number).
+export function buildRegisterLedgerRows(
+  rows: RegisterCsvRow[],
+  ctx: { batchId: string; fileName: string; vendor: string; exportedBy: string; actorPacket: unknown; nowIso: string },
+) {
+  return rows.map((row) => ({
+    invoice_number: row.invoiceNumber,
+    register_exported_at: ctx.nowIso,
+    batch_id: ctx.batchId,
+    vendor: ctx.vendor,
+    csv_file_name: ctx.fileName,
+    csv_row: row,
+    disposition: row.disposition || null,
+    approved_to_pay: row.approvedToPay === "Yes",
+    exported_by: ctx.exportedBy,
+    exported_by_actor: ctx.actorPacket,
+  }));
+}

@@ -5,7 +5,7 @@
 
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
-import { type ProcessedCsvRow, renderCsv } from "@lib/invoice-payment";
+import { type ProcessedCsvRow, type RegisterCsvRow, renderCsv, renderRegisterCsv } from "@lib/invoice-payment";
 import { loadDecisionDetailCsv } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -51,6 +51,29 @@ export const GET: APIRoute = async ({ locals, params, url }) => {
       status: 200,
       headers: {
         "content-disposition": `attachment; filename="${detailName.replace(/[^a-z0-9._-]/gi, "-")}"`,
+        "content-type": "text/csv; charset=utf-8",
+      },
+    });
+  }
+
+  // Register CSV (docs/63 Change 1b): every fully-processed invoice loaded once to the
+  // QuickBooks register — incl. do-not-pay holds + S/W transfers — with Approved-to-Pay + Disposition.
+  if (kind === "register") {
+    let regQuery = client
+      .from("invoice_register_export")
+      .select("csv_row,csv_file_name,invoice_number")
+      .eq("batch_id", batchId);
+    if (vendor) regQuery = regQuery.eq("vendor", vendor);
+    const { data, error } = await regQuery.order("invoice_number", { ascending: true });
+    if (error) return new Response(`invoice_register_export: ${error.message}`, { status: 409 });
+    const ledger = (data ?? []) as Array<{ csv_row: RegisterCsvRow | null; csv_file_name: string | null }>;
+    if (!ledger.length) return new Response("Batch not found.", { status: 404 });
+    const rows = ledger.map((r) => r.csv_row).filter((r): r is RegisterCsvRow => !!r && typeof r === "object");
+    const fileName = ledger.find((r) => r.csv_file_name)?.csv_file_name ?? "invoices-register.csv";
+    return new Response(renderRegisterCsv(rows), {
+      status: 200,
+      headers: {
+        "content-disposition": `attachment; filename="${fileName}"`,
         "content-type": "text/csv; charset=utf-8",
       },
     });

@@ -294,7 +294,7 @@ describe("loadInvoiceAuditSummary", () => {
         ],
       }),
     });
-    const { loadInvoiceAuditSummary, isInvoicePayable } = await import("./invoice-audit");
+    const { loadInvoiceAuditSummary, isInvoicePayable, isInvoiceRegisterExportable } = await import("./invoice-audit");
     const data = await loadInvoiceAuditSummary(undefined, { force: true });
     const inv = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === "HELD-1");
 
@@ -303,6 +303,9 @@ describe("loadInvoiceAuditSummary", () => {
     expect(inv?.disposition).toBe("Hold — credit memo");
     expect(inv?.toBePaid).toBe(false);            // a disputed (held) line keeps it out of to-be-paid
     expect(isInvoicePayable(inv!)).toBe(false);   // excluded from the Payment CSV
+    // …but a fully-DECIDED held invoice (1 passed + 1 disputed) still loads to the register.
+    expect(inv?.workedLines).toBe(2);
+    expect(isInvoiceRegisterExportable(inv!)).toBe(true);
   });
 });
 
@@ -334,6 +337,18 @@ describe("invoice-payment CSV", () => {
     expect(vendorSlug("SRS Distribution, Inc.")).toBe("srs-distribution-inc");
     const name = buildVendorFileName("ABC Supply", new Date("2026-06-26T15:23:00-06:00"));
     expect(name).toBe("abc-supply-invoices-to-be-paid-2026-06-26-1523.csv");
+  });
+
+  it("register CSV appends Disposition + dynamic Approved-to-Pay; builds the register file name (docs/63 Change 1b)", async () => {
+    const { renderRegisterCsv, REGISTER_CSV_HEADER, buildRegisterFileName } = await import("./invoice-payment");
+    const csv = renderRegisterCsv([
+      { invoiceNumber: "X-1", invoiceDate: "2026-06-22", totalDue: 100, poNumber: "KS-1", discountMessage: "", dueDate: "2026-08-21", terms: "Net", discountAmount: null, approvedToPay: "No", disposition: "Hold — credit memo" },
+    ]);
+    const [header, row] = csv.split("\r\n");
+    expect(header).toBe("INVOICE_NUMBER,INVOICE_DATE,TOTAL_DUE,PO_NUMBER,DISCOUNT_MESSAGE,DUE_DATE,TERMS,DISCOUNT_AMOUNT,Approved to Pay,Disposition");
+    expect(REGISTER_CSV_HEADER[REGISTER_CSV_HEADER.length - 1]).toBe("Disposition");
+    expect(row.endsWith(",No,Hold — credit memo")).toBe(true);
+    expect(buildRegisterFileName("ABC Supply", new Date("2026-06-26T15:23:00-06:00"))).toBe("abc-supply-invoices-register-2026-06-26-1523.csv");
   });
 });
 
