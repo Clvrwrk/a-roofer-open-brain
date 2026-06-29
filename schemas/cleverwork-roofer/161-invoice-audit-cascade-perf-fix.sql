@@ -1,0 +1,8 @@
+-- 161 — cascade perf regression fix (mig 160 made the per-line `recent` price subqueries
+-- source from v_invoice_lines_complete (a UNION view + abc_invoices join); 2 scalar
+-- subqueries × every line blew the 8s API statement timeout on larger invoices → the
+-- detail endpoint 500'd → the client showed "network error"). Revert `recent` to the
+-- indexed abc_invoice_lines (pre-160). Credit-memo `org_inv` stays on v_invoice_lines_complete
+-- (CM-only, low volume) so the $0-original coverage from mig 160 is preserved.
+-- Applied to prod via apply_migration (CREATE OR REPLACE VIEW, no column changes).
+-- Canonical body == the applied migration; see git for the full view definition (mig 160 + 161).
