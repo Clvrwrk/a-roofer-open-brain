@@ -40,7 +40,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 }));
 
 const DRY = Boolean(args.dry);
-const SCOPE = args.scope === "purchased" ? "purchased" : "gpa"; // gpa = 99 freq items; purchased = ~606 products we buy
+const SCOPE = args.scope === "purchased" ? "purchased" : args.scope === "office-isochrone" ? "office-isochrone" : "gpa"; // gpa = 99 freq items; purchased = ~606 products we buy; office-isochrone = branches within PE office drive polygon (~2hr)
 const BRANCH_LIMIT = args.branches ? Number(args.branches) : Infinity;
 const ITEM_LIMIT = args.items ? Number(args.items) : Infinity;
 const SHIP_TO_OVERRIDE = args["ship-to"] ? String(args["ship-to"]) : null;
@@ -124,10 +124,10 @@ const lineItem = (l) => l?.itemNumber || l?.item?.number || l?.id || null;
 async function main() {
   log(`ABC price seed — env=${ABC_ENV} cycle=${CYCLE} dry=${DRY} (resume: ${doneBranches.size} branches done)`);
 
-  // 1. Item set. scope=purchased -> v_price_seed_item (canonical products we buy, ~606);
+  // 1. Item set. scope=purchased|office-isochrone -> v_price_seed_item (canonical products we buy, ~606);
   //    scope=gpa -> the 99 frequently-ordered SKUs.
   let prodRows = [];
-  if (SCOPE === "purchased") {
+  if (SCOPE === "purchased" || SCOPE === "office-isochrone") {
     prodRows = await sbGet(`v_price_seed_item?select=product_id,item_number,base_uom`);
     prodRows = prodRows.map((r) => ({ id: r.product_id, manufacturer_sku: r.item_number, base_uom: r.base_uom }));
   } else {
@@ -161,7 +161,26 @@ async function main() {
     }
   }
   if (SHIP_TO_OVERRIDE) for (const k of branchShipTo.keys()) branchShipTo.set(k, SHIP_TO_OVERRIDE);
-  const branches = [...branchShipTo.keys()].slice(0, BRANCH_LIMIT);
+
+  let branches = [...branchShipTo.keys()];
+  if (SCOPE === "office-isochrone") {
+    const isoRows = await sbGet(
+      "branch_office_candidate?select=vendor_branch_id&contains=eq.true&vendor_branch_id=not.is.null",
+    );
+    const isoIds = [...new Set(isoRows.map((r) => r.vendor_branch_id).filter(Boolean))];
+    const isoBranchNums = new Set();
+    if (isoIds.length) {
+      for (let i = 0; i < isoIds.length; i += 100) {
+        const chunk = isoIds.slice(i, i + 100).map((id) => `"${id}"`).join(",");
+        const rows = await sbGet(`vendor_branches?select=branch_number&id=in.(${chunk})`);
+        for (const b of rows) isoBranchNums.add(String(b.branch_number).replace(/^0+/, ""));
+      }
+    }
+    branches = branches.filter((b) => isoBranchNums.has(String(b).replace(/^0+/, "")));
+    log(`office-isochrone filter: ${branches.length} priceable branches inside PE office drive polygons`);
+  }
+
+  branches = branches.slice(0, BRANCH_LIMIT);
   log(`priceable branches: ${branches.length} (across ${new Set([...branchShipTo.values()]).size} Ship-To accounts)`);
 
   const stats = { branches: 0, priced: 0, ok_lines: 0, miss_lines: 0, http400: 0, http_other: 0, rows: 0, ...ckpt.stats };

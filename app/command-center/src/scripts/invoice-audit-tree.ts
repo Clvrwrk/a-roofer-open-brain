@@ -4,7 +4,7 @@
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -608,6 +608,9 @@ if (root && dataEl && mount) {
       inv.awaitingPayment ? '<span class="pill pill-brand" title="Exported for payment; not yet confirmed paid">Awaiting Payment</span>' : "",
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
+      inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
+      inv.namingStatus === "needs_link" || inv.needsAcculynxLink ? '<span class="pill pill-red">Needs AccuLynx link</span>' : "",
+      inv.namingStatus === "temp_job" ? '<span class="pill pill-grey">TEMP job</span>' : "",
     ].filter(Boolean).join("");
   }
   function invoiceNode(inv: Invoice, hasPriceList: boolean): string {
@@ -616,8 +619,9 @@ if (root && dataEl && mount) {
     // The job number usually equals the PO (that's how they matched), so show it only when it differs.
     const norm = (s: string) => s.replace(/[^a-z0-9]/gi, "").toLowerCase();
     const calloutBits = [
-      inv.po ? "PO " + esc(inv.po) : (inv.jobNumber ? esc(inv.jobNumber) : ""),
-      inv.jobNumber && norm(inv.jobNumber) !== norm(inv.po) ? esc(inv.jobNumber) : "",
+      inv.po ? "PO " + esc(inv.po) : "",
+      inv.canonicalPo && norm(inv.canonicalPo) !== norm(inv.po) ? "should be " + esc(inv.canonicalPo) : "",
+      inv.jobNumber ? esc(inv.jobNumber) : "",
       inv.clientName ? esc(inv.clientName) : "",
       inv.jobCategory ? esc(inv.jobCategory) : "",
     ].filter(Boolean);

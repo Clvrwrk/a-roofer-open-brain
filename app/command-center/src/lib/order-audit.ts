@@ -53,6 +53,7 @@ export interface Order {
   atRisk: number;
   worstPct: number;
   matched: boolean;
+  namingStatus: string;
   jobNumber: string;
   clientName: string;
   jobCategory: string;
@@ -140,7 +141,7 @@ async function loadFreshOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "ac
   const activeOnly = scope !== "all";
   const [ordRows, matchRows, catRows, archivedCountRes] = await Promise.all([
     selectAll<any>(client, "v_order_audit_order", "*", activeOnly ? (q) => q.eq("disposition", "active") : undefined),
-    selectAll<any>(client, "v_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched"),
+    selectAll<any>(client, "v_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched,naming_status"),
     selectAll<any>(client, "roof_system_category", "key,label,sort_order"),
     // archived count for the KPI sub-line (active scope doesn't load archived orders)
     activeOnly ? client.from("v_order_audit_order").select("order_number", { count: "exact", head: true }).eq("disposition", "archived") : Promise.resolve({ count: 0 } as any),
@@ -182,6 +183,7 @@ async function loadFreshOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "ac
       atRisk: num(o.at_risk),
       worstPct: num(o.worst_pct),
       matched,
+      namingStatus: m?.naming_status ?? "needs_link",
       jobNumber: matched ? m?.pe_job_number ?? "" : "",
       clientName: matched ? m?.client_name ?? "" : "",
       jobCategory: matched ? m?.job_category_name ?? "" : "",

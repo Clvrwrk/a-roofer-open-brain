@@ -127,6 +127,10 @@ export interface Invoice {
   jobNumber: string;
   clientName: string;
   jobCategory: string;
+  canonicalPo: string;
+  namingStatus: string;
+  acculynxJobId: string;
+  needsAcculynxLink: boolean;
   lines: InvLine[];
 }
 
@@ -309,7 +313,11 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     fetchAll(() => client.from("v_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
     fetchAll(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path")),
-    fetchAll(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true)),
+    fetchAll(() =>
+      client
+        .from("v_invoice_acculynx_match")
+        .select("invoice_number,pe_job_number,client_name,job_category_name,acculynx_job_id,canonical_po,naming_status,matched"),
+    ),
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
     // invoice_documents gate is a secondary internal signal we reconcile to this.
@@ -438,6 +446,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
     clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
     jobCategory: acculynxByInvoice.get(i.invoice_number)?.job_category_name ?? "",
+    canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
+    namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
+    acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
+    needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;
@@ -711,9 +723,13 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
       clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
       jobCategory: acculynxByInvoice.get(i.invoice_number)?.job_category_name ?? "",
+      canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
+      namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
+      acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
+      needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
       lines: [],
       hasPriceList: true,
-      searchText: [i.invoice_number, i.purchase_order_number, i.branch_number, i.ship_to_number, i.branch_name, cleanOffice(i.office), acculynxByInvoice.get(i.invoice_number)?.pe_job_number, acculynxByInvoice.get(i.invoice_number)?.client_name, acculynxByInvoice.get(i.invoice_number)?.job_category_name]
+      searchText: [i.invoice_number, i.purchase_order_number, i.branch_number, i.ship_to_number, i.branch_name, cleanOffice(i.office), acculynxByInvoice.get(i.invoice_number)?.pe_job_number, acculynxByInvoice.get(i.invoice_number)?.client_name, acculynxByInvoice.get(i.invoice_number)?.job_category_name, acculynxByInvoice.get(i.invoice_number)?.canonical_po, acculynxByInvoice.get(i.invoice_number)?.naming_status]
         .filter(Boolean)
         .join(" ")
         .toLowerCase(),
@@ -896,7 +912,12 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
       ? fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date").in("invoice_line_id", lineIds))
       : Promise.resolve([]),
     fetchAllForInvoiceAudit(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path").eq("invoice_number", wanted)),
-    fetchAllForInvoiceAudit(() => client.from("v_invoice_acculynx_match").select("invoice_number,pe_job_number,client_name,job_category_name").eq("matched", true).eq("invoice_number", wanted)),
+    fetchAllForInvoiceAudit(() =>
+      client
+        .from("v_invoice_acculynx_match")
+        .select("invoice_number,pe_job_number,client_name,job_category_name,acculynx_job_id,canonical_po,naming_status,matched")
+        .eq("invoice_number", wanted),
+    ),
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
     // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
@@ -989,6 +1010,10 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
     jobCategory: ax?.job_category_name ?? "",
+    canonicalPo: ax?.canonical_po ?? "",
+    namingStatus: ax?.naming_status ?? "needs_link",
+    acculynxJobId: ax?.acculynx_job_id ?? "",
+    needsAcculynxLink: !ax?.matched,
     lines,
   };
   invoice.toBePaid = isInvoiceToBePaid(invoice);

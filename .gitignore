@@ -11,6 +11,7 @@ config/roofer.config.yaml
 
 # Local agent workspaces and raw import staging
 .worktrees/
+.hermes/
 imports/
 private/
 
