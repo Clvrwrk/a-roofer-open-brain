@@ -16,6 +16,13 @@ type ServerSupabaseClient = NonNullable<ReturnType<typeof createServerSupabaseCl
 // one-time historical seed import (neither a live agent nor a person).
 export type AuditActorKind = "agent" | "human" | "system";
 
+// Which audit a load is scoped to. "invoice" = the pricing Invoice Audit (excludes
+// invoices transferred to Service/Warranty); "service_warranty" = the mirrored S/W
+// Audit (ONLY the transferred set). Same engine, screens, and variance logic (docs/61).
+export type AuditMode = "invoice" | "service_warranty";
+export const inAuditScope = (inv: { transferred: boolean }, mode: AuditMode): boolean =>
+  mode === "service_warranty" ? inv.transferred : !inv.transferred;
+
 export interface AuditAttribution {
   label: string; // client-facing display name
   kind: AuditActorKind; // drives the agent/human badge
@@ -228,13 +235,14 @@ type ScopeTotalsInvoice = Pick<
 export function buildScopeAndTotals(
   invoices: ScopeTotalsInvoice[],
   today: Date = new Date(),
+  mode: AuditMode = "invoice",
 ): { scope: InvoiceAuditScope; totals: InvoiceAuditData["totals"] } {
   const cutoff = scopeCutoffDate(today);
-  // Invoices transferred to the Service/Warranty Audit (mig 162) leave the invoice-audit
-  // perspective entirely — they don't count toward any audit/open/payment KPI here; only
-  // the `transferred` headline counts them. Everything else scopes to the live set.
+  // The in-scope set depends on the audit: invoice-mode excludes transferred (they left
+  // for Service/Warranty); service_warranty-mode is ONLY the transferred set. `transferred`
+  // headline = count routed to S/W (meaningful on the invoice-audit side).
   const transferredCount = invoices.filter((i) => i.transferred).length;
-  const live = invoices.filter((i) => !i.transferred);
+  const live = invoices.filter((i) => inAuditScope(i, mode));
   const actionable = live.filter((i) => i.actionable);
   const openInv = live.filter((i) => !i.paid);
   // Default date window = oldest OPEN invoice_date → today (client request 2026-06-28).
@@ -675,7 +683,7 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   return progressByInvoice;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = []): InvoiceAuditData {
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice"): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
@@ -728,6 +736,8 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       ...paymentState,
       toBePaid: false,
       actionable: false,
+      transferred: transferredSet.has(i.invoice_number),
+      transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
       hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
       jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
       clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
@@ -740,12 +750,16 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
         .toLowerCase(),
     };
     invoice.toBePaid = isInvoiceToBePaid(invoice);
-    invoice.actionable = isInvoiceActionable(invoice, cutoff);
+    invoice.actionable = !invoice.transferred && isInvoiceActionable(invoice, cutoff);
     return invoice;
   });
 
+  // Scope the tree to the active audit: invoice-mode hides transferred (they moved to
+  // Service/Warranty); service_warranty-mode shows ONLY them (docs/61).
+  const inScope = invoices.filter((inv) => inAuditScope(inv, mode));
+
   const branchMap = new Map<string, InvBranch>();
-  for (const inv of invoices) {
+  for (const inv of inScope) {
     const key = `${inv.office}|${inv.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
@@ -789,7 +803,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     .map((o) => ({ ...o, atRisk: Math.round(o.atRisk), creditMemoRequested: Math.round(o.creditMemoRequested), branches: o.branches.sort((a, b) => b.atRisk - a.atRisk) }))
     .sort((a, b) => b.atRisk - a.atRisk);
 
-  const { scope, totals } = buildScopeAndTotals(invoices);
+  const { scope, totals } = buildScopeAndTotals(invoices, undefined, mode);
   return {
     status: "live",
     generatedAt: new Date().toISOString(),
@@ -829,7 +843,7 @@ async function fetchOptionalForInvoiceAudit(make: () => any): Promise<any[]> {
   }
 }
 
-async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
+async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), mode: AuditMode = "invoice"): Promise<InvoiceAuditData> {
   const empty = emptyInvoiceAuditData();
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
@@ -852,7 +866,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows, lineRows, auditRows, processedRows] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
@@ -863,9 +877,12 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv()): 
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status")),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
+    // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
+    fetchOptionalForInvoiceAudit(() => client.from("service_warranty_audit_queue").select("invoice_number,status")),
   ]);
   if (invRows.length === 0) return empty;
-  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows);
+  const transferredSet = new Set<string>((swqRows ?? []).map((r) => String(r.invoice_number)));
+  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode);
 }
 
 export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
@@ -898,6 +915,28 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(),
     return invoiceAuditSummaryCache.data;
   }
   return invoiceAuditSummaryInflight;
+}
+
+// Service/Warranty Audit summary — the same engine/screens scoped to the transferred set
+// (docs/61). Separate cache from the invoice-audit path so neither evicts the other; the
+// set is small so the simple TTL cache is enough.
+let serviceWarrantyAuditSummaryCache: { expiresAt: number; data: InvoiceAuditData } | null = null;
+export function invalidateServiceWarrantyAuditSummaryCache() {
+  serviceWarrantyAuditSummaryCache = null;
+}
+export async function loadServiceWarrantyAuditSummary(
+  env: RuntimeEnv = getRuntimeEnv(),
+  options: { force?: boolean } = {},
+): Promise<InvoiceAuditData> {
+  const now = Date.now();
+  if (!options.force && serviceWarrantyAuditSummaryCache && serviceWarrantyAuditSummaryCache.expiresAt > now) {
+    return serviceWarrantyAuditSummaryCache.data;
+  }
+  const data = await loadFreshInvoiceAuditSummary(env, "service_warranty");
+  if (data.status === "live") {
+    serviceWarrantyAuditSummaryCache = { expiresAt: Date.now() + INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS, data };
+  }
+  return data;
 }
 
 export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: RuntimeEnv = getRuntimeEnv()): Promise<Invoice | null> {

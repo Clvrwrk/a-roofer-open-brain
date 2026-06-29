@@ -35,6 +35,7 @@ export const navDepartments: NavDepartment[] = [
     icon: "accounting",
     items: [
       { label: "Invoice Audit", href: "/accounting/invoice-audit", status: "built" },
+      { label: "Service/Warranty Audit", href: "/accounting/invoice-audit?audit=service_warranty", status: "built", note: "Commercial ship-to invoices (mirrors Invoice Audit)" },
       { label: "Fleet Audit", status: "soon" },
       { label: "Tools Audit", status: "soon", note: "Software, subscriptions" },
       { label: "Business Expense Audit", status: "soon", note: "Insurance, CPA, advisors, compliance" },

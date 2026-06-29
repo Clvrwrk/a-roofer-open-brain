@@ -333,3 +333,20 @@ Slack app in the **pe-command-center** workspace (`T0B8QEGPVQW`):
   runtime env). **Follow-ups:** add `SLACK_BOT_TOKEN` + channel ids to Coolify env; call
   `postSlackMessage()` from Alex's comms paths (active once the host scheduler #9 runs Alex autonomously).
 - **Security:** the `SLACK_APP_CONFIG_TOKEN` was pasted in chat — **rotate it** (api.slack.com → app config tokens).
+
+## 0a. `ship_to_triage` — Commercial → Service/Warranty  ✅ Phase 1 LIVE (2026-06-29)
+
+Runs **first** in `morning_abc_sync`, before the pricing variance pass. For each in-scope open
+invoice, evaluate the ship-to: if `abc_invoices.raw->'shipTo'->>'name' ILIKE 'commercial'`
+(API-primary; reusable view `v_service_warranty_candidates`), route the invoice to the
+**Service/Warranty Audit** instead of pricing variance —
+- insert into `service_warranty_audit_queue` (append-only), log `transfer_service_warranty`
+  to `dashboard_action_log` (actor `alex-rivers`), and post the S/W notice to
+  `#service-warranty-audit` (`C0BE05YUQTW`) as Alex (per the `/slack-agents` skill).
+- The invoice drops out of the Invoice Audit (engine `inAuditScope`) and appears in the S/W
+  Audit surface `/accounting/invoice-audit?audit=service_warranty` — same screens + same
+  price-vs-agreement variance. **Human-in-the-loop = Chris** (not Lucinda).
+
+Phase 1 backfill of the 16 open Commercial invoices ran 2026-06-29 (docs/61). OCR of the PDF
+ship-to is a future SECOND confirmation (double-positive); detection is API-primary today.
+The autonomous per-invoice triage on new invoices activates with the headless runtime (#9).

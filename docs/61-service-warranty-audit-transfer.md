@@ -53,3 +53,17 @@ same price-vs-agreement variance logic) by adding an `audit_type` (`invoice` | `
 discriminator to the **shared** audit views/tables rather than duplicating them; Chris as approver.
 Wire detection into Alex's `morning_abc_sync` as a first-step triage so new Commercial invoices
 transfer automatically. Build the invoice-OCR pipeline to make the double-positive real.
+
+## Phase 2 progress (2026-06-29)
+
+- **Engine parameterized** (`lib/invoice-audit.ts`): `AuditMode = invoice | service_warranty`
+  + `inAuditScope()`. The summary path (`summarizeInvoiceRows` / `loadFreshInvoiceAuditSummary`)
+  now fetches the queue and scopes by mode — this also **fixed a Phase 1 gap** where the live
+  page (summary path) had not been excluding the transferred set. New cached
+  `loadServiceWarrantyAuditSummary()`. tsc clean, 14/14 unit tests.
+- **Surface:** the S/W Audit reuses the exact Invoice Audit page via
+  `/accounting/invoice-audit?audit=service_warranty` (shared screens + same variance) + a nav
+  entry. Verified vs live DB: all 16 queued invoices are present in `v_invoice_audit_invoice`.
+- **SOP:** triage step documented in docs/57 §0a. **Human-in-the-loop = Chris.**
+- **Deferred (later phase):** invoice-OCR pipeline for the double-positive confirmation; the
+  autonomous `morning_abc_sync` triage run (gated on the headless runtime, #9).
