@@ -1,13 +1,21 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
-import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
+import { loadInvoiceAuditSummary, loadServiceWarrantyAuditSummary } from "@lib/invoice-audit";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
+
+// Same surface, two audits (docs/61): ?audit=service_warranty shows ONLY the transferred
+// Commercial-ship-to invoices (the mirrored Service/Warranty Audit, human-in-loop = Chris);
+// default shows the pricing Invoice Audit (which now excludes the transferred set).
+const isSW = Astro.url.searchParams.get("audit") === "service_warranty";
+const auditLabel = isSW ? "Service/Warranty Audit" : "Invoice Audit";
+const loadSummary = (opts: { force: boolean }) =>
+  isSW ? loadServiceWarrantyAuditSummary(undefined, opts) : loadInvoiceAuditSummary(undefined, opts);
 
 const perfMetrics: PerfMetric[] = [];
 const forceLiveRefresh = Astro.url.searchParams.has("refresh") || Astro.url.searchParams.has("live");
-let data = await timeAsync("invoice_audit.summary", () => loadInvoiceAuditSummary(undefined, { force: forceLiveRefresh }), perfMetrics);
+let data = await timeAsync("invoice_audit.summary", () => loadSummary({ force: forceLiveRefresh }), perfMetrics);
 if (!forceLiveRefresh && (data.status !== "live" || data.totals.invoices === 0)) {
-  data = await timeAsync("invoice_audit.summary.force", () => loadInvoiceAuditSummary(undefined, { force: true }), perfMetrics);
+  data = await timeAsync("invoice_audit.summary.force", () => loadSummary({ force: true }), perfMetrics);
 }
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
@@ -33,7 +41,7 @@ logPerfMetrics("invoice-audit", perfMetrics);
 const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
 ---
 
-<AppShell title="Invoice Audit" eyebrow="Accounting" activePage="accounting">
+<AppShell title={auditLabel} eyebrow="Accounting" activePage="accounting">
   <section class="iv" data-theme="light" data-pref="system" data-initial-payload-bytes={initialPayloadBytes}>
     <div class="iv-toolbar">
       <input class="iv-input" id="iv-search" type="search" placeholder="Search invoice, item, branch…" autocomplete="off" />
