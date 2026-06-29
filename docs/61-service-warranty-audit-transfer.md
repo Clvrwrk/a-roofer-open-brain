@@ -38,8 +38,15 @@ Reusable as `v_service_warranty_candidates` (excludes already-queued). 16 open o
 ## Invoice-audit engine exclusion (`lib/invoice-audit.ts`)
 
 The engine fetches the queue and, for any queued invoice, sets `transferred=true` and forces
-`actionable=false`. Transferred invoices drop out of the audit tree and every audit/open/payment
-KPI; a new `totals.transferred` headline counts them. Unit-tested; `tsc` clean.
+`actionable=false` (excluded from the audit/review set). A new `totals.transferred` headline counts them.
+
+**Update — docs/63 Change 2 (2026-06-29):** transferred invoices are **no longer dropped from
+payment**. Per Lucinda, Commercial invoices still have to be paid — she just doesn't review them.
+The transfer now means **auto-approve for payment**: `pendingLines=0`, `toBePaid=true`
+(`isInvoiceToBePaid` short-circuits on `transferred`), so they flow into the to-be-paid/CSV set
+with a `Transferred to Service` disposition, while staying hidden from the audit review default
+(`pendingLines=0`) and still appearing in the S/W review surface (`?audit=service_warranty`).
+`inAuditScope` invoice-mode now returns `true` for all (transferred included). Unit-tested; `tsc` clean.
 
 ## Slack
 

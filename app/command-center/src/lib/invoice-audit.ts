@@ -20,8 +20,12 @@ export type AuditActorKind = "agent" | "human" | "system";
 // invoices transferred to Service/Warranty); "service_warranty" = the mirrored S/W
 // Audit (ONLY the transferred set). Same engine, screens, and variance logic (docs/61).
 export type AuditMode = "invoice" | "service_warranty";
+// docs/63 Change 2: invoice mode now INCLUDES transferred (Commercial) invoices so they
+// stay payable — they're auto-approved ("Transferred to Service") and hidden from the
+// review default (pendingLines forced to 0), not dropped. Service/Warranty mode is the
+// focused review subset = transferred only (for the service department).
 export const inAuditScope = (inv: { transferred: boolean }, mode: AuditMode): boolean =>
-  mode === "service_warranty" ? inv.transferred : !inv.transferred;
+  mode === "service_warranty" ? inv.transferred : true;
 
 export interface AuditAttribution {
   label: string; // client-facing display name
@@ -193,8 +197,10 @@ export interface InvoiceAuditData {
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 const cleanOffice = (s: string) => (s || "Unassigned").replace(/^,\s*/, "").replace(/^\s*,/, "").trim() || "Unassigned";
-export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt">) =>
-  !invoice.paid && !invoice.isCreditMemo && !invoice.processedAt && invoice.pendingLines === 0 && invoice.auditedLines > 0;
+export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt" | "transferred">) =>
+  !invoice.paid && !invoice.isCreditMemo && !invoice.processedAt &&
+  // Transferred (Commercial) invoices are auto-approved → payable without line review (docs/63 Change 2).
+  (invoice.transferred || (invoice.pendingLines === 0 && invoice.auditedLines > 0));
 
 // ── Actionable scope (docs/59 Task 2 · docs/57 morning_abc_sync v3) ──────────────
 // The audit "actionable set" is the single source of truth for the default queue and
@@ -494,6 +500,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // Only auditable lines (resolvable qty + price) can be "pending review" — a line
     // with no qty/price must never surface to audit (Item 6 guard).
     inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
+    // Transferred (Commercial) invoices are auto-approved → no pending review (docs/63 Change 2).
+    if (inv.transferred) inv.pendingLines = 0;
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.toBePaid = isInvoiceToBePaid(inv);
@@ -503,9 +511,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     return inv;
   });
 
-  // Transferred invoices leave the invoice-audit tree entirely (they live in the S/W
-  // queue / Phase-2 surface); totals still report their count via buildScopeAndTotals.
-  const live = invoices.filter((inv) => !inv.transferred);
+  // docs/63 Change 2: transferred (Commercial) invoices stay in the tree so they remain
+  // payable (auto-approved, hidden from the review default via pendingLines=0). They also
+  // appear in the S/W review queue for the service department. totals still report their count.
+  const live = invoices;
 
   // Group invoice → branch → office.
   const branchMap = new Map<string, InvBranch>();
@@ -781,6 +790,8 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
         .join(" ")
         .toLowerCase(),
     };
+    // Transferred (Commercial) invoices are auto-approved → no pending review (docs/63 Change 2).
+    if (invoice.transferred) invoice.pendingLines = 0;
     invoice.toBePaid = isInvoiceToBePaid(invoice);
     invoice.actionable = !invoice.transferred && isInvoiceActionable(invoice);
     invoice.dueNow = !invoice.transferred && isInvoiceDueNow(invoice, cutoff);

@@ -343,9 +343,13 @@ invoice, evaluate the ship-to: if `abc_invoices.raw->'shipTo'->>'name' ILIKE 'co
 - insert into `service_warranty_audit_queue` (append-only), log `transfer_service_warranty`
   to `dashboard_action_log` (actor `alex-rivers`), and post the S/W notice to
   `#service-warranty-audit` (`C0BE05YUQTW`) as Alex (per the `/slack-agents` skill).
-- The invoice drops out of the Invoice Audit (engine `inAuditScope`) and appears in the S/W
-  Audit surface `/accounting/invoice-audit?audit=service_warranty` — same screens + same
-  price-vs-agreement variance. **Human-in-the-loop = Chris** (not Lucinda).
+- **docs/63 Change 2 (2026-06-29):** the invoice is **NOT removed from payment** — Lucinda
+  still has to pay Commercial invoices, she just doesn't review them. The transfer now means
+  **auto-approve for payment** (`Transferred to Service` disposition, `pendingLines=0`, payable
+  in the to-be-paid/CSV set, hidden from the audit review default) **and** surface it in the S/W
+  Audit `/accounting/invoice-audit?audit=service_warranty` for the **service department's**
+  review (review-only — same screens + price-vs-agreement variance). **Payment HITL = Lucinda;
+  S/W review HITL = Chris.**
 
 Phase 1 backfill of the 16 open Commercial invoices ran 2026-06-29 (docs/61). OCR of the PDF
 ship-to is a future SECOND confirmation (double-positive); detection is API-primary today.

@@ -250,6 +250,30 @@ describe("loadInvoiceAuditSummary", () => {
     expect(data.totals.toBePaid).toBe(0);
     expect(data.totals.awaitingPayment).toBe(0);
   });
+
+  it("transferred (Commercial) invoices are auto-approved → payable, pendingLines=0, still in invoice scope (docs/63 Change 2)", async () => {
+    const iso = (daysAgo: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - daysAgo); return d.toISOString().slice(0, 10); };
+    mockCreateServerSupabaseClient.mockReturnValue({
+      client: makeClient({
+        v_invoice_audit_invoice: [
+          { invoice_number: "COMM-1", invoice_date: iso(5), total_amount: 500, branch_number: "49", branch_name: "Denver, CO", office: "Denver", line_count: 2, no_price_lines: 1, flagged_lines: 1, at_risk: 30, credit_memo_amount: 0, worst_pct: 9 },
+        ],
+        roof_system_category: [],
+        abc_invoices: [{ invoice_number: "COMM-1", ar_status: "open", date_paid: null }],
+        service_warranty_audit_queue: [{ invoice_number: "COMM-1", status: "queued" }],
+      }),
+    });
+    const { loadInvoiceAuditSummary } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const inv = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === "COMM-1");
+
+    expect(inv?.transferred).toBe(true);
+    expect(inv?.pendingLines).toBe(0);   // auto-approved → no review needed
+    expect(inv?.toBePaid).toBe(true);    // payable (was dropped from the CSV before Change 2)
+    expect(inv?.actionable).toBe(false); // not in the audit/review set
+    expect(data.totals.toBePaid).toBe(1);
+    expect(data.totals.transferred).toBe(1);
+  });
 });
 
 describe("invoice-payment CSV", () => {
