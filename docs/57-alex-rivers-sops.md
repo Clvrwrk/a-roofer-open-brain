@@ -315,3 +315,21 @@ Manual hand-run of `morning_abc_sync` v3 over the 17-invoice actionable set (no 
 - Dashboard verified: TO AUDIT 10 (held), INVOICES TO BE PAID 11. Process export + the two CSV
   deliverables: Deliverable 1 (pay CSV) via Process; **Deliverable 2 (decision-detail CSV) now wired into
   the Manage panel** (`/api/invoice-audit/batch/<id>.csv?kind=detail`) — both downloadable per batch.
+
+## 8. Slack delivery — LIVE (2026-06-28)
+
+The per-user MCP Slack connector was bound to the wrong workspace (mycleverwork.slack.com /
+chussey@cleverwork.io), so trial DMs landed in a silent self-DM. Fixed by standing up a dedicated
+Slack app in the **pe-command-center** workspace (`T0B8QEGPVQW`):
+- **App:** "Open Brain Command Center" (`SLACK_APP_ID` A0BDVCB4ZGC), bot user **@openbrain**, created
+  headlessly via the Manifest API with the `SLACK_APP_CONFIG_TOKEN`. Scopes: `chat:write`,
+  `chat:write.customize`, `channels:read/manage/join`, `groups:write`. Installed by Chris (OAuth);
+  bot token (`SLACK_BOT_TOKEN`, xoxb-…) + app credentials stored in gitignored `config/.env`.
+- **Channels (resolved):** `#accounting-invoice-processing` C0BDRFACQ4S, `#accounting-credit-memos`
+  C0BD4EW4RU4, `#accounting-vendor-intake` C0BCUF29G1H, `#accounting-product-catalog-review` C0BCYNW98RL.
+- **Trial delivery:** all **13 messages posted to #accounting-invoice-processing** (6 hold notices +
+  5 daily summaries + weekly digest + weekly package w/ pay-file + decision-detail links).
+- **Code:** `src/lib/slack.server.ts` `postSlackMessage()` — canonical agent→Slack path (bot token from
+  runtime env). **Follow-ups:** add `SLACK_BOT_TOKEN` + channel ids to Coolify env; call
+  `postSlackMessage()` from Alex's comms paths (active once the host scheduler #9 runs Alex autonomously).
+- **Security:** the `SLACK_APP_CONFIG_TOKEN` was pasted in chat — **rotate it** (api.slack.com → app config tokens).
