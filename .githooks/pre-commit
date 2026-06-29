@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Auto-bump Command Center app version on every commit (patch + date).
+# Minor bumps: include [minor] or [feature] in the commit message, or run
+#   node scripts/bump-app-version.mjs minor
+# before committing. Policy: docs/62-app-versioning.md
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [[ "${SKIP_VERSION_BUMP:-}" == "1" ]]; then
+  exit 0
+fi
+
+# Skip merge commits (version already bumped on the branch tip).
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  exit 0
+fi
+
+COMMIT_MSG=""
+if [[ -f .git/COMMIT_EDITMSG ]]; then
+  COMMIT_MSG="$(cat .git/COMMIT_EDITMSG)"
+fi
+
+if echo "$COMMIT_MSG" | grep -qi '\[skip version\]'; then
+  exit 0
+fi
+
+node scripts/bump-app-version.mjs auto --message "$COMMIT_MSG"
+git add app/command-center/src/lib/version.ts

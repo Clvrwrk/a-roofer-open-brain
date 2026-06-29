@@ -1,4 +1,8 @@
-// Command Center app version, shown in the top-bar under the runtime pill.
-// Bump both on each user-visible release (the date is "last updated").
-export const APP_VERSION = "0.6.0";
-export const APP_VERSION_DATE = "2026-06-28";
+// Auto-maintained by scripts/bump-app-version.mjs — do not edit by hand.
+// Policy: docs/62-app-versioning.md
+export const APP_VERSION_MAJOR = 0;
+export const APP_VERSION_MINOR = 6;
+export const APP_VERSION_PATCH = 5;
+export const APP_VERSION_STAGE: "A" | "B" | null = "A";
+export const APP_VERSION = `${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}${APP_VERSION_STAGE ?? ""}`;
+export const APP_VERSION_DATE = "2026-06-29";
