@@ -134,6 +134,9 @@ export interface Invoice {
   awaitingPayment: boolean;
   actionable: boolean; // open, unpaid, non-credit-memo (ALL ages) — the daily processing set (docs/63)
   dueNow: boolean; // actionable AND payment now due (invoice_date + 60d ≤ today) — "Due now" display lens
+  held: boolean; // do-not-pay hold: has a credit-flag line (Casey credit memo; payment withheld) — docs/63 Change 1b
+  approvedToPay: boolean; // cleared to pay = !held (transferred → auto-approved, never held)
+  disposition: string; // summary label for the QuickBooks register row (Transferred to Service / Hold — credit memo / Approved / …)
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
@@ -201,6 +204,22 @@ export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCre
   !invoice.paid && !invoice.isCreditMemo && !invoice.processedAt &&
   // Transferred (Commercial) invoices are auto-approved → payable without line review (docs/63 Change 2).
   (invoice.transferred || (invoice.pendingLines === 0 && invoice.auditedLines > 0));
+
+// docs/63 Change 1b — the QuickBooks PAYMENT CSV is approved-to-pay only: a held
+// (credit-flag / do-not-pay) invoice is fully dispositioned (so isInvoiceToBePaid is true)
+// but must NOT be paid until its credit memo resolves. The REGISTER CSV still includes it.
+export const isInvoicePayable = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt" | "transferred" | "approvedToPay">) =>
+  isInvoiceToBePaid(invoice) && invoice.approvedToPay;
+
+// Summary disposition label for the QuickBooks register row (docs/63 Change 1b).
+export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid">): string {
+  if (inv.isCreditMemo) return "Credit memo";
+  if (inv.transferred) return "Transferred to Service";
+  if (inv.held) return "Hold — credit memo";
+  if (inv.paid) return "Paid";
+  if (inv.toBePaid) return "Approved";
+  return "In review";
+}
 
 // ── Actionable scope (docs/59 Task 2 · docs/57 morning_abc_sync v3) ──────────────
 // The audit "actionable set" is the single source of truth for the default queue and
@@ -484,6 +503,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     toBePaid: false,
     actionable: false,
     dueNow: false,
+    // held/approvedToPay computed in the summary path (the live/export path); detail path defaults to not-held.
+    held: false,
+    approvedToPay: true,
+    disposition: "",
     transferred: transferredSet.has(i.invoice_number),
     transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -508,6 +531,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // Transferred → Service/Warranty invoices are never actionable in this audit.
     inv.actionable = !inv.transferred && isInvoiceActionable(inv);
     inv.dueNow = !inv.transferred && isInvoiceDueNow(inv, cutoff);
+    inv.disposition = deriveDisposition(inv);
     return inv;
   });
 
@@ -696,24 +720,28 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   const passedLineIds = new Set<string>();
   // "Worked" = passed OR disputed (any human/agent decision) → drives the Go-back button.
   const workedLineIds = new Set<string>();
+  // "Held" = a credit-flag (do-not-pay / Casey credit memo) line → invoice is on payment hold (docs/63 Change 1b).
+  const heldLineIds = new Set<string>();
   for (const a of auditRows) {
     if (!a.invoice_line_id) continue;
     if (a.audit_status === "passed") passedLineIds.add(String(a.invoice_line_id));
     if (a.audit_status === "passed" || a.audit_status === "disputed") workedLineIds.add(String(a.invoice_line_id));
+    if (a.decision === "credit-flag") heldLineIds.add(String(a.invoice_line_id));
   }
 
-  const progressByInvoice = new Map<string, { audited: number; pending: number; worked: number }>();
+  const progressByInvoice = new Map<string, { audited: number; pending: number; worked: number; held: boolean }>();
   for (const line of lineRows) {
     const invoiceNumber = String(line.invoice_number ?? "");
     const lineId = String(line.line_id ?? "");
     if (!invoiceNumber || !lineId) continue;
-    const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0, worked: 0 };
+    const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0, worked: 0, held: false };
     if (passedLineIds.has(lineId)) {
       progress.audited++;
     } else if (line.is_auditable !== false) {
       progress.pending++;
     }
     if (workedLineIds.has(lineId)) progress.worked++;
+    if (heldLineIds.has(lineId)) progress.held = true;
     progressByInvoice.set(invoiceNumber, progress);
   }
   return progressByInvoice;
@@ -739,6 +767,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const auditedLines = progress?.audited ?? fallbackAuditedLines;
     const pendingLines = progress?.pending ?? fallbackPendingLines;
     const hasWork = (progress?.worked ?? auditedLines) > 0;
+    const held = progress?.held ?? false; // do-not-pay hold (credit-flag line) — docs/63 Change 1b
     const paid = arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
       : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
@@ -763,6 +792,9 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       auditedLines,
       pendingLines,
       hasWork,
+      held,
+      approvedToPay: !held,
+      disposition: "",
       paid,
       paidAt: arByInvoice.get(i.invoice_number)?.date_paid
         ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
@@ -795,6 +827,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     invoice.toBePaid = isInvoiceToBePaid(invoice);
     invoice.actionable = !invoice.transferred && isInvoiceActionable(invoice);
     invoice.dueNow = !invoice.transferred && isInvoiceDueNow(invoice, cutoff);
+    invoice.disposition = deriveDisposition(invoice);
     return invoice;
   });
 
@@ -919,7 +952,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     // Progress bars need real audit rollups, but not full line detail. Fetch only the
     // invoice/line identity and auditable flag, then join to current audit status in memory.
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
-    fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status")),
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,decision")),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
     // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
     fetchOptionalForInvoiceAudit(() => client.from("service_warranty_audit_queue").select("invoice_number,status")),
@@ -1095,6 +1128,9 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     toBePaid: false,
     actionable: false,
     dueNow: false,
+    held: false,
+    approvedToPay: true,
+    disposition: "",
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
@@ -1108,6 +1144,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   invoice.toBePaid = isInvoiceToBePaid(invoice);
   invoice.actionable = isInvoiceActionable(invoice);
   invoice.dueNow = isInvoiceDueNow(invoice);
+  invoice.disposition = deriveDisposition(invoice);
   return invoice;
 }
 

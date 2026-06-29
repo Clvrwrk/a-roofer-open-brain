@@ -274,6 +274,36 @@ describe("loadInvoiceAuditSummary", () => {
     expect(data.totals.toBePaid).toBe(1);
     expect(data.totals.transferred).toBe(1);
   });
+
+  it("credit-flag line → held invoice: approvedToPay=false, 'Hold — credit memo', excluded from payment (docs/63 Change 1b)", async () => {
+    const lineRows = [
+      { invoice_number: "HELD-1", line_id: "h-1", is_auditable: true },
+      { invoice_number: "HELD-1", line_id: "h-2", is_auditable: true },
+    ];
+    mockCreateServerSupabaseClient.mockReturnValue({
+      client: makeClient({
+        v_invoice_audit_invoice: [
+          { invoice_number: "HELD-1", invoice_date: "2026-01-15", total_amount: 800, branch_number: "49", branch_name: "Denver, CO", office: "Denver", line_count: 2, no_price_lines: 0, flagged_lines: 1, at_risk: 75, credit_memo_amount: 75, worst_pct: 12 },
+        ],
+        roof_system_category: [],
+        abc_invoices: [{ invoice_number: "HELD-1", ar_status: "open", date_paid: null }],
+        v_invoice_audit_line: lineRows,
+        v_invoice_line_audit_current: [
+          { invoice_line_id: "h-1", audit_status: "passed" },
+          { invoice_line_id: "h-2", audit_status: "disputed", decision: "credit-flag" },
+        ],
+      }),
+    });
+    const { loadInvoiceAuditSummary, isInvoicePayable } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const inv = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === "HELD-1");
+
+    expect(inv?.held).toBe(true);
+    expect(inv?.approvedToPay).toBe(false);
+    expect(inv?.disposition).toBe("Hold — credit memo");
+    expect(inv?.toBePaid).toBe(false);            // a disputed (held) line keeps it out of to-be-paid
+    expect(isInvoicePayable(inv!)).toBe(false);   // excluded from the Payment CSV
+  });
 });
 
 describe("invoice-payment CSV", () => {

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission, serializeActor } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
-import { invalidateInvoiceAuditSummaryCache, type Invoice, isInvoiceToBePaid, loadInvoiceAuditSummary } from "@lib/invoice-audit";
+import { invalidateInvoiceAuditSummaryCache, type Invoice, isInvoicePayable, loadInvoiceAuditSummary } from "@lib/invoice-audit";
 import { type AbcInvoicePayRow, buildLedgerRows, buildVendorFileName, csvRows, invoiceVendor } from "@lib/invoice-payment";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -29,7 +29,9 @@ export const POST: APIRoute = async ({ locals }) => {
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
   const data = await loadInvoiceAuditSummary(undefined, { force: true });
-  const invoices = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).filter((inv) => isInvoiceToBePaid(inv));
+  // Payment CSV = approved-to-pay only (docs/63 Change 1b): held (credit-flag / do-not-pay)
+  // invoices are excluded here; they still load to the QuickBooks register via the Register CSV.
+  const invoices = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).filter((inv) => isInvoicePayable(inv));
   if (!invoices.length) {
     return jsonApiResponse({ error: "nothing_to_process", error_description: "No fully reviewed invoices are ready to be paid." }, { status: 409 });
   }
