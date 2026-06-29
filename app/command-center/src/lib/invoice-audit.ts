@@ -122,6 +122,8 @@ export interface Invoice {
   toBePaid: boolean;
   awaitingPayment: boolean;
   actionable: boolean; // in the open+≥60d, non-credit-memo audit scope (docs/59 Task 2)
+  transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
+  transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
   hasPdf: boolean;
   jobNumber: string;
@@ -174,7 +176,7 @@ export interface InvoiceAuditData {
   scope: InvoiceAuditScope;
   offices: InvOffice[];
   categories: { key: string; label: string; sortOrder: number }[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; toBePaid: number; awaitingPayment: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; toBePaid: number; awaitingPayment: number; transferred: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -221,15 +223,20 @@ function emptyScope(today: Date = new Date()): InvoiceAuditScope {
 // loop is independent of the 60-day audit age bound. (docs/59 Task 2)
 type ScopeTotalsInvoice = Pick<
   Invoice,
-  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "toBePaid" | "awaitingPayment"
+  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "toBePaid" | "awaitingPayment" | "transferred"
 >;
 export function buildScopeAndTotals(
   invoices: ScopeTotalsInvoice[],
   today: Date = new Date(),
 ): { scope: InvoiceAuditScope; totals: InvoiceAuditData["totals"] } {
   const cutoff = scopeCutoffDate(today);
-  const actionable = invoices.filter((i) => i.actionable);
-  const openInv = invoices.filter((i) => !i.paid);
+  // Invoices transferred to the Service/Warranty Audit (mig 162) leave the invoice-audit
+  // perspective entirely — they don't count toward any audit/open/payment KPI here; only
+  // the `transferred` headline counts them. Everything else scopes to the live set.
+  const transferredCount = invoices.filter((i) => i.transferred).length;
+  const live = invoices.filter((i) => !i.transferred);
+  const actionable = live.filter((i) => i.actionable);
+  const openInv = live.filter((i) => !i.paid);
   // Default date window = oldest OPEN invoice_date → today (client request 2026-06-28).
   // (Previously oldest-actionable → today−60d; the wider span lets a human reach any open
   // invoice that still needs a "Go back" without first toggling "Show all".)
@@ -238,7 +245,7 @@ export function buildScopeAndTotals(
   return {
     scope: { minAgeDays: SCOPE_MIN_AGE_DAYS, cutoff, defaultFrom, defaultTo: todayStr },
     totals: {
-      invoices: invoices.length,
+      invoices: live.length,
       atRisk: Math.round(actionable.reduce((s, i) => s + i.atRisk, 0)),
       creditMemoRequested: Math.round(actionable.reduce((s, i) => s + i.creditMemoRequested, 0)),
       noPrice: actionable.reduce((s, i) => s + i.noPriceLines, 0),
@@ -247,10 +254,11 @@ export function buildScopeAndTotals(
       pending: actionable.reduce((s, i) => s + i.pendingLines, 0),
       creditMemos: openInv.filter((i) => i.isCreditMemo).length,
       openInvoices: openInv.length,
-      paidInvoices: invoices.filter((i) => i.paid).length,
+      paidInvoices: live.filter((i) => i.paid).length,
       actionableInvoices: actionable.length,
       toBePaid: openInv.filter((i) => i.toBePaid).length,
       awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
+      transferred: transferredCount,
     },
   };
 }
@@ -271,7 +279,7 @@ export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymen
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, awaitingPayment: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, awaitingPayment: 0, transferred: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -320,6 +328,12 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
+
+  // Invoices transferred to the Service/Warranty Audit (Commercial ship-to, mig 162) are
+  // routed OUT of this audit. fetchOptional tolerates the table being absent on a brand-new
+  // brain. status transferred|in_review = still owned by S/W; resolved stays excluded too.
+  const swqRows = await fetchOptional(() => client.from("service_warranty_audit_queue").select("invoice_number,status"));
+  const transferredSet = new Set<string>(swqRows.map((r) => String(r.invoice_number)));
 
   // Canonical UOM map so the ABC API price (seeded in its stocking UOM, e.g. BD) is converted
   // to each line's pricing UOM (e.g. SQ) before it's shown next to the invoice unit price.
@@ -434,6 +448,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
     actionable: false,
+    transferred: transferredSet.has(i.invoice_number),
+    transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
     jobNumber: acculynxByInvoice.get(i.invoice_number)?.pe_job_number ?? "",
     clientName: acculynxByInvoice.get(i.invoice_number)?.client_name ?? "",
@@ -447,13 +463,18 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.toBePaid = isInvoiceToBePaid(inv);
-    inv.actionable = isInvoiceActionable(inv, cutoff);
+    // Transferred → Service/Warranty invoices are never actionable in this audit.
+    inv.actionable = !inv.transferred && isInvoiceActionable(inv, cutoff);
     return inv;
   });
 
+  // Transferred invoices leave the invoice-audit tree entirely (they live in the S/W
+  // queue / Phase-2 surface); totals still report their count via buildScopeAndTotals.
+  const live = invoices.filter((inv) => !inv.transferred);
+
   // Group invoice → branch → office.
   const branchMap = new Map<string, InvBranch>();
-  for (const inv of invoices) {
+  for (const inv of live) {
     const key = `${inv.office}|${inv.branchCode}`;
     let br = branchMap.get(key);
     if (!br) {
