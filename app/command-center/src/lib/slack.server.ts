@@ -5,13 +5,21 @@
 // workspace). Accounting channel ids come from env (see config/.env.example).
 //
 // Usage: await postSlackMessage({ channel: env.SLACK_ACCOUNTING_INVOICE_PROCESSING_CHANNEL_ID, text });
+// Post as a specific agent: await postSlackMessage({ channel, text, agent: "alex" });
 import { getRuntimeEnv } from "@lib/runtime-env";
+import { resolveAgentToken } from "@lib/slack-agents";
 
 export interface SlackPostInput {
   channel: string; // channel id (C…) or user id (U…) for a DM
   text: string; // Slack mrkdwn (*bold*, _italic_, `code`)
   threadTs?: string; // reply in a thread
   unfurlLinks?: boolean; // default false — keep audit posts compact
+  /**
+   * Post AS a specific agent (slug, e.g. "alex" or "casey-morgan"). Uses that
+   * agent's own bot token when present; falls back to the shared @openbrain bot
+   * otherwise. Omit to post as @openbrain.
+   */
+  agent?: string;
 }
 
 export interface SlackPostResult {
@@ -19,18 +27,22 @@ export interface SlackPostResult {
   ts?: string;
   channel?: string;
   error?: string;
+  /** Which identity actually posted: the agent's own bot, the shared fallback, or none. */
+  postedAs?: "agent" | "fallback" | "none";
 }
 
 /**
  * Post a message to Slack via the bot token. Returns { ok:false, error } rather than
  * throwing, so a failed post never breaks the calling workflow (the caller decides
  * whether to retry / surface it). No-op with a clear error when the token is unset.
+ *
+ * When `agent` is set, posts as that agent's own bot (its xoxb token), falling
+ * back to the shared @openbrain bot if the agent token isn't configured yet.
  */
 export async function postSlackMessage(input: SlackPostInput): Promise<SlackPostResult> {
-  const env = getRuntimeEnv();
-  const token = env.SLACK_BOT_TOKEN?.trim();
-  if (!token) return { ok: false, error: "slack_bot_token_unset" };
-  if (!input.channel) return { ok: false, error: "channel_required" };
+  const { token, source } = resolveAgentToken(input.agent);
+  if (!token) return { ok: false, error: "slack_bot_token_unset", postedAs: "none" };
+  if (!input.channel) return { ok: false, error: "channel_required", postedAs: source };
 
   try {
     const res = await fetch("https://slack.com/api/chat.postMessage", {
@@ -44,8 +56,8 @@ export async function postSlackMessage(input: SlackPostInput): Promise<SlackPost
       }),
     });
     const data = (await res.json()) as { ok: boolean; ts?: string; channel?: string; error?: string };
-    return { ok: data.ok, ts: data.ts, channel: data.channel, error: data.error };
+    return { ok: data.ok, ts: data.ts, channel: data.channel, error: data.error, postedAs: source };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "slack_post_failed" };
+    return { ok: false, error: error instanceof Error ? error.message : "slack_post_failed", postedAs: source };
   }
 }

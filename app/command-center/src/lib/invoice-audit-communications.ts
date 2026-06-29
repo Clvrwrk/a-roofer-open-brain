@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sanitizeHtml from "sanitize-html";
 import type { CommandCenterActor } from "@lib/access-control";
+import { dashboardLink, manageDeepLink } from "@lib/invoice-audit-links";
 
 export type CommunicationChannel = "slack" | "email";
 export type CommunicationThreadStatus =
@@ -12,7 +13,7 @@ export type CommunicationThreadStatus =
   | "deleted";
 
 export interface CommunicationAttachment {
-  kind: "invoice_pdf" | "price_list";
+  kind: "invoice_pdf" | "price_list" | "command_center";
   label: string;
   href: string;
 }
@@ -101,11 +102,21 @@ function actorDisplayName(actor: CommandCenterActor) {
 }
 
 function linksForInvoice(invoiceNumber: string): CommunicationAttachment[] {
+  // Outbound messages must link to login-safe dashboard pages, never raw gated
+  // /api/* routes (those return a JSON 401 instead of redirecting to WorkOS
+  // login — the "links 401 when clicked from Slack" bug). The Manage deep-link
+  // is the primary, always-clickable action; the Invoice PDF is an absolute
+  // convenience link that resolves once the recipient has a dashboard session.
   return [
     {
+      kind: "command_center",
+      label: "Review in Command Center",
+      href: manageDeepLink(),
+    },
+    {
       kind: "invoice_pdf",
-      label: "Invoice PDF",
-      href: `/api/invoice-audit/pdf/${encodeURIComponent(invoiceNumber)}`,
+      label: "Invoice PDF (sign in first)",
+      href: dashboardLink(`/api/invoice-audit/pdf/${encodeURIComponent(invoiceNumber)}`),
     },
   ];
 }

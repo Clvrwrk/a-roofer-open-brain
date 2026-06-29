@@ -1026,6 +1026,7 @@ if (root && dataEl && mount) {
 
   const payBtn = document.getElementById("iv-payments");
   let payDirty = false;
+  let pendingManageBatch: string | null = null;
   function closePay(overlay: HTMLElement) { overlay.remove(); if (payDirty) window.location.reload(); }
   async function renderPay(body: HTMLElement) {
     body.innerHTML = '<p class="iv-pay-empty">Loading…</p>';
@@ -1055,9 +1056,20 @@ if (root && dataEl && mount) {
       const dl = files.map((f) => `<a href="${esc(f.downloadUrl)}" download>⬇ ${esc(f.fileName || f.vendor)} (pay file)</a>`).join("");
       // Deliverable 2 (docs/57 §3c): decision-detail / explainability CSV for the batch.
       const detailDl = b.detailUrl ? `<a href="${esc(b.detailUrl)}" download>⬇ Decision detail (CSV)</a>` : "";
-      parts.push(`<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${detailDl}${confirmBtn}${returnBtn}</div></div>`);
+      parts.push(`<div class="iv-pay-batch" data-batch="${esc(b.batchId)}"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${detailDl}${confirmBtn}${returnBtn}</div></div>`);
     }
     body.innerHTML = parts.join("");
+    // Deep-link target (#manage-<batchId>): scroll to and flash the batch a
+    // Slack/email "weekly package" link pointed at (see manageDeepLink()).
+    if (pendingManageBatch) {
+      const target = body.querySelector<HTMLElement>(`.iv-pay-batch[data-batch="${CSS.escape(pendingManageBatch)}"]`);
+      pendingManageBatch = null;
+      if (target) {
+        target.scrollIntoView({ block: "center" });
+        target.style.outline = "2px solid var(--brand, #2f6fed)";
+        window.setTimeout(() => { target.style.outline = ""; }, 2400);
+      }
+    }
     body.querySelectorAll<HTMLElement>("[data-pay]").forEach((el) => el.addEventListener("click", async () => {
       const kind = el.dataset.pay;
       const batchId = el.dataset.batch;
@@ -1095,4 +1107,17 @@ if (root && dataEl && mount) {
     overlay.addEventListener("click", (ev) => { if (ev.target === overlay) closePay(overlay); });
     renderPay(panelBody);
   });
+
+  // Deep-link support for outbound Slack/email links (manageDeepLink()): a URL
+  // hash of #manage or #manage-<batchId> opens the Manage panel on load, so a
+  // recipient who clicks a weekly-package link lands straight on the payments
+  // panel (after WorkOS login if needed) instead of a JSON 401 from a raw API.
+  function openManageFromHash() {
+    const m = /^#manage(?:-(.+))?$/.exec(window.location.hash);
+    if (!m || !payBtn) return;
+    pendingManageBatch = m[1] ? decodeURIComponent(m[1]) : null;
+    payBtn.click();
+  }
+  openManageFromHash();
+  window.addEventListener("hashchange", openManageFromHash);
 }
