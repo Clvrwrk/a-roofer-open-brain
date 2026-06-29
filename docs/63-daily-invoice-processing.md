@@ -35,7 +35,7 @@ This plan covers **three changes**. A fourth from the same call — Job-box (`or
 | 3 | **Credit-memo release-from-hold** — when a matching CM arrives, flip the held (do-not-pay) original back to payable | ✅ |
 | 4 | Job-box → PO normalization | ⛔ Done — mig 163 / `pe-job-naming.ts` on `main` (dependency) |
 
-**Out of scope / unchanged:** the variance decision tree (negotiated → flag-any-variance; no-benchmark → cascade to API + most-recent-purchase; per-invoice ≥$25 gross-overcharge floor; service-fee auto-approve). Those thresholds live in the SQL views + Alex's SOP (docs/57) and are not being touched here.
+**Out of scope / unchanged:** the variance decision tree (negotiated → flag-any-variance; no-benchmark → cascade to API + most-recent-purchase; per-invoice ≥$25 gross-overcharge floor; service-fee auto-approve) — thresholds live in the SQL views + Alex's SOP (docs/57). Also out of scope: **Slack two-way agent routing** (a separate `.hermes/` workstream).
 
 ---
 
@@ -61,14 +61,21 @@ This plan covers **three changes**. A fourth from the same call — Job-box (`or
 - `invoice-audit.ts`: rename/repoint line 487 so the workflow surfaces `processable`; expose `dueNow` (and ideally a computed `dueDate = invoiceDate + 60d`) on the `Invoice` type for the UI.
 - `invoice-audit.astro` / `invoice-audit-tree.ts`: the default view shows the **processing** set (all open); the 60-day math becomes a **"Due now"** filter/badge and a due-date the date-range can target. Keep the existing date-range + "Show all" controls; "To-audit only" now means "has an open disposition," not "≥60 days."
 - **Alex SOP (docs/57 §0/§1):** change audit scope from "OPEN, unpaid, ≥60 days" to "OPEN, unpaid, **all ages**, not credit memos." The 60-day window is retained only as the "due-now" reporting lens in the daily/weekly summaries.
+- **Due-date policy is overridable, human-gated (Q4 resolved):** default due math = invoice date + **60 days**. A per-**office/terms** override may set a different due window, but it only takes effect once a human **explicitly adopts and approves** that policy (HITL) — never auto-applied. Implementation: a small `due_policy` lookup (office/terms → due_days, default 60) with an `approved_by` gate; until approved, 60 days applies. This sub-feature can land as a fast follow after the core decoupling (it does not block daily processing).
+
+**1c. First-run backfill + ongoing cadence (Q5 resolved).**
+- **First run = full catch-up:** Alex processes **every currently-unprocessed open invoice** (the whole backlog, all ages) in one pass, posting the normal **per-invoice Slack messages** to `#accounting-invoice-processing` and generating a **Monday-style full summary report** (the weekly payment package). Goal, in Lucinda's words: *"not be behind at all as of today."*
+- **Thereafter = daily-incremental:** each morning Alex only processes the invoices newly **received/pulled via the overnight ABC API sync** — so "tomorrow" is just tonight's new invoices, not a re-sweep of the backlog.
+- This is both a one-time operational run (execute Alex over the backlog) and the steady-state cadence; the engine change (1a) makes the backlog visible, the run clears it.
 
 **1b. On-demand QuickBooks CSV including do-not-pay invoices.**
 - Broaden the export set from `isInvoiceToBePaid` to a new **`isInvoiceExportable`** = `!paid && !isCreditMemo && !processedAt && pendingLines === 0 && auditedLines > 0` — i.e. *fully dispositioned*, whether or not it's on payment hold. (The Process button already exports "everything not yet exported"; this widens what qualifies.)
 - Per-invoice **`Approved to Pay`** becomes dynamic: `No` when the invoice is held for non-payment (any line dispositioned `credit-flag` / explicit do-not-pay), `Yes` otherwise.
 - Add a **`Disposition`** column to the QuickBooks CSV summarizing the invoice-level outcome (`Passed`, `Credit memo — hold`, `Credit memo — pay`, `Flag — do not pay`, `Transferred to Service`).
+- **Hold is a whole-invoice state** (Q3 resolved): if *any* line is held for non-payment, the entire invoice is `Approved to Pay = No`. No partial-pay of an invoice.
 - An invoice still only becomes exportable once **every auditable line is dispositioned** (`pendingLines === 0`) — unchanged rule, just no longer gated by age.
 
-> **Key design decision for review (§6, Q1):** adding a 10th column + dynamic `Approved to Pay` touches the *locked* QuickBooks import contract. Need to confirm accounting's QuickBooks import tolerates a trailing `Disposition` column and `Approved to Pay = No` rows, or whether the disposition belongs only in the detail CSV.
+> **Q1 resolved:** the new `Disposition` column + `Approved to Pay = No` rows are safe — Lucinda **manually maps columns** on the QuickBooks import, so extra/added columns are tolerated. We extend the CSV (append `Disposition`; make `Approved to Pay` dynamic) without breaking her import.
 
 ### Change 2 — Commercial → Service/Warranty auto-pay
 
@@ -101,24 +108,33 @@ Lucinda's correction to what shipped:
 
 ---
 
-## 6. Open questions for Chris / Lucinda (resolve before implementing)
+## 6. Decisions (resolved 2026-06-29) + one open clarification
 
-1. **QuickBooks CSV contract:** can accounting's import tolerate a new trailing `Disposition` column and `Approved to Pay = No` rows? Or should `Approved to Pay` flip to `No` but `Disposition` live only in the detail CSV? (Drives whether we touch the locked 9-col contract.)
-2. **Do-not-pay in the register:** confirm the *register/expense* export (all fully-dispositioned invoices) vs *payment authorization* (approved-only) split is right — i.e. she loads every invoice into QuickBooks, but only pays `Approved to Pay = Yes` ones.
-3. **Hold granularity:** is do-not-pay a whole-invoice state (any held line ⇒ invoice `Approved to Pay = No`), or can part of an invoice pay while a line is held? (Call implies whole-invoice; confirm.)
-4. **"Due now" view:** keep 60 days as the due-date math for the display lens, or make it configurable per office/terms? (She mentioned terms vary.)
-5. **Backfill:** on first run, processing "all open" will surface the backlog of <60-day invoices at once. Confirm she wants the full catch-up in one pass (she asked to "not be behind at all as of today").
+- **Q1 — QuickBooks CSV contract — RESOLVED.** Lucinda manually maps columns on import, so we can append a `Disposition` column and emit `Approved to Pay = No` rows without breaking her import.
+- **Q3 — Hold granularity — RESOLVED.** Do-not-pay is a **whole-invoice** state.
+- **Q4 — Due-date math — RESOLVED.** Default 60 days; overridable by an explicitly human-approved **office/terms** policy (HITL), never auto-applied.
+- **Q5 — Backfill — RESOLVED.** First run clears the **entire** unprocessed backlog (per-invoice Slack + a full Monday-style summary); thereafter daily-incremental on tonight's API pull only.
+- **Q6 — Slack two-way agent routing — OUT OF SCOPE.** Separate workstream (`.hermes/…slack-two-way-agent-routing`); not touched here.
+
+- **Q2 — OPEN (clarification needed): how the "register entry" and the "pay it now" events reach QuickBooks.**
+  Every fully-processed invoice exports once as a bill/expense. A held (do-not-pay) invoice exports with `Approved to Pay = No`. The question is what happens **when that held invoice is later released** (credit memo resolved, or Lucinda clears it):
+  - **(A)** It's already in QuickBooks as a bill; Lucinda flips it to payable **inside QuickBooks** — our system never re-exports it (the CSV is a one-time bill-load; `Approved to Pay` is just a hint at load time).
+  - **(B)** Our system **re-exports** the released invoice on a later CSV (now `Approved to Pay = Yes`) so she has an explicit "now pay these" list — risk: it could double-enter in QuickBooks unless keyed/deduped.
+  - **(C)** Two separate outputs: a **register CSV** (all processed invoices, once) **+** a **payment CSV** (approved-to-pay only, when she's ready to cut checks).
+  This determines whether `processedAt` stamps once and we never revisit, or whether released invoices re-surface — and whether it's one CSV or two.
 
 ---
 
 ## 7. Sequencing
 
-1. **Confirm §6 decisions** with Chris (and Lucinda on Q1–Q3).
-2. **Change 1a** (decouple processing scope) — engine + UI + SOP. Verify the daily run now surfaces all open invoices; KPIs/"due now" view correct.
-3. **Change 1b** (export set + CSV columns) — after Q1 resolved.
+1. **Resolve Q2** (register vs payment export model) — last open decision.
+2. **Change 1a** (decouple processing scope) — engine + UI + SOP. Verify the workflow now surfaces all open invoices; KPIs/"due now" view correct.
+3. **Change 1b** (export set + dynamic `Approved to Pay` + `Disposition` column) — shape depends on Q2.
 4. **Change 2** (S/W auto-pay) — engine + docs/61 + docs/57 §0a.
 5. **Change 3** (CM release-from-hold) — mig 164 + engine.
-6. **Verify** (per §8), converge branch → `main` (human push = deploy), update memory + docs.
+6. **First-run backfill (Change 1c):** execute Alex over the full unprocessed backlog (per-invoice Slack + Monday-style summary); confirm steady-state is daily-incremental thereafter.
+7. **Due-policy override (Change 1a, Q4)** — fast follow; HITL-gated `due_policy` lookup.
+8. **Verify** (§8), converge branch → `main` (human push = deploy), update memory + docs.
 
 ## 8. Verification plan
 
