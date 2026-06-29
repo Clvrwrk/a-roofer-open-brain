@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**main @ `e5482a6`** (pushed origin/main). S/W Audit Phase 1+2 + PE job/PO naming (mig 163 prod; audit pills). Invoices **995** (to 2026-06-27). Isochrone price seed: 674 items / 11,323 obs. **NEXT:** Coolify redeploy; view hotfix (`po_mismatch` w/o AccuLynx match); ABC webhooks receiver. **OPEN:** ROTATE Slack tokens; full ABC catalog sync (non-sandbox). Deploy = human.
+**main @ `093c391`** (pushed origin/main). S/W Audit Phase 1+2 + PE job/PO naming (mig 163 prod; audit pills). Invoices **995** (to 2026-06-27). Isochrone price seed: 674 items / 11,323 obs. **NEXT:** Coolify redeploy; view hotfix (`po_mismatch` w/o AccuLynx match); ABC webhooks receiver. **OPEN:** ROTATE Slack tokens; full ABC catalog sync (non-sandbox). Deploy = human.
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
