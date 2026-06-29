@@ -1065,6 +1065,7 @@ if (root && dataEl && mount) {
     const exceptions: any[] = recRes?.exceptions ?? [];
     const parts: string[] = [];
     parts.push(`<div class="iv-pay-row"><button class="iv-process-btn iv-secondary" data-pay="reconcile">Reconcile with ABC AR</button><span class="iv-msg-muted">Auto-confirms exported invoices ABC now reports paid.</span></div>`);
+    parts.push(`<div class="iv-pay-row"><button class="iv-process-btn iv-secondary" data-pay="release-holds">Release credit-memo holds</button><span class="iv-msg-muted">Frees held invoices whose matching credit memo has arrived → back to payable.</span></div>`);
     parts.push(`<div class="iv-pay-sec-title">Exceptions${exceptions.length ? ` (${exceptions.length})` : ""}</div>`);
     if (!exceptions.length) parts.push('<p class="iv-pay-empty">No reconciliation exceptions.</p>');
     for (const e of exceptions) {
@@ -1104,6 +1105,11 @@ if (root && dataEl && mount) {
         const { ok, data } = await postJson("/api/invoice-audit/reconcile");
         if (!ok) { toast("Reconcile failed: " + (data?.error_description || "error")); return; }
         payDirty = true; toast(`Reconciled ${data.reconciled} · ${data.counts?.exportedUncleared || 0} uncleared, ${data.counts?.paidButArOpen || 0} drift`); renderPay(body); return;
+      }
+      if (kind === "release-holds") {
+        const { ok, data } = await postJson("/api/invoice-audit/release-credit-holds");
+        if (!ok) { toast("Release failed: " + (data?.error_description || "error")); return; }
+        payDirty = true; toast(data.count ? `Released ${data.count} credit-memo hold(s) → payable` : "No matching credit memos arrived yet."); renderPay(body); return;
       }
       if (kind === "confirm") {
         if (!window.confirm("Confirm this batch actually paid? Invoices will be marked Paid.")) return;

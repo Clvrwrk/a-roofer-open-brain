@@ -213,6 +213,12 @@ export const isInvoiceToBePaid = (invoice: Pick<Invoice, "auditedLines" | "isCre
 export const isInvoicePayable = (invoice: Pick<Invoice, "auditedLines" | "isCreditMemo" | "paid" | "pendingLines" | "processedAt" | "transferred" | "approvedToPay">) =>
   isInvoiceToBePaid(invoice) && invoice.approvedToPay;
 
+// Normalize an ABC invoice number / credit-memo originalInvoiceReference to its base so a CM
+// (e.g. "2011014809-1") matches the original it credits ("2011014809-001"). docs/63 Change 3.
+export function normalizeInvoiceRef(value: string | null | undefined): string {
+  return String(value ?? "").trim().split("-")[0].trim();
+}
+
 // Summary disposition label for the QuickBooks register row (docs/63 Change 1b).
 export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid">): string {
   if (inv.isCreditMemo) return "Credit memo";
@@ -1181,6 +1187,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 const DECISION_LABEL: Record<string, string> = {
   "credit-flag": "Hold + credit memo (Casey)",
   "credit-noflag": "Credit memo (no flag)",
+  "credit-resolved": "Credit memo received — released for payment",
   "accept-svc": "Service fee — auto-approved (weekly review)",
   "accept-30d": "Accepted; 3-6% → weekly digest",
   "accept-nochallenge": "Accepted; no benchmark → Jordan coverage",

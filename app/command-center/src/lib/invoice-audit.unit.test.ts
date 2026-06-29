@@ -352,6 +352,18 @@ describe("invoice-payment CSV", () => {
   });
 });
 
+describe("normalizeInvoiceRef (docs/63 Change 3 — credit-memo release)", () => {
+  it("matches a credit memo's originalInvoiceReference to the original invoice base", async () => {
+    const { normalizeInvoiceRef } = await import("./invoice-audit");
+    // CM ref "2011014809-1" must match original invoice "2011014809-001".
+    expect(normalizeInvoiceRef("2011014809-1")).toBe("2011014809");
+    expect(normalizeInvoiceRef("2011014809-001")).toBe("2011014809");
+    expect(normalizeInvoiceRef("2011014809-1")).toBe(normalizeInvoiceRef("2011014809-001"));
+    expect(normalizeInvoiceRef("")).toBe("");
+    expect(normalizeInvoiceRef(null)).toBe("");
+  });
+});
+
 describe("attributeAuditActor (docs/59 Task 5)", () => {
   it("maps an automated price-agreement match to the Alex agent", async () => {
     const { attributeAuditActor } = await import("./invoice-audit");

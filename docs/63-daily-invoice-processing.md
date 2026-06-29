@@ -1,8 +1,12 @@
 # 63 — Daily Invoice Processing + CSV-on-demand (implementation plan)
 
-**Status:** DRAFT — for review with Chris (do not implement until approved)
+**Status:** IMPLEMENTED on `contrib/cleverwork/daily-invoice-processing` (pending deploy). All four changes built + unit-tested; mig 164 applied to prod (additive).
+- **1a** decouple processing from the 60-day gate (`isInvoiceActionable` all-ages + `dueNow` lens + "Due now" UI) — done.
+- **1b** two CSVs: held detection (`held`/`approvedToPay`/`disposition`) + Register CSV (mig 164 `invoice_register_export`, load-once, `Disposition` + dynamic `Approved to Pay`) + "Register CSV" button; Payment CSV = approved-only — done.
+- **2** Commercial → S/W auto-pay (`isInvoiceToBePaid` short-circuit on `transferred`, hidden from review default) — done.
+- **3** credit-memo release-from-hold (`release-credit-holds` reconcile: matches arrived CM by `normalizeInvoiceRef`, records `credit-resolved` → payable) — done.
 **Date:** 2026-06-29
-**Branch:** `contrib/cleverwork/daily-invoice-processing` (worktree, from `origin/main` @ `09d8fa9`)
+**Branch:** `contrib/cleverwork/daily-invoice-processing` (single canonical repo, from `origin/main`)
 **Source of requirements:** Chris ↔ Lucinda working call, 2026-06-29 (full transcript reviewed).
 **Builds on (already landed on `main`):** Service/Warranty Audit Phase 1+2 (mig 162, docs/61) and PE job/PO naming alignment (mig 163, `pe-job-naming.ts`).
 
