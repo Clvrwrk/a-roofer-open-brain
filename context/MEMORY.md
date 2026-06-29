@@ -2,9 +2,9 @@
 # Working Memory
 
 ## ▶ Pick up here
-**Handoff: `docs/handoffs/current.md` + daily log.** `main`==origin/main `7b4ad8e`. On unpushed branches `contrib/cleverwork/service-warranty-transfer` + `…/session-learnings`: 8 Slack **per-agent bots** (registry `slack-agents.ts`; tokens in config/.env + Coolify env), **401 weekly-links fixed**, **S/W transfer Phase 1** (mig 162, docs/61 — 16 Commercial invoices routed out of Invoice Audit → #service-warranty-audit).
-**NEXT (needs human push — deploys classifier-blocked):** push both branches→main (activates audit exclusion + loads Coolify agent tokens); then **Phase 2** = mirrored S/W surface + `morning_abc_sync` Commercial triage + invoice-OCR. ROTATE pasted Slack tokens.
-**OPEN:** classifier blocks prod deploys/push, autonomous launch, payment-export → human.
+**main==origin/main `c03a572`** (session-learnings + app-versioning in). S/W work + today's log on branch **`contrib/cleverwork/service-warranty-audit-ui`** (on origin; has Phase 1+2, supersedes `…/transfer`): Commercial ship-to routed OUT of Invoice Audit → #service-warranty-audit (mig 162, docs/61); engine `AuditMode`; S/W surface `?audit=service_warranty`; 16 open transferred. 8 Slack per-agent bots live; 401 links fixed.
+**NEXT:** user-directed changes to invoice-audit / service-warranty-audit / Alex SOPs. DEPLOY S/W: human pushes `service-warranty-audit-ui`→main (agent-blocked; loads 8 Coolify tokens + activates live exclusion).
+**OPEN:** ROTATE pasted Slack tokens (8 bot+config). Full ABC prod sync still owed (needs non-sandboxed runner). Deploys/push/self-grant = human.
 
 ## Standing instructions (Chris)
 - **Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.**
