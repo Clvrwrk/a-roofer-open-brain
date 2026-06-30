@@ -25,7 +25,8 @@ describe("roofing-ops Slack file handoff", () => {
 
     expect(prompt).toContain("/tmp/openbrain-slack-files/abc123-today-payables.pdf");
     expect(prompt).toContain("PDFs, spreadsheets, images, audio/voice memos, and videos");
-    expect(prompt).toContain("inspect the downloaded localPath files directly");
+    expect(prompt).toContain("use the processed attachment packets, not just filenames");
+    expect(prompt).toContain("Supabase Storage");
   });
 
   it("tells agents to route failed downloads instead of asking humans to paste files", () => {

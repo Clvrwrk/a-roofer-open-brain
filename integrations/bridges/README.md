@@ -29,6 +29,14 @@ business-data bridges:
 - [Dolt](dolt/README.md) - version-controlled SQL/data-diff lab for selected non-sensitive reference
   datasets.
 
+Commercial AI/media/OCR provider resources support the Slack attachment enrichment layer:
+
+- [Unstructured](unstructured/README.md) - OCR/document partitioning for PDFs, scanned docs,
+  images, Office files, tables, and AI-ready document elements.
+- [Media AI Provider Registry](media-ai/README.md) - Deepgram, xAI/Grok Vision, FAL.ai,
+  Firecrawl, Exa, Tavily, Higgsfield, ElevenLabs, Google AI Studio, Descript, Canva,
+  Go High Level, DataForSEO, and Apify provider notes for raw + derived attachment artifacts.
+
 ---
 
 ## 1. The Four-Tier Taxonomy
