@@ -24,7 +24,7 @@
 
 SELECT
   account_key,
-  resource,
+  resource_type,
   api_count,
   brain_count,
   delta_pct,
@@ -37,4 +37,4 @@ WHERE
 ORDER BY
   delta_pct DESC NULLS FIRST, -- NULL rows (never synced) appear first
   account_key,
-  resource;
+  resource_type;
