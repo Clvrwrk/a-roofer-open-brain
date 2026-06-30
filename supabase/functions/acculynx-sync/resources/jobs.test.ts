@@ -287,6 +287,36 @@ Deno.test("syncJobs — returns apiCount from the response for last_api_count", 
   );
 });
 
+// ---------------------------------------------------------------------------
+// Rule 1 Bug Fix: AccuLynx jobs API repeats last item(s) when recordStartIndex > count
+// — must break on offset >= count (not just on empty items array)
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobs — breaks when offset reaches API count (prevents infinite loop)", async () => {
+  let fetchCount = 0;
+  const mockFetch = () => {
+    fetchCount++;
+    // Always return 1 item regardless of offset — simulates the AccuLynx behavior
+    // where items are repeated when recordStartIndex exceeds count.
+    const items = [{ id: "j-1", modifiedDate: "2026-06-30T12:00:00Z" }];
+    const body = JSON.stringify({ items, count: 1 }); // count=1 means only 1 total
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  // Null watermark → startDate=2000-01-01 full-history floor
+  await syncJobs(sb, ACCT, "test-api-key", deadline, null, mockFetch);
+
+  assertEquals(
+    fetchCount,
+    1,
+    `When count=1 and page returns 1 item, loop must make exactly 1 fetch (not loop forever). Got ${fetchCount}`,
+  );
+});
+
 Deno.test("syncJobs — returns maxModifiedDate for incremental watermark advancement", async () => {
   let callNum = 0;
   const mockFetch = () => {

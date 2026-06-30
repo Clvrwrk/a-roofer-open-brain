@@ -146,8 +146,18 @@ export async function syncJobs(
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
   let maxModified: Date | null = null; // track max modifiedDate across all fetched items
+  // totalCount: authoritative page total from the API response (count field).
+  // CRITICAL: AccuLynx jobs API does NOT return an empty items array when
+  // recordStartIndex exceeds count — it returns the last item(s) repeatedly.
+  // Breaking on items.length===0 is insufficient; we MUST break on offset>=totalCount.
+  let totalCount: number | null = null;
 
   while (Date.now() < deadline) {
+    // Break when offset has reached or exceeded the API-reported total count.
+    // This prevents infinite looping when the AccuLynx API returns the last page
+    // item(s) repeatedly for recordStartIndex values > count (observed in production).
+    if (totalCount !== null && offset >= totalCount) break;
+
     const url =
       `${ACCULYNX_BASE}/jobs?dateFilterType=ModifiedDate` +
       `&startDate=${startDate}&endDate=${endDate}` +
@@ -166,11 +176,14 @@ export async function syncJobs(
     const items: unknown[] = typedBody?.items ?? [];
 
     // Capture the API-reported total count (present on every page response).
+    // This drives both the infinite-loop guard (offset >= totalCount) and the
+    // last_api_count watermark field for v_acculynx_reconciliation.
     if (typeof typedBody?.count === "number") {
       lastApiCount = typedBody.count;
+      totalCount = typedBody.count;
     }
 
-    if (items.length === 0) break; // no more pages in this date window
+    if (items.length === 0) break; // empty page — secondary termination guard
 
     // Track max modifiedDate for incremental watermark advancement.
     // Sorted Ascending by ModifiedDate, so last item has the highest date.
