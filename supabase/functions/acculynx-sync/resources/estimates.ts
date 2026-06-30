@@ -3,17 +3,24 @@
 // Full-sweep estimates sync using pageStartIndex pagination.
 // Endpoint: GET /estimates?pageSize=50&pageStartIndex={N}
 //
-// Identical full-sweep shape to contacts.ts; differences:
-//   - Endpoint: /estimates
-//   - Target table: acculynx_estimates
-//   - Stamps job_id from the estimate's jobId field
+// The list endpoint returns stubs: {id, isPrimary, job: {id, _link}, _link}.
+// We upsert the stub fields (id, job_id, is_primary) from the list pass.
+// Financial detail (title, profit_margin_rate, etc.) is a Phase 3 enrichment
+// via a per-estimate GET /estimates/{id} detail call.
 //
 // Behavioral contracts:
 //   - URL pagination param: pageStartIndex
 //   - Stamps account_key AND market on every upserted row (no cross-account bleed, T-02-04)
-//   - Sets last_seen_by_api and job_id on every upserted row
+//   - Sets last_seen_by_api on every upserted row (feeds diff detection)
 //   - Budget-stop: stops the page loop when Date.now() >= deadline
 //   - apiKey is an explicit parameter — never a module-level constant (Pitfall 3)
+//
+// Fix (Rule 1 — 2026-06-30): map camelCase API fields to snake_case DB columns;
+// removed ...item spread (PostgREST rejects unknown camelCase columns).
+// Fix (Rule 1 — 2026-06-30): job_id now uses item.job?.id (list endpoint nests job as object,
+// not item.jobId which was the original incorrect reference).
+// Fix (Rule 1 — 2026-06-30): onConflict changed from "id,account_key" to "id"
+// (table PK is id only; no composite unique constraint exists).
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -55,6 +62,41 @@ async function acculynxGet(
 }
 
 /**
+ * Map a camelCase AccuLynx estimate API item to snake_case DB columns.
+ * List endpoint returns stubs; financial detail fields are null here (Phase 3 enrichment).
+ */
+function mapEstimate(item: any, acct: any, now: string): Record<string, unknown> {
+  return {
+    id: item.id,
+    job_id: item.job?.id ?? null,
+    title: item.title ?? null,
+    description: item.description ?? null,
+    estimate_number: item.estimateNumber ?? null,
+    is_primary: item.isPrimary ?? null,
+    created_by_user_id: item.createdBy?.id ?? null,
+    created_date: item.createdDate ?? null,
+    modified_by_user_id: item.modifiedBy?.id ?? null,
+    modified_date: item.modifiedDate ?? null,
+    profit_margin_rate: item.profitMarginRate ?? item.financials?.profitMarginRate ?? null,
+    profit_margin_total: item.profitMarginTotal ?? item.financials?.profitMarginTotal ?? null,
+    tax_rate: item.taxRate ?? item.financials?.taxRate ?? null,
+    tax_total: item.taxTotal ?? item.financials?.taxTotal ?? null,
+    overhead_rate: item.overheadRate ?? item.financials?.overheadRate ?? null,
+    overhead_total: item.overheadTotal ?? item.financials?.overheadTotal ?? null,
+    profit_rate: item.profitRate ?? item.financials?.profitRate ?? null,
+    profit_total: item.profitTotal ?? item.financials?.profitTotal ?? null,
+    total_cost: item.totalCost ?? item.financials?.totalCost ?? null,
+    total_price: item.totalPrice ?? item.financials?.totalPrice ?? null,
+    notes: item.notes ?? null,
+    raw: item,
+    synced_at: now,
+    account_key: acct.account_key,
+    market: acct.market,
+    last_seen_by_api: now,
+  };
+}
+
+/**
  * Sync estimates for a single account via a full-sweep pagination loop.
  * Endpoint: GET /estimates?pageSize=50&pageStartIndex={N}
  *
@@ -89,19 +131,11 @@ export async function syncEstimates(
     const items: unknown[] = (body as { items?: unknown[] })?.items ?? [];
     if (items.length === 0) break; // sweep complete
 
-    const rows = items.map((item: any) => ({
-      ...item,
-      account_key: acct.account_key,
-      market: acct.market,
-      job_id: item.jobId ?? null,
-      last_seen_by_api: now,
-      synced_at: now,
-      raw: item,
-    }));
+    const rows = items.map((item: any) => mapEstimate(item, acct, now));
 
     const { error } = await sb
       .from("acculynx_estimates")
-      .upsert(rows, { onConflict: "id,account_key" });
+      .upsert(rows, { onConflict: "id" });
     if (error) console.warn(`[estimates] upsert: ${error.message}`);
 
     pageIndex += items.length;

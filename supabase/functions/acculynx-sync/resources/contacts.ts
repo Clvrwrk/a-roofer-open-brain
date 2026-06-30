@@ -9,6 +9,11 @@
 //   - Sets last_seen_by_api on every upserted row (feeds diff detection)
 //   - Budget-stop: stops the page loop when Date.now() >= deadline
 //   - apiKey is an explicit parameter — never a module-level constant (Pitfall 3)
+//
+// Fix (Rule 1 — 2026-06-30): map camelCase API fields to snake_case DB columns;
+// removed ...item spread (PostgREST rejects unknown camelCase columns).
+// Fix (Rule 1 — 2026-06-30): onConflict changed from "id,account_key" to "id"
+// (table PK is id only; no composite unique constraint exists).
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -50,6 +55,40 @@ async function acculynxGet(
 }
 
 /**
+ * Map a camelCase AccuLynx contact API item to snake_case DB columns.
+ * Only maps fields that exist in the acculynx_contacts table schema.
+ */
+function mapContact(item: any, acct: any, now: string): Record<string, unknown> {
+  const mailing = item.mailingAddress ?? {};
+  const billing = item.billingAddress ?? {};
+  return {
+    id: item.id,
+    first_name: item.firstName ?? null,
+    last_name: item.lastName ?? null,
+    salutation: item.salutation ?? null,
+    cross_reference: item.crossReference ?? null,
+    company_name: item.companyName ?? null,
+    mailing_street1: mailing.street1 ?? null,
+    mailing_street2: mailing.street2 ?? null,
+    mailing_city: mailing.city ?? null,
+    mailing_state: mailing.state?.abbreviation ?? mailing.state ?? null,
+    mailing_zip: mailing.zipCode ?? null,
+    mailing_country: mailing.country?.abbreviation ?? mailing.country ?? null,
+    billing_street1: billing.street1 ?? null,
+    billing_street2: billing.street2 ?? null,
+    billing_city: billing.city ?? null,
+    billing_state: billing.state?.abbreviation ?? billing.state ?? null,
+    billing_zip: billing.zipCode ?? null,
+    billing_country: billing.country?.abbreviation ?? billing.country ?? null,
+    raw: item,
+    synced_at: now,
+    account_key: acct.account_key,
+    market: acct.market,
+    last_seen_by_api: now,
+  };
+}
+
+/**
  * Sync contacts for a single account via a full-sweep pagination loop.
  * Endpoint: GET /contacts?pageSize=50&pageStartIndex={N}
  *
@@ -84,18 +123,11 @@ export async function syncContacts(
     const items: unknown[] = (body as { items?: unknown[] })?.items ?? [];
     if (items.length === 0) break; // sweep complete
 
-    const rows = items.map((item: any) => ({
-      ...item,
-      account_key: acct.account_key,
-      market: acct.market,
-      last_seen_by_api: now,
-      synced_at: now,
-      raw: item,
-    }));
+    const rows = items.map((item: any) => mapContact(item, acct, now));
 
     const { error } = await sb
       .from("acculynx_contacts")
-      .upsert(rows, { onConflict: "id,account_key" });
+      .upsert(rows, { onConflict: "id" });
     if (error) console.warn(`[contacts] upsert: ${error.message}`);
 
     pageIndex += items.length;
