@@ -6,7 +6,7 @@ Promote the AccuLynx integration from a one-account sandbox into a commercial, m
 data + action layer. We start by mapping every location account and proving the full read surface
 in the sandbox, then ingest all 8 production accounts and every resource, harden the scheduler to
 hourly/observable/secure, prove the write surface in the sandbox, ship a human-gated write/action
-layer, stand up a dedicated AccuLynx Agent backed by a Google Drive knowledge folder, and finally
+layer, stand up a dedicated AccuLynx Agent backed by an in-repo OKF knowledge bundle, and finally
 prove completeness with a realtime Executive Sales Pipeline dashboard that replaces the weekly snapshot.
 
 ## Phases
@@ -15,12 +15,12 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Foundation — Account Registry & Read-Capability Discovery** - Map all 9 keys; exhaustively probe every READ endpoint in the sandbox; stand up the knowledge-folder skeleton.
+- [x] **Phase 1: Foundation — Account Registry & Read-Capability Discovery** - Map all 9 keys; exhaustively probe every READ endpoint in the sandbox; stand up the knowledge-folder skeleton. (completed 2026-06-30)
 - [ ] **Phase 2: Multi-Location Full Ingestion** - Fan out the sync across all 8 production accounts and ingest every currently-unfed resource.
 - [ ] **Phase 3: Commercial Cron Hardening** - Hourly, stable, observable, secure scheduling with healthchecks, alerting, and resumption.
 - [ ] **Phase 4: Sandbox Write-Capability Exploration & Red-Team** - Exercise every WRITE endpoint in the sandbox to diminishing returns; produce a live write-capability matrix.
 - [ ] **Phase 5: Read/Write Action Layer** - Human-approval-gated write wrappers on a contrib branch; begin offloading specific human tasks.
-- [ ] **Phase 6: AccuLynx Agent + Google Drive Knowledge Base** - A3-approved dedicated agent; finalized who/what/how/why/where/when knowledge folder wired to skills/memories/references.
+- [ ] **Phase 6: AccuLynx Agent + OKF Knowledge Base** - A3-approved dedicated agent; finalized who/what/how/why/where/when knowledge folder wired to skills/memories/references.
 - [ ] **Phase 7: Executive Sales Pipeline Dashboard** - Researched C-suite realtime dashboard under the Executive tab replacing the weekly snapshot (completeness proof).
 
 ## Phase Details
@@ -33,13 +33,13 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
   1. An `acculynx_accounts` registry maps all 9 keys → location/program, market, state, environment (prod/sandbox), and stores keys securely (no secrets in repo).
   2. Every READ (GET) endpoint in the 124-operation surface has been called against the sandbox account, with real request/response shapes, includes behavior, pagination params, and undocumented quirks recorded to `acculynx_api_catalog`/probe tables.
   3. A read-capability matrix doc exists, reconciled against the published reference and noting where live behavior differs.
-  4. A Google Drive "AccuLynx" knowledge folder skeleton exists (who/what/how/why/where/when sections) and a repo reference points agents to it.
+  4. An in-repo OKF (Open Knowledge Format) "AccuLynx" knowledge bundle exists (who/what/how/why/where/when concepts) and the acculynx-api skill points agents to it. (Drive folder dropped — agents read the repo.)
 **Plans**: 3 plans
 
 Plans:
 - [x] 01-01-PLAN.md — Schema foundation: acculynx_accounts registry (165) + idempotent catalog/probe DDL (166) + 86-GET checklist seed (167) + sandbox secret
 - [x] 01-02-PLAN.md — Sandbox-only read-sweep Edge Function: hard gate + Tier A/B/C HATEOAS ID-chaining + PII redaction over the 86 GETs
-- [ ] 01-03-PLAN.md — Reconciliation + read-capability matrix (docs/65) + Google Drive knowledge-folder skeleton + repo pointer
+- [x] 01-03-PLAN.md — Reconciliation + read-capability matrix (docs/65) + OKF knowledge bundle (docs/knowledge-base/acculynx) + repo pointer
 
 ### Phase 2: Multi-Location Full Ingestion
 **Goal**: The brain holds current data from all 8 production location accounts, across every resource AccuLynx exposes for read.
@@ -97,14 +97,14 @@ Plans:
 Plans:
 - [ ] 05-01: TBD (set during planning)
 
-### Phase 6: AccuLynx Agent + Google Drive Knowledge Base
-**Goal**: A dedicated AccuLynx Agent owns all AccuLynx work, backed by a complete, navigable Google Drive knowledge folder that skills/memories/references route agents to.
+### Phase 6: AccuLynx Agent + OKF Knowledge Base
+**Goal**: A dedicated AccuLynx Agent owns all AccuLynx work, backed by a complete, navigable in-repo OKF knowledge bundle that skills/memories/references route agents to.
 **Depends on**: Phase 1, 4, 5
 **Requirements**: REQ-01, REQ-09
 **Success Criteria** (what must be TRUE):
   1. An approved A3 (proposals/) justifies the AccuLynx Agent per CLAUDE.md rule 9.
   2. The AccuLynx Agent exists (role, bound skills/tools, read + gated-write capability) and can answer/act across the full data and capability surface.
-  3. The Google Drive "AccuLynx" folder is complete (who/what/how/why/where/when, read+write matrices, runbooks, account registry, dashboard spec) and is the cited source of truth.
+  3. The in-repo OKF "AccuLynx" bundle is complete (who/what/how/why/where/when, read+write matrices, runbooks, account registry, dashboard spec) and is the cited source of truth.
   4. Repo skills (`acculynx-api`), memories, and references point to the folder so any agent reaches the right knowledge quickly.
 **Plans**: TBD
 
@@ -132,10 +132,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Account Registry & Read-Capability Discovery | 2/3 | In Progress|  |
+| 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
 | 2. Multi-Location Full Ingestion | 0/TBD | Not started | - |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
-| 6. AccuLynx Agent + Google Drive Knowledge Base | 0/TBD | Not started | - |
+| 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |

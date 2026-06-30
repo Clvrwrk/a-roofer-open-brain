@@ -25,7 +25,7 @@ the data must be complete across all 8 location accounts and never stale by more
 
 ### Active
 
-- [ ] REQ-01: Full who/what/how/why/where/when documentation published as a Google Drive "AccuLynx" knowledge/OKR folder that repo skills, memories, and references point AI agents to.
+- [ ] REQ-01: Full who/what/how/why/where/when documentation published as an in-repo OKF (Open Knowledge Format) "AccuLynx" knowledge bundle (docs/knowledge-base/acculynx) that repo skills, memories, and references point AI agents to.
 - [ ] REQ-02: Account registry mapping all 9 AccuLynx API keys (8 production locations/programs + 1 sandbox) to location, market, state, and trust posture.
 - [ ] REQ-03: Full ingestion across all 8 production location accounts — not just Kansas.
 - [ ] REQ-04: Ingest the currently-unfed resources: contacts, job-contacts, estimates, invoices, invoice lines, job financials, job insurance, milestone history.
