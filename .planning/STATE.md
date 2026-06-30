@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Phase: 02 (multi-location-full-ingestion) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
+Phase: 02 (multi-location-full-ingestion) — PARTIAL (machinery done; ingestion deferred to Phase 3)
+Plan: 4 of 4 executed
+Status: Phase 2 goal PARTIAL — see 02-VERIFICATION.md. Machinery built/deployed/proven (v19, 56/56 tests, migs 168–171, zero bleed; KC+Wichita jobs+contacts ingesting). SC1 substantially met; SC2–SC4 partial — full backfill + within-tolerance reconciliation are cron-paced → Phase 3. Next: /gsd-plan-phase 3 (Commercial Cron Hardening), which now also owns the Phase-2 carry-forward (backfill completion, jobs api_count fix, 8 legacy rows, 6-account expansion).
 Last activity: 2026-06-30
 
-Progress: [██████████] 100%
+Progress: [████████░░] machinery complete; ingestion in progress (cron-paced)
 
 ## Performance Metrics
 

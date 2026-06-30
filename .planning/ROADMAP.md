@@ -73,6 +73,8 @@ Plans:
 
 - [x] 02-04-PLAN.md — Verify 8 keys + sandbox-first proof → human gate → deploy + production fan-out + reconciliation (REQ-03/04 production proof)
 
+**Status: plans executed; phase goal PARTIAL — see [02-VERIFICATION.md](phases/02-multi-location-full-ingestion/02-VERIFICATION.md).** Machinery built/deployed/proven (v19, 56/56 tests, migs 168–171, zero cross-account bleed; KC+Wichita jobs+contacts ingesting). SC1 substantially met; SC2–SC4 partial — full backfill + within-tolerance reconciliation are cron-paced and deferred to Phase 3. Production fan-out scoped to kansas_city + wichita (human-approved); other 6 accounts not yet enabled.
+
 ### Phase 3: Commercial Cron Hardening
 
 **Goal**: Ingestion is current within the hour, runs reliably without human babysitting, alerts on failure or staleness, and is secure.
@@ -84,6 +86,12 @@ Plans:
   2. pg_net responses are reconciled — `v_acculynx_cron_outcomes` reflects real outcomes (no perpetual `pending`); failures and stale watermarks raise an alert (Slack/Sentry).
   3. Incomplete/timed-out runs resume cleanly from watermarks; a runbook documents recovery.
   4. A security review confirms secret handling, RLS, and least-privilege are sound; no secret is exposed.
+
+**Carried forward from Phase 2** (cron-paced ingestion completion):
+  - Complete the KC + Wichita backfill to within tolerance (contacts → estimates → job-walk sub-resources) via the hourly cron.
+  - Fix jobs `last_api_count` to store the true API total (currently stores `1` → jobs reconciliation is blind).
+  - Stamp/triage the 8 remaining legacy NULL non-job rows (3 contacts, 3 job_contacts, 1 financial, 1 insurance).
+  - Expand fan-out to the remaining 6 production accounts (florida, colorado, georgia, texas, insurance_program, multi_family_commercial) — set Edge secrets after KC+Wichita reconcile within tolerance; human-approved scope step.
 
 **Plans**: TBD
 
