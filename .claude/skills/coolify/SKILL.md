@@ -99,22 +99,22 @@ curl -s -H "Authorization: Bearer $KEY" "$BASE/deployments/<deployment_uuid>"  #
 - Keep dev↔main aligned: this repo's deploy contract (CLAUDE.md rule 11) says `origin/main`
   is the only thing that deploys; converge feature branches into it and push.
 
-## Agent-triggered deploys are classifier-blocked (auto mode) — don't fight it
+## Deploy policy — the agent ships it (corrected 2026-06-29)
 
-In auto mode the classifier **blocks the agent from deploying prod**, and an in-chat "yes" does
-NOT clear it. Verified 2026-06-29 — all of these were denied: the Coolify `GET …/deploy` API call,
-`git push origin main`, **and** editing `.claude/settings.json` via `update-config` to self-grant
-the permission (self-escalation is blocked by design). Even read-only `git status` got caught when
-bundled with a push in one command. So:
+The agent deploys prod itself, with full GitHub + Coolify + Hetzner access. This corrects the
+earlier note that treated deploys as a human-only action. The discipline is a HITL transparency
+gate, not a hand-off:
 
-- **Don't loop on it.** One attempt, then hand off — don't retry the same blocked action.
-- **The two real paths:** (a) the user runs the deploy/push themselves, or (b) the user adds a
-  `Bash` allow-rule to their settings FIRST (e.g. `Bash(bash scripts/coolify-redeploy.sh:*)` or
-  `Bash(git push origin main)`), then you run it. You cannot add that rule for them.
-- **Helper:** `scripts/coolify-redeploy.sh` (no-arg = trigger; `status <uuid>` = poll) is the
-  tightly-scoped, allow-listable entry point — it only redeploys command-center. But note: a
-  redeploy ships **current `origin/main`**, so new *code* must be pushed first; the script alone
-  won't deploy un-pushed commits (it does pick up new **env** vars on the running image).
+- **Before deploying**, state in one short paragraph what is changing, the user-visible impact,
+  and the rollback path.
+- **Prep first:** converge the feature branch into `main`, apply any migration to prod, and get
+  the build + tests green — all before the deploy step.
+- **Then ship:** push `origin main` (webhook → Coolify build) or run `scripts/coolify-redeploy.sh`.
+- **Confirm it landed:** poll `/healthz` until `buildCommit` equals the pushed SHA (≈30–90s, up to
+  ~300s on a cold build).
+- **Helper:** `scripts/coolify-redeploy.sh` (no-arg = trigger; `status <uuid>` = poll) redeploys
+  command-center only. A redeploy ships **current `origin/main`**, so new *code* must be pushed
+  first; the script alone won't deploy un-pushed commits (it does pick up new **env** vars).
 
 ## Healthz reference
 `GET https://cc.proexteriorsus.net/healthz` → `{ status, buildCommit, supabaseConfigured,
