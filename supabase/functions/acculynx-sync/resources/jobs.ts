@@ -123,7 +123,11 @@ function mapJob(item: any, acct: any, now: string): Record<string, unknown> {
  * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop)
  * @param watermark  - current watermark row (null or last_modified_date=null → 2000-01-01 floor)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
- * @returns          - API-reported total count (for last_api_count watermark field), or null
+ * @returns          - { apiCount: API-reported total count or null, maxModifiedDate: max
+ *                      modifiedDate seen across all fetched items or null }. The caller
+ *                      persists both to the watermark: apiCount → last_api_count (feeds
+ *                      delta_pct reconciliation); maxModifiedDate → last_modified_date
+ *                      (feeds incremental resumption on next run).
  */
 export async function syncJobs(
   sb: any,
@@ -132,7 +136,7 @@ export async function syncJobs(
   deadline: number,
   watermark: any,
   fetchFn: typeof fetch = fetch,
-): Promise<number | null> {
+): Promise<{ apiCount: number | null; maxModifiedDate: string | null }> {
   // Full-history floor: null watermark or null last_modified_date → sweep from 2000-01-01
   const startDate = watermark?.last_modified_date
     ? new Date(watermark.last_modified_date).toISOString().slice(0, 10)
@@ -141,6 +145,7 @@ export async function syncJobs(
   let offset = 0;
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
+  let maxModified: Date | null = null; // track max modifiedDate across all fetched items
 
   while (Date.now() < deadline) {
     const url =
@@ -166,6 +171,17 @@ export async function syncJobs(
     }
 
     if (items.length === 0) break; // no more pages in this date window
+
+    // Track max modifiedDate for incremental watermark advancement.
+    // Sorted Ascending by ModifiedDate, so last item has the highest date.
+    for (const item of items as any[]) {
+      if (item.modifiedDate) {
+        const d = new Date(item.modifiedDate);
+        if (!isNaN(d.getTime()) && (maxModified === null || d > maxModified)) {
+          maxModified = d;
+        }
+      }
+    }
 
     // Upsert lead sources first (acculynx_jobs FK → acculynx_lead_sources).
     // Without pre-populating lead sources, job upserts raise FK violation 23503.
@@ -197,5 +213,8 @@ export async function syncJobs(
     offset += items.length;
   }
 
-  return lastApiCount;
+  return {
+    apiCount: lastApiCount,
+    maxModifiedDate: maxModified ? maxModified.toISOString() : null,
+  };
 }

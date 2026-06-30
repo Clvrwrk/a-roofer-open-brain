@@ -262,28 +262,61 @@ Deno.test("syncJobs — watermark with null last_modified_date uses 2000-01-01 (
 });
 
 // ---------------------------------------------------------------------------
-// Fix SC4: syncJobs returns API count for last_api_count watermark persistence
+// Fix SC4: syncJobs returns { apiCount, maxModifiedDate } for watermark persistence
 // ---------------------------------------------------------------------------
 
-Deno.test("syncJobs — returns the API count from the response for last_api_count", async () => {
-  const mockFetch = (url: string | URL | Request) => {
-    void url;
-    const callNum = mockFetch._calls++;
+Deno.test("syncJobs — returns apiCount from the response for last_api_count", async () => {
+  let callNum = 0;
+  const mockFetch = () => {
     const items = callNum === 0 ? [{ id: "j-1", modifiedDate: "2026-06-15T12:00:00Z" }] : [];
+    callNum++;
     const body = JSON.stringify({ items, count: 166 }); // API reports 166 total jobs
     return Promise.resolve(
       new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
     );
   };
-  mockFetch._calls = 0;
 
   const { sb } = makeUpsertSb();
   const deadline = Date.now() + 60_000;
-  const apiCount = await syncJobs(sb, ACCT, "test-api-key", deadline, WATERMARK, mockFetch);
+  const result = await syncJobs(sb, ACCT, "test-api-key", deadline, WATERMARK, mockFetch);
 
   assertEquals(
-    apiCount,
+    result.apiCount,
     166,
-    `syncJobs must return the API count (166) so caller can persist it as last_api_count`,
+    `syncJobs must return apiCount=166 so caller can persist it as last_api_count`,
+  );
+});
+
+Deno.test("syncJobs — returns maxModifiedDate for incremental watermark advancement", async () => {
+  let callNum = 0;
+  const mockFetch = () => {
+    // Two items with different modified dates; sorted ascending so last is the max
+    const items = callNum === 0
+      ? [
+          { id: "j-1", modifiedDate: "2026-06-10T00:00:00Z" },
+          { id: "j-2", modifiedDate: "2026-06-15T12:00:00Z" },
+        ]
+      : [];
+    callNum++;
+    const body = JSON.stringify({ items, count: 2 });
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  const result = await syncJobs(sb, ACCT, "test-api-key", deadline, WATERMARK, mockFetch);
+
+  assertEquals(
+    typeof result.maxModifiedDate,
+    "string",
+    "maxModifiedDate must be an ISO string when items were fetched",
+  );
+  // Must capture the max modifiedDate across all items (2026-06-15)
+  assertEquals(
+    result.maxModifiedDate?.startsWith("2026-06-15"),
+    true,
+    `maxModifiedDate must be 2026-06-15 (the max), got: ${result.maxModifiedDate}`,
   );
 });

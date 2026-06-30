@@ -543,13 +543,18 @@ async function runAccountSync(
   // --- Jobs (date-windowed; null watermark → 2000-01-01 full-history floor) ---
   try {
     const jobWm = await readWatermark(sb, acct.account_key, "jobs");
-    const jobApiCount = await syncJobs(sb, acct, apiKey, deadline, jobWm);
+    const { apiCount: jobApiCount, maxModifiedDate } = await syncJobs(sb, acct, apiKey, deadline, jobWm);
 
-    // Advance watermark for jobs; persist API count for reconciliation view
+    // Advance watermark for jobs:
+    //   - last_modified_date: max modifiedDate seen across fetched items — enables incremental
+    //     resumption on the next run (picks up from where this run's date window ended).
+    //   - last_api_count: API-reported total from the last page — feeds v_acculynx_reconciliation
+    //     delta_pct so the health gate can compare brain_count vs api_count.
     await advanceWatermark(sb, {
       account_key: acct.account_key,
       resource_type: "jobs",
       last_sync_at: new Date().toISOString(),
+      ...(maxModifiedDate !== null ? { last_modified_date: maxModifiedDate } : {}),
       ...(jobApiCount !== null ? { last_api_count: jobApiCount } : {}),
     });
     result.jobs = "ok";
