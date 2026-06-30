@@ -1,30 +1,52 @@
-// acculynx-sync — v10
-// Changes from v9:
-//   • fullSync now tracks runStartIso and, after all pages are fetched,
-//     queries acculynx_jobs WHERE synced_at < runStartIso to detect
-//     records that exist in DB but were NOT returned by AccuLynx API.
-//   • diff summary (added, updated, not_seen_in_api) returned in response.
-//   • All other logic (incremental sync, resolveLeads, users) unchanged from v9.
+// acculynx-sync — Phase 2 multi-location fan-out entry point
+//
+// Replaces the v10 single-account index.ts with a serial account fan-out over all
+// production AccuLynx accounts. Runs all resource syncs in order for each account
+// under a shared runtime deadline.
+//
+// Hard rules honored:
+//   - Rule 2: apiKey resolved only at runtime via Deno.env.get(env_secret_name);
+//             the NAME is warned on skip, the VALUE is never logged (T-02-05)
+//   - Rule 1: all diff detection uses markNotSeen (.update only, never .delete) (T-02-06)
+//   - T-02-04: apiKey passed as explicit param to every resource fn (no module-level key)
+//   - T-02-07: serial account loop — 30 req/s IP limit enforced (no concurrent fan-out)
+//
+// v10 behavior preserved: users sync, jobs incremental+full-sync, crm_pipeline, resolveLeads.
+// Phase 2 additions: multi-account fan-out for contacts, estimates, job-walk sub-resources.
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { loadProductionAccounts, resolveKey } from "./lib/accounts.ts";
+import { readWatermark, advanceWatermark } from "./lib/watermark.ts";
+import { markNotSeen } from "./lib/diff.ts";
+import { syncJobs } from "./resources/jobs.ts";
+import { syncContacts } from "./resources/contacts.ts";
+import { syncEstimates } from "./resources/estimates.ts";
+import { syncJobWalk } from "./resources/job-walk.ts";
+
+// deno-lint-ignore-file no-explicit-any
+
+const SB_URL = Deno.env.get("SUPABASE_URL")!;
+const SB_SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const RUNTIME_BUDGET_MS = 110_000; // leave 10s of the 120s edge function limit
+const BATCH_PACE_MS = 150; // inter-request pacing for legacy resolveLeads loop
+
+const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
+
+// ---------------------------------------------------------------------------
+// v10 preserved helpers (single-account jobs + users + resolveLeads)
+// ---------------------------------------------------------------------------
 
 const ACCULYNX_BASE = "https://api.acculynx.com/api/v2";
 const PAGE_SIZE_USERS = 50;
 const PAGE_SIZE_JOBS = 25;
-const RUNTIME_BUDGET_MS = 120_000;
 const MAX_RETRIES = 3;
 const DEFAULT_MILESTONES = "lead,prospect,approved,completed,invoiced,closed,cancelled,dead";
 
-const ACCULYNX_KEY = Deno.env.get("ACCULYNX_API_KEY");
-const SB_URL = Deno.env.get("SUPABASE_URL")!;
-const SB_SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Module-level key for v10 compatibility — only used by legacy helpers below.
+// Phase 2 resource modules all receive apiKey as an explicit parameter (T-02-04).
+const LEGACY_KEY = Deno.env.get("ACCULYNX_API_KEY");
 
-const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
-
-function newBatchId(): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  return `${ts}-${crypto.randomUUID().slice(0, 8)}`;
-}
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 function parseLeadSource(name?: string | null): { parent: string | null; sub: string | null } {
@@ -114,7 +136,7 @@ function normalizeJobCategory(name?: string | null): string | null {
   return allowed.has(slug) ? slug : null;
 }
 
-async function acculynxFetch(
+async function legacyAcculynxFetch(
   path: string,
   batchId: string,
   resourceType: string,
@@ -126,7 +148,7 @@ async function acculynxFetch(
   let lastBody: any = null;
   while (attempt <= MAX_RETRIES) {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${ACCULYNX_KEY}`, Accept: "application/json" },
+      headers: { Authorization: `Bearer ${LEGACY_KEY}`, Accept: "application/json" },
     });
     lastStatus = res.status;
     lastBody = await res.json().catch(() => ({}));
@@ -180,64 +202,59 @@ async function resolveLeadMilestones(
   let assignedLeads = 0;
   let stillUnassigned = 0;
   let errors = 0;
-  const BATCH = 8;
   const nowIso = new Date().toISOString();
 
-  for (let i = 0; i < leads.length && Date.now() < deadline; i += BATCH) {
-    const chunk = leads.slice(i, i + BATCH);
-    await Promise.all(
-      chunk.map(async (lead: any) => {
-        const path = `/jobs/${lead.acculynx_job_id}/representatives/sales-owner`;
-        const url = `${ACCULYNX_BASE}${path}`;
-        try {
-          const res = await fetch(url, {
-            headers: { Authorization: `Bearer ${ACCULYNX_KEY}`, Accept: "application/json" },
-          });
-          let payload: any = {};
-          if (res.status === 200) payload = await res.json().catch(() => ({}));
-          // Non-fatal raw insert — ignore error (Supabase client does not support .catch()).
-          await sb.from("acculynx_raw").insert({
-            sync_batch_id: batchId,
-            resource_type: "sales_owner",
-            api_endpoint: path,
-            http_status: res.status,
-            page_index: null,
-            payload,
-          });
-          if (res.status === 200) {
-            const userId = payload?.user?.id ?? null;
-            const salesperson = userId ? (userMap.get(userId) ?? userId) : null;
-            const msDate = toDate(lead.milestone_date);
-            const { error: uErr } = await sb
-              .from("crm_pipeline")
-              .update({
-                current_milestone: "assigned_lead",
-                primary_salesperson: salesperson,
-                assigned_date: msDate,
-                acculynx_synced_at: nowIso,
-                updated_at: nowIso,
-              })
-              .eq("id", lead.id);
-            if (uErr) throw new Error(uErr.message);
-            assignedLeads++;
-          } else if (res.status === 204) {
-            stillUnassigned++;
-          } else {
-            throw new Error(`Unexpected ${res.status} from ${path}`);
-          }
-          checked++;
-        } catch (e) {
-          errors++;
-          console.error(`resolveLeads ${lead.acculynx_job_id}: ${(e as Error).message}`);
-        }
-      }),
-    );
-    if (i + BATCH < leads.length) await sleep(150);
+  // Sequential loop — serial per IP rate limit (T-02-07)
+  for (let i = 0; i < leads.length && Date.now() < deadline; i++) {
+    const lead = leads[i];
+    const path = `/jobs/${lead.acculynx_job_id}/representatives/sales-owner`;
+    const url = `${ACCULYNX_BASE}${path}`;
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${LEGACY_KEY}`, Accept: "application/json" },
+      });
+      let payload: any = {};
+      if (res.status === 200) payload = await res.json().catch(() => ({}));
+      await sb.from("acculynx_raw").insert({
+        sync_batch_id: batchId,
+        resource_type: "sales_owner",
+        api_endpoint: path,
+        http_status: res.status,
+        page_index: null,
+        payload,
+      });
+      if (res.status === 200) {
+        const userId = payload?.user?.id ?? null;
+        const salesperson = userId ? (userMap.get(userId) ?? userId) : null;
+        const msDate = toDate(lead.milestone_date);
+        const { error: uErr } = await sb
+          .from("crm_pipeline")
+          .update({
+            current_milestone: "assigned_lead",
+            primary_salesperson: salesperson,
+            assigned_date: msDate,
+            acculynx_synced_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", lead.id);
+        if (uErr) throw new Error(uErr.message);
+        assignedLeads++;
+      } else if (res.status === 204) {
+        stillUnassigned++;
+      } else {
+        throw new Error(`Unexpected ${res.status} from ${path}`);
+      }
+      checked++;
+    } catch (e) {
+      errors++;
+      console.error(`resolveLeads ${lead.acculynx_job_id}: ${(e as Error).message}`);
+    }
+    if (i < leads.length - 1) await sleep(BATCH_PACE_MS);
   }
   return { found: leads.length, checked, assignedLeads, stillUnassigned, errors };
 }
 
-async function syncUsers(batchId: string, deadline: number) {
+async function legacySyncUsers(batchId: string, deadline: number) {
   let idx = 0;
   let total = 0;
   let pages = 0;
@@ -247,7 +264,7 @@ async function syncUsers(batchId: string, deadline: number) {
       pageStartIndex: String(idx),
       status: "Active,Inactive,Archived",
     });
-    const data = await acculynxFetch(`/users?${qs}`, batchId, "users", pages);
+    const data = await legacyAcculynxFetch(`/users?${qs}`, batchId, "users", pages);
     const items: any[] = data.items ?? [];
     if (items.length === 0) break;
     const rows = items.map((u) => ({
@@ -281,7 +298,7 @@ async function syncUsers(batchId: string, deadline: number) {
   return { total, pages };
 }
 
-async function syncJobs(
+async function legacySyncJobs(
   batchId: string,
   deadline: number,
   fullSync = false,
@@ -322,12 +339,11 @@ async function syncJobs(
       includes: "contact,initialAppointment,assignedSalesperson",
       milestones: DEFAULT_MILESTONES,
     });
-    const data = await acculynxFetch(`/jobs?${qs}`, batchId, "jobs", pages);
+    const data = await legacyAcculynxFetch(`/jobs?${qs}`, batchId, "jobs", pages);
     const items: any[] = data.items ?? [];
     totalCount = data.count ?? totalCount;
     if (items.length === 0) break;
 
-    // Track every ID seen in this sync run
     for (const j of items) seenIds.add(j.id);
 
     const lsMap = new Map<string, any>();
@@ -376,7 +392,7 @@ async function syncJobs(
       initial_appointment_end: j.initialAppointment?.endDate || null,
       initial_appointment_notes: j.initialAppointment?.notes ?? null,
       raw: j,
-      synced_at: nowIso,   // always stamped — used for diff detection
+      synced_at: nowIso,
     }));
     const { error: ej } = await sb.from("acculynx_jobs").upsert(jobRows, { onConflict: "id" });
     if (ej) throw new Error(`upsert acculynx_jobs: ${ej.message}`);
@@ -465,10 +481,6 @@ async function syncJobs(
 
   if (idx < totalCount) incomplete = true;
 
-  // --- v10: DIFF DETECTION (fullSync only) ---
-  // Any acculynx_jobs record whose synced_at is older than runStartIso was
-  // NOT returned by AccuLynx in this full sweep → potentially deleted or
-  // excluded (e.g. filtered by milestone).
   let notSeenCount = 0;
   let notSeenRecords: any[] = [];
   if (fullSync) {
@@ -484,7 +496,6 @@ async function syncJobs(
       notSeenRecords = notSeen ?? [];
     }
 
-    // Also update the watermark after a full sync
     await sb.from("acculynx_sync_watermark").update({
       last_successful_sync_at: new Date().toISOString(),
       last_sync_batch_id: batchId,
@@ -510,60 +521,206 @@ async function syncJobs(
   };
 }
 
-Deno.serve(async (req: Request) => {
-  if (!ACCULYNX_KEY) return json({ error: "ACCULYNX_API_KEY secret not set" }, 500);
+// ---------------------------------------------------------------------------
+// Phase 2 multi-account fan-out
+// ---------------------------------------------------------------------------
+
+/**
+ * Run Phase 2 resource syncs for a single account.
+ * SERIAL across resources — 30 req/s IP limit enforced (T-02-07).
+ * apiKey is explicit — never a module-level shared key (T-02-04).
+ */
+async function runAccountSync(
+  acct: { account_key: string; env_secret_name: string; label: string | null; market: string | null; state: string | null },
+  apiKey: string,
+  deadline: number,
+): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string }> {
+  const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped" };
+
+  // --- Jobs (date-windowed) ---
+  try {
+    const jobWm = await readWatermark(sb, acct.account_key, "jobs");
+    await syncJobs(sb, acct, apiKey, deadline, jobWm);
+
+    // Advance watermark for jobs
+    await advanceWatermark(sb, {
+      account_key: acct.account_key,
+      resource_type: "jobs",
+      last_sync_at: new Date().toISOString(),
+    });
+    result.jobs = "ok";
+  } catch (e) {
+    result.jobs = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/jobs: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
+  // --- Contacts (full sweep) ---
+  const contactsSweepStart = new Date().toISOString();
+  try {
+    const contactsWm = await readWatermark(sb, acct.account_key, "contacts");
+    await syncContacts(sb, acct, apiKey, deadline, contactsWm);
+
+    // Mark rows not seen in this sweep
+    await markNotSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
+
+    await advanceWatermark(sb, {
+      account_key: acct.account_key,
+      resource_type: "contacts",
+      last_page_index: 0, // reset cursor on completion
+      last_sync_at: new Date().toISOString(),
+    });
+    result.contacts = "ok";
+  } catch (e) {
+    result.contacts = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/contacts: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
+  // --- Estimates (full sweep) ---
+  const estimatesSweepStart = new Date().toISOString();
+  try {
+    const estimatesWm = await readWatermark(sb, acct.account_key, "estimates");
+    await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
+
+    await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
+
+    await advanceWatermark(sb, {
+      account_key: acct.account_key,
+      resource_type: "estimates",
+      last_page_index: 0,
+      last_sync_at: new Date().toISOString(),
+    });
+    result.estimates = "ok";
+  } catch (e) {
+    result.estimates = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/estimates: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
+  // --- Job Walk (sub-resources + invoice two-level) ---
+  try {
+    const jobWalkWm = await readWatermark(sb, acct.account_key, "job_walk");
+
+    // Load ordered job IDs for this account (sorted by created_date ASC for deterministic resumption)
+    const { data: jobRows, error: jobErr } = await sb
+      .from("acculynx_jobs")
+      .select("id")
+      .eq("account_key", acct.account_key)
+      .order("created_date", { ascending: true });
+    if (jobErr) throw new Error(`job IDs load: ${jobErr.message}`);
+
+    const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
+    await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds);
+    result.jobWalk = "ok";
+  } catch (e) {
+    result.jobWalk = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+Deno.serve(async (req: Request): Promise<Response> => {
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
+
   const started = Date.now();
   const runStartIso = new Date(started).toISOString();
   const deadline = started + RUNTIME_BUDGET_MS;
-  const batchId = newBatchId();
-  const body = await req.json().catch(() => ({}));
 
+  const body = await req.json().catch(() => ({}));
   const resources: string[] = body.resources ?? ["users", "jobs"];
   const fullSync: boolean = body.fullSync ?? false;
   const resolveLeads: boolean =
     body.resolveLeads === true || resources.includes("resolveLeads");
+  const multiAccount: boolean = body.multiAccount ?? false;
+
+  const batchId = `sync-${runStartIso.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
 
   await sb.from("crm_sync_log").insert({
     sync_batch_id: batchId,
-    sync_type: fullSync ? "full_sync" : resources.join(",") || "api_incremental",
+    sync_type: multiAccount
+      ? "multi_account"
+      : (fullSync ? "full_sync" : resources.join(",") || "api_incremental"),
     started_at: runStartIso,
     status: "running",
     api_endpoint: "acculynx-sync",
   });
 
-  const result: any = { batch_id: batchId, resources: {}, fullSync, resolveLeads, run_start: runStartIso };
+  const result: any = {
+    batch_id: batchId,
+    resources: {},
+    fullSync,
+    resolveLeads,
+    multiAccount,
+    run_start: runStartIso,
+  };
   let totalFetched = 0;
   let errorCount = 0;
   const errorDetails: any[] = [];
 
   try {
-    if (resources.includes("users")) {
-      try {
-        result.resources.users = await syncUsers(batchId, deadline);
-        totalFetched += result.resources.users.total;
-      } catch (e) {
-        errorCount++;
-        errorDetails.push({ resource: "users", message: (e as Error).message });
-        result.resources.users = { error: (e as Error).message };
+    // Phase 2 multi-account fan-out (triggered by multiAccount flag)
+    if (multiAccount) {
+      const accounts = await loadProductionAccounts(sb);
+      result.accounts = {};
+
+      // SERIAL loop — 30 req/s IP limit (T-02-07)
+      for (const acct of accounts) {
+        if (Date.now() >= deadline) break;
+
+        const apiKey = resolveKey(acct);
+        if (!apiKey) {
+          // Warn with NAME only — hard rule 2 (T-02-05)
+          console.warn(`[sync] secret ${acct.env_secret_name} not set — skipping ${acct.account_key}`);
+          result.accounts[acct.account_key] = "skipped (no key)";
+          continue;
+        }
+
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, deadline);
       }
     }
-    if (resources.includes("jobs")) {
-      try {
-        result.resources.jobs = await syncJobs(batchId, deadline, fullSync, runStartIso);
-        totalFetched += result.resources.jobs.total;
-      } catch (e) {
-        errorCount++;
-        errorDetails.push({ resource: "jobs", message: (e as Error).message });
-        result.resources.jobs = { error: (e as Error).message };
+
+    // v10 legacy resources (users, jobs, resolveLeads) — preserved for backward compat
+    if (!multiAccount || resources.includes("users")) {
+      if (resources.includes("users")) {
+        try {
+          result.resources.users = await legacySyncUsers(batchId, deadline);
+          totalFetched += result.resources.users.total;
+        } catch (e) {
+          errorCount++;
+          errorDetails.push({ resource: "users", message: (e as Error).message });
+          result.resources.users = { error: (e as Error).message };
+        }
       }
     }
-    if (resolveLeads) {
-      try {
-        result.resources.resolveLeads = await resolveLeadMilestones(batchId, deadline);
-      } catch (e) {
-        errorCount++;
-        errorDetails.push({ resource: "resolveLeads", message: (e as Error).message });
-        result.resources.resolveLeads = { error: (e as Error).message };
+
+    if (!multiAccount) {
+      if (resources.includes("jobs")) {
+        try {
+          result.resources.jobs = await legacySyncJobs(batchId, deadline, fullSync, runStartIso);
+          totalFetched += result.resources.jobs.total;
+        } catch (e) {
+          errorCount++;
+          errorDetails.push({ resource: "jobs", message: (e as Error).message });
+          result.resources.jobs = { error: (e as Error).message };
+        }
+      }
+      if (resolveLeads) {
+        try {
+          result.resources.resolveLeads = await resolveLeadMilestones(batchId, deadline);
+        } catch (e) {
+          errorCount++;
+          errorDetails.push({ resource: "resolveLeads", message: (e as Error).message });
+          result.resources.resolveLeads = { error: (e as Error).message };
+        }
       }
     }
 
