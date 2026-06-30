@@ -2,7 +2,7 @@
 phase: 1
 slug: foundation-account-registry-read-capability-discovery
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-30
 ---
@@ -39,16 +39,16 @@ created: 2026-06-30
 
 | Task ID | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 01-*-checklist-seed | 0 | REQ-05 | — | N/A | integration (SQL) | `select count(*) from acculynx_get_checklist` ≈ 86 | ❌ W0 | ⬜ pending |
-| 01-*-registry-migration | 0 | REQ-02 | T-1-secret-leak | env-name-only; no value in DB | integration (SQL) | `select count(*), array_agg(distinct environment) from acculynx_accounts` → 9, {production,sandbox} | ❌ W0 | ⬜ pending |
-| 01-*-registry-secret-guard | 0 | REQ-02 | T-1-secret-leak | no secret value committed | security smoke | `grep -rIE 'acculynx.*=.{20,}' schemas/ .planning/` returns nothing | ❌ W0 | ⬜ pending |
-| 01-*-probe-tables-ddl | 0 | REQ-05 | — | repo is source-of-truth for live tables | integration (SQL) | `CREATE TABLE IF NOT EXISTS` applies cleanly (idempotent) | ❌ W0 | ⬜ pending |
-| 01-*-sandbox-hard-gate | 1 | REQ-05 | T-1-prod-probe | throws unless env == sandbox | unit (deno test) | `deno test` on the gate fn passes; sweep refuses non-sandbox key | ❌ W0 | ⬜ pending |
-| 01-*-tierA-sweep | 1 | REQ-05 | T-1-prod-probe | sandbox-tagged rows only | integration | distinct Tier-A `endpoint_pattern` in batch == Tier-A checklist | ✅ (probe table live) | ⬜ pending |
-| 01-*-tierBC-sweep | 1 | REQ-05 | T-1-pii | shapes stored, PII redacted in payload_sample | integration | `select count(*) from acculynx_api_probe where probe_batch_id=$B and http_status=200 and result_summary is null` = 0 | ✅ | ⬜ pending |
-| 01-*-reconciliation | 2 | REQ-05 | — | N/A | integration | distinct probed endpoints (any verdict) ⊇ 86-op checklist | ❌ W0 | ⬜ pending |
-| 01-*-read-matrix-doc | 2 | REQ-05 | — | N/A | repo smoke | `test -f docs/65-acculynx-read-capability-matrix.md`; ~86 rows | ❌ W0 | ⬜ pending |
-| 01-*-drive-folder | 2 | REQ-01 | T-1-secret-leak | no secrets in folder | manual + repo smoke | folder URL opens; `test -f skills/cleverwork-roofer/acculynx-api/reference/knowledge-folder.md` | ❌ W0 | ⬜ pending |
+| 01-01-T3-checklist-seed | 0 | REQ-05 | — | N/A | integration (SQL) | `select count(*) from acculynx_get_checklist` ≈ 86 | ❌ W0 | ⬜ pending |
+| 01-01-T1-registry-migration | 0 | REQ-02 | T-1-secret-leak | env-name-only; no value in DB | integration (SQL) | `select count(*), array_agg(distinct environment) from acculynx_accounts` → 9, {production,sandbox} | ❌ W0 | ⬜ pending |
+| 01-01-T1/T3-secret-guard | 0 | REQ-02 | T-1-secret-leak | no secret value committed | security smoke | `grep -rIE 'acculynx.*=.{20,}' schemas/ .planning/` returns nothing | ❌ W0 | ⬜ pending |
+| 01-01-T2-probe-tables-ddl | 0 | REQ-05 | — | repo is source-of-truth for live tables | integration (SQL) | `CREATE TABLE IF NOT EXISTS` applies cleanly (idempotent) | ❌ W0 | ⬜ pending |
+| 01-02-T1-sandbox-hard-gate | 1 | REQ-05 | T-1-prod-probe | throws unless env == sandbox | unit (deno test) | `deno test` on the gate fn passes; sweep refuses non-sandbox key | ❌ W0 | ⬜ pending |
+| 01-02-T2-tierA-sweep | 1 | REQ-05 | T-1-prod-probe | sandbox-tagged rows only | integration | distinct Tier-A `endpoint_pattern` in batch == Tier-A checklist | ✅ (probe table live) | ⬜ pending |
+| 01-02-T2-tierBC-sweep | 1 | REQ-05 | T-1-pii | shapes stored, PII redacted in payload_sample | integration | `select count(*) from acculynx_api_probe where probe_batch_id=$B and http_status=200 and result_summary is null` = 0 | ✅ | ⬜ pending |
+| 01-03-T1-reconciliation | 2 | REQ-05 | — | N/A | integration | distinct probed endpoints (any verdict) ⊇ 86-op checklist | ❌ W0 | ⬜ pending |
+| 01-03-T1-read-matrix-doc | 2 | REQ-05 | — | N/A | repo smoke | `test -f docs/65-acculynx-read-capability-matrix.md`; ~86 rows | ❌ W0 | ⬜ pending |
+| 01-03-T3-drive-folder | 2 | REQ-01 | T-1-secret-leak | no secrets in folder | manual + repo smoke | folder URL opens; `test -f skills/cleverwork-roofer/acculynx-api/reference/knowledge-folder.md` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -84,4 +84,4 @@ created: 2026-06-30
 - [ ] Feedback latency < 60s
 - [ ] `nyquist_compliant: true` set in frontmatter (after planner aligns task IDs)
 
-**Approval:** pending
+**Approval:** task IDs aligned to plans 01-01/01-02/01-03 (planner, 2026-06-30)

@@ -34,10 +34,12 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
   2. Every READ (GET) endpoint in the 124-operation surface has been called against the sandbox account, with real request/response shapes, includes behavior, pagination params, and undocumented quirks recorded to `acculynx_api_catalog`/probe tables.
   3. A read-capability matrix doc exists, reconciled against the published reference and noting where live behavior differs.
   4. A Google Drive "AccuLynx" knowledge folder skeleton exists (who/what/how/why/where/when sections) and a repo reference points agents to it.
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD (set during planning)
+- [ ] 01-01-PLAN.md — Schema foundation: acculynx_accounts registry (165) + idempotent catalog/probe DDL (166) + 86-GET checklist seed (167) + sandbox secret
+- [ ] 01-02-PLAN.md — Sandbox-only read-sweep Edge Function: hard gate + Tier A/B/C HATEOAS ID-chaining + PII redaction over the 86 GETs
+- [ ] 01-03-PLAN.md — Reconciliation + read-capability matrix (docs/65) + Google Drive knowledge-folder skeleton + repo pointer
 
 ### Phase 2: Multi-Location Full Ingestion
 **Goal**: The brain holds current data from all 8 production location accounts, across every resource AccuLynx exposes for read.
