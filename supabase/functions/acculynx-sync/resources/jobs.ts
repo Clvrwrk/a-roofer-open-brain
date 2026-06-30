@@ -15,8 +15,13 @@
 // causing 400 responses. Now passes today's date as endDate.
 // Fix (Rule 1 — 2026-06-30): map camelCase API fields to snake_case DB columns;
 // removed ...item spread (PostgREST rejects unknown camelCase columns).
+// Fix (Rule 1 — 2026-06-30): item.jobId → item.job?.id for job_id reference.
 // Fix (Rule 1 — 2026-06-30): onConflict changed from "id,account_key" to "id"
 // (table PK is id only; no composite unique constraint exists).
+// Fix (Rule 1 — 2026-06-30): upsert acculynx_lead_sources before acculynx_jobs per
+// batch — acculynx_jobs has FK(lead_source_id) → acculynx_lead_sources; without
+// pre-populating the lead source the job upsert raises 23503. Mirrors the legacy
+// legacySyncJobs approach.
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -143,6 +148,26 @@ export async function syncJobs(
 
     const items: unknown[] = (body as { items?: unknown[] })?.items ?? [];
     if (items.length === 0) break; // no more pages in this date window
+
+    // Upsert lead sources first (acculynx_jobs FK → acculynx_lead_sources).
+    // Without pre-populating lead sources, job upserts raise FK violation 23503.
+    const lsMap = new Map<string, any>();
+    for (const item of items as any[]) {
+      if (item.leadSource?.id) {
+        lsMap.set(item.leadSource.id, {
+          id: item.leadSource.id,
+          name: item.leadSource.name ?? null,
+          raw: item.leadSource,
+          synced_at: now,
+        });
+      }
+    }
+    if (lsMap.size > 0) {
+      const { error: lsErr } = await sb
+        .from("acculynx_lead_sources")
+        .upsert([...lsMap.values()], { onConflict: "id" });
+      if (lsErr) console.warn(`[jobs] lead_sources upsert: ${lsErr.message}`);
+    }
 
     const rows = items.map((item: any) => mapJob(item, acct, now));
 
