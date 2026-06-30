@@ -38,7 +38,7 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
 
 Plans:
 - [x] 01-01-PLAN.md — Schema foundation: acculynx_accounts registry (165) + idempotent catalog/probe DDL (166) + 86-GET checklist seed (167) + sandbox secret
-- [ ] 01-02-PLAN.md — Sandbox-only read-sweep Edge Function: hard gate + Tier A/B/C HATEOAS ID-chaining + PII redaction over the 86 GETs
+- [x] 01-02-PLAN.md — Sandbox-only read-sweep Edge Function: hard gate + Tier A/B/C HATEOAS ID-chaining + PII redaction over the 86 GETs
 - [ ] 01-03-PLAN.md — Reconciliation + read-capability matrix (docs/65) + Google Drive knowledge-folder skeleton + repo pointer
 
 ### Phase 2: Multi-Location Full Ingestion
@@ -132,7 +132,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Account Registry & Read-Capability Discovery | 1/3 | In Progress|  |
+| 1. Foundation — Account Registry & Read-Capability Discovery | 2/3 | In Progress|  |
 | 2. Multi-Location Full Ingestion | 0/TBD | Not started | - |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
