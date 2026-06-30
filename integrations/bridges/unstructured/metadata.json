@@ -1,0 +1,26 @@
+{
+  "name": "unstructured",
+  "display_name": "Unstructured",
+  "version": "0.1.0",
+  "tier": 1,
+  "source_system_type": "commercial-document-ocr-api",
+  "enabled": false,
+  "origin": "cleverwork",
+  "bound_agents": ["maya", "alex", "sam", "ops-conductor"],
+  "env_vars": {
+    "required": ["UNSTRUCTURED_API_KEY", "UNSTRUCTURED_API_URL"],
+    "optional": ["PE_SLACK_UNSTRUCTURED_API"]
+  },
+  "webhook_topics": [],
+  "objects_ingested": [
+    "slack_attachment_raw_object",
+    "document_elements_json",
+    "document_text",
+    "table_html",
+    "ocr_metadata",
+    "extraction_error"
+  ],
+  "job_phase_map": {},
+  "debrief_trigger_milestone": null,
+  "notes": "OCR/document partitioning provider for Slack/Supabase attachment pipeline. Real keys live in .env/Coolify/vault only. Do not commit test keys."
+}
