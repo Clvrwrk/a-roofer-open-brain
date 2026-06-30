@@ -50,10 +50,13 @@ Plans:
   2. Contacts, job-contacts, estimates, invoices, invoice lines, job financials, job insurance, and milestone history are populated (non-empty) for accounts that have them, with per-resource watermarks.
   3. A full historical backfill has run for every location account, windowed to respect pagination/runtime limits, with diff detection for not-seen-in-API records.
   4. Row counts by account/market reconcile against AccuLynx job counts within an acceptable tolerance.
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD (set during planning)
+- [ ] 02-01-PLAN.md — Schema foundation: live-schema introspection (Task 0) + migrations 168 (watermark) / 169 (11 target tables, account_key + diff cols) / 170 (reconciliation view), applied to prod DB
+- [ ] 02-02-PLAN.md — Locate-or-recreate acculynx-sync in repo + Wave 0 FAILING tests (fan-out, watermark, mark-not-delete, invoice two-level) + reconcile smoke SQL
+- [ ] 02-03-PLAN.md — Implement lib (accounts/watermark/diff) + resources (jobs date-window, contacts/estimates full-sweep, job-walk) with account stamping; full suite GREEN
+- [ ] 02-04-PLAN.md — Verify 8 keys + sandbox-first proof → human gate → deploy + production fan-out + reconciliation (REQ-03/04 production proof)
 
 ### Phase 3: Commercial Cron Hardening
 **Goal**: Ingestion is current within the hour, runs reliably without human babysitting, alerts on failure or staleness, and is secure.
@@ -133,7 +136,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
-| 2. Multi-Location Full Ingestion | 0/TBD | Not started | - |
+| 2. Multi-Location Full Ingestion | 0/4 | Planned | - |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
