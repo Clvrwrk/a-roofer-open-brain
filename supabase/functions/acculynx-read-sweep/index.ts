@@ -140,6 +140,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (clErr) return json({ error: `checklist load: ${clErr.message}` }, 500);
 
   const seeds: Record<string, string[]> = { countryId: ["1"] };
+
+  // Seed pre-fetch: prefer ASSIGNED jobs first (they carry financials/estimates/invoices),
+  // then append UNASSIGNED leads (POST-created jobs are unassigned and excluded from the
+  // default /jobs list — a real quirk). jobId[0] should be the richest job for Tier B depth.
+  try {
+    const base = "https://api.acculynx.com/api/v2/jobs?pageSize=25&includes=contact";
+    const assigned = await acculynxGet(base);
+    const unassigned = await acculynxGet(`${base}&assignment=unassigned`);
+    const items = [
+      ...((assigned.body as { items?: any[] })?.items ?? []),
+      ...((unassigned.body as { items?: any[] })?.items ?? []),
+    ];
+    const jobIds = [...new Set(items.map((j) => j?.id).filter(Boolean))].slice(0, 5);
+    if (jobIds.length) seeds.jobId = jobIds;
+    const contactIds = [...new Set(items.flatMap((j) => (j?.contacts ?? []).map((c: any) => c?.contact?.id)).filter(Boolean))].slice(0, 5);
+    if (contactIds.length) seeds.contactId = contactIds;
+  } catch (_e) { /* non-fatal */ }
+
   const probeRows: Record<string, unknown>[] = [];
   const catalogRows: Record<string, unknown>[] = [];
   const verdicts: Record<string, number> = {};

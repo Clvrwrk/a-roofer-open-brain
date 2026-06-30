@@ -1,6 +1,6 @@
 # AccuLynx Read-Capability Matrix (Phase 1, REQ-05)
 
-Generated: 2026-06-30 from sandbox sweep batch `sweep-2026-06-30T10-38-31-506Z`
+Generated: 2026-06-30 from sandbox sweep batch `sweep-2026-06-30T11-06-22-039Z`
 Source account: **sandbox** (`PE_CC_SANDBOX_ACCULYNX_API_KEY`) — no production account was touched.
 Pairs with the write matrix [docs/37](37-acculynx-write-capability-matrix.md). Source of truth: `public.acculynx_get_checklist` (86 GETs from `openapi-index.json`) reconciled against `public.acculynx_api_probe`.
 
@@ -10,7 +10,7 @@ One row per documented GET (86 total). **Sandbox status** verdict vocabulary:
 `200` works · `empty` 200 but zero items in sandbox · `204` no content · `4xx` error ·
 `tier_gated` webhook endpoint gated by account tier · `unprobeable` no seed id available in the sandbox
 (sparse data: 1 job / 1 contact / 1 supplement — Phase 4 write-seeding can deepen coverage on a re-run).
-Evidence: every row traces to probe batch `sweep-2026-06-30T10-38-31-506Z`.
+Evidence: every row traces to probe batch `sweep-2026-06-30T11-06-22-039Z`.
 
 **Verdict totals:** 52× 200 · 22× unprobeable · 6× empty · 2× 204 · 2× 400 · 1× 404 · 1× 416
 
@@ -30,7 +30,7 @@ Evidence: every row traces to probe batch `sweep-2026-06-30T10-38-31-506Z`.
 | getCompanySettingsJobSettingsTradeTypes | `/company-settings/job-file-settings/trade-types` | A | 200 | count pageSize pageStartIndex items | id name | recordStartIndex | 9 |  |
 | getCompanySettingsJobSettingsWorkTypes | `/company-settings/job-file-settings/work-types` | A | 200 | count pageSize pageStartIndex items | id name systemDefault _link | recordStartIndex | 7 |  |
 | getCompanySettingsLocationSettingsCountries | `/company-settings/location-settings/countries` | A | 200 | count pageSize pageStartIndex items | id name abbreviation _link | recordStartIndex | 1 |  |
-| getContacts | `/contacts` | A | 200 | count pageSize pageStartIndex items | id firstName lastName salutation crossReference companyName mailingAddress billingAddress phoneNumbers emailAddresses _link | pageStartIndex | 1 |  |
+| getContacts | `/contacts` | A | 200 | count pageSize pageStartIndex items | id firstName lastName salutation crossReference companyName mailingAddress phoneNumbers emailAddresses _link | pageStartIndex | 53 |  |
 | getContactTypes | `/contacts/contact-types` | A | 200 | count pageSize pageStartIndex items | id name isDefault | pageStartIndex | 2 |  |
 | getEstimates | `/estimates` | A | empty | count pageSize pageStartIndex items | — | pageStartIndex | 0 |  |
 | getFinancialsSupplementsForCompany | `/supplements` | A | 200 | count pageSize pageStartIndex items | id name state job assignedSupplementer itemsToSupplement notations createdDate createdBy editedDate editedBy closedDate closedBy appliedDate appliedBy _link | recordStartIndex | 1 | company-level /supplements (not nested under a job) |
