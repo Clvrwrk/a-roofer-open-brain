@@ -62,8 +62,8 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Schema foundation: live-schema introspection (Task 0) + migrations 168 (watermark) / 169 (11 target tables, account_key + diff cols) / 170 (reconciliation view), applied to prod DB
-- [ ] 02-02-PLAN.md — Locate-or-recreate acculynx-sync in repo + Wave 0 FAILING tests (fan-out, watermark, mark-not-delete, invoice two-level) + reconcile smoke SQL
+- [x] 02-01-PLAN.md — Schema foundation: live-schema introspection (Task 0) + migrations 168 (watermark) / 169 (11 target tables, account_key + diff cols) / 170 (reconciliation view), applied to prod DB
+- [x] 02-02-PLAN.md — Locate-or-recreate acculynx-sync in repo + Wave 0 FAILING tests (fan-out, watermark, mark-not-delete, invoice two-level) + reconcile smoke SQL
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -171,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
-| 2. Multi-Location Full Ingestion | 0/4 | Planned | - |
+| 2. Multi-Location Full Ingestion | 2/4 | In Progress|  |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
