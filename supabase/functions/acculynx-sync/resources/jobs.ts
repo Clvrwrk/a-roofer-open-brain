@@ -109,12 +109,21 @@ function mapJob(item: any, acct: any, now: string): Record<string, unknown> {
  * Sync jobs for a single account via a date-windowed incremental query.
  * Endpoint: GET /jobs?dateFilterType=ModifiedDate&startDate={wm}&endDate={today}&recordStartIndex={N}
  *
+ * Full-history sweep: when watermark.last_modified_date is null (first run), startDate
+ * defaults to "2000-01-01" so the entire historical record is fetched, not just today.
+ * Successive invokes resume via the last_modified_date watermark (Pitfall 5).
+ *
+ * Returns the API-reported total count (from the `count` field), or null if no pages
+ * were fetched. The caller passes this to advanceWatermark as last_api_count so
+ * v_acculynx_reconciliation can compute delta_pct.
+ *
  * @param sb         - Supabase client (service role)
  * @param acct       - account row (account_key, market stamped on every upserted row)
  * @param apiKey     - explicit per-account Bearer key (not module-level — Pitfall 3)
  * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop)
- * @param watermark  - current watermark row (last_modified_date for startDate param)
+ * @param watermark  - current watermark row (null or last_modified_date=null → 2000-01-01 floor)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
+ * @returns          - API-reported total count (for last_api_count watermark field), or null
  */
 export async function syncJobs(
   sb: any,
@@ -123,13 +132,15 @@ export async function syncJobs(
   deadline: number,
   watermark: any,
   fetchFn: typeof fetch = fetch,
-): Promise<void> {
+): Promise<number | null> {
+  // Full-history floor: null watermark or null last_modified_date → sweep from 2000-01-01
   const startDate = watermark?.last_modified_date
     ? new Date(watermark.last_modified_date).toISOString().slice(0, 10)
     : "2000-01-01";
   const endDate = new Date().toISOString().slice(0, 10); // required by AccuLynx jobs API
   let offset = 0;
   const now = new Date().toISOString();
+  let lastApiCount: number | null = null;
 
   while (Date.now() < deadline) {
     const url =
@@ -146,7 +157,14 @@ export async function syncJobs(
       break;
     }
 
-    const items: unknown[] = (body as { items?: unknown[] })?.items ?? [];
+    const typedBody = body as { items?: unknown[]; count?: number };
+    const items: unknown[] = typedBody?.items ?? [];
+
+    // Capture the API-reported total count (present on every page response).
+    if (typeof typedBody?.count === "number") {
+      lastApiCount = typedBody.count;
+    }
+
     if (items.length === 0) break; // no more pages in this date window
 
     // Upsert lead sources first (acculynx_jobs FK → acculynx_lead_sources).
@@ -178,4 +196,6 @@ export async function syncJobs(
 
     offset += items.length;
   }
+
+  return lastApiCount;
 }

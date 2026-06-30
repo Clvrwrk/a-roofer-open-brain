@@ -205,3 +205,85 @@ Deno.test("syncJobs — budget-stop: no fetch beyond a past deadline", async () 
     `With a past deadline, syncJobs must make 0 fetch calls, got: ${fetchCount}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Fix SC3: Full-history floor — null watermark must default to 2000-01-01
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobs — null watermark uses 2000-01-01 as startDate (full-history floor)", async () => {
+  const fetchedUrls: string[] = [];
+  const mockFetch = (url: string | URL | Request) => {
+    fetchedUrls.push(String(url));
+    // Return one page then empty to end the loop
+    const isFirstCall = fetchedUrls.length === 1;
+    const items = isFirstCall ? [{ id: "j-1", modifiedDate: "2020-01-15T12:00:00Z" }] : [];
+    const body = JSON.stringify({ items, count: 1 });
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  // Pass null watermark — simulates first run for an account
+  await syncJobs(sb, ACCT, "test-api-key", deadline, null, mockFetch);
+
+  const firstUrl = fetchedUrls[0] ?? "";
+  assertEquals(
+    firstUrl.includes("startDate=2000-01-01"),
+    true,
+    `Null watermark must use startDate=2000-01-01 for full-history sweep, got URL: ${firstUrl}`,
+  );
+});
+
+Deno.test("syncJobs — watermark with null last_modified_date uses 2000-01-01 (full-history floor)", async () => {
+  const fetchedUrls: string[] = [];
+  const mockFetch = (url: string | URL | Request) => {
+    fetchedUrls.push(String(url));
+    const isFirstCall = fetchedUrls.length === 1;
+    const items = isFirstCall ? [{ id: "j-1", modifiedDate: "2020-01-15T12:00:00Z" }] : [];
+    const body = JSON.stringify({ items, count: 1 });
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  // Watermark row exists but last_modified_date is null (reset for fresh sweep)
+  await syncJobs(sb, ACCT, "test-api-key", deadline, { account_key: "florida", resource_type: "jobs", last_modified_date: null }, mockFetch);
+
+  const firstUrl = fetchedUrls[0] ?? "";
+  assertEquals(
+    firstUrl.includes("startDate=2000-01-01"),
+    true,
+    `Watermark with null last_modified_date must use startDate=2000-01-01, got URL: ${firstUrl}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Fix SC4: syncJobs returns API count for last_api_count watermark persistence
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobs — returns the API count from the response for last_api_count", async () => {
+  const mockFetch = (url: string | URL | Request) => {
+    void url;
+    const callNum = mockFetch._calls++;
+    const items = callNum === 0 ? [{ id: "j-1", modifiedDate: "2026-06-15T12:00:00Z" }] : [];
+    const body = JSON.stringify({ items, count: 166 }); // API reports 166 total jobs
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+  mockFetch._calls = 0;
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  const apiCount = await syncJobs(sb, ACCT, "test-api-key", deadline, WATERMARK, mockFetch);
+
+  assertEquals(
+    apiCount,
+    166,
+    `syncJobs must return the API count (166) so caller can persist it as last_api_count`,
+  );
+});

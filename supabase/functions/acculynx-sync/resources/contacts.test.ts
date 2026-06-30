@@ -176,3 +176,48 @@ Deno.test("syncContacts — budget-stop: no fetch beyond a past deadline", async
     `With a past deadline, syncContacts must make 0 fetch calls, got: ${fetchCount}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Fix SC4: syncContacts returns API count for last_api_count watermark persistence
+// ---------------------------------------------------------------------------
+
+Deno.test("syncContacts — returns the API count from the response for last_api_count", async () => {
+  let callNum = 0;
+  const mockFetch = () => {
+    const items = callNum === 0 ? [{ id: "c-1" }, { id: "c-2" }] : [];
+    callNum++;
+    const body = JSON.stringify({ items, count: 342 }); // API reports 342 total contacts
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const deadline = Date.now() + 60_000;
+  const apiCount = await syncContacts(sb, ACCT, "test-api-key", deadline, null, mockFetch);
+
+  assertEquals(
+    apiCount,
+    342,
+    `syncContacts must return the API count (342) so caller can persist it as last_api_count`,
+  );
+});
+
+Deno.test("syncContacts — returns null when no pages were fetched (budget-exhausted before first page)", async () => {
+  const mockFetch = () => {
+    const body = JSON.stringify({ items: [], count: 0 });
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const pastDeadline = Date.now() - 1;
+  const apiCount = await syncContacts(sb, ACCT, "test-api-key", pastDeadline, null, mockFetch);
+
+  assertEquals(
+    apiCount,
+    null,
+    "syncContacts must return null when budget expired before any fetch (no api_count observed)",
+  );
+});

@@ -92,12 +92,18 @@ function mapContact(item: any, acct: any, now: string): Record<string, unknown> 
  * Sync contacts for a single account via a full-sweep pagination loop.
  * Endpoint: GET /contacts?pageSize=50&pageStartIndex={N}
  *
+ * Returns the API-reported total count (from the `count` field on the last page
+ * that returned items), or null if no pages were fetched. The caller passes this
+ * to advanceWatermark as last_api_count so v_acculynx_reconciliation can compute
+ * delta_pct without making a live API call.
+ *
  * @param sb         - Supabase client (service role)
  * @param acct       - account row (account_key, market stamped on every upserted row)
  * @param apiKey     - explicit per-account Bearer key (not module-level — Pitfall 3)
  * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop)
  * @param watermark  - current watermark row (null = first run)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
+ * @returns          - API-reported total count (for last_api_count watermark field), or null
  */
 export async function syncContacts(
   sb: any,
@@ -106,9 +112,10 @@ export async function syncContacts(
   deadline: number,
   watermark: any,
   fetchFn: typeof fetch = fetch,
-): Promise<void> {
+): Promise<number | null> {
   let pageIndex: number = watermark?.last_page_index ?? 0;
   const now = new Date().toISOString();
+  let lastApiCount: number | null = null;
 
   while (Date.now() < deadline) {
     const url = `${ACCULYNX_BASE}/contacts?pageSize=50&pageStartIndex=${pageIndex}`;
@@ -120,7 +127,14 @@ export async function syncContacts(
       break;
     }
 
-    const items: unknown[] = (body as { items?: unknown[] })?.items ?? [];
+    const typedBody = body as { items?: unknown[]; count?: number };
+    const items: unknown[] = typedBody?.items ?? [];
+
+    // Capture the API-reported total count (present on every page response).
+    if (typeof typedBody?.count === "number") {
+      lastApiCount = typedBody.count;
+    }
+
     if (items.length === 0) break; // sweep complete
 
     const rows = items.map((item: any) => mapContact(item, acct, now));
@@ -132,4 +146,6 @@ export async function syncContacts(
 
     pageIndex += items.length;
   }
+
+  return lastApiCount;
 }

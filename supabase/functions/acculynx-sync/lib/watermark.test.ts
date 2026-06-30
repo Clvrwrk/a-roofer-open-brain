@@ -159,3 +159,46 @@ Deno.test("readWatermark — returns null when no row exists yet", async () => {
   const result = await readWatermark(sb, "new_account", "contacts");
   assertEquals(result, null);
 });
+
+// ---------------------------------------------------------------------------
+// Tests: advanceWatermark persists last_api_count (Fix SC4 — blocker fix 1)
+// ---------------------------------------------------------------------------
+
+Deno.test("advanceWatermark — persists last_api_count when provided", async () => {
+  const { sb, calls } = makeUpsertMock();
+  const row: WatermarkRow = {
+    account_key: "kansas_city",
+    resource_type: "contacts",
+    last_api_count: 342,
+    last_sync_at: new Date().toISOString(),
+  };
+  await advanceWatermark(sb, row);
+
+  const upsertCall = calls.find((c) => c.method === "upsert");
+  assertEquals(upsertCall !== undefined, true, "upsert must be called");
+  const passedRow = upsertCall?.args[0] as WatermarkRow;
+  assertEquals(
+    passedRow.last_api_count,
+    342,
+    "last_api_count=342 must be persisted to the watermark row",
+  );
+});
+
+Deno.test("advanceWatermark — persists last_api_count=0 (valid API count)", async () => {
+  const { sb, calls } = makeUpsertMock();
+  const row: WatermarkRow = {
+    account_key: "wichita",
+    resource_type: "estimates",
+    last_api_count: 0,
+    last_sync_at: new Date().toISOString(),
+  };
+  await advanceWatermark(sb, row);
+
+  const upsertCall = calls.find((c) => c.method === "upsert");
+  const passedRow = upsertCall?.args[0] as WatermarkRow;
+  assertEquals(
+    passedRow.last_api_count,
+    0,
+    "last_api_count=0 must be persisted (0 is a valid API count, not null)",
+  );
+});

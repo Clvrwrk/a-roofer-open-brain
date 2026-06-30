@@ -529,6 +529,9 @@ async function legacySyncJobs(
  * Run Phase 2 resource syncs for a single account.
  * SERIAL across resources — 30 req/s IP limit enforced (T-02-07).
  * apiKey is explicit — never a module-level shared key (T-02-04).
+ *
+ * last_api_count: each resource sync returns the API-reported total count.
+ * advanceWatermark persists it so v_acculynx_reconciliation can compute delta_pct.
  */
 async function runAccountSync(
   acct: { account_key: string; env_secret_name: string; label: string | null; market: string | null; state: string | null },
@@ -537,16 +540,17 @@ async function runAccountSync(
 ): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string }> {
   const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped" };
 
-  // --- Jobs (date-windowed) ---
+  // --- Jobs (date-windowed; null watermark → 2000-01-01 full-history floor) ---
   try {
     const jobWm = await readWatermark(sb, acct.account_key, "jobs");
-    await syncJobs(sb, acct, apiKey, deadline, jobWm);
+    const jobApiCount = await syncJobs(sb, acct, apiKey, deadline, jobWm);
 
-    // Advance watermark for jobs
+    // Advance watermark for jobs; persist API count for reconciliation view
     await advanceWatermark(sb, {
       account_key: acct.account_key,
       resource_type: "jobs",
       last_sync_at: new Date().toISOString(),
+      ...(jobApiCount !== null ? { last_api_count: jobApiCount } : {}),
     });
     result.jobs = "ok";
   } catch (e) {
@@ -560,16 +564,18 @@ async function runAccountSync(
   const contactsSweepStart = new Date().toISOString();
   try {
     const contactsWm = await readWatermark(sb, acct.account_key, "contacts");
-    await syncContacts(sb, acct, apiKey, deadline, contactsWm);
+    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm);
 
     // Mark rows not seen in this sweep
     await markNotSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
 
+    // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
       account_key: acct.account_key,
       resource_type: "contacts",
       last_page_index: 0, // reset cursor on completion
       last_sync_at: new Date().toISOString(),
+      ...(contactApiCount !== null ? { last_api_count: contactApiCount } : {}),
     });
     result.contacts = "ok";
   } catch (e) {
@@ -583,15 +589,17 @@ async function runAccountSync(
   const estimatesSweepStart = new Date().toISOString();
   try {
     const estimatesWm = await readWatermark(sb, acct.account_key, "estimates");
-    await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
+    const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
 
     await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
 
+    // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
       account_key: acct.account_key,
       resource_type: "estimates",
       last_page_index: 0,
       last_sync_at: new Date().toISOString(),
+      ...(estimateApiCount !== null ? { last_api_count: estimateApiCount } : {}),
     });
     result.estimates = "ok";
   } catch (e) {
@@ -641,6 +649,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const resolveLeads: boolean =
     body.resolveLeads === true || resources.includes("resolveLeads");
   const multiAccount: boolean = body.multiAccount ?? false;
+  // accountFilter: optional array of account_key strings to restrict the fan-out.
+  // When set, only the named production account(s) are synced, giving each the full
+  // ~110s budget instead of sharing it across all enabled accounts (fixes wichita budget
+  // exhaustion — SC2 blocker). Example: {"multiAccount":true,"accountFilter":["wichita"]}
+  // When absent (default), all production accounts with a resolved key are synced serially.
+  const accountFilter: string[] | null =
+    Array.isArray(body.accountFilter) && body.accountFilter.length > 0
+      ? (body.accountFilter as string[])
+      : null;
 
   const batchId = `sync-${runStartIso.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -669,8 +686,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     // Phase 2 multi-account fan-out (triggered by multiAccount flag)
     if (multiAccount) {
-      const accounts = await loadProductionAccounts(sb);
+      let accounts = await loadProductionAccounts(sb);
       result.accounts = {};
+
+      // accountFilter: when provided, restrict to the named subset of account_keys.
+      // This gives each account its own full ~110s budget — the fix for wichita
+      // budget exhaustion where kansas_city consumed the entire budget each run.
+      // No-arg behavior (accountFilter absent) is unchanged: all production accounts, serial.
+      if (accountFilter) {
+        const filterSet = new Set(accountFilter);
+        accounts = accounts.filter((a: { account_key: string }) => filterSet.has(a.account_key));
+        result.accountFilter = accountFilter;
+      }
 
       // SERIAL loop — 30 req/s IP limit (T-02-07)
       for (const acct of accounts) {
