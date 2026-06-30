@@ -1,4 +1,4 @@
-// acculynx-sync — lib/diff.ts (Phase 2, plan 02-02)
+// acculynx-sync — lib/diff.ts (Phase 2, plan 02-03)
 //
 // Mark-not-seen-in-API diff detection.
 //
@@ -18,6 +18,8 @@
  * from the API response — it may have been deleted in AccuLynx.
  * We mark it with archived_at + archive_reason='not_seen_in_api' (never DELETE).
  *
+ * Non-fatal: logs a warning on error but does not abort the sync.
+ *
  * @param sb             - Supabase client (service role)
  * @param table          - target table name (e.g. 'acculynx_contacts')
  * @param accountKey     - account scope (prevents cross-account updates)
@@ -29,13 +31,11 @@ export async function markNotSeen(
   accountKey: string,
   sweepStartedAt: string,
 ): Promise<void> {
-  // This stub shape preserves the contract: only .update() is used (hard rule 1).
-  // Plan 03 (GREEN) replaces this with the real implementation:
-  //   sb.from(table)
-  //     .update({ archived_at: ..., archive_reason: "not_seen_in_api" })
-  //     .eq("account_key", accountKey)
-  //     .is("archived_at", null)
-  //     .lt("last_seen_by_api", sweepStartedAt)
-  void sb; void table; void accountKey; void sweepStartedAt;
-  throw new Error("not implemented — markNotSeen (Plan 03 GREEN)");
+  const { error } = await sb
+    .from(table)
+    .update({ archived_at: new Date().toISOString(), archive_reason: "not_seen_in_api" })
+    .eq("account_key", accountKey)
+    .is("archived_at", null)
+    .lt("last_seen_by_api", sweepStartedAt);
+  if (error) console.warn(`[diff] markNotSeen on ${table}: ${error.message}`);
 }
