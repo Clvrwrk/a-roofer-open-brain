@@ -36,5 +36,5 @@ Trigger: user says *"handoff"*, *"wrapup"*, *"wrap up"*, *"end of session"*, *"t
 
 ## Working rules (operational)
 - **Structured source before OCR.** Before building any OCR/parse/extraction step, check whether the vendor API/`raw` JSON already carries the field — verify against the live DB first. Don't OCR what's already structured.
-- **Deploys + permission grants are human actions in auto mode.** The classifier blocks the agent from `git push origin main`, the Coolify deploy API, and self-granting via `settings.json`; an in-chat "yes" doesn't clear it. Commit + converge locally, then hand the user the command (or they add a `Bash` allow-rule first). Don't retry a blocked deploy.
+- **The agent deploys; the gate is explain-then-ship.** Full GitHub/Coolify/Hetzner access (corrected 2026-06-29, supersedes the prior human-only rule). Converge → `main`, apply migrations, build + tests green; then state change + impact + rollback, push `origin main`, and poll `/healthz` `buildCommit` to live. Self-granting via `settings.json` stays blocked and isn't needed.
 - **Slack agents** — per-agent bot identities/app IDs/token env vars/channel IDs are in the `slack-agents` skill (`.claude/skills/slack-agents/`). A Slack config token can't mint/read bot tokens.

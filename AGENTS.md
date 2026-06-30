@@ -45,7 +45,7 @@ When multiple AI agents work on this repo, do not share a checkout. **Stay align
 - Don't switch branches in the canonical repo while another agent may be working.
 - Before staging: `git status --short`; stage only files belonging to the current task. **Commit early — never let substantial work sit untracked/uncommitted** (that is how the tracks diverged on 2026-06-17).
 - **Close the loop:** merge the task branch **back into the live branch and push** so dev and live converge — then `git worktree remove <path>`. Never leave a production feature (vendor map, WorkOS auth, a new surface) stranded on a side branch the rest of dev doesn't build on.
-- **The push/deploy is a human action in auto mode.** The classifier blocks the agent from `git push origin main`, the Coolify deploy API, and self-granting that permission via `settings.json` — an in-chat "yes" doesn't clear it. Commit + converge locally, then hand the user the push command (or they add a `Bash` allow-rule first). Don't retry a blocked deploy. See `/coolify`.
+- **The agent deploys; the gate is explain-then-ship.** Full GitHub/Coolify/Hetzner access (corrected 2026-06-29, supersedes the prior human-only rule). Do all prep first — converge the branch into `main`, apply migrations, build + tests green — then state what's changing + impact + rollback, push `origin main`, and poll `/healthz` until `buildCommit` matches (≈30–90s, up to ~300s cold). Self-granting the permission via `settings.json` is still blocked and not needed. See `/coolify`.
 
 ## Session wrap-up / handoff
 
