@@ -91,6 +91,39 @@ Decision unit = the **invoice**, not the line. Per invoice, compute **gross over
 | **< $25** | **Approve the whole invoice**, flag for the **weekly review session**. No hold, no Slack — even if it contains an isolated ≥6% line (those are tiny-dollar; absorbed deliberately). |
 | **≥ $25** | **ACTION invoice.** Within it: every line **≥6%** → `not-to-be-paid` (Track C hold) + Casey credit-memo candidate; lines **3–6%** → weekly digest (no real-time Slack). One real-time Slack hold notice per invoice. |
 
+**NEGOTIATED-LINE HUMAN GATE (LOCKED 2026-06-30) — pre-empts the gross floor above.**
+A line whose benchmark is a **matched branch agreement** (`benchmark_source = 'negotiated'`, i.e.
+cascade step 1) and which shows **any positive variance** (`variance_pct > 0`, overcharge vs the
+negotiated price) is **NEVER auto-dispositioned**. It is left **`pending`** (no `passed`/`disputed`
+audit row written) with decision `gate-negotiated` — which keeps the invoice **out of the
+to-be-paid / register-export set** until a human rules on it. This is the gate: *leaving the line
+pending IS the hold.* Rationale: a price we negotiated should never be silently auto-passed when the
+vendor still billed over it — every such overcharge gets human eyes, regardless of size.
+
+- The gate is **size-agnostic**: it fires on a +0.1% negotiated overcharge the same as a +40% one.
+  The `$25` / `6%` / `3%` thresholds do **not** apply to negotiated overcharges.
+- **Negotiated-gated lines are EXCLUDED from the per-invoice gross-overcharge sum** — they neither
+  push an invoice into ACTION territory nor get absorbed under the $25 floor. They sit out the floor
+  entirely and wait for the human.
+- **Only NEGOTIATED lines gate.** Non-negotiated benchmarks (`api` / `recent` / `org_inv`) and
+  no-benchmark lines (`none` → Jordan coverage gap) follow the per-invoice gross floor unchanged.
+- A negotiated line at **zero or negative** variance (priced at or below agreement) is **not** gated —
+  it auto-passes `accept-neg` like any in-tolerance line.
+- Engine of record: `app/command-center/src/lib/invoice-audit-disposition.ts` (`disposeInvoice`),
+  the tested home of this rule (`invoice-audit-disposition.unit.test.ts`). `morning_abc_sync` follows
+  the same model in its prompt.
+
+Per-line disposition (the full ladder, in evaluation order):
+
+| Condition (first match wins) | Decision | Auto/Gate |
+| --- | --- | --- |
+| category `service_fees` | `accept-svc` | auto-approve (weekly review) |
+| `benchmark_source = none` (no benchmark) | `accept-nochallenge` | auto (coverage gap → Jordan) |
+| **`negotiated` + `variance_pct > 0`** | **`gate-negotiated`** | **HUMAN GATE — leave pending** |
+| non-negotiated, invoice gross ≥ $25, line ≥ 6% | `credit-flag` | auto (Track C hold + Casey) |
+| non-negotiated, `variance_pct` ≥ 3% | `accept-30d` | auto (weekly digest) |
+| else | `accept-neg` | auto (within tolerance / sub-$25 absorbed) |
+
 - **3–6% real-time approval tier is removed** (was §4, routed to Lucinda). At observed volume it was ~$3/line — negative ROI. 3–6% now reports in the weekly digest only.
 - **Recurring same-item overcharges** (same SKU overcharged across multiple invoices) are grouped and escalated as **systematic** (nepq "call it out explicitly"), not as independent lines.
 - **No-agreement lines do NOT go to weekly review individually.** Emit **one coverage signal** (count + top items by spend) to `agreement_coverage_verification` (§3a). At ~60% of recent lines, per-line routing is pure noise.

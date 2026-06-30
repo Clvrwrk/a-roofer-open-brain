@@ -1189,6 +1189,7 @@ const DECISION_LABEL: Record<string, string> = {
   "credit-noflag": "Credit memo (no flag)",
   "credit-resolved": "Credit memo received — released for payment",
   "accept-svc": "Service fee — auto-approved (weekly review)",
+  "gate-negotiated": "Negotiated line + variance — human review required",
   "accept-30d": "Accepted; 3-6% → weekly digest",
   "accept-nochallenge": "Accepted; no benchmark → Jordan coverage",
   "accept-neg": "Accepted (within tolerance)",
