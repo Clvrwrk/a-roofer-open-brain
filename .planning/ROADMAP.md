@@ -17,7 +17,7 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Foundation — Account Registry & Read-Capability Discovery** - Map all 9 keys; exhaustively probe every READ endpoint in the sandbox; stand up the knowledge-folder skeleton. (completed 2026-06-30)
-- [ ] **Phase 2: Multi-Location Full Ingestion** - Fan out the sync across all 8 production accounts and ingest every currently-unfed resource.
+- [x] **Phase 2: Multi-Location Full Ingestion** - Fan out the sync across all 8 production accounts and ingest every currently-unfed resource. (completed 2026-06-30)
 - [ ] **Phase 3: Commercial Cron Hardening** - Hourly, stable, observable, secure scheduling with healthchecks, alerting, and resumption.
 - [ ] **Phase 4: Sandbox Write-Capability Exploration & Red-Team** - Exercise every WRITE endpoint in the sandbox to diminishing returns; produce a live write-capability matrix.
 - [ ] **Phase 5: Read/Write Action Layer** - Human-approval-gated write wrappers on a contrib branch; begin offloading specific human tasks.
@@ -71,7 +71,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-04-PLAN.md — Verify 8 keys + sandbox-first proof → human gate → deploy + production fan-out + reconciliation (REQ-03/04 production proof)
+- [x] 02-04-PLAN.md — Verify 8 keys + sandbox-first proof → human gate → deploy + production fan-out + reconciliation (REQ-03/04 production proof)
 
 ### Phase 3: Commercial Cron Hardening
 
@@ -171,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
-| 2. Multi-Location Full Ingestion | 3/4 | In Progress|  |
+| 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
