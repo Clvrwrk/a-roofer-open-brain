@@ -1,12 +1,17 @@
-// acculynx-sync — resources/contacts.ts (Phase 2, plan 02-03)
+// acculynx-sync — resources/estimates.ts (Phase 2, plan 02-03)
 //
-// Full-sweep contacts sync using pageStartIndex pagination.
-// Endpoint: GET /contacts?pageSize=50&pageStartIndex={N}
+// Full-sweep estimates sync using pageStartIndex pagination.
+// Endpoint: GET /estimates?pageSize=50&pageStartIndex={N}
 //
-// Behavioral contracts (asserted by contacts.test.ts):
-//   - URL pagination param: pageStartIndex (NOT recordStartIndex — Pitfall 2)
+// Identical full-sweep shape to contacts.ts; differences:
+//   - Endpoint: /estimates
+//   - Target table: acculynx_estimates
+//   - Stamps job_id from the estimate's jobId field
+//
+// Behavioral contracts:
+//   - URL pagination param: pageStartIndex
 //   - Stamps account_key AND market on every upserted row (no cross-account bleed, T-02-04)
-//   - Sets last_seen_by_api on every upserted row (feeds diff detection)
+//   - Sets last_seen_by_api and job_id on every upserted row
 //   - Budget-stop: stops the page loop when Date.now() >= deadline
 //   - apiKey is an explicit parameter — never a module-level constant (Pitfall 3)
 
@@ -50,8 +55,8 @@ async function acculynxGet(
 }
 
 /**
- * Sync contacts for a single account via a full-sweep pagination loop.
- * Endpoint: GET /contacts?pageSize=50&pageStartIndex={N}
+ * Sync estimates for a single account via a full-sweep pagination loop.
+ * Endpoint: GET /estimates?pageSize=50&pageStartIndex={N}
  *
  * @param sb         - Supabase client (service role)
  * @param acct       - account row (account_key, market stamped on every upserted row)
@@ -60,7 +65,7 @@ async function acculynxGet(
  * @param watermark  - current watermark row (null = first run)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
  */
-export async function syncContacts(
+export async function syncEstimates(
   sb: any,
   acct: any,
   apiKey: string,
@@ -72,12 +77,12 @@ export async function syncContacts(
   const now = new Date().toISOString();
 
   while (Date.now() < deadline) {
-    const url = `${ACCULYNX_BASE}/contacts?pageSize=50&pageStartIndex=${pageIndex}`;
+    const url = `${ACCULYNX_BASE}/estimates?pageSize=50&pageStartIndex=${pageIndex}`;
     await sleep(PACE_MS);
     const { status, body } = await acculynxGet(url, apiKey, fetchFn);
 
     if (status !== 200) {
-      console.warn(`[contacts] unexpected status ${status} for ${acct.account_key}`);
+      console.warn(`[estimates] unexpected status ${status} for ${acct.account_key}`);
       break;
     }
 
@@ -88,15 +93,16 @@ export async function syncContacts(
       ...item,
       account_key: acct.account_key,
       market: acct.market,
+      job_id: item.jobId ?? null,
       last_seen_by_api: now,
       synced_at: now,
       raw: item,
     }));
 
     const { error } = await sb
-      .from("acculynx_contacts")
+      .from("acculynx_estimates")
       .upsert(rows, { onConflict: "id,account_key" });
-    if (error) console.warn(`[contacts] upsert: ${error.message}`);
+    if (error) console.warn(`[estimates] upsert: ${error.message}`);
 
     pageIndex += items.length;
   }
