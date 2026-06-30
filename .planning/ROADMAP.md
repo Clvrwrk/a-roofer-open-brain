@@ -67,7 +67,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md — Implement lib (accounts/watermark/diff) + resources (jobs date-window, contacts/estimates full-sweep, job-walk) with account stamping; full suite GREEN
+- [x] 02-03-PLAN.md — Implement lib (accounts/watermark/diff) + resources (jobs date-window, contacts/estimates full-sweep, job-walk) with account stamping; full suite GREEN
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -171,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
-| 2. Multi-Location Full Ingestion | 2/4 | In Progress|  |
+| 2. Multi-Location Full Ingestion | 3/4 | In Progress|  |
 | 3. Commercial Cron Hardening | 0/TBD | Not started | - |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
