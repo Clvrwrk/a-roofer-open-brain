@@ -88,6 +88,7 @@ Plans:
   4. A security review confirms secret handling, RLS, and least-privilege are sound; no secret is exposed.
 
 **Carried forward from Phase 2** (cron-paced ingestion completion):
+
   - Complete the KC + Wichita backfill to within tolerance (contacts → estimates → job-walk sub-resources) via the hourly cron.
   - Fix jobs `last_api_count` to store the true API total (currently stores `1` → jobs reconciliation is blind).
   - Stamp/triage the 8 remaining legacy NULL non-job rows (3 contacts, 3 job_contacts, 1 financial, 1 insurance).
@@ -98,19 +99,24 @@ Plans:
 Plans:
 
 **Wave 1**
+
 - [x] 03-01-PLAN.md — Wave 0 live-DB verification (cron jobname, RLS status, last_api_count, Slack channel) + committed verify-acculynx-cron.sql
 
 **Wave 2** *(blocked on Wave 1)*
+
 - [x] 03-02-PLAN.md — Hourly cutover (multiAccount:true, migs 172-175) + pg_net reconciliation (owned dispatch table + /10 reconcile cron + rewritten outcomes view); ends perpetual pending, fixes jobs last_api_count
 - [x] 03-04-PLAN.md — Trust/provenance guardrails + rot guards + RLS deny-by-default (migs 177-180): legacy NULL triage → RLS revoke → rot-guard views → NOT NULL invariants
 
 **Wave 3** *(blocked on 03-02)*
+
 - [x] 03-03-PLAN.md — Alerting: SQL check_acculynx_alerts() (4 D-05 conditions, mig 176) + edge-side lib/alerts.ts (Slack+Sentry, no-secret-in-payload)
 
 **Wave 4** *(blocked on 03-02/03/04)*
+
 - [x] 03-05-PLAN.md — Security review (/gsd-secure-phase + posture doc, D-13) + recovery runbook (D-15) + sync-pipeline.md update
 
 **Wave 5** *(blocked on all prior — human-gated)*
+
 - [x] 03-06-PLAN.md — 6-account expansion: D-08 tolerance gate → canary-then-batch enable (D-09)
 
 **Status: COMPLETE (2026-07-01) — see [03-VERIFICATION.md](phases/03-commercial-cron-hardening/03-VERIFICATION.md).** All 4 success criteria met on live prod (`rnhmvcpsvtqjlffpsayu`): hourly cron active for all 8 accounts, pg_net reconciled (no perpetual pending), watermark-resumable + runbook, security review CLOSED T-03-01…T-03-11. All 8 accounts fully backfilled, zero cross-account bleed. Two accepted cosmetic residuals: georgia/insurance jobs phantom 7.4% delta (API count-overcount, data complete); alert *delivery* proof pending 2 human steps (03-03).
@@ -132,15 +138,19 @@ Plans:
 Plans:
 
 **Wave 1**
+
 - [x] 04-01-PLAN.md — Wave 0 foundation: DDL 182 (write catalog/probe) + seed 183 (38-endpoint checklist) + reconcile SQL + pure sweep.ts (hard gate/redaction/stop-rule/address builders) with failing-first tests + [BLOCKING] apply 182/183 to prod (live-DB verified)
 
 **Wave 2** *(blocked on 04-01)*
+
 - [x] 04-02-PLAN.md — acculynx-write-sweep Edge Function index.ts: hard gate + generalized acculynxCall + reference-data pre-fetch + contact→job→financials walk + tiered deep/smoke red-team loop + persistence; deploy via supabase functions deploy
 
 **Wave 3** *(blocked on 04-02 — human-gated)*
+
 - [x] 04-03-PLAN.md — Execute the sweep against the sandbox to 38/38 coverage + red-team deep lanes to diminishing returns + evidence-based verdicts + reconcile gate (zero rows)
 
 **Wave 4** *(blocked on 04-03)*
+
 - [x] 04-04-PLAN.md — Generate the write-capability matrix from acculynx_write_catalog (D-03): regenerate docs/37 + write-capability.md (correct the phantom measurements endpoint) + guardrail recipes + write-sweep.md design doc
 
 ### Phase 5: Read/Write Action Layer
@@ -160,13 +170,16 @@ Plans:
 Plans:
 
 **Wave 1**
-- [ ] 05-01-PLAN.md — acculynx-write-action edge function: pure core (action.ts) + tests + thin entrypoint (index.ts); 17-lane builder, D-03 preview==execute, D-09 assertTarget, per-request key resolution, idempotency
+
+- [x] 05-01-PLAN.md — acculynx-write-action edge function: pure core (action.ts) + tests + thin entrypoint (index.ts); 17-lane builder, D-03 preview==execute, D-09 assertTarget, per-request key resolution, idempotency
 - [ ] 05-02-PLAN.md — Migrations 184 (acculynx_pending_write) + 185 (acculynx_write_action_log), additive/idempotent, with a [BLOCKING] apply-to-prod task (RQ-4, SC2)
 
 **Wave 2** *(blocked on Wave 1)*
+
 - [ ] 05-03-PLAN.md — Command Center wiring: prod-write permission (D-09), enqueue route + live-work surface loader (RQ-1 gap closure), decision-endpoint fallback + edge invoke on approve, Slack notify (D-08)
 
 **Wave 3** *(blocked on Wave 2 — human-gated)*
+
 - [ ] 05-04-PLAN.md — Deploy (edge + Coolify) → sandbox proof for 3 offload lanes → approver-roster config (OQ-2) → first live PROD payment write (SC3/SC4) → converge to main
 
 ### Phase 6: AccuLynx Agent + OKF Knowledge Base
@@ -216,6 +229,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
-| 5. Read/Write Action Layer | 0/4 | Planned | - |
+| 5. Read/Write Action Layer | 1/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
