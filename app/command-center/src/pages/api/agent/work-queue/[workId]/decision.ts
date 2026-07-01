@@ -152,6 +152,7 @@ interface EdgeInvokeResult {
  */
 async function invokeAcculynxWriteActionEdge(
   row: AcculynxPendingWriteRow,
+  approver: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<EdgeInvokeResult> {
   const env = getRuntimeEnv();
@@ -170,6 +171,9 @@ async function invokeAcculynxWriteActionEdge(
     dryRun: false,
     workKey: row.work_key,
     idempotencyKey: row.idempotency_key,
+    // Record WHO approved this execute (SC2 / T-05-23): the edge writes it to
+    // acculynx_pending_write.approver and acculynx_write_action_log.actor.
+    approver,
   };
 
   try {
@@ -277,11 +281,36 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   // The edge function self-persists status/exec_result to acculynx_pending_write and the
   // audit row to acculynx_write_action_log — this endpoint reflects the returned status,
   // it does not re-persist.
+  const approverIdentity = actor.email ?? actor.displayName ?? actor.id;
   let edgeInvocation: EdgeInvokeResult | null = null;
   if (isAcculynxWriteAction && isApprove) {
     edgeInvocation = pendingWriteRow
-      ? await invokeAcculynxWriteActionEdge(pendingWriteRow)
+      ? await invokeAcculynxWriteActionEdge(pendingWriteRow, approverIdentity)
       : { invoked: false, error: "pending_write_row_not_found" };
+  }
+
+  // Reject closes the pending write (finding #2): the edge is never invoked on reject, so
+  // nothing else transitions the row off pending_review — do it here. The schema already
+  // permits the 'rejected' status; without this a rejected write lingers and could be
+  // re-approved. Record the rejecter as the approver for a complete decision trail.
+  if (isAcculynxWriteAction && decision === "reject" && pendingWriteRow) {
+    try {
+      const { client } = createServerSupabaseClient(getRuntimeEnv());
+      if (client) {
+        const { error: rejectError } = await client
+          .from("acculynx_pending_write")
+          .update({ status: "rejected", approver: approverIdentity, updated_at: new Date().toISOString() })
+          .eq("work_key", pendingWriteRow.work_key);
+        if (rejectError) {
+          console.error("[work-queue/decision] pending-write reject-close failed:", rejectError.message);
+        }
+      }
+    } catch (error) {
+      console.error(
+        "[work-queue/decision] pending-write reject-close threw:",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   return jsonApiResponse({

@@ -103,6 +103,10 @@ interface WriteActionInput {
   dryRun: boolean;
   idempotencyKey?: string;
   workKey?: string;
+  /** The human approver who authorized this execute (email preferred, else display name).
+   * Recorded into acculynx_pending_write.approver and acculynx_write_action_log.approver
+   * so every executed write names its approver (SC2 / T-05-23). */
+  approver?: string | null;
 }
 
 /** True if an `acculynx_write_action_log` row with this idempotency key already recorded a
@@ -146,6 +150,7 @@ async function persistExecutionResult(
         .update({
           status: success ? "executed" : "failed",
           exec_result: redactSample(result.body),
+          approver: input.approver ?? null,
           updated_at: new Date().toISOString(),
         })
         .eq("work_key", input.workKey);
@@ -167,6 +172,8 @@ async function persistExecutionResult(
       response_body: redactSample(result.body),
       http_status: result.status,
       status: success ? "success" : "failed",
+      actor: input.approver ?? null,
+      work_key: input.workKey ?? null,
       created_at: new Date().toISOString(),
     });
     if (error) console.warn(`[acculynx-write-action] audit-log insert skipped: ${error.message}`);

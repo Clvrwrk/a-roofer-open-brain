@@ -62,10 +62,13 @@ function makePendingWriteRow(overrides: Record<string, unknown> = {}) {
 
 function mockSupabaseSingleRowClient(row: Record<string, unknown> | null) {
   const maybeSingle = vi.fn().mockResolvedValue({ data: row, error: null });
-  const eq = vi.fn().mockReturnValue({ maybeSingle });
-  const select = vi.fn().mockReturnValue({ eq });
-  const from = vi.fn().mockReturnValue({ select });
-  return { client: { from }, config: { missing: [] } };
+  const selectEq = vi.fn().mockReturnValue({ maybeSingle });
+  const select = vi.fn().mockReturnValue({ eq: selectEq });
+  // reject-close path: from().update().eq() resolves to { error: null }
+  const updateEq = vi.fn().mockResolvedValue({ error: null });
+  const update = vi.fn().mockReturnValue({ eq: updateEq });
+  const from = vi.fn().mockReturnValue({ select, update });
+  return { client: { from }, config: { missing: [] }, __update: update, __updateEq: updateEq };
 }
 
 function emptySurface() {
@@ -168,6 +171,43 @@ describe("decision.ts — acculynx-write-action wiring", () => {
     expect(sentBody.payload).toBeDefined();
     expect(typeof sentBody.payload).toBe("object");
     expect(Object.keys(sentBody).sort()).not.toEqual(["workKey"]);
+  });
+
+  it("approve passes the approver identity in the edge body (SC2 / T-05-23)", async () => {
+    const row = makePendingWriteRow({ target_env: "sandbox" });
+    mockCreateServerSupabaseClient.mockReturnValue(mockSupabaseSingleRowClient(row));
+
+    const namedApprover = { ...ACCOUNTING_ACTOR, email: "lucinda@cc.proexteriorsus.net" };
+    const { POST } = await import("./decision");
+    await POST({
+      request: makeRequest({ decision: "approve" }),
+      params: { workId: "acculynx-write-action:wk-1" },
+      locals: { actor: namedApprover },
+    } as any);
+
+    const [, init] = (fetch as any).mock.calls[0];
+    const sentBody = JSON.parse(init.body);
+    expect(sentBody.approver).toBe("lucinda@cc.proexteriorsus.net");
+  });
+
+  it("reject closes the pending write to status 'rejected' (finding #2)", async () => {
+    const row = makePendingWriteRow();
+    const mock = mockSupabaseSingleRowClient(row);
+    mockCreateServerSupabaseClient.mockReturnValue(mock);
+
+    const { POST } = await import("./decision");
+    const response = await POST({
+      request: makeRequest({ decision: "reject" }),
+      params: { workId: "acculynx-write-action:wk-1" },
+      locals: { actor: ACCOUNTING_ACTOR },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mock.__update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "rejected" }),
+    );
+    expect(mock.__updateEq).toHaveBeenCalledWith("work_key", "wk-1");
   });
 
   it("a non-approve decision on an acculynx-write-action item never invokes the edge function", async () => {
