@@ -22,7 +22,7 @@ Requirement: **REQ-08** — "A read/write exploratory branch with human-approval
 - **D-03: The dry-run preview and the real execute share ONE code path.** The `acculynx-write-action` function takes a `dryRun` flag: it builds + validates the exact request (target account, endpoint, payload, headers) and returns it **without sending**. Execute is the identical path minus the flag → the human provably approves exactly what will fire. No separate preview builder (that would risk preview ≠ execute drift).
 
 ### Task offloading (SC3)
-- **D-04: All four discussed lanes are in scope** — post a job message (`POST /jobs/{id}/messages`), record a payment (`POST /jobs/{id}/payments/received|expense`), update custom fields (`PUT /jobs/{id}/custom-fields`), add an external reference (`POST /jobs/external-references`).
+- **D-04 (amended 2026-07-01 after research): Three PROVEN-SAFE first-offload lanes** — post a job message (`POST /jobs/{id}/messages`), record a payment (`POST /jobs/{id}/payments/received|expense`), add an external reference (`POST /jobs/external-references`). **`PUT /jobs/{id}/custom-fields` is REMOVED from v1** — Phase-4 evidence (`docs/37`, `write-capability.md`) classifies it `blocked-by-dependency` (the sandbox has no `CustomFieldType` configured), so it was never proven safe. It moves to Deferred Ideas until the AccuLynx sandbox is configured. D-06's 17 evidence-proven lanes are authoritative over the originally-discussed lane list.
 - **D-05: Payment is the FIRST live production write** (after full sandbox validation). Because the first-ever prod write touches money, its guardrails (amount/account-type validation, idempotency, no double-post) get first-class attention. The other lanes follow on the same proven pipe once payment is proven end-to-end.
 
 ### Wrapper coverage set (SC1)
@@ -33,6 +33,12 @@ Requirement: **REQ-08** — "A read/write exploratory branch with human-approval
 - **D-07: The Command Center dashboard is the source of truth** for the dry-run preview and the approve/reject action (rendered in `HumanUnblockerDashboard` alongside the existing work-queue). Agents create the pending write item via the agent API.
 - **D-08: Slack notifies on a pending write** (per the `slack-agents` infra) so humans don't miss it — notification only; the dashboard remains the authoritative approve/reject + audit surface.
 - **D-09: Production execution requires a second barrier beyond the approval click.** The pending item explicitly names its target account; a **prod** target requires (a) an explicit target/env flag (prod is never the implicit default — sandbox is) AND (b) an approver whose `access-control` permission allows production writes. Belt-and-suspenders so no one approves a prod write without the target being unmistakable and their role permitting it.
+
+### Research resolutions (2026-07-01)
+- **RQ-1 (work-queue enqueue gap):** the dashboard work-queue is currently derived only from live query surfaces — there is NO generic path for an agent to enqueue an arbitrary pending item today. The plan MUST add a new surface-loading branch (reading agent-authored `dashboard_work_items` rows, precedent: `api/agent/intake.ts`) + a decision-endpoint fallback lookup (mirroring the hardcoded `accounting:price-gap:*` fallback). This is the central build task, not a given contract.
+- **RQ-4 (audit table):** do NOT reuse `atom_access_log` (that's the cross-client consent domain, hard rule 6). Create a NEW `acculynx_write_action_log` (+ pending-write) table; schema numbering starts at **184** (latest applied is 183). Additive/idempotent only.
+- **OQ-3 (edge invocation):** decision endpoint invokes `acculynx-write-action` **synchronously** on approve (accepted research recommendation).
+- **OQ-2 (prod-write permission):** the planner defines the permission *mechanism* (a named `access-control` permission gating prod targets, D-09); the approver *roster* assignment is a human/config step, not code — surface it as an execution-time todo, don't block planning on it.
 
 ### Claude's Discretion
 - Exact `acculynx-write-action` internal structure and per-lane wrapper request-shape construction — planner/researcher decide, grounded in the `acculynx-write-sweep` pattern and the Phase-4 quirk guardrails.
@@ -110,6 +116,7 @@ Requirement: **REQ-08** — "A read/write exploratory branch with human-approval
 <deferred>
 ## Deferred Ideas
 
+- **`PUT /jobs/{id}/custom-fields`** (dropped from v1 per amended D-04) → offload once the AccuLynx sandbox has a `CustomFieldType` configured so it can be proven safe; blocked-by-dependency today.
 - **2 fragile-with-guardrail lanes** (`PUT /jobs/{id}/trade-types`, `DELETE /jobs/{id}/initial-appointment`) → guarded follow-up after the 17 proven-safe lanes ship; both have known non-empty-body guardrails.
 - **17 blocked-by-dependency lanes** → not wrappable until the sandbox/company config supplies the missing child ids (documentFolderId, accountTypeId, role-specific CompanyUserId, etc.) — out of Phase 5.
 - **Dedicated AccuLynx Agent** (A3-gated) → Phase 6 (REQ-09).
