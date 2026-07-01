@@ -40,6 +40,7 @@ bound_agents:
   - ob-sales
   - ob-ops
   - ob-accounting
+  - ob-acculynx
 provenance:
   origin: cleverwork
   author: Cleverwork
