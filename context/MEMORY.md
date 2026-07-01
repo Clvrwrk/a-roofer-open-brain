@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–4 COMPLETE; Phase 5 (Read/Write Action Layer, REQ-08) IN PROGRESS — Waves 1–2 done, Wave 3 gated.** Branch **`contrib/cleverwork/read-write-action-layer`** (pushed; NOT merged — main auto-deploys via Coolify): built `acculynx-write-action` Edge fn (dryRun==execute, D-09 assertTarget, idempotency), applied migs **184/185** (pending-write + audit log), wired the Command Center (enqueue, dashboard surface RQ-1, decision.ts barrier#2 + edge invoke on approve, Slack notify). **NEXT: `/gsd-execute-phase 5 --wave 3`** — deploy → sandbox-prove 3 lanes → set PROD_WRITE_APPROVER_EMAILS → FIRST live PROD payment (blocking-human) → converge→main.
+**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–5 COMPLETE** (Phase 5 write-action layer sandbox-proven; first live prod payment deferred by user until a real need). **Phase 6 (AccuLynx Agent + OKF Knowledge Base) IN PROGRESS** — A3 approved (D-04 gate cleared); OKF bundle (`docs/knowledge-base/acculynx/`) now complete + link-navigable, cited source of truth via the `acculynx-api` skill. **NEXT: `ob-acculynx` roster identity + Claude Code subagent build** (Plans 03/04), then Phase 7 (Executive Sales Pipeline dashboard). Branch `contrib/cleverwork/read-write-action-layer` — converge to main per Live⇄Dev alignment.
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
