@@ -2,8 +2,8 @@
 phase: 5
 slug: read-write-action-layer
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-01
 ---
 
@@ -55,8 +55,8 @@ created: 2026-07-01
 
 ## Wave 0 Requirements
 
-- [ ] `supabase/functions/acculynx-write-action/*.test.ts` — pure request-builder + gate stubs for REQ-08
-- [ ] Reuse `acculynx-write-sweep` pure-core test pattern as the analog
+- [x] `supabase/functions/acculynx-write-action/*.test.ts` — pure request-builder + gate stubs for REQ-08 (05-01 Task 2 creates `action.test.ts`)
+- [x] Reuse `acculynx-write-sweep` pure-core test pattern as the analog (05-01 Task 2 `<read_first>` anchors on `sweep.test.ts`)
 
 *Edge-function Deno test infra already exists (write-sweep). No new framework install expected.*
 
@@ -73,11 +73,11 @@ created: 2026-07-01
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s (unit layer)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (05-01/05-02/05-03 auto tasks carry `<automated>` deno/vitest/astro-check commands; 05-04's live-loop tasks are blocking human/decision checkpoints with a leading `<automated>`-verified prep task)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify (every code-producing task pairs with a deno/vitest run; 05-04's checkpoints are interleaved with the Task 1 automated prep)
+- [x] Wave 0 covers all MISSING references (05-01 Task 2 creates `action.test.ts`; 05-03 Task 1 creates `acculynx-pending-write.test.ts` — the two pure/unit suites for REQ-08, no MISSING placeholders remain)
+- [x] No watch-mode flags (all runners use `deno test` / `npx vitest run` / `npx astro check` — no `--watch`)
+- [x] Feedback latency < 30s (unit layer) (pure/unit suites estimated ~10–30s)
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
