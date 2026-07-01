@@ -17,6 +17,7 @@ export interface WatermarkRow {
   last_page_index?: number | null;
   last_walked_job_id?: string | null;
   last_api_count?: number | null;
+  last_api_total?: number | null;
   last_sync_at?: string | null;
 }
 

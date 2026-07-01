@@ -113,9 +113,12 @@ function mapJob(item: any, acct: any, now: string): Record<string, unknown> {
  * defaults to "2000-01-01" so the entire historical record is fetched, not just today.
  * Successive invokes resume via the last_modified_date watermark (Pitfall 5).
  *
- * Returns the API-reported total count (from the `count` field), or null if no pages
- * were fetched. The caller passes this to advanceWatermark as last_api_count so
- * v_acculynx_reconciliation can compute delta_pct.
+ * Returns the windowed `count` (apiCount) AND the unfiltered grand total (apiTotal).
+ * apiCount reflects the modified-since-watermark window (jobs is date-filtered), so it is
+ * NOT the reconciliation reference once incremental — v_acculynx_reconciliation must compare
+ * brain_count against apiTotal (the true total of all jobs for this account). apiTotal is the
+ * `count` from a one-shot full-history (startDate=2000-01-01) probe; on a full-history run
+ * apiCount already equals the total, so no probe is issued.
  *
  * @param sb         - Supabase client (service role)
  * @param acct       - account row (account_key, market stamped on every upserted row)
@@ -123,11 +126,10 @@ function mapJob(item: any, acct: any, now: string): Record<string, unknown> {
  * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop)
  * @param watermark  - current watermark row (null or last_modified_date=null → 2000-01-01 floor)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
- * @returns          - { apiCount: API-reported total count or null, maxModifiedDate: max
- *                      modifiedDate seen across all fetched items or null }. The caller
- *                      persists both to the watermark: apiCount → last_api_count (feeds
- *                      delta_pct reconciliation); maxModifiedDate → last_modified_date
- *                      (feeds incremental resumption on next run).
+ * @returns          - { apiCount: windowed API count or null, apiTotal: unfiltered grand
+ *                      total or null, maxModifiedDate: max modifiedDate seen or null }. The
+ *                      caller persists: apiCount → last_api_count; apiTotal → last_api_total
+ *                      (the reconciliation reference); maxModifiedDate → last_modified_date.
  */
 export async function syncJobs(
   sb: any,
@@ -136,7 +138,7 @@ export async function syncJobs(
   deadline: number,
   watermark: any,
   fetchFn: typeof fetch = fetch,
-): Promise<{ apiCount: number | null; maxModifiedDate: string | null }> {
+): Promise<{ apiCount: number | null; apiTotal: number | null; maxModifiedDate: string | null }> {
   // Full-history floor: null watermark or null last_modified_date → sweep from 2000-01-01
   const startDate = watermark?.last_modified_date
     ? new Date(watermark.last_modified_date).toISOString().slice(0, 10)
@@ -226,8 +228,29 @@ export async function syncJobs(
     offset += items.length;
   }
 
+  // Grand-total for reconciliation (v_acculynx_reconciliation compares brain_count
+  // against the true total, not the windowed count). On a full-history run
+  // (no last_modified_date) the loop's count IS the grand total — reuse it, no extra
+  // call. On an incremental run the loop's count is only the modified window, so issue
+  // ONE full-history probe (pageSize=1, startDate=2000-01-01) and read its `count`.
+  let apiTotal: number | null = lastApiCount;
+  if (watermark?.last_modified_date && Date.now() < deadline) {
+    const probeUrl =
+      `${ACCULYNX_BASE}/jobs?dateFilterType=ModifiedDate` +
+      `&startDate=2000-01-01&endDate=${endDate}` +
+      `&pageSize=1&recordStartIndex=0` +
+      `&sortBy=ModifiedDate&sortOrder=Ascending`;
+    const { status: probeStatus, body: probeBody } = await acculynxGet(probeUrl, apiKey, fetchFn);
+    if (probeStatus === 200 && typeof (probeBody as { count?: number })?.count === "number") {
+      apiTotal = (probeBody as { count: number }).count;
+    }
+    // On probe failure apiTotal stays = lastApiCount (windowed) — reconciliation then
+    // falls back gracefully; better a stale-but-safe total than blocking the sync.
+  }
+
   return {
     apiCount: lastApiCount,
+    apiTotal,
     maxModifiedDate: maxModified ? maxModified.toISOString() : null,
   };
 }

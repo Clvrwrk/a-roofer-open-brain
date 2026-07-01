@@ -113,12 +113,20 @@ export async function syncContacts(
   watermark: any,
   fetchFn: typeof fetch = fetch,
 ): Promise<number | null> {
-  let pageIndex: number = watermark?.last_page_index ?? 0;
+  // pageStartIndex is a PAGE NUMBER (0-based), NOT a record offset — the AccuLynx
+  // pagination quirk (jobs use recordStartIndex = record offset; contacts/estimates use
+  // pageStartIndex = page number; docs/knowledge-base/acculynx/api/read-capability.md).
+  // Advance ONE page at a time and stop on the last (short/empty) page. The prior code
+  // advanced by items.length (50), jumping to page 50 after page 0 — landing past the end
+  // and only re-fetching the tail (observed 2026-07-01: wichita contacts stuck at 64 of
+  // 1314 = one full page + the 14-row tail page).
+  const PAGE_SIZE = 50;
+  let pageNo: number = watermark?.last_page_index ?? 0;
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
 
   while (Date.now() < deadline) {
-    const url = `${ACCULYNX_BASE}/contacts?pageSize=50&pageStartIndex=${pageIndex}`;
+    const url = `${ACCULYNX_BASE}/contacts?pageSize=${PAGE_SIZE}&pageStartIndex=${pageNo}`;
     await sleep(PACE_MS);
     const { status, body } = await acculynxGet(url, apiKey, fetchFn);
 
@@ -135,7 +143,7 @@ export async function syncContacts(
       lastApiCount = typedBody.count;
     }
 
-    if (items.length === 0) break; // sweep complete
+    if (items.length === 0) break; // empty page — sweep complete
 
     const rows = items.map((item: any) => mapContact(item, acct, now));
 
@@ -144,7 +152,8 @@ export async function syncContacts(
       .upsert(rows, { onConflict: "id" });
     if (error) console.warn(`[contacts] upsert: ${error.message}`);
 
-    pageIndex += items.length;
+    pageNo += 1;                          // advance ONE page (page-number semantics)
+    if (items.length < PAGE_SIZE) break;  // last (partial) page — sweep complete
   }
 
   return lastApiCount;

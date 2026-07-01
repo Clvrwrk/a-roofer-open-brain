@@ -121,12 +121,16 @@ export async function syncEstimates(
   watermark: any,
   fetchFn: typeof fetch = fetch,
 ): Promise<number | null> {
-  let pageIndex: number = watermark?.last_page_index ?? 0;
+  // pageStartIndex is a PAGE NUMBER (0-based), not a record offset — see contacts.ts and
+  // docs/knowledge-base/acculynx/api/read-capability.md. Advance one page at a time and
+  // stop on the last (short/empty) page; advancing by items.length skips past the end.
+  const PAGE_SIZE = 50;
+  let pageNo: number = watermark?.last_page_index ?? 0;
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
 
   while (Date.now() < deadline) {
-    const url = `${ACCULYNX_BASE}/estimates?pageSize=50&pageStartIndex=${pageIndex}`;
+    const url = `${ACCULYNX_BASE}/estimates?pageSize=${PAGE_SIZE}&pageStartIndex=${pageNo}`;
     await sleep(PACE_MS);
     const { status, body } = await acculynxGet(url, apiKey, fetchFn);
 
@@ -143,7 +147,7 @@ export async function syncEstimates(
       lastApiCount = typedBody.count;
     }
 
-    if (items.length === 0) break; // sweep complete
+    if (items.length === 0) break; // empty page — sweep complete
 
     const rows = items.map((item: any) => mapEstimate(item, acct, now));
 
@@ -152,7 +156,8 @@ export async function syncEstimates(
       .upsert(rows, { onConflict: "id" });
     if (error) console.warn(`[estimates] upsert: ${error.message}`);
 
-    pageIndex += items.length;
+    pageNo += 1;                          // advance ONE page (page-number semantics)
+    if (items.length < PAGE_SIZE) break;  // last (partial) page — sweep complete
   }
 
   return lastApiCount;

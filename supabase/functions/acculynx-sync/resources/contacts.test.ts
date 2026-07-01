@@ -221,3 +221,38 @@ Deno.test("syncContacts — returns null when no pages were fetched (budget-exha
     "syncContacts must return null when budget expired before any fetch (no api_count observed)",
   );
 });
+
+// ---------------------------------------------------------------------------
+// 2026-07-01 fix: pageStartIndex is a PAGE NUMBER — advance by 1, not items.length.
+// Regression guard for the wichita-contacts-stuck-at-64 bug.
+// ---------------------------------------------------------------------------
+
+Deno.test("syncContacts — pageStartIndex advances by 1 per page (page-number pagination)", async () => {
+  const seenPageStartIndex: number[] = [];
+  // 3 full pages of 50, then a short final page of 10 → sweep must fetch pages 0,1,2,3.
+  const mockFetch = (url: string | URL | Request) => {
+    const u = String(url);
+    const m = u.match(/pageStartIndex=(\d+)/);
+    const p = m ? Number(m[1]) : -1;
+    seenPageStartIndex.push(p);
+    const count = 160;
+    const full = Array.from({ length: 50 }, (_, i) => ({ id: `c-${p}-${i}` }));
+    const items = p < 3 ? full : Array.from({ length: 10 }, (_, i) => ({ id: `c-${p}-${i}` }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ items, count }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const result = await syncContacts(sb, ACCT, "test-api-key", Date.now() + 60_000, null, mockFetch);
+
+  assertEquals(
+    seenPageStartIndex,
+    [0, 1, 2, 3],
+    `pageStartIndex must increment by 1 per page (page number), got: ${JSON.stringify(seenPageStartIndex)}`,
+  );
+  assertEquals(result, 160, "returns the API-reported total count");
+});

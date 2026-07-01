@@ -350,3 +350,77 @@ Deno.test("syncJobs — returns maxModifiedDate for incremental watermark advanc
     `maxModifiedDate must be 2026-06-15 (the max), got: ${result.maxModifiedDate}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// mig 181: syncJobs returns apiTotal (unfiltered grand total) for reconciliation.
+// Jobs is date-windowed, so apiCount is only the modified window; apiTotal must be
+// the true total (full-history probe on incremental runs; the swept count otherwise).
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobs — incremental run probes full-history total into apiTotal", async () => {
+  const urls: string[] = [];
+  let windowedCalls = 0;
+  const mockFetch = (url: string | URL | Request) => {
+    const u = String(url);
+    urls.push(u);
+    if (u.includes("pageSize=1&recordStartIndex=0")) {
+      // full-history probe → grand total
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [{ id: "j-1" }], count: 166 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }
+    windowedCalls++;
+    const items = windowedCalls === 1 ? [{ id: "j-w", modifiedDate: "2026-06-20T00:00:00Z" }] : [];
+    return Promise.resolve(
+      new Response(JSON.stringify({ items, count: 8 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const result = await syncJobs(sb, ACCT, "test-api-key", Date.now() + 60_000, WATERMARK, mockFetch);
+
+  assertEquals(result.apiCount, 8, "apiCount is the windowed (modified-since) count");
+  assertEquals(result.apiTotal, 166, "apiTotal is the full-history probe grand total");
+  assertEquals(
+    urls.some((u) => u.includes("startDate=2000-01-01") && u.includes("pageSize=1&recordStartIndex=0")),
+    true,
+    "an incremental run must issue exactly the full-history probe",
+  );
+});
+
+Deno.test("syncJobs — full-history run sets apiTotal without an extra probe", async () => {
+  const urls: string[] = [];
+  const mockFetch = (url: string | URL | Request) => {
+    urls.push(String(url));
+    const items = urls.length === 1 ? [{ id: "j-1", modifiedDate: "2020-01-01T00:00:00Z" }] : [];
+    return Promise.resolve(
+      new Response(JSON.stringify({ items, count: 166 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+
+  const { sb } = makeUpsertSb();
+  const result = await syncJobs(
+    sb,
+    ACCT,
+    "test-api-key",
+    Date.now() + 60_000,
+    { account_key: "florida", resource_type: "jobs", last_modified_date: null },
+    mockFetch,
+  );
+
+  assertEquals(result.apiTotal, 166, "full-history run: apiTotal reuses the swept count");
+  assertEquals(
+    urls.some((u) => u.includes("pageSize=1&recordStartIndex=0")),
+    false,
+    "no separate probe on a full-history run (count already equals the total)",
+  );
+});
