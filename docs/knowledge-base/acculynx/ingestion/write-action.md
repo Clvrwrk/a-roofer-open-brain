@@ -67,7 +67,7 @@ impact, rollback) precedes any push.
 
 **Deploy SHAs (Task 2, 2026-07-01):**
 - Edge function `acculynx-write-action`: deployed ACTIVE v1 (id `c8b30930-4cd5-4a14-bef4-8f06ae0bde49`) from contrib `862482e`, via `supabase functions deploy acculynx-write-action --project-ref rnhmvcpsvtqjlffpsayu`.
-- Command Center `buildCommit`: _recorded below once the Coolify build flips_ (see "Coolify buildCommit confirmed").
+- Command Center `buildCommit`: **`9da0f841dd430887b27b205091671eb87684f808`** — confirmed live via `GET /healthz` (`status: ok`, `liveSurfaceStatus: live`, no errors) ~105s after `git push origin main` (contrib converged into main by fast-forward, 23 commits: 02e3502 → 9da0f84). Explain-then-ship stated before push.
 
 # The Edge Function request contract
 
