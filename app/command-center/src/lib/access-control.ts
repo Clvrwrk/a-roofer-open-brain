@@ -285,6 +285,13 @@ export const SERVICE_AGENT_IDENTITIES: ServiceAgentIdentity[] = [
     departmentAccess: ["system"],
     roles: ["dev-team", "dev-plane"],
   },
+  {
+    id: "ob-acculynx",
+    displayName: "AccuLynx",
+    handle: "@ob-acculynx",
+    departmentAccess: "all",
+    roles: ["vertical", "acculynx"],
+  },
 ];
 
 function splitCsv(value?: string) {
