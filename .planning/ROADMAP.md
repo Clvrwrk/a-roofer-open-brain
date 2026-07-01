@@ -165,7 +165,7 @@ Plans:
   3. At least one real human task is offloaded end-to-end through the action layer (sandbox-validated, then prod with approval).
   4. No write path can fire against production without passing the approval gate.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 
@@ -176,7 +176,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 05-03-PLAN.md — Command Center wiring: prod-write permission (D-09), enqueue route + live-work surface loader (RQ-1 gap closure), decision-endpoint fallback + edge invoke on approve, Slack notify (D-08)
+- [x] 05-03-PLAN.md — Command Center wiring: prod-write permission (D-09), enqueue route + live-work surface loader (RQ-1 gap closure), decision-endpoint fallback + edge invoke on approve, Slack notify (D-08)
 
 **Wave 3** *(blocked on Wave 2 — human-gated)*
 
@@ -229,6 +229,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
-| 5. Read/Write Action Layer | 2/4 | In Progress|  |
+| 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |

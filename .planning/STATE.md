@@ -2,15 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
+current_phase: 05
+current_phase_name: read-write-action-layer
 status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-07-01T15:33:58.822Z"
-last_activity: 2026-07-01 — Phase 05 execution started
+last_updated: "2026-07-01T16:04:04.890Z"
+last_activity: 2026-07-01
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 20
   percent: 57
 ---
 
@@ -26,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 05 (read-write-action-layer) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-01 — Phase 05 execution started
 
@@ -54,6 +57,7 @@ Progress: [██████████] 100%
 | Phase 04 P03 | 40m | 3 tasks | 4 files |
 | Phase 04 P04 | 15min | 2 tasks | 3 files |
 | Phase 05 P01 | 35min | 3 tasks | 3 files |
+| Phase 05-read-write-action-layer P03 | 45min | 3 tasks | 6 files |
 
 ### Decisions
 
@@ -72,6 +76,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase ?]: acculynx-write-action WriteLane enum uses descriptive camelCase names, not sweep.ts operation_id strings
 - [Phase ?]: computeIdempotencyKey canonicalizes payload key ordering before sha256 hashing
 - [Phase ?]: index.ts persistence to acculynx_pending_write/acculynx_write_action_log degrades gracefully until Wave 1 Plan 02 tables land
+- [Phase 05]: D-09 barrier #2 target check reads target_env from a fresh acculynx_pending_write source row rather than string-parsing LiveWorkItem.evidence
+- [Phase 05]: enqueue.ts derives department from the lane (departmentForLane) instead of hardcoding accounting, generalizing intake.ts's gate to all 17 lanes
+- [Phase 05]: D-08 Slack notify reuses SLACK_OB_AGENT_AUDIT_LOG_CHANNEL_ID instead of a new dedicated channel
+- [Phase 05]: acculynx-write-action edge function URL built from ${SUPABASE_URL}/functions/v1/acculynx-write-action, the standard Supabase Edge Function URL convention
 
 ### Pending Todos
 
@@ -90,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-01T15:33:40.395Z
+Last session: 2026-07-01T16:03:17.563Z
 Stopped at: Phase 5 context gathered
 Resume file: .planning/phases/05-read-write-action-layer/05-CONTEXT.md
