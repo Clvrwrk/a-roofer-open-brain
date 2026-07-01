@@ -196,11 +196,19 @@ Plans:
   3. The in-repo OKF "AccuLynx" bundle is complete (who/what/how/why/where/when, read+write matrices, runbooks, account registry, dashboard spec) and is the cited source of truth.
   4. Repo skills (`acculynx-api`), memories, and references point to the folder so any agent reaches the right knowledge quickly.
 
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
 
 Plans:
 
-- [ ] 06-01: TBD (set during planning)
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — Author the rule-9 A3 (`proposals/2026-07-01-acculynx-agent.md`) + human approval gate (D-04 hard gate, SC1)
+- [ ] 06-02-PLAN.md — Complete + wire the OKF bundle: link write-action/security sections, update overview/log, route acculynx-api skill + memory pointer to the bundle (REQ-01, SC3/SC4)
+
+**Wave 2** *(agent build — gated on Wave 1 A3 approval)*
+
+- [ ] 06-03-PLAN.md — `ob-acculynx` roster identity (`departmentAccess:"all"`) + Wave-0 access-control test + bound_agents wiring + Slack/Coolify provisioning + cross-department enqueue smoke test (REQ-09, SC2)
+- [ ] 06-04-PLAN.md — Claude Code subagent (`.claude/agents/acculynx.md`): NO_ANALOG doc-verify gate → author with D-03 authority + REQ-09 data-not-instructions boundary (REQ-09, SC2)
 
 ### Phase 7: Executive Sales Pipeline Dashboard
 
@@ -232,5 +240,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
-| 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
+| 6. AccuLynx Agent + OKF Knowledge Base | 0/4 | Planned | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
