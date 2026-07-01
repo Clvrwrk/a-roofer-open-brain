@@ -155,11 +155,19 @@ Plans:
   3. At least one real human task is offloaded end-to-end through the action layer (sandbox-validated, then prod with approval).
   4. No write path can fire against production without passing the approval gate.
 
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
 
-- [ ] 05-01: TBD (set during planning)
+**Wave 1**
+- [ ] 05-01-PLAN.md — acculynx-write-action edge function: pure core (action.ts) + tests + thin entrypoint (index.ts); 17-lane builder, D-03 preview==execute, D-09 assertTarget, per-request key resolution, idempotency
+- [ ] 05-02-PLAN.md — Migrations 184 (acculynx_pending_write) + 185 (acculynx_write_action_log), additive/idempotent, with a [BLOCKING] apply-to-prod task (RQ-4, SC2)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 05-03-PLAN.md — Command Center wiring: prod-write permission (D-09), enqueue route + live-work surface loader (RQ-1 gap closure), decision-endpoint fallback + edge invoke on approve, Slack notify (D-08)
+
+**Wave 3** *(blocked on Wave 2 — human-gated)*
+- [ ] 05-04-PLAN.md — Deploy (edge + Coolify) → sandbox proof for 3 offload lanes → approver-roster config (OQ-2) → first live PROD payment write (SC3/SC4) → converge to main
 
 ### Phase 6: AccuLynx Agent + OKF Knowledge Base
 
@@ -208,6 +216,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
-| 5. Read/Write Action Layer | 0/TBD | Not started | - |
+| 5. Read/Write Action Layer | 0/4 | Planned | - |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
