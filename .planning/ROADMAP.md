@@ -93,11 +93,25 @@ Plans:
   - Stamp/triage the 8 remaining legacy NULL non-job rows (3 contacts, 3 job_contacts, 1 financial, 1 insurance).
   - Expand fan-out to the remaining 6 production accounts (florida, colorado, georgia, texas, insurance_program, multi_family_commercial) — set Edge secrets after KC+Wichita reconcile within tolerance; human-approved scope step.
 
-**Plans**: TBD
+**Plans**: 6 plans (5 waves)
 
 Plans:
 
-- [ ] 03-01: TBD (set during planning)
+**Wave 1**
+- [ ] 03-01-PLAN.md — Wave 0 live-DB verification (cron jobname, RLS status, last_api_count, Slack channel) + committed verify-acculynx-cron.sql
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 03-02-PLAN.md — Hourly cutover (multiAccount:true, migs 172-175) + pg_net reconciliation (owned dispatch table + /10 reconcile cron + rewritten outcomes view); ends perpetual pending, fixes jobs last_api_count
+- [ ] 03-04-PLAN.md — Trust/provenance guardrails + rot guards + RLS deny-by-default (migs 177-180): legacy NULL triage → RLS revoke → rot-guard views → NOT NULL invariants
+
+**Wave 3** *(blocked on 03-02)*
+- [ ] 03-03-PLAN.md — Alerting: SQL check_acculynx_alerts() (4 D-05 conditions, mig 176) + edge-side lib/alerts.ts (Slack+Sentry, no-secret-in-payload)
+
+**Wave 4** *(blocked on 03-02/03/04)*
+- [ ] 03-05-PLAN.md — Security review (/gsd-secure-phase + posture doc, D-13) + recovery runbook (D-15) + sync-pipeline.md update
+
+**Wave 5** *(blocked on all prior — human-gated)*
+- [ ] 03-06-PLAN.md — 6-account expansion: D-08 tolerance gate → canary-then-batch enable (D-09)
 
 ### Phase 4: Sandbox Write-Capability Exploration & Red-Team
 
