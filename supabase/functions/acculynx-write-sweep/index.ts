@@ -192,6 +192,15 @@ async function prefetchReferenceData(): Promise<ReferenceData> {
   };
 }
 
+/** jobCategory.id is Int32 in AccuLynx (unlike the GUID-string ids elsewhere) — the harvested
+ * reference id is stringified by pick(); coerce it back to a number for the API. Returns
+ * undefined for null/NaN so the field is omitted rather than sent as an invalid value. */
+function intId(v: string | null | undefined): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /** Seed contact -> job -> financialsId. Stamps run_tag into notes/description fields where supported. */
 async function seedDependencyRoot(
   refData: ReferenceData,
@@ -216,7 +225,7 @@ async function seedDependencyRoot(
   const jobBody = {
     contact: { id: contactId },
     locationAddress: buildJobAddress({ city: "Wichita", state: "KS", zipCode: "67203" }),
-    jobCategory: refData.jobCategoryId ? { id: refData.jobCategoryId } : undefined,
+    jobCategory: intId(refData.jobCategoryId) !== undefined ? { id: intId(refData.jobCategoryId) } : undefined,
     tradeTypes: refData.tradeTypeId ? [{ id: refData.tradeTypeId }] : undefined,
     leadSource: refData.leadSourceId ? { id: refData.leadSourceId } : undefined,
     priority: "Normal",
@@ -361,7 +370,7 @@ function buildRequestBody(
         ? { insuranceCompanyId: "00000000-0000-0000-0000-000000000000" }
         : { insuranceCompanyName: "Write Sweep Insurance Co" };
     case "putJobCategoriesForJob":
-      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.jobCategoryId ?? undefined };
+      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: intId(seeds.jobCategoryId) };
     case "putLeadSourceForJob":
       return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.leadSourceId ?? undefined };
     case "putPriorityForJob":
