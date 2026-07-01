@@ -241,6 +241,44 @@ is unset (safe-fail by design).
 - **Alerting:** unset the Vault secret to silence alerts safely
   (`check_acculynx_alerts()` no-ops with no token) without deleting the cron.
 
+## 6-account expansion (canary-then-batch, 2026-07-01)
+
+All 8 production accounts are now enabled (D-08 gate proven open — every KC+Wichita
+reconciled resource ≤2% after the instrument + pagination fixes). D-09 sequence:
+
+- **Canary:** `insurance_program` (smallest, 27 jobs) enabled first. contacts 28/28,
+  estimates 1/1 (0.0%); no cross-account bleed; run well inside the 110s budget.
+- **Batch:** colorado, florida, georgia, texas, multi_family_commercial enabled next.
+  Each stamped correctly — `select distinct account_key from acculynx_jobs` returns
+  exactly the 8 enabled accounts, zero bleed. contacts drain fully in one run
+  (colorado 1909/1909, georgia 479/479, multi_family 369/369 — all 0.0%).
+
+**Setting secrets — do NOT `source .env`.** `.env` line ~214 has a value zsh tries to
+execute, so `source` aborts before the AccuLynx keys (lines 230+) and silently sets
+EMPTY secrets (digest `e3b0c442…b855` = SHA-256 of ""). Set via a temp env-file
+instead, then verify the digest is non-empty:
+```bash
+grep -E '^PE_CC_<ACCT>_ACCULYNX_API_KEY=' .env > /tmp/one.env
+supabase secrets set --env-file /tmp/one.env --project-ref rnhmvcpsvtqjlffpsayu
+shred -u /tmp/one.env
+supabase secrets list --project-ref rnhmvcpsvtqjlffpsayu | grep <ACCT>   # digest must NOT be e3b0c442…
+```
+Edge secrets take ~30–60s to propagate before the fn resolves them (a too-soon run
+skips the account: ~1s edge exec, no watermark written).
+
+**KNOWN ISSUE — jobs sweep stalls at ~25/run (blocks large-account jobs backfill).**
+The date-windowed jobs sweep (`resources/jobs.ts`) fetches only the first page
+(`PAGE_SIZE=25`) then terminates, every run — observed uniformly across all
+API-swept accounts (georgia 25/470, texas 25/2300, multi_family 25/352, colorado
+crawls ~25/run). KC (166/166) and Wichita (1284/1286) look complete only because
+their jobs were loaded by the **legacy backfill script**, not this sweep. Contacts
+and estimates are unaffected (page-number fix works). Diagnosis pending edge-fn
+console logs on the page-2 response (recordStartIndex=25) — a `status != 200` or
+empty-items early break. Until fixed, large-account jobs reconciliation stays high
+(colorado jobs 97.4%); the account is enabled and contacts/estimates are current.
+Fix path: instrument jobs.ts page-2 with logging, redeploy, inspect
+`get_logs edge-function`; compare against the legacy `pageStartIndex` jobs path.
+
 ## Owners
 
 - **Ingestion / Data (AccuLynx):** owns watermark, backfill, and edge-fn recovery.
