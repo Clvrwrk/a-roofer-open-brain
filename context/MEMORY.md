@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phase 2 PARTIAL** (`f4ce1f1`): acculynx-sync v19 + migs 168-171 live; serial multi-account fan-out PROVEN on prod, zero cross-account bleed; KC+Wichita jobs(166/1284)+contacts ingesting; reconciliation view computes. SC1~met, SC2-4 partial (backfill is cron-paced). Edge secrets: sandbox+KC+Wichita only. **NEXT: /gsd-plan-phase 3** (Cron Hardening) — owns P2 carry-forward: finish backfill, jobs `last_api_count=1` bug, 8 legacy NULL rows, 6-acct expansion, pg_net reconcile. Also: Hermes scheduler.
+**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–4 COMPLETE.** P4 (write red-team, REQ-06): migs **182/183** live; **`acculynx-write-sweep`** Edge fn deployed (hard sandbox gate; NOT Coolify); 38/38 write endpoints verdicted from live sandbox = 12 writable/5 write-only/2 fragile/2 read-shaped/17 blocked-by-dep/0 unsupported; matrix regenerated (docs/37 + write-capability.md); SECURED 10/10. Quirk: **jobCategory.id is Int32** (not GUID) else job POST 404s+cascades. **NEXT: /gsd-plan-phase 5** (Read/Write Action Layer, REQ-08) — human-gated write wrappers on the write matrix. Also open: Hermes scheduler.
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
