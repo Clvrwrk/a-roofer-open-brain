@@ -198,6 +198,167 @@ interface StepResult {
   createdEntityId?: string | null;
 }
 
+/** Resolve {param} placeholders in a path from the seeds map. Returns null if any param is unresolvable. */
+function resolvePath(path: string, seeds: Record<string, string | null>): string | null {
+  let resolved = path;
+  for (const p of pathParams(path)) {
+    const id = seeds[p];
+    if (!id) return null;
+    resolved = resolved.replace(`{${p}}`, encodeURIComponent(id));
+  }
+  return resolved;
+}
+
+/** Build a request body for a given operation, using seeds + reference data. Returns undefined for bodyless calls. */
+function buildRequestBody(
+  op: string,
+  seeds: Record<string, string | null>,
+  refData: ReferenceData,
+  dimension: string | null,
+): unknown {
+  switch (op) {
+    case "putJobCustomFields":
+    case "putContactCustomFields":
+      return dimension === "bad_input"
+        ? { customFields: [] } // empty required array -> expect 400
+        : { customFields: seeds.customFieldId ? [{ id: seeds.customFieldId, values: ["write-sweep-probe"] }] : [] };
+    case "putJobCustomFieldById":
+    case "putContactCustomFieldById":
+      return dimension === "bad_input"
+        ? { fieldType: "NotARealType", values: ["x"] }
+        : { fieldType: "Text", values: ["write-sweep-probe"] };
+    case "postWorksheetItem":
+      return dimension === "bad_input"
+        ? { itemName: "bad-input-probe" } // missing required `price` -> expect 400
+        : { price: 100, itemName: "Write-sweep probe item", quantity: 1 };
+    case "postPaymentReceived":
+      return dimension === "bad_input"
+        ? { amount: "not-a-number" }
+        : { from: "Write Sweep", amount: 1, paymentDate: new Date().toISOString().slice(0, 10), notes: "probe" };
+    case "postPaymentPaid":
+      return dimension === "bad_input"
+        ? { amount: -1 }
+        : {
+          to: "Write Sweep Vendor",
+          paymentMethod: "Check",
+          amount: 1,
+          paymentDate: new Date().toISOString().slice(0, 10),
+          notes: "probe",
+          accountTypeId: seeds.accountTypeId ?? undefined,
+        };
+    case "postPaymentExpense":
+      return dimension === "bad_input"
+        ? { amount: "bad" }
+        : { to: "Write Sweep Vendor", amount: 1, notes: "probe", accountTypeId: seeds.accountTypeId ?? undefined };
+    case "postJobDocument":
+      return dimension === "bad_input"
+        ? { documentFolderId: "00000000-0000-0000-0000-000000000000" } // foreign/nonexistent id -> expect 404
+        : { documentFolderId: seeds.documentFolderId ?? undefined };
+    case "postJobPhotoVideo":
+      return dimension === "bad_input" ? { fileUri: "not-a-url" } : { description: "write-sweep probe photo" };
+    case "postJobMessage":
+      return dimension === "bad_input" ? {} : { message: "write-sweep probe message" };
+    case "postJobMessageReply":
+      return dimension === "bad_input" ? {} : { message: "write-sweep probe reply" };
+    case "postCompanyRepresentativeForJob":
+    case "postSalesOwnerForJob":
+    case "postAROwnerForJob":
+      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.userId ?? undefined };
+    case "postJobExternalReference":
+      return dimension === "bad_input"
+        ? { jobId: seeds.jobId, source: "write-sweep" } // missing required projectId -> expect 400
+        : { jobId: seeds.jobId, source: "write-sweep", projectId: `probe-${seeds.jobId}` };
+    case "postContact":
+      return dimension === "bad_input"
+        ? { contactTypeIds: [] } // empty required array -> expect 400
+        : {
+          contactTypeIds: refData.defaultContactTypeId ? [refData.defaultContactTypeId] : [],
+          firstName: "Bad",
+          lastName: "Input",
+        };
+    case "postJob":
+      return dimension === "bad_input"
+        ? { priority: "Urgent" } // invalid strict enum -> expect 404 (Pitfall 2)
+        : { contact: { id: seeds.contactId }, priority: "Normal" };
+    case "postContactLog":
+      return dimension === "bad_input" ? { message: 12345 } : { message: "write-sweep probe log" };
+    case "postContactsSearch":
+      return dimension === "bad_input"
+        ? { sort: "not-a-valid-sort" }
+        : { startDate: "2020-01-01", endDate: new Date().toISOString().slice(0, 10), sort: "createdDate" };
+    case "postJobsSearch":
+      return dimension === "bad_input" ? { pageSize: -1 } : { searchTerm: "write-sweep" };
+    case "putJobAddress":
+      return dimension === "bad_input"
+        ? { ...buildContactAddress({}), state: { abbreviation: "KS" } } // wrong shape: object where string expected
+        : buildJobAddress({ city: "Wichita", state: "KS", zipCode: "67203" });
+    case "putAdjusterForJob":
+      return dimension === "bad_input" ? { claimApproved: "not-a-boolean" } : { adjusterName: "Write Sweep Adjuster" };
+    case "putInitialAppointmentForJob":
+      return dimension === "bad_input"
+        ? { startDate: "not-a-date" }
+        : { startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3600_000).toISOString(), notes: "probe" };
+    case "putInsuranceForJob":
+      return dimension === "bad_input" ? { invalidField: true } : {};
+    case "putInsuranceCompanyForJob":
+      return dimension === "bad_input"
+        ? { insuranceCompanyId: "00000000-0000-0000-0000-000000000000" }
+        : { insuranceCompanyName: "Write Sweep Insurance Co" };
+    case "putJobCategoriesForJob":
+      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.jobCategoryId ?? undefined };
+    case "putLeadSourceForJob":
+      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.leadSourceId ?? undefined };
+    case "putPriorityForJob":
+      return dimension === "bad_input" ? { priority: "Urgent" } : { priority: "High" };
+    case "putTradeTypesForJob":
+      return dimension === "bad_input" ? { tradeTypes: "not-an-array" } : { tradeTypes: refData.tradeTypeId ? [{ id: refData.tradeTypeId }] : [] };
+    case "putWorkTypeForJob":
+      return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.workTypeId ?? undefined };
+    case "postSubscription":
+      return dimension === "bad_input"
+        ? { consumerUrl: "not-a-url" }
+        : { consumerUrl: "https://example.com/write-sweep-hook", techContact: "sandbox@example.com", topicNames: ["job_created"] };
+    case "putSubscription":
+      return dimension === "bad_input" ? { topicNames: "not-an-array" } : { topicNames: ["job_created"] };
+    case "postSubscriptionTestEvent":
+      return dimension === "bad_input" ? { topicName: "not_a_real_topic" } : { topicName: "job_created" };
+    default:
+      return dimension === "bad_input" ? {} : undefined;
+  }
+}
+
+/** Classify a single probe's raw result into a ProbeSignal (for the stop-rule) + an error-shape string. */
+function classifySignal(status: number, body: unknown): ProbeSignal {
+  const errShape = status >= 400
+    ? `${status}:${topKeys(body).sort().join(",")}`
+    : null;
+  const guardrail = status === 412 ? "precondition_failed" : status === 416 ? "payload_too_large" : null;
+  return { status, errorShape: errShape, guardrail };
+}
+
+/** Map an endpoint's accumulated probe history into the acculynx_write_catalog verdict enum. */
+function classifyVerdict(
+  row: ChecklistRow,
+  history: ProbeSignal[],
+  createdEntityId: string | null,
+  neverProbed: boolean,
+): string {
+  if (row.probeability === "blocked-by-dependency") return "blocked-by-dependency";
+  if (neverProbed) return "blocked-by-dependency";
+  if (row.operation_id === "postJobsSearch" || row.operation_id === "postContactsSearch") return "read-shaped";
+  const anySuccess = history.some((h) => h.status >= 200 && h.status < 300);
+  const allFail = history.every((h) => h.status >= 400);
+  const hasGuardrail = history.some((h) => h.guardrail);
+  if (allFail && history.length > 0) return "unsupported";
+  if (anySuccess && hasGuardrail) return "fragile-with-guardrail";
+  if (anySuccess && (row.operation_id === "postJobMessage" || row.operation_id === "postJobMessageReply" || row.operation_id === "postContactLog")) {
+    return "write-only";
+  }
+  if (anySuccess && createdEntityId === null && row.method === "POST") return "write-only";
+  if (anySuccess) return "writable";
+  return "blocked-by-dependency";
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   // HARD GATE: enforce sandbox-only in code before any network call.
@@ -270,25 +431,172 @@ Deno.serve(async (req: Request): Promise<Response> => {
     subscriptionId: null,
   };
 
-  // Placeholders consumed by Task 2's tiered walk (kept here so Task 1 alone still type-checks
-  // and the checklist/seed/refData plumbing is exercised end-to-end).
-  void checklist;
-  void probeRows;
-  void catalogRows;
-  void verdicts;
-  void bump;
-  void deadline;
-  void calls;
-  void pathParams;
-  void shouldStopProbing;
-  const _unusedSignal: ProbeSignal | undefined = undefined;
-  void _unusedSignal;
-  void seeds;
+  // 3. Tiered walk over the checklist, ordered by dependency (contact/job roots already
+  //    seeded above; checklist rows are ordered tier then operation_id by the query).
+  for (const rawRow of (checklist ?? [])) {
+    const row = rawRow as ChecklistRow;
+    if (Date.now() >= deadline) { bump("budget_skipped"); continue; }
+    // Roots already seeded directly above — skip re-probing postContact/postJob here to
+    // avoid double-creating the dependency-chain entities (they got their own probe rows).
+    if (row.operation_id === "postContact" || row.operation_id === "postJob") continue;
+
+    const resolvedPath = resolvePath(row.path, seeds);
+    if (resolvedPath === null) {
+      probeRows.push({
+        probe_batch_id: batchId,
+        probe_name: row.operation_id,
+        api_endpoint: row.path,
+        method: row.method,
+        http_status: null,
+        response_ms: null,
+        result_summary: { verdict: "blocked-by-dependency", reason: "no seed id available in sandbox" },
+        payload_sample: null,
+        request_body_sample: null,
+        error: null,
+        red_team_dimension: null,
+        side_effect_observed: "no_side_effect",
+        created_entity_id: null,
+        run_tag: runTag,
+        source_account_key: SOURCE_ACCOUNT,
+      });
+      catalogRows.push({
+        endpoint_pattern: row.path,
+        method: row.method,
+        category: row.tier,
+        verdict: "blocked-by-dependency",
+        tier: row.tier,
+        red_team_dimensions_covered: [],
+        side_effect: "no_side_effect",
+        guardrail_notes: "no seed id available in sandbox entity graph",
+        source_account_key: SOURCE_ACCOUNT,
+        last_probe_status: null,
+        last_probed_at: new Date().toISOString(),
+        notes: `blocked-by-dependency: missing path param seed for ${row.path}`,
+        updated_at: new Date().toISOString(),
+      });
+      bump("blocked-by-dependency");
+      continue;
+    }
+
+    const url = `${row.base_url}${resolvedPath}`;
+    const history: ProbeSignal[] = [];
+    let lastCreatedEntityId: string | null = null;
+    let anyProbe = false;
+    const dimensionsCovered: string[] = [];
+
+    // Dimensions to run: deep tier iterates the full red_team_dimensions list to the
+    // stop rule; smoke tier runs happy-path (dimension=null) + exactly 1 bad-input probe.
+    const dimensionPlan: (string | null)[] = row.tier === "deep"
+      ? [null, ...row.red_team_dimensions] // happy-path first, then each red-team dimension
+      : [null, "bad_input"];
+
+    for (const dimension of dimensionPlan) {
+      if (Date.now() >= deadline) break;
+      if (row.tier === "deep" && dimension && shouldStopProbing(history)) break;
+
+      const body = row.method === "DELETE" ? undefined : buildRequestBody(row.operation_id, seeds, refData, dimension);
+      if (calls > 0) await sleep(PACE_MS);
+      const { status, ms, body: respBody } = await acculynxCall(row.method, url, body);
+      calls++;
+      anyProbe = true;
+
+      const signal = classifySignal(status, respBody);
+      history.push(signal); // happy-path AND red-team probes count toward stop-rule history
+      if (dimension) dimensionsCovered.push(dimension);
+
+      const createdEntityId = (respBody as { id?: string })?.id ?? null;
+      if (createdEntityId && status >= 200 && status < 300) lastCreatedEntityId = createdEntityId;
+
+      // Harvest IDs this probe reveals for later dependent probes (e.g. postJobMessage -> messageId).
+      if (row.operation_id === "postJobMessage" && createdEntityId) seeds.messageId = createdEntityId;
+      if (row.operation_id === "postSubscription" && createdEntityId) seeds.subscriptionId = createdEntityId;
+
+      probeRows.push({
+        probe_batch_id: batchId,
+        probe_name: row.operation_id,
+        api_endpoint: resolvedPath,
+        method: row.method,
+        http_status: status,
+        response_ms: ms,
+        result_summary: { top_keys: topKeys(respBody), dimension: dimension ?? "happy_path" },
+        payload_sample: redactSample(respBody),
+        request_body_sample: body ? redactSample(body) : null,
+        error: status >= 400 ? `HTTP ${status}` : null,
+        red_team_dimension: dimension,
+        side_effect_observed: status >= 200 && status < 300
+          ? (createdEntityId ? "creates_entity" : "mutates_entity")
+          : "no_side_effect",
+        created_entity_id: createdEntityId,
+        run_tag: runTag,
+        source_account_key: SOURCE_ACCOUNT,
+      });
+    }
+
+    // DELETE lifecycle: for the 4 DELETE endpoints, issue a second DELETE to probe
+    // idempotency (expect 404 the second time).
+    if (row.method === "DELETE" && anyProbe) {
+      if (calls > 0) await sleep(PACE_MS);
+      const second = await acculynxCall("DELETE", url);
+      calls++;
+      const secondSignal = classifySignal(second.status, second.body);
+      history.push(secondSignal);
+      dimensionsCovered.push("idempotency");
+      probeRows.push({
+        probe_batch_id: batchId,
+        probe_name: row.operation_id,
+        api_endpoint: resolvedPath,
+        method: row.method,
+        http_status: second.status,
+        response_ms: second.ms,
+        result_summary: { top_keys: topKeys(second.body), dimension: "idempotency", note: "second DELETE of same resource" },
+        payload_sample: redactSample(second.body),
+        request_body_sample: null,
+        error: second.status >= 400 ? `HTTP ${second.status}` : null,
+        red_team_dimension: "idempotency",
+        side_effect_observed: "no_side_effect",
+        created_entity_id: null,
+        run_tag: runTag,
+        source_account_key: SOURCE_ACCOUNT,
+      });
+    }
+
+    const verdict = classifyVerdict(row, history, lastCreatedEntityId, !anyProbe);
+    bump(verdict);
+
+    catalogRows.push({
+      endpoint_pattern: row.path,
+      method: row.method,
+      category: row.tier,
+      verdict,
+      tier: row.tier,
+      red_team_dimensions_covered: dimensionsCovered,
+      side_effect: lastCreatedEntityId ? "creates_entity" : (verdict === "writable" || verdict === "fragile-with-guardrail" ? "mutates_entity" : "no_side_effect"),
+      guardrail_notes: history.some((h) => h.guardrail) ? history.find((h) => h.guardrail)?.guardrail ?? null : null,
+      source_account_key: SOURCE_ACCOUNT,
+      last_probe_status: history.length ? history[history.length - 1].status : null,
+      last_probed_at: new Date().toISOString(),
+      notes: `tier ${row.tier}; verdict ${verdict}; probes ${history.length}`,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  // 4. Persist: insert all probe rows (one batch), upsert catalog on (endpoint_pattern, method).
+  if (probeRows.length) {
+    const { error } = await sb.from("acculynx_write_probe").insert(probeRows);
+    if (error) return json({ error: `probe insert: ${error.message}`, batch_id: batchId }, 500);
+  }
+  if (catalogRows.length) {
+    const { error: catErr } = await sb
+      .from("acculynx_write_catalog")
+      .upsert(catalogRows, { onConflict: "endpoint_pattern,method" });
+    if (catErr) console.warn(`[write-sweep] catalog upsert skipped: ${catErr.message}`);
+  }
 
   return json({
     batch_id: batchId,
     source_account: SOURCE_ACCOUNT,
     checklist_ops: checklist?.length ?? 0,
+    probe_rows: probeRows.length,
     calls_made: calls,
     seeds_harvested: { contactId: !!contactId, jobId: !!jobId, financialsId: !!financialsId },
     verdicts,
