@@ -255,7 +255,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // only evidence recorded for every lane, satisfying the write-only guardrail by construction.
 
   await persistExecutionResult(
-    { lane, accountKey, targetEnv, payload, dryRun, idempotencyKey, workKey },
+    { lane, accountKey, targetEnv, payload, dryRun, idempotencyKey, workKey, approver: input.approver },
     idempotencyKey,
     built,
     result,
