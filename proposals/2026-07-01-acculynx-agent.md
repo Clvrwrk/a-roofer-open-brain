@@ -2,7 +2,7 @@
 
 Proposed by: Chris
 Date: 2026-07-01
-Status: pending
+Status: approved
 Affected clients: template-wide
 A3 file: proposals/2026-07-01-acculynx-agent.md
 
@@ -153,12 +153,12 @@ rather than proposing new capability.
 
 ## 8. Decision
 
-- [ ] **Approve** — build by 2026-07-01; pilot client: Pro Exteriors (template-wide pattern).
+- [x] **Approve** — build by 2026-07-01; pilot client: Pro Exteriors (template-wide pattern).
 - [ ] **Kill** — reason:
 - [ ] **Defer** — revisit at:, condition:
 
 Approver: Chris
-Approved / decided on:
+Approved / decided on: 2026-07-01
 
 ---
 
