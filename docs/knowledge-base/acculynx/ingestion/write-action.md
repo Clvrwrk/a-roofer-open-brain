@@ -146,31 +146,36 @@ reading the prod DB and invoking the live edge fn. This session was authorized a
   HTTP 200 and produced **no 4th audit row** — exactly one sandbox payment fired.
 - **Reject proven (SC4):** the rejected item produced no audit row; the edge function was never invoked.
 
-## Findings from the sandbox proof (must fix before the Task 5 prod payment)
+## Findings from the sandbox proof
 
-1. **Approver is never captured (SC2 / T-05-23 blocker).** `acculynx_write_action_log` has **no
-   `approver` column**, the edge audit insert omits approver, and although `acculynx_pending_write.approver`
-   exists it is never populated (the edge's pending-write update doesn't set it, and the decision route's
-   edge-invoke body — `decision.ts invokeAcculynxWriteActionEdge` — omits the approver actor). Task 5
-   requires the prod audit row to record the approver. **Fix:** migration adding `approver` to
-   `acculynx_write_action_log`; decision route passes the approver identity in the edge body; edge writes
-   it to both the pending-write update and the audit row.
-2. **Reject never closes the pending write (queue hygiene / re-approve risk).** A rejected item stays
-   `status = pending_review` (only the edge, on approve, self-persists a terminal status). The schema
-   already allows `rejected`, so this is a wiring gap: the decision route must set
-   `acculynx_pending_write.status = 'rejected'` on reject. (The Task 3 reject test item was manually set to
-   `rejected` to keep the live queue clean.)
-3. **Double-prefixed workKey (cosmetic).** Passing a `workKey` that already starts with
-   `acculynx-write-action:` yields a doubled display key (the mapper prepends the prefix again). Callers
-   should pass a **bare** workKey; the enqueue route should defensively strip a leading prefix.
-4. **Slack notify not delivered (`not_in_channel`).** The D-08 notify posted `ok: false` — the notify bot
-   is not a member of the target channel. Non-fatal (notify-only), but D-08 isn't actually reaching Slack
-   until the bot is invited to the channel.
+1. **Approver capture — FIXED + re-verified (SC2 / T-05-23).** Root cause: the edge audit insert omitted
+   the approver, and although `acculynx_pending_write.approver` exists it was never populated. **Fix (no
+   migration needed):** the audit log's existing `actor` column now records the approver; `decision.ts`
+   passes the approver identity (`actor.email ?? displayName ?? id`) in the edge-invoke body; the edge
+   writes it to both `acculynx_pending_write.approver` and `acculynx_write_action_log.actor`, and stamps
+   `work_key` on the audit row. A follow-up fix was needed because the handler rebuilt the input object for
+   `persistExecutionResult` without `approver` — caught by live sandbox re-verify (index.ts is verified
+   live, not unit-tested). **Verified:** approve of `p5w3-fix2-approve` → audit row #5, HTTP 201,
+   `pw_approver` and `audit_actor` both = "Local Operator". Edge fn deployed **v3**.
+2. **Reject closes the pending write — FIXED + re-verified.** `decision.ts` now sets
+   `acculynx_pending_write.status = 'rejected'` (+ records the rejecter) when an acculynx-write-action item
+   is rejected — the edge is never invoked on reject, so nothing else transitioned the row off
+   `pending_review`. **Verified:** reject of `p5w3-fix-reject` → status `rejected`, approver recorded, no
+   audit row. Tests added (`decision.test.ts`): approver-in-body + reject-close.
+3. **Double-prefixed workKey — was a test-input error (not a code bug).** Passing a `workKey` that already
+   starts with `acculynx-write-action:` yields a doubled display key (the mapper prepends the prefix). The
+   fix items used **bare** workKeys and rendered a single canonical prefix. A defensive prefix-strip in the
+   enqueue route remains a minor nice-to-have.
+4. **Slack notify not delivered (`not_in_channel`) — open config item.** The D-08 notify posted `ok:
+   false` because the notify bot is not a member of the target channel. Non-fatal (notify-only), but D-08
+   isn't reaching Slack until the bot is invited to the channel (per the slack-agents skill). Config task,
+   not code.
 
 # First prod payment (Task 5) — DEFERRED
 
-Not performed this session (user chose "deploy + sandbox only"). Prerequisites before Task 5: fix findings
-#1 and #2 above, set `PROD_WRITE_APPROVER_EMAILS` (primary owners) in Coolify, redeploy edge + CC.
+Not performed this session (user chose "deploy + sandbox only"). Findings #1 and #2 are now fixed,
+re-verified, and deployed (edge v3, CC `bb86ca4`). Remaining prerequisites before Task 5: set
+`PROD_WRITE_APPROVER_EMAILS` (primary owners) in Coolify + redeploy, then fire the gated prod payment.
 
 # Citations
 
