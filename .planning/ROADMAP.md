@@ -180,7 +180,9 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 — human-gated)*
 
-- [ ] 05-04-PLAN.md — Deploy (edge + Coolify) → sandbox proof for 3 offload lanes → approver-roster config (OQ-2) → first live PROD payment write (SC3/SC4) → converge to main
+- [~] 05-04-PLAN.md — Deploy (edge + Coolify) → sandbox proof for 3 offload lanes → approver-roster config (OQ-2) → first live PROD payment write (SC3/SC4) → converge to main
+
+**Status: SANDBOX-COMPLETE; first live prod payment DEFERRED by user (2026-07-01).** SC1/SC2/SC4 met and deployed (edge fn v3, CC `fbcbdc4`): 17-lane action layer, dry-run==execute, D-09 two-barrier gate, audit log with approver capture. SC3 proven **in sandbox** end-to-end for all 3 first-offload lanes (message/payment/external-ref: executed + audit rows + idempotency + reject-never-executes). The **prod half of SC3** (first live prod payment) is intentionally postponed until there is a real payment need — per user: "we test first; do the real prod post when there's an actual need." Two blockers found in sandbox (approver not captured; reject didn't close pending-write) were fixed, tested, re-verified, and deployed. Only remaining prereq for the eventual prod payment: set `PROD_WRITE_APPROVER_EMAILS` (primary owners) in Coolify + redeploy, then a rostered human fires it. Full record: [write-action.md](../../docs/knowledge-base/acculynx/ingestion/write-action.md).
 
 ### Phase 6: AccuLynx Agent + OKF Knowledge Base
 
