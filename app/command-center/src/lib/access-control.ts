@@ -8,6 +8,7 @@ export type CommandCenterPermission =
   | "command_center.read"
   | "work_queue.read"
   | "approval.decide"
+  | "approval.decide_prod_write"
   | "approval.request_more_evidence"
   | "evidence.attach"
   | "agent.resume"
@@ -401,6 +402,31 @@ function isViewerDomain(email: string, env: RuntimeEnv) {
 }
 
 /**
+ * D-09 barrier #2 / OQ-2: the prod-write-approval permission ("approval.decide_prod_write")
+ * is NEVER granted via the blanket HUMAN_PERMISSIONS array — a prod-target AccuLynx write
+ * requires the approver's email to be on this named roster, mirroring isHumanAdminEmail's
+ * env-driven allowlist shape. The initial roster is intentionally empty by default; naming
+ * the first approvers (likely Chris/Roberto) is a human/config step, not a code change
+ * (CONTEXT.md OQ-2) — set PROD_WRITE_APPROVER_EMAILS in Coolify env to populate it.
+ */
+function isProdWriteApprover(email: string | null, env: RuntimeEnv) {
+  const normalized = cleanEmail(email);
+  if (!normalized) return false;
+  return isEmailOnList(normalized, env.PROD_WRITE_APPROVER_EMAILS);
+}
+
+function maybeGrantProdWrite(
+  permissions: CommandCenterPermission[],
+  email: string | null,
+  env: RuntimeEnv,
+): CommandCenterPermission[] {
+  if (!isProdWriteApprover(email, env)) return permissions;
+  return permissions.includes("approval.decide_prod_write")
+    ? permissions
+    : [...permissions, "approval.decide_prod_write"];
+}
+
+/**
  * Open access — default ON (Chris, 2026-06-29): every WorkOS-authenticated human
  * gets full Command Center access with no per-user role/department gating, so no
  * one with a login is excluded from seeing or working any surface. WorkOS sign-in
@@ -499,20 +525,22 @@ export function resolveActorFromSessionUser(
 
   // Open access (default ON): every authenticated human gets full access, all
   // departments — no user-gated views. WorkOS sign-in is the gate. See isOpenAccessEnabled.
+  // approval.decide_prod_write is NEVER part of this blanket grant (D-09) — it is added
+  // on top, only for emails on the PROD_WRITE_APPROVER_EMAILS roster (OQ-2).
   if (isOpenAccessEnabled(env)) {
-    return humanActor(email, displayName, ["human", "member"], HUMAN_PERMISSIONS, "all");
+    return humanActor(email, displayName, ["human", "member"], maybeGrantProdWrite(HUMAN_PERMISSIONS, email, env), "all");
   }
 
   if (isHumanAdminEmail(email, env)) {
-    return humanActor(email, displayName, ["human", "admin", "ceo"], HUMAN_PERMISSIONS, "all");
+    return humanActor(email, displayName, ["human", "admin", "ceo"], maybeGrantProdWrite(HUMAN_PERMISSIONS, email, env), "all");
   }
 
   if (isEmailOnList(email, env.COMMAND_CENTER_ROLE_PURCHASING_EMAILS)) {
-    return humanActor(email, displayName, ["human", "purchasing"], HUMAN_PERMISSIONS, ["accounting", "operations"]);
+    return humanActor(email, displayName, ["human", "purchasing"], maybeGrantProdWrite(HUMAN_PERMISSIONS, email, env), ["accounting", "operations"]);
   }
 
   if (isEmailOnList(email, env.COMMAND_CENTER_ROLE_ACCOUNTING_EMAILS)) {
-    return humanActor(email, displayName, ["human", "accounting"], HUMAN_PERMISSIONS, ["accounting"]);
+    return humanActor(email, displayName, ["human", "accounting"], maybeGrantProdWrite(HUMAN_PERMISSIONS, email, env), ["accounting"]);
   }
 
   if (isViewerDomain(email, env)) {

@@ -25,6 +25,8 @@ interface ImportMetaEnv {
   readonly COMMAND_CENTER_ROLE_PURCHASING_EMAILS?: string;
   readonly COMMAND_CENTER_ROLE_ACCOUNTING_EMAILS?: string;
   readonly COMMAND_CENTER_VIEWER_DOMAINS?: string;
+  /** D-09/OQ-2: CSV of approver emails granted approval.decide_prod_write. Empty by default — human/config step. */
+  readonly PROD_WRITE_APPROVER_EMAILS?: string;
   readonly AGENTMAIL_API_KEY?: string;
   readonly AGENTMAIL_DOMAIN?: string;
   readonly AGENTMAIL_WEBHOOK_URL?: string;
