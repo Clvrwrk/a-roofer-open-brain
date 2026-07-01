@@ -15,10 +15,14 @@ agents read the repo; a Drive copy would be a second source of truth to keep in 
 | [accounts](../../../../docs/knowledge-base/acculynx/accounts.md) | WHO / WHERE — the 9 accounts + secret names (no values) |
 | [ingestion/sync-pipeline](../../../../docs/knowledge-base/acculynx/ingestion/sync-pipeline.md) | HOW — pg_cron → pg_net → acculynx-sync |
 | [ingestion/read-sweep](../../../../docs/knowledge-base/acculynx/ingestion/read-sweep.md) | HOW — sandbox capability sweep |
+| [ingestion/write-sweep](../../../../docs/knowledge-base/acculynx/ingestion/write-sweep.md) | HOW — sandbox write red-team harness (Phase 4) |
+| [ingestion/write-action](../../../../docs/knowledge-base/acculynx/ingestion/write-action.md) | HOW — human-gated enqueue → approve → execute → audit loop (Phase 5) |
+| [ingestion/runbook](../../../../docs/knowledge-base/acculynx/ingestion/runbook.md) | HOW — ingestion recovery procedures |
 | [api/auth-and-limits](../../../../docs/knowledge-base/acculynx/api/auth-and-limits.md) | per-account keys, 30/10 req/s |
 | [api/read-capability](../../../../docs/knowledge-base/acculynx/api/read-capability.md) | 86 GETs → [docs/65](../../../../docs/65-acculynx-read-capability-matrix.md) |
 | [api/write-capability](../../../../docs/knowledge-base/acculynx/api/write-capability.md) | writes → [docs/37](../../../../docs/37-acculynx-write-capability-matrix.md) |
 | [data/jobs](../../../../docs/knowledge-base/acculynx/data/jobs.md), [data/tables](../../../../docs/knowledge-base/acculynx/data/tables.md) | WHERE — brain tables |
+| [security/posture](../../../../docs/knowledge-base/acculynx/security/posture.md) | secrets, RLS, STRIDE attestation, and the untrusted-content boundary (data never instructions) |
 
 ## Source-of-truth tables (in the brain DB)
 

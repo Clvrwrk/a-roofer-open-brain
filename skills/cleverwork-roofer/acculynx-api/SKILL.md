@@ -85,6 +85,7 @@ Load these before choosing endpoints:
 - `skills/cleverwork-roofer/acculynx-api/reference/source-index.md` — fetched source inventory.
 - `integrations/bridges/acculynx/README.md` and `mapping.md` — bridge-specific behavior and brain schema mapping.
 - `skills/cleverwork-roofer/acculynx-api/reference/knowledge-folder.md` — **Knowledge Folder** pointer: routes agents to the Google Drive "AccuLynx" folder (who/what/how/why/where/when) and the read/write capability matrices (`docs/65`, `docs/37`).
+- `docs/knowledge-base/acculynx/index.md` — the complete in-repo [Open Knowledge Format](../../../docs/knowledge-base/OKF/SPEC.md) "AccuLynx" bundle (who/what/how/why/where/when, the full read + write capability matrices, ingestion + write-action runbooks, and security posture) — the cited source of truth for AccuLynx work.
 
 If the user asks for the latest AccuLynx API behavior, refresh the generated reference first:
 
