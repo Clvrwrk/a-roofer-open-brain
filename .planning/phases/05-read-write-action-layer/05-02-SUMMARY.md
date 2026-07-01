@@ -10,9 +10,10 @@ requires:
     plan: 01
     provides: "the acculynx-write-action index.ts consumer contract (exact column names this DDL matches: work_key, status, exec_result, idempotency_key, lane, account_key, target_env, request_method, request_path, request_body_sample, response_body, http_status)"
 provides:
-  - "schemas/cleverwork-roofer/184-acculynx-pending-write-ddl.sql — acculynx_pending_write table DDL (NOT yet applied to prod)"
-  - "schemas/cleverwork-roofer/185-acculynx-write-action-log-ddl.sql — acculynx_write_action_log table DDL (NOT yet applied to prod)"
+  - "schemas/cleverwork-roofer/184-acculynx-pending-write-ddl.sql — acculynx_pending_write table DDL (APPLIED to prod rnhmvcpsvtqjlffpsayu 2026-07-01)"
+  - "schemas/cleverwork-roofer/185-acculynx-write-action-log-ddl.sql — acculynx_write_action_log table DDL (APPLIED to prod rnhmvcpsvtqjlffpsayu 2026-07-01)"
 affects: [05-03-work-queue-surface, 05-04-decision-endpoint-invocation]
+applied_to_prod: "2026-07-01 — migrations 184 + 185 applied to rnhmvcpsvtqjlffpsayu via Supabase MCP apply_migration; verified live: 2 tables, 6 indexes, 3 CHECK constraints (lane/target_env/status), 1 FK, RLS enabled on both, idempotent re-run = clean no-op. Task 2 blocking checkpoint CLOSED."
 
 # Tech tracking
 tech-stack:
