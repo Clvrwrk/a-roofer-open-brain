@@ -1,8 +1,8 @@
 ---
 phase: 3
 slug: commercial-cron-hardening
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-30
 ---
@@ -46,7 +46,7 @@ created: 2026-06-30
 | SC3 no-delete | — | — | REQ-07 | T-tamper-bleed | Diff uses `.update()` only, never `.delete()` | unit | `deno test supabase/functions/acculynx-sync/lib/diff.test.ts --allow-env` | ✅ exists | ⬜ pending |
 | SC4 RLS | — | — | REQ-07 | T-info-disclosure-PII | `anon`/`authenticated` cannot SELECT `acculynx_*`; `service_role` can | integration/manual | anon-key SELECT (expect denied) vs service-role SELECT; recorded in security posture doc | ❌ W0 (procedure) | ⬜ pending |
 | CF last_api_count | — | — | REQ-07 | — | jobs watermark shows real API count, not `1`, after `multiAccount:true` run | unit + live | `deno test supabase/functions/acculynx-sync/resources/jobs.test.ts --allow-env --allow-net=localhost` + live query | ✅ unit / ❌ W0 live | ⬜ pending |
-| CF NULL provenance | — | — | REQ-07 | T-tamper-bleed | 8 legacy NULL rows triaged, then NOT NULL constraint holds | SQL/manual | `select count(*) from <table> where account_key is null;` (expect 0 pre-constraint) | ❌ W0 | ⬜ pending |
+| CF NULL provenance | — | — | REQ-07 | T-tamper-bleed | NULL-provenance rows across all 9 constrained tables triaged, then NOT NULL constraint holds | SQL/manual | `select count(*) from <each of 9 tables> where account_key is null;` (expect 0 pre-constraint) | ❌ W0 | ⬜ pending |
 | CF rot guards | — | — | REQ-07 | T-tamper-bleed | Dup-GUID / orphan / NULL-provenance / stale-tail views flag seeded bad rows, else zero | integration | Seed bad fixtures via service-role client, assert each view surfaces expected rows | ❌ W0 (new views + tests) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -55,7 +55,7 @@ created: 2026-06-30
 
 ## Wave 0 Requirements
 
-- [ ] **Live-DB verification task (Open Questions 1–4)** — confirm live `trigger_acculynx_sync` passes `multiAccount:true`; current RLS status of `acculynx_*`; current `acculynx_sync_watermark.last_api_count` for kansas_city/wichita jobs; confirm Slack alert channel (research recommends `#cc-proexteriors`). MUST run before finalizing cron-cutover + RLS migrations.
+- [ ] **Live-DB verification task (Open Questions 1–4)** — confirm live `trigger_acculynx_sync` passes `multiAccount:true`; current RLS status of `acculynx_*`; current `acculynx_sync_watermark.last_api_count` for kansas_city/wichita jobs; NULL `account_key` counts across ALL 9 tables mig 178 constrains; confirm Slack alert channel (research recommends `#cc-proexteriors`). MUST run before finalizing cron-cutover + RLS + NOT-NULL migrations.
 - [ ] `scripts/verify-acculynx-cron.sql` — committed, runnable cron-schedule assertion (not a one-off typed command)
 - [ ] `supabase/functions/acculynx-sync/lib/reconcile.test.ts` — pg_net reconciliation join logic (if expressed as testable TS)
 - [ ] Alert-firing verification procedure — seed synthetic failure/staleness, confirm Slack + Sentry receive it, document exact steps in the runbook (D-15)
@@ -85,3 +85,4 @@ created: 2026-06-30
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
+</content>

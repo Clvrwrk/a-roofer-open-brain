@@ -407,24 +407,28 @@ return {
 | A4 | The Edge Function deploy path for `acculynx-sync` specifically is the `supabase` CLI (`supabase functions deploy`), separate from the Coolify-based Command Center app deploy. | Runtime State Inventory | If deploy actually flows through some other mechanism (e.g., a CI pipeline, or Coolify also proxies Supabase function deploys), the runbook (D-15) would document the wrong rollback procedure. Low risk — `supabase` CLI is present in this environment and is Supabase's standard tool for this. |
 | A5 | Sentry alerting from the Deno Edge Function runtime is feasible using a `fetch`-based envelope POST to the Sentry ingest endpoint (the DSN is public, per the sentry skill), without necessarily needing the full `@sentry/node`/`@sentry/deno` SDK inside the edge function. | Don't Hand-Roll, Package Legitimacy Audit | If a full SDK is actually required for correct envelope formatting/retry semantics, a new package (`@sentry/deno` or similar) would need to be added and would then require the Package Legitimacy Gate — flag this for the planner to decide with a concrete spike/test rather than assuming raw fetch suffices. |
 
-## Open Questions
+## Open Questions (RESOLVED via 03-01 Wave 0)
 
 1. **Does the live `trigger_acculynx_sync(...)` SQL function currently pass `multiAccount:true`, and what is the exact current pg_cron job name?**
+   - **RESOLVED: 03-01-PLAN.md Task 1 → 03-LIVE-STATE.md**
    - What we know: `sync-pipeline.md` documents the call as `trigger_acculynx_sync('["users","jobs"]')` (a resources array, not a `multiAccount` flag) — this is consistent with A1 (legacy path).
    - What's unclear: The exact current SQL function body, its parameter shape, and the exact `cron.job.jobname` needed to `cron.unschedule()` it cleanly. None of this is captured in any committed migration.
    - Recommendation: First task of Phase 3 execution (or a planning-time spike) should be `select jobid, jobname, schedule, command from cron.job;` and `select prosrc from pg_proc where proname = 'trigger_acculynx_sync';` against the live DB, via Supabase MCP or `supabase db` tooling, before writing the cutover migration.
 
 2. **What is the actual current RLS status of each `acculynx_*` table?**
+   - **RESOLVED: 03-01-PLAN.md Task 1 → 03-LIVE-STATE.md**
    - What we know: One doc (`tables.md`) claims RLS is already enabled; CONTEXT.md/D-14 treats it as not-yet-done; no RLS-enabling statements for `acculynx_*` tables exist in any committed migration file (migrations 165-171 reviewed, none contain `ENABLE ROW LEVEL SECURITY`).
    - What's unclear: Whether RLS was enabled directly on the live DB (same "live DB is source of truth, not migrations" pattern noted elsewhere) without a corresponding committed migration, or whether the docs claim is simply aspirational/wrong.
    - Recommendation: `select relname, relrowsecurity from pg_class where relname like 'acculynx_%' and relkind = 'r';` live, before planning D-14 tasks — this determines whether the work is "enable RLS on N tables" or "audit + close policy gaps on tables that already have RLS enabled."
 
 3. **What are the current `acculynx_sync_watermark.last_api_count` values, specifically for `(kansas_city, jobs)` and `(wichita, jobs)`?**
+   - **RESOLVED: 03-01-PLAN.md Task 1 → 03-LIVE-STATE.md**
    - What we know: 02-VERIFICATION.md states jobs `last_api_count` "stores `1`" as of Phase 2 close.
    - What's unclear: Whether this is true for ALL accounts/resources or specifically the legacy-path-synced jobs rows; whether a stale `1` value will self-correct on the next `multiAccount:true` run or needs a manual UPDATE to unblock reconciliation sooner.
    - Recommendation: `select account_key, resource_type, last_api_count, last_modified_date, last_sync_at from acculynx_sync_watermark order by account_key, resource_type;` live before finalizing whether "fix jobs last_api_count" needs any code change at all (current evidence from reading `jobs.ts` suggests it may not).
 
 4. **Which Slack channel should D-05 alerts post to, and under which agent identity (or the `@openbrain` fallback)?**
+   - **RESOLVED: 03-01-PLAN.md Task 1 → 03-LIVE-STATE.md**
    - What we know: The `slack-agents` skill documents per-agent identities and several channels, but none are obviously "AccuLynx ingestion ops" — the closest is `#service-warranty-audit` or a generic ops channel; `ob-dev-internal`/`ob-ops-conductor` are private and would need a bot invite.
    - What's unclear: Whether a new channel should be created for AccuLynx cron alerts, or an existing one repurposed. This is explicitly Claude's Discretion per D-15's CONTEXT.md note ("exact Slack channel... align with /slack-agents").
    - Recommendation: Default to `#cc-proexteriors` (already the Sentry Slack-integration channel per the `sentry` skill) for consistency — one ops channel for both error classes — unless the user prefers a dedicated channel; confirm at planning time, not blocking research.
