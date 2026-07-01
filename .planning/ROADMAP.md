@@ -98,7 +98,7 @@ Plans:
 Plans:
 
 **Wave 1**
-- [ ] 03-01-PLAN.md — Wave 0 live-DB verification (cron jobname, RLS status, last_api_count, Slack channel) + committed verify-acculynx-cron.sql
+- [x] 03-01-PLAN.md — Wave 0 live-DB verification (cron jobname, RLS status, last_api_count, Slack channel) + committed verify-acculynx-cron.sql
 
 **Wave 2** *(blocked on Wave 1)*
 - [ ] 03-02-PLAN.md — Hourly cutover (multiAccount:true, migs 172-175) + pg_net reconciliation (owned dispatch table + /10 reconcile cron + rewritten outcomes view); ends perpetual pending, fixes jobs last_api_count
@@ -194,7 +194,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
-| 3. Commercial Cron Hardening | 0/TBD | Not started | - |
+| 3. Commercial Cron Hardening | 1/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
