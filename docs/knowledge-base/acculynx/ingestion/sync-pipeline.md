@@ -4,7 +4,7 @@ title: AccuLynx Sync Pipeline
 description: The live pull-based incremental sync — pg_cron → pg_net → acculynx-sync Edge Function.
 resource: https://supabase.com/dashboard/project/rnhmvcpsvtqjlffpsayu/functions
 tags: [acculynx, ingestion, pg_cron, edge-function, watermark]
-timestamp: 2026-06-30T00:00:00Z
+timestamp: 2026-07-01T00:00:00Z
 ---
 
 The integration of record is **NOT** the repo's `integrations/bridges/acculynx`
@@ -13,13 +13,16 @@ webhook stub — it is a live Supabase Edge Function. Plan against this.
 # Architecture
 
 ```
-pg_cron (daily 08:15 UTC)
-  → trigger_acculynx_sync('["users","jobs"]')   -- SQL fn
-    → pg_net  (async HTTP POST)
-      → acculynx-sync  (Deno Edge Function, v10)
-        → AccuLynx API V2  (GET, incremental by ModifiedDate)
-        → upsert acculynx_jobs + crm_pipeline
-        → advance acculynx_sync_watermark
+pg_cron (hourly, 0 * * * *)
+  → trigger_acculynx_sync('{"multiAccount":true}')   -- SQL fn, fans out over acculynx_accounts
+    → pg_net  (async HTTP POST)  ── dispatch logged to acculynx_cron_dispatch
+      → acculynx-sync  (Deno Edge Function, v19)
+        → AccuLynx API V2  (GET, incremental by ModifiedDate; per-account key from Deno.env)
+        → upsert acculynx_jobs + crm_pipeline (+ contacts/estimates/… per resource)
+        → advance acculynx_sync_watermark  (composite PK: account_key, resource_type)
+
+pg_cron (*/10)  → reconcile_acculynx_cron_outcomes()  -- copies pg_net results into the owned table
+pg_cron (*/15)  → check_acculynx_alerts()             -- fires Slack/Sentry on failure/staleness
 ```
 
 # How it paces (rate-limit safety)
@@ -39,18 +42,40 @@ See [Auth & Rate Limits](../api/auth-and-limits.md) for the 30/10 req/s limits.
 and `crm_pipeline` (normalized: milestone, market, `data_source='api_sync'`). See
 [Brain Tables](../data/tables.md).
 
-# Known gaps (2026-06-30)
+# Resolved in Phase 3 (2026-07-01)
 
-- **Single-account only.** Uses one key (Kansas) — see [Account Registry](../accounts.md).
-  Multi-location fan-out across all 8 production keys is Phase 2.
-- **Only jobs + users sync.** Contacts/estimates/invoices/financials/insurance/
-  milestone-history watermarks are null — Phase 2.
-- **Cron observability gap.** `v_acculynx_cron_outcomes` shows historical runs as
-  `pending` (pg_net responses unreconciled) — Phase 3 hardening fixes this and moves
-  the schedule to hourly.
+- **Hourly, multi-account.** The daily 08:15 single-key run was cut over to an
+  hourly `0 * * * *` run that fans out over the `acculynx_accounts` registry
+  (`multiAccount:true`) — see [Account Registry](../accounts.md). Each account's
+  key is resolved at runtime from `Deno.env` (name only), never shared module-level.
+- **Cron observability fixed (no more perpetual `pending`).** Every dispatch is
+  logged to the owned `acculynx_cron_dispatch` table; `reconcile_acculynx_cron_outcomes()`
+  (`*/10`) copies each pg_net response out of the transient `net._http_response`
+  (6h TTL) well inside the window, so `v_acculynx_cron_outcomes` reflects real
+  `success`/`failure` instead of stuck `pending`.
+- **Alerting.** `check_acculynx_alerts()` (`*/15`) posts to Slack (#ob-ops-conductor)
+  and Sentry on failed dispatch, stale watermark, over-tolerance reconciliation
+  delta, or unreconciled pg_net — secret-safe (redaction guard; names only).
+- **Deny-by-default + trust invariants.** RLS revokes `anon`/`authenticated` on all
+  `acculynx_*` tables (service_role only); `account_key NOT NULL` + `trust_tier`
+  default `evidence` on the ingested tables; `acculynx_raw` is immutable. Rot-guard
+  views monitor duplicates/orphans/null-provenance/stale-tail.
+
+Recovery procedures for each of these live in the
+[Recovery Runbook](runbook.md).
+
+# Still open (later phases)
+
+- **Resource breadth.** Not every resource watermark is fed for every account yet;
+  full backfill to tolerance is cron-paced (carry-forward from Phase 2).
+- **Agent-side untrusted-content enforcement.** Free-text is *labeled* untrusted
+  (evidence tier) now; the read-time agent that must honor "data never
+  instructions" is REQ-09 (its own phase).
 
 # Citations
 
-[1] Edge Function `acculynx-sync` (v10), Supabase project `rnhmvcpsvtqjlffpsayu`
+[1] Edge Function `acculynx-sync` (v19), Supabase project `rnhmvcpsvtqjlffpsayu`
 [2] [Account Registry](../accounts.md)
 [3] [Read-Capability Sweep](read-sweep.md)
+[4] [Recovery Runbook](runbook.md); migrations 172–180 (`schemas/cleverwork-roofer/`)
+[5] [Security Posture](../security/posture.md)
