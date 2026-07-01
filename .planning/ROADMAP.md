@@ -19,7 +19,7 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
 - [x] **Phase 1: Foundation — Account Registry & Read-Capability Discovery** - Map all 9 keys; exhaustively probe every READ endpoint in the sandbox; stand up the knowledge-folder skeleton. (completed 2026-06-30)
 - [x] **Phase 2: Multi-Location Full Ingestion** - Fan out the sync across all 8 production accounts and ingest every currently-unfed resource. (completed 2026-06-30)
 - [x] **Phase 3: Commercial Cron Hardening** - Hourly, stable, observable, secure scheduling with healthchecks, alerting, and resumption. (completed 2026-07-01)
-- [ ] **Phase 4: Sandbox Write-Capability Exploration & Red-Team** - Exercise every WRITE endpoint in the sandbox to diminishing returns; produce a live write-capability matrix.
+- [x] **Phase 4: Sandbox Write-Capability Exploration & Red-Team** - Exercise every WRITE endpoint in the sandbox to diminishing returns; produce a live write-capability matrix. (completed 2026-07-01)
 - [ ] **Phase 5: Read/Write Action Layer** - Human-approval-gated write wrappers on a contrib branch; begin offloading specific human tasks.
 - [ ] **Phase 6: AccuLynx Agent + OKF Knowledge Base** - A3-approved dedicated agent; finalized who/what/how/why/where/when knowledge folder wired to skills/memories/references.
 - [ ] **Phase 7: Executive Sales Pipeline Dashboard** - Researched C-suite realtime dashboard under the Executive tab replacing the weekly snapshot (completeness proof).
@@ -141,7 +141,7 @@ Plans:
 - [x] 04-03-PLAN.md — Execute the sweep against the sandbox to 38/38 coverage + red-team deep lanes to diminishing returns + evidence-based verdicts + reconcile gate (zero rows)
 
 **Wave 4** *(blocked on 04-03)*
-- [ ] 04-04-PLAN.md — Generate the write-capability matrix from acculynx_write_catalog (D-03): regenerate docs/37 + write-capability.md (correct the phantom measurements endpoint) + guardrail recipes + write-sweep.md design doc
+- [x] 04-04-PLAN.md — Generate the write-capability matrix from acculynx_write_catalog (D-03): regenerate docs/37 + write-capability.md (correct the phantom measurements endpoint) + guardrail recipes + write-sweep.md design doc
 
 ### Phase 5: Read/Write Action Layer
 
@@ -207,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
-| 4. Sandbox Write-Capability Exploration & Red-Team | 3/4 | In Progress|  |
+| 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |

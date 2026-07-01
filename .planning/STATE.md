@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-07-01T13:41:29.411Z"
+status: verifying
+last_updated: "2026-07-01T13:53:49.229Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_plans: 17
+  percent: 57
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 Phase: 04 (sandbox-write-capability-exploration-red-team) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-01
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [█████████░] 94%
 | Phase 04 P01 | 10m | 5 tasks | 5 files |
 | Phase 04 P02 | 15m | 3 tasks | 1 files |
 | Phase 04 P03 | 40m | 3 tasks | 4 files |
+| Phase 04 P04 | 15min | 2 tasks | 3 files |
 
 ### Decisions
 
@@ -65,6 +66,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 04]: [04-03]: Reserve 'unsupported' for genuinely-absent routes only — a reachable 4xx (ProblemDetails) or 5xx is route-exists evidence (classifyVerdict2); write-sweep run wsweep-2026-07-01T13-33-02-965Z probed 38/38, reconcile PASS, unsupported=0.
 - [Phase 04]: [04-03]: jobCategory.id is Int32 (unlike GUID-string ids elsewhere) — coerce harvested ref id back to number or a 404 System.Int32 cascades the dependency chain; durable AccuLynx quirk/guardrail.
 - [Phase 04]: [04-03]: Final write-verdict tally 38/38 — writable 12, write-only 5, fragile-with-guardrail 2, read-shaped 2, blocked-by-dependency 17 (evidence-backed, diminishing returns), unsupported 0.
+- [Phase ?]: [Phase 04]: [04-04]: Regenerated docs/37 + write-capability.md from the human-verified acculynx_write_catalog evidence tally (38/38, batch wsweep-2026-07-01T13-33-02-965Z, reconcile PASS) — writable 12, write-only 5, fragile-with-guardrail 2, read-shaped 2, blocked-by-dependency 17, unsupported 0; corrected the phantom POST /jobs/{id}/measurements endpoint (never existed in the 124-op surface)
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-01T13:40:55.732Z
-Stopped at: Completed 04-02-PLAN.md (write-sweep index.ts built + deployed ACTIVE v1)
+Last session: 2026-07-01T13:53:49.223Z
+Stopped at: Completed 04-04-PLAN.md (phase 04 execution complete — all 4 plans done)
 Resume file: None
