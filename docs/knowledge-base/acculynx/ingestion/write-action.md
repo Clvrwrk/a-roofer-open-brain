@@ -65,9 +65,9 @@ Center converges the `contrib/cleverwork/read-write-action-layer` branch into `m
 `main` is the only thing Coolify builds (CONVENTIONS §13). Explain-then-ship (state change, user-visible
 impact, rollback) precedes any push.
 
-**Deploy SHAs (filled at Task 2):**
-- Edge function `acculynx-write-action`: _pending Task 2_
-- Command Center `buildCommit`: _pending Task 2_
+**Deploy SHAs (Task 2, 2026-07-01):**
+- Edge function `acculynx-write-action`: deployed ACTIVE v1 (id `c8b30930-4cd5-4a14-bef4-8f06ae0bde49`) from contrib `862482e`, via `supabase functions deploy acculynx-write-action --project-ref rnhmvcpsvtqjlffpsayu`.
+- Command Center `buildCommit`: _recorded below once the Coolify build flips_ (see "Coolify buildCommit confirmed").
 
 # The Edge Function request contract
 
@@ -119,8 +119,14 @@ write is a payment** (D-05).
 
 # Prod-write-approver roster (OQ-2)
 
-_Resolved at Task 4. The `PROD_WRITE_APPROVER_EMAILS` roster (Coolify env, granting
-`approval.decide_prod_write`) is recorded here once chosen._
+**Decision (2026-07-01):** **Primary department owners only.** The `PROD_WRITE_APPROVER_EMAILS` roster
+(Coolify env, granting `approval.decide_prod_write`) is the smallest trusted set — the primary owners in
+the existing `live-work.ts` `DEPARTMENT_META` ownership model. Smallest blast radius for a money-touching
+first write; accepted bottleneck if an owner is unavailable.
+
+> Not yet set in the Coolify env — the roster is only *needed* immediately before the first prod payment
+> (Task 5). This session stops after sandbox proof (Task 3), so `PROD_WRITE_APPROVER_EMAILS` is set when
+> the prod payment is actually scheduled. Mechanism and roster choice are recorded here now.
 
 # Sandbox proof + first prod payment (SC3 evidence)
 
