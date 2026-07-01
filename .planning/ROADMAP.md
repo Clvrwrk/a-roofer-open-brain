@@ -202,7 +202,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Author the rule-9 A3 (`proposals/2026-07-01-acculynx-agent.md`) + human approval gate (D-04 hard gate, SC1)
+- [x] 06-01-PLAN.md — Author the rule-9 A3 (`proposals/2026-07-01-acculynx-agent.md`) + human approval gate (D-04 hard gate, SC1) — **A3 approved by Chris 2026-07-01; D-04 gate cleared, Wave 2 unblocked**
 - [ ] 06-02-PLAN.md — Complete + wire the OKF bundle: link write-action/security sections, update overview/log, route acculynx-api skill + memory pointer to the bundle (REQ-01, SC3/SC4)
 
 **Wave 2** *(agent build — gated on Wave 1 A3 approval)*
@@ -240,5 +240,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
-| 6. AccuLynx Agent + OKF Knowledge Base | 0/4 | Planned | - |
+| 6. AccuLynx Agent + OKF Knowledge Base | 1/4 | In Progress | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
