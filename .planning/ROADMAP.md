@@ -135,7 +135,7 @@ Plans:
 - [x] 04-01-PLAN.md — Wave 0 foundation: DDL 182 (write catalog/probe) + seed 183 (38-endpoint checklist) + reconcile SQL + pure sweep.ts (hard gate/redaction/stop-rule/address builders) with failing-first tests + [BLOCKING] apply 182/183 to prod (live-DB verified)
 
 **Wave 2** *(blocked on 04-01)*
-- [ ] 04-02-PLAN.md — acculynx-write-sweep Edge Function index.ts: hard gate + generalized acculynxCall + reference-data pre-fetch + contact→job→financials walk + tiered deep/smoke red-team loop + persistence; deploy via supabase functions deploy
+- [x] 04-02-PLAN.md — acculynx-write-sweep Edge Function index.ts: hard gate + generalized acculynxCall + reference-data pre-fetch + contact→job→financials walk + tiered deep/smoke red-team loop + persistence; deploy via supabase functions deploy
 
 **Wave 3** *(blocked on 04-02 — human-gated)*
 - [ ] 04-03-PLAN.md — Execute the sweep against the sandbox to 38/38 coverage + red-team deep lanes to diminishing returns + evidence-based verdicts + reconcile gate (zero rows)
@@ -207,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
-| 4. Sandbox Write-Capability Exploration & Red-Team | 1/4 | In Progress|  |
+| 4. Sandbox Write-Capability Exploration & Red-Team | 2/4 | In Progress|  |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
