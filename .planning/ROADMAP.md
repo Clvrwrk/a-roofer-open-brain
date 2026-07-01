@@ -127,11 +127,21 @@ Plans:
   3. A live write-capability matrix supersedes docs/37 with evidence-based verdicts (writable / write-only / unsupported / fragile-with-guardrail).
   4. Each writable path has a documented guardrail recipe ("it just works" conditions and failure modes).
 
-**Plans**: TBD
+**Plans**: 4 plans (4 waves)
 
 Plans:
 
-- [ ] 04-01: TBD (set during planning)
+**Wave 1**
+- [ ] 04-01-PLAN.md — Wave 0 foundation: DDL 182 (write catalog/probe) + seed 183 (38-endpoint checklist) + reconcile SQL + pure sweep.ts (hard gate/redaction/stop-rule/address builders) with failing-first tests + [BLOCKING] apply 182/183 to prod (live-DB verified)
+
+**Wave 2** *(blocked on 04-01)*
+- [ ] 04-02-PLAN.md — acculynx-write-sweep Edge Function index.ts: hard gate + generalized acculynxCall + reference-data pre-fetch + contact→job→financials walk + tiered deep/smoke red-team loop + persistence; deploy via supabase functions deploy
+
+**Wave 3** *(blocked on 04-02 — human-gated)*
+- [ ] 04-03-PLAN.md — Execute the sweep against the sandbox to 38/38 coverage + red-team deep lanes to diminishing returns + evidence-based verdicts + reconcile gate (zero rows)
+
+**Wave 4** *(blocked on 04-03)*
+- [ ] 04-04-PLAN.md — Generate the write-capability matrix from acculynx_write_catalog (D-03): regenerate docs/37 + write-capability.md (correct the phantom measurements endpoint) + guardrail recipes + write-sweep.md design doc
 
 ### Phase 5: Read/Write Action Layer
 
@@ -197,7 +207,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation — Account Registry & Read-Capability Discovery | 3/3 | Complete   | 2026-06-30 |
 | 2. Multi-Location Full Ingestion | 4/4 | Complete   | 2026-06-30 |
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
-| 4. Sandbox Write-Capability Exploration & Red-Team | 0/TBD | Not started | - |
+| 4. Sandbox Write-Capability Exploration & Red-Team | 0/4 | Planned | - |
 | 5. Read/Write Action Layer | 0/TBD | Not started | - |
 | 6. AccuLynx Agent + OKF Knowledge Base | 0/TBD | Not started | - |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
