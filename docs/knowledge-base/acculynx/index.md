@@ -32,3 +32,18 @@ YAML frontmatter, read directly by agents and humans, version-controlled, no dri
 * [Data](data/) - where AccuLynx data lands in the brain DB
   * [Jobs & Pipeline](data/jobs.md) - acculynx_jobs and crm_pipeline
   * [Brain Tables](data/tables.md) - every acculynx_* table and view
+
+# Write action layer (the HOW, write side)
+
+* [Write-Sweep](ingestion/write-sweep.md) - the sandbox write red-team harness (Phase 4)
+* [Write-Action](ingestion/write-action.md) - the human-gated enqueue → approve → execute → audit loop (Phase 5)
+* [Runbook](ingestion/runbook.md) - ingestion recovery procedures
+
+# Security
+
+* [Security](security/) - secrets, RLS, and the untrusted-content boundary
+  * [Security Posture](security/posture.md) - secrets, RLS, STRIDE attestation (Phase 3)
+
+# Bundle history
+
+* [Update Log](log.md) - dated changelog of what was added to this bundle, by phase
