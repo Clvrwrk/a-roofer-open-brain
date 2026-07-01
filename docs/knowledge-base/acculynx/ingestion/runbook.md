@@ -266,18 +266,20 @@ supabase secrets list --project-ref rnhmvcpsvtqjlffpsayu | grep <ACCT>   # diges
 Edge secrets take ~30–60s to propagate before the fn resolves them (a too-soon run
 skips the account: ~1s edge exec, no watermark written).
 
-**KNOWN ISSUE — jobs sweep stalls at ~25/run (blocks large-account jobs backfill).**
-The date-windowed jobs sweep (`resources/jobs.ts`) fetches only the first page
-(`PAGE_SIZE=25`) then terminates, every run — observed uniformly across all
-API-swept accounts (georgia 25/470, texas 25/2300, multi_family 25/352, colorado
-crawls ~25/run). KC (166/166) and Wichita (1284/1286) look complete only because
-their jobs were loaded by the **legacy backfill script**, not this sweep. Contacts
-and estimates are unaffected (page-number fix works). Diagnosis pending edge-fn
-console logs on the page-2 response (recordStartIndex=25) — a `status != 200` or
-empty-items early break. Until fixed, large-account jobs reconciliation stays high
-(colorado jobs 97.4%); the account is enabled and contacts/estimates are current.
-Fix path: instrument jobs.ts page-2 with logging, redeploy, inspect
-`get_logs edge-function`; compare against the legacy `pageStartIndex` jobs path.
+**RESOLVED (2026-07-01) — jobs sweep stalled at ~25/run (wrong pagination param).**
+The jobs sweep (`resources/jobs.ts`) used `recordStartIndex`, which `/jobs` **silently
+ignores** (a direct API probe showed `recordStartIndex=0` and `=25` return the
+identical 25 rows) — so every page re-fetched the same 25, `offset` climbed to
+`count`, and the loop ended with jobs stuck at 25 for every API-swept account
+(georgia 25/470, texas 25/2300, colorado ~25/run). KC (166/166) and Wichita
+(1284/1286) only looked complete because their jobs were loaded by the **legacy
+backfill script**, not this sweep — which masked the bug. **Fix:** `/jobs` paginates
+by `pageStartIndex` as a **record offset** (probe: `pageStartIndex=25` → records 26+;
+`=460` → 10 tail records; `=470` → empty) — switched the sweep to `pageStartIndex`
+(kept `offset += items.length`). Deployed + verified live (see the jobs-pagination
+fix commit). Contacts/estimates were already correct (they use `pageStartIndex` as a
+**page number**, `+= 1`). Docs corrected: [read-capability](../api/read-capability.md#pagination-split-a-real-quirk).
+If a jobs sweep ever stalls again, first re-probe the endpoint's pagination unit.
 
 ## Owners
 

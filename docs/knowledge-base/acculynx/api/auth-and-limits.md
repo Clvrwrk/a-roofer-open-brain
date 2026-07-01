@@ -33,8 +33,11 @@ timestamp: 2026-06-30T00:00:00Z
 # Backfill guidance
 
 Page by date windows (`dateFilterType=ModifiedDate`) rather than sweeping >100k
-records from one listing query. Jobs use `recordStartIndex`; contacts use
-`pageStartIndex` — the pagination param is per-endpoint (see [Read Capability](read-capability.md)).
+records from one listing query. Both `/jobs` and `/contacts`/`/estimates` paginate by
+`pageStartIndex` (verified live 2026-07-01) — but the UNIT differs: `/jobs` treats it as
+a **record offset** (advance by items-per-page), while `/contacts`/`/estimates` treat it
+as a **page number** (advance by 1). `recordStartIndex` is ignored by `/jobs`. Full
+table in [Read Capability](read-capability.md#pagination-split-a-real-quirk).
 
 # Citations
 

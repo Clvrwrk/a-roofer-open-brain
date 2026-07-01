@@ -6,7 +6,7 @@
 // The import failure IS the intended RED state.
 //
 // Behavioral contracts asserted:
-//   (a) URL pagination param is `recordStartIndex` (NOT pageStartIndex — Pitfall 2)
+//   (a) URL pagination param is `pageStartIndex` (record offset; recordStartIndex ignored by /jobs)
 //   (b) URL includes dateFilterType=ModifiedDate (jobs support date filtering)
 //   (c) Every upserted row carries account_key AND market from the passed acct
 //   (d) last_seen_by_api is set on every upserted row
@@ -68,7 +68,7 @@ const WATERMARK = {
 // Tests
 // ---------------------------------------------------------------------------
 
-Deno.test("syncJobs — URL pagination param is recordStartIndex (not pageStartIndex)", async () => {
+Deno.test("syncJobs — URL pagination param is pageStartIndex (recordStartIndex is ignored by /jobs)", async () => {
   const fetchedUrls: string[] = [];
   const mockFetch = (url: string | URL | Request) => {
     fetchedUrls.push(String(url));
@@ -85,15 +85,17 @@ Deno.test("syncJobs — URL pagination param is recordStartIndex (not pageStartI
   await syncJobs(sb, ACCT, "test-api-key", deadline, WATERMARK, mockFetch);
 
   const firstUrl = fetchedUrls[0] ?? "";
-  assertEquals(
-    firstUrl.includes("recordStartIndex"),
-    true,
-    `URL must contain 'recordStartIndex' but got: ${firstUrl}`,
-  );
+  // Verified live 2026-07-01: /jobs paginates by pageStartIndex (record offset);
+  // recordStartIndex is ignored (every value returns page 1), which stalled the sweep at 25.
   assertEquals(
     firstUrl.includes("pageStartIndex"),
+    true,
+    `URL must contain 'pageStartIndex' but got: ${firstUrl}`,
+  );
+  assertEquals(
+    firstUrl.includes("recordStartIndex"),
     false,
-    `URL must NOT contain 'pageStartIndex' (jobs uses recordStartIndex, not pageStartIndex)`,
+    `URL must NOT contain 'recordStartIndex' (ignored by /jobs — use pageStartIndex)`,
   );
 });
 
@@ -288,16 +290,15 @@ Deno.test("syncJobs — returns apiCount from the response for last_api_count", 
 });
 
 // ---------------------------------------------------------------------------
-// Rule 1 Bug Fix: AccuLynx jobs API repeats last item(s) when recordStartIndex > count
-// — must break on offset >= count (not just on empty items array)
+// Guard: break on offset >= count so a repeated/last page past the end can't loop
+// (pageStartIndex past the end returns empty live, but the count guard is the backstop)
 // ---------------------------------------------------------------------------
 
 Deno.test("syncJobs — breaks when offset reaches API count (prevents infinite loop)", async () => {
   let fetchCount = 0;
   const mockFetch = () => {
     fetchCount++;
-    // Always return 1 item regardless of offset — simulates the AccuLynx behavior
-    // where items are repeated when recordStartIndex exceeds count.
+    // Always return 1 item regardless of offset — the count guard must still stop the loop.
     const items = [{ id: "j-1", modifiedDate: "2026-06-30T12:00:00Z" }];
     const body = JSON.stringify({ items, count: 1 }); // count=1 means only 1 total
     return Promise.resolve(
@@ -363,7 +364,7 @@ Deno.test("syncJobs — incremental run probes full-history total into apiTotal"
   const mockFetch = (url: string | URL | Request) => {
     const u = String(url);
     urls.push(u);
-    if (u.includes("pageSize=1&recordStartIndex=0")) {
+    if (u.includes("pageSize=1&pageStartIndex=0")) {
       // full-history probe → grand total
       return Promise.resolve(
         new Response(JSON.stringify({ items: [{ id: "j-1" }], count: 166 }), {
@@ -388,7 +389,7 @@ Deno.test("syncJobs — incremental run probes full-history total into apiTotal"
   assertEquals(result.apiCount, 8, "apiCount is the windowed (modified-since) count");
   assertEquals(result.apiTotal, 166, "apiTotal is the full-history probe grand total");
   assertEquals(
-    urls.some((u) => u.includes("startDate=2000-01-01") && u.includes("pageSize=1&recordStartIndex=0")),
+    urls.some((u) => u.includes("startDate=2000-01-01") && u.includes("pageSize=1&pageStartIndex=0")),
     true,
     "an incremental run must issue exactly the full-history probe",
   );
@@ -419,7 +420,7 @@ Deno.test("syncJobs — full-history run sets apiTotal without an extra probe", 
 
   assertEquals(result.apiTotal, 166, "full-history run: apiTotal reuses the swept count");
   assertEquals(
-    urls.some((u) => u.includes("pageSize=1&recordStartIndex=0")),
+    urls.some((u) => u.includes("pageSize=1&pageStartIndex=0")),
     false,
     "no separate probe on a full-history run (count already equals the total)",
   );

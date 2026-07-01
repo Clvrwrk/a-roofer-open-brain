@@ -1,10 +1,17 @@
 // acculynx-sync — resources/jobs.ts (Phase 2, plan 02-03)
 //
-// Date-windowed incremental jobs sync using recordStartIndex pagination.
-// Endpoint: GET /jobs?dateFilterType=ModifiedDate&startDate={wm}&endDate={today}&recordStartIndex={N}
+// Date-windowed incremental jobs sync using pageStartIndex pagination.
+// Endpoint: GET /jobs?dateFilterType=ModifiedDate&startDate={wm}&endDate={today}&pageStartIndex={N}
+//
+// PAGINATION (verified live against the AccuLynx API 2026-07-01, georgia key):
+//   /jobs paginates by `pageStartIndex` (a RECORD offset — pageStartIndex=25 returns
+//   records 26+). `recordStartIndex` is IGNORED by /jobs (every value returns page 1),
+//   so the earlier recordStartIndex loop re-fetched the same 25 rows each page and left
+//   jobs stuck at 25 for every API-swept account (docs/65 mislabeled /jobs; corrected).
+//   This matches the legacy jobs path, which used pageStartIndex all along.
 //
 // Behavioral contracts (asserted by jobs.test.ts):
-//   - URL pagination param: recordStartIndex (NOT pageStartIndex — Pitfall 2)
+//   - URL pagination param: pageStartIndex (record offset; recordStartIndex is ignored by /jobs)
 //   - URL includes dateFilterType=ModifiedDate
 //   - Stamps account_key AND market on every upserted row (no cross-account bleed, T-02-04)
 //   - Sets last_seen_by_api on every upserted row (feeds diff detection)
@@ -107,7 +114,7 @@ function mapJob(item: any, acct: any, now: string): Record<string, unknown> {
 
 /**
  * Sync jobs for a single account via a date-windowed incremental query.
- * Endpoint: GET /jobs?dateFilterType=ModifiedDate&startDate={wm}&endDate={today}&recordStartIndex={N}
+ * Endpoint: GET /jobs?dateFilterType=ModifiedDate&startDate={wm}&endDate={today}&pageStartIndex={N}
  *
  * Full-history sweep: when watermark.last_modified_date is null (first run), startDate
  * defaults to "2000-01-01" so the entire historical record is fetched, not just today.
@@ -148,27 +155,30 @@ export async function syncJobs(
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
   let maxModified: Date | null = null; // track max modifiedDate across all fetched items
-  // totalCount: authoritative page total from the API response (count field).
-  // CRITICAL: AccuLynx jobs API does NOT return an empty items array when
-  // recordStartIndex exceeds count — it returns the last item(s) repeatedly.
-  // Breaking on items.length===0 is insufficient; we MUST break on offset>=totalCount.
+  // totalCount: authoritative total from the API response (count field).
+  // We break on offset>=totalCount as the primary guard; pageStartIndex past the end
+  // returns an empty items array (verified live), so items.length===0 is a valid
+  // secondary guard. Both are kept.
   let totalCount: number | null = null;
 
   while (Date.now() < deadline) {
     // Break when offset has reached or exceeded the API-reported total count.
-    // This prevents infinite looping when the AccuLynx API returns the last page
-    // item(s) repeatedly for recordStartIndex values > count (observed in production).
     if (totalCount !== null && offset >= totalCount) break;
 
     const url =
       `${ACCULYNX_BASE}/jobs?dateFilterType=ModifiedDate` +
       `&startDate=${startDate}&endDate=${endDate}` +
-      `&pageSize=${PAGE_SIZE}&recordStartIndex=${offset}` +
+      `&pageSize=${PAGE_SIZE}&pageStartIndex=${offset}` +
       `&sortBy=ModifiedDate&sortOrder=Ascending`;
 
     if (offset > 0) await sleep(PACE_MS);
     const { status, body } = await acculynxGet(url, apiKey, fetchFn);
 
+    // 416 (Range Not Satisfiable) is the NORMAL end-of-pagination for /jobs: the API's
+    // `count` field can exceed the truly-paginable set (phantom/duplicate count — georgia
+    // reports count=470 but only ~435 unique records paginate), so pageStartIndex past
+    // the real end returns 416, not an empty page. Treat it as a clean stop, not an error.
+    if (status === 416) break;
     if (status !== 200) {
       console.warn(`[jobs] unexpected status ${status} for ${acct.account_key}`);
       break;
@@ -238,7 +248,7 @@ export async function syncJobs(
     const probeUrl =
       `${ACCULYNX_BASE}/jobs?dateFilterType=ModifiedDate` +
       `&startDate=2000-01-01&endDate=${endDate}` +
-      `&pageSize=1&recordStartIndex=0` +
+      `&pageSize=1&pageStartIndex=0` +
       `&sortBy=ModifiedDate&sortOrder=Ascending`;
     const { status: probeStatus, body: probeBody } = await acculynxGet(probeUrl, apiKey, fetchFn);
     if (probeStatus === 200 && typeof (probeBody as { count?: number })?.count === "number") {

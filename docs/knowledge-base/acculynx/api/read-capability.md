@@ -23,11 +23,26 @@ against `acculynx_get_checklist`.
 
 # Pagination split (a real quirk)
 
-- `recordStartIndex` (21 ops): `/jobs`, `/users`, `/supplements`, most
-  `/company-settings/*`, `/jobs/{id}/history`, …
-- `pageStartIndex` (10 ops): `/contacts`, `/estimates`, `/jobs/{id}/invoices`,
-  `/subscriptions`, `/topics`, …
+- `recordStartIndex`: `/users`, `/supplements`, most `/company-settings/*`,
+  `/jobs/{id}/history`, …
+- `pageStartIndex` (record offset): `/jobs`, `/contacts`, `/estimates`,
+  `/jobs/{id}/invoices`, `/subscriptions`, `/topics`, …
 - Select per-endpoint — never assume one global param.
+
+> **CORRECTION (verified live 2026-07-01) — `/jobs` uses `pageStartIndex`, and the
+> `pageStartIndex` UNIT differs by endpoint.** `/jobs` paginates by **`pageStartIndex`**,
+> NOT `recordStartIndex` (which `/jobs` silently ignores — every value returns page 1,
+> stalling the sweep at 25 rows/run until fixed). But the unit is not uniform:
+>
+> | Endpoint | Param | `pageStartIndex` unit | Advance by | Terminate on |
+> |---|---|---|---|---|
+> | `/jobs` | `pageStartIndex` | **record offset** (`=25` → records 26+; `=460` → 10 tail records) | `items.length` | `offset >= count` |
+> | `/contacts`, `/estimates` | `pageStartIndex` | **page number** (`=1` → records 50–99; beyond-end → last-page repeat) | `1` | short/empty page |
+>
+> Both units were confirmed by direct probes (georgia key). The live sync encodes this:
+> `resources/jobs.ts` increments by `items.length`; `resources/contacts.ts` /
+> `estimates.ts` increment by 1. Re-probe any `recordStartIndex`-listed op before
+> trusting deep pagination — the labels here are not reliable.
 
 # Structural notes
 
