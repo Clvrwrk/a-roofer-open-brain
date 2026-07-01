@@ -25,12 +25,22 @@ supplements, insurance, payments, and representatives. Today the brain ingests
 milestone history are scoped for [multi-location ingestion](/index.md) (Phase 2).
 See [Jobs & Pipeline](data/jobs.md) and [Brain Tables](data/tables.md).
 
-# How (ingestion)
+# How (ingestion + write-action)
 
-A pull-based [sync pipeline](ingestion/sync-pipeline.md) — `pg_cron → pg_net →
-acculynx-sync` Edge Function — does incremental, watermark-based syncs and lands
-data in `acculynx_jobs` + `crm_pipeline`. A separate sandbox-only
-[read-capability sweep](ingestion/read-sweep.md) maps the full API surface.
+**Read side (ingestion):** A pull-based [sync pipeline](ingestion/sync-pipeline.md)
+— `pg_cron → pg_net → acculynx-sync` Edge Function — does incremental,
+watermark-based syncs and lands data in `acculynx_jobs` + `crm_pipeline`. A
+separate sandbox-only [read-capability sweep](ingestion/read-sweep.md) maps the
+full API surface.
+
+**Write side (the action layer):** Writes are never fired directly. A sandbox-only
+[write-sweep](ingestion/write-sweep.md) red-teamed every documented write endpoint
+(Phase 4) to prove real behavior before anything touches production. The proven-safe
+lanes are exposed through the [write-action layer](ingestion/write-action.md)
+(Phase 5) — a human-approval-gated loop: an agent *enqueues* a proposed write, a
+human *previews and approves* it on the Command Center work-queue, only then does
+the `acculynx-write-action` Edge Function *execute* it and record an audit row. If
+ingestion or a write needs recovery, see the [runbook](ingestion/runbook.md).
 
 # Where (in the brain)
 
