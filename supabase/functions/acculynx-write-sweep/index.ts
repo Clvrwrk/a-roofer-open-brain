@@ -1,16 +1,18 @@
-// acculynx-write-sweep — Edge Function entrypoint (Phase 4, plan 04-02)
+// acculynx-write-sweep — Edge Function entrypoint (Phase 4, plans 04-02 + 04-03)
 //
 // SANDBOX-ONLY tiered red-team sweep of the 38 documented AccuLynx write operations
 // (19 POST / 15 PUT / 4 DELETE). Reads the checklist from acculynx_write_checklist,
 // resolves ONLY the sandbox key behind a code-level hard gate, seeds prerequisite
 // reference data (contact-types, job-categories, trade-types, lead-sources, states,
-// custom-field defs, document-folders, account-types), walks the dependency chain
-// (contact -> job -> financials -> worksheet/payments/custom-fields/documents/messages/
-// representatives/external-references), red-teams deep-tier endpoints across 5
-// dimensions to the D-05 stop rule (shouldStopProbing), smoke-tests the remaining
-// endpoints (happy-path + 1 bad-input probe), and records one acculynx_write_probe
-// row per attempt (tagged source_account_key='sandbox', run_tag, created_entity_id)
-// plus an upsert into acculynx_write_catalog with the evidence-based verdict.
+// custom-field defs, document-folders, account-types, company users), walks the
+// dependency chain (contact -> job -> financials -> worksheet/payments/custom-fields/
+// documents/messages/representatives/external-references), red-teams deep-tier
+// endpoints across 5 dimensions to the D-05 stop rule (shouldStopProbing), smoke-tests
+// the remaining endpoints (happy-path + 1 bad-input probe), and records one
+// acculynx_write_probe row per attempt (tagged source_account_key='sandbox', run_tag,
+// created_entity_id) plus an upsert into acculynx_write_catalog with the evidence-based
+// verdict (classifyVerdict2 — Plan 04-03: reserves 'unsupported' for genuinely-absent
+// routes only; a reachable validation 4xx classifies as blocked-by-dependency).
 //
 // NO secret value in source — only the sandbox secret NAME constant (see sweep.ts).
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -18,11 +20,13 @@ import {
   assertSandbox,
   buildContactAddress,
   buildJobAddress,
+  classifyVerdict2,
   pathParams,
   redactSample,
   SANDBOX_SECRET_NAME,
   shouldStopProbing,
   type ProbeSignal,
+  type VerdictInput,
 } from "./sweep.ts";
 
 const ACCULYNX_KEY = Deno.env.get(SANDBOX_SECRET_NAME);
@@ -57,26 +61,32 @@ function topKeys(o: unknown): string[] {
 /**
  * Generalized HTTP call helper for writes — same 429/backoff/retry-after logic as
  * read-sweep's acculynxGet, VERBATIM (Don't-Hand-Roll rate-limit pattern), extended
- * to accept a method + optional JSON body.
+ * to accept a method + optional JSON body OR a pre-built FormData body (Plan 04-03:
+ * postJobDocument/postJobPhotoVideo are multipart/form-data per the OpenAPI index,
+ * not JSON — sending JSON against them mis-negotiates content-type and the vendor's
+ * routing layer returns a bare, non-ProblemDetails 404 that looks like "unsupported"
+ * but is actually just the wrong wire format).
  */
 async function acculynxCall(
   method: string,
   url: string,
   body?: unknown,
+  formData?: FormData,
 ): Promise<{ status: number; ms: number; body: unknown; isJson: boolean }> {
   let attempt = 0;
   while (true) {
     const t0 = Date.now();
     let res: Response;
     try {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${ACCULYNX_KEY}`,
+        Accept: "application/json",
+      };
+      if (!formData) headers["Content-Type"] = "application/json";
       res = await fetch(url, {
         method,
-        headers: {
-          Authorization: `Bearer ${ACCULYNX_KEY}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: body ? JSON.stringify(body) : undefined,
+        headers,
+        body: formData ?? (body ? JSON.stringify(body) : undefined),
       });
     } catch (e) {
       return { status: 0, ms: Date.now() - t0, body: { fetchError: String(e) }, isJson: false };
@@ -95,6 +105,29 @@ async function acculynxCall(
   }
 }
 
+/** Tiny in-memory 1x1 GIF fixture for multipart document/photo probes — no real file needed. */
+function buildProbeFile(name: string, contentType: string): Blob {
+  const bytes = new Uint8Array([
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+  ]);
+  return new Blob([bytes], { type: contentType });
+}
+
+/** Build a multipart/form-data body for the two file-upload write endpoints. */
+function buildMultipartBody(op: string, seeds: Record<string, string | null>): FormData {
+  const fd = new FormData();
+  fd.append("file", buildProbeFile("write-sweep-probe.gif", "image/gif"), "write-sweep-probe.gif");
+  if (op === "postJobDocument") {
+    fd.append("description", "write-sweep probe document");
+    if (seeds.documentFolderId) fd.append("documentFolderId", seeds.documentFolderId);
+  } else if (op === "postJobPhotoVideo") {
+    fd.append("description", "write-sweep probe photo");
+  }
+  return fd;
+}
+
 /** Reference-data pre-fetch: safe read-only GETs used to resolve dependent write bodies. */
 async function ref(path: string): Promise<any[]> {
   const { body } = await acculynxCall("GET", `${BASE}${path}`);
@@ -109,11 +142,16 @@ interface ReferenceData {
   accountTypeId: string | null;
   documentFolderId: string | null;
   customFieldDefinitionId: string | null;
+  workTypeId: string | null;
+  userId: string | null;
   stateByAbbr: Record<string, { id: number; name: string; abbreviation: string }>;
+  /** Names any reference GET that came back empty in this sandbox, for evidence-carrying
+   * blocked-by-dependency notes (Plan 04-03: never fabricate a synthetic id). */
+  missing: string[];
 }
 
 async function prefetchReferenceData(): Promise<ReferenceData> {
-  const [contactTypes, jobCategories, tradeTypes, leadSources, states, customFields, docFolders, accountTypes] =
+  const [contactTypes, jobCategories, tradeTypes, leadSources, states, customFields, docFolders, accountTypes, workTypes, users] =
     await Promise.all([
       ref("/contacts/contact-types"),
       ref("/company-settings/job-file-settings/job-categories"),
@@ -123,21 +161,34 @@ async function prefetchReferenceData(): Promise<ReferenceData> {
       ref("/company-settings/custom-fields"),
       ref("/company-settings/job-file-settings/document-folders"),
       ref("/company-settings/location-settings/account-types"),
+      ref("/company-settings/job-file-settings/work-types"),
+      ref("/users"),
     ]);
 
   const stateByAbbr = Object.fromEntries(
     (states ?? []).map((s: any) => [s.abbreviation, { id: s.id, name: s.name, abbreviation: s.abbreviation }]),
   );
 
+  const missing: string[] = [];
+  const pick = (arr: any[], name: string, pred?: (x: any) => boolean): string | null => {
+    const found = (pred ? arr.find(pred) : undefined) ?? arr[0];
+    const id = found?.id ?? null;
+    if (id == null) missing.push(name);
+    return id != null ? String(id) : null;
+  };
+
   return {
-    defaultContactTypeId: contactTypes.find((t: any) => t.isDefault)?.id ?? contactTypes[0]?.id ?? null,
-    jobCategoryId: jobCategories[0]?.id ?? null,
-    tradeTypeId: tradeTypes[0]?.id ?? null,
-    leadSourceId: leadSources[0]?.id ?? null,
-    accountTypeId: accountTypes[0]?.id ?? null,
-    documentFolderId: docFolders[0]?.id ?? null,
-    customFieldDefinitionId: customFields[0]?.id ?? null,
+    defaultContactTypeId: pick(contactTypes, "contactTypeId", (t: any) => t.isDefault),
+    jobCategoryId: pick(jobCategories, "jobCategoryId"),
+    tradeTypeId: pick(tradeTypes, "tradeTypeId"),
+    leadSourceId: pick(leadSources, "leadSourceId"),
+    accountTypeId: pick(accountTypes, "accountTypeId"),
+    documentFolderId: pick(docFolders, "documentFolderId"),
+    customFieldDefinitionId: pick(customFields, "customFieldDefinitionId"),
+    workTypeId: pick(workTypes, "workTypeId"),
+    userId: pick(users, "userId"),
     stateByAbbr,
+    missing,
   };
 }
 
@@ -281,7 +332,12 @@ function buildRequestBody(
         ? { priority: "Urgent" } // invalid strict enum -> expect 404 (Pitfall 2)
         : { contact: { id: seeds.contactId }, priority: "Normal" };
     case "postContactLog":
-      return dimension === "bad_input" ? { message: 12345 } : { message: "write-sweep probe log" };
+      // OpenAPI index's contactLogPost schema is thin (only inherited id/_link fields show
+      // in the flattened index — the real body shape isn't fully captured there). Best-effort
+      // guess is a `message`/`note`-shaped log entry; a 400 here is real evidence the guess is
+      // wrong (reachable-but-wrong-shape -> blocked-by-dependency via classifyVerdict2), not
+      // proof the route is unsupported.
+      return dimension === "bad_input" ? { message: 12345 } : { message: "write-sweep probe log", note: "write-sweep probe log" };
     case "postContactsSearch":
       return dimension === "bad_input"
         ? { sort: "not-a-valid-sort" }
@@ -311,7 +367,13 @@ function buildRequestBody(
     case "putPriorityForJob":
       return dimension === "bad_input" ? { priority: "Urgent" } : { priority: "High" };
     case "putTradeTypesForJob":
-      return dimension === "bad_input" ? { tradeTypes: "not-an-array" } : { tradeTypes: refData.tradeTypeId ? [{ id: refData.tradeTypeId }] : [] };
+      // OpenAPI index: jobTradeTypeCollection = { items: [...] } (NOT a top-level `tradeTypes`
+      // key). Plan 04-03: the prior run's empty-body probe 500'd here — that is real evidence
+      // of a guardrail (classifyVerdict2 maps any 500 to fragile-with-guardrail), not a reason
+      // to send a still-malformed body; the happy-path uses the verified `items` shape.
+      return dimension === "bad_input"
+        ? undefined // empty/no body -> documented 500 crash (the guardrail this endpoint reveals)
+        : { items: refData.tradeTypeId ? [{ id: refData.tradeTypeId }] : [] };
     case "putWorkTypeForJob":
       return dimension === "bad_input" ? { id: "00000000-0000-0000-0000-000000000000" } : { id: seeds.workTypeId ?? undefined };
     case "postSubscription":
@@ -332,31 +394,71 @@ function classifySignal(status: number, body: unknown): ProbeSignal {
   const errShape = status >= 400
     ? `${status}:${topKeys(body).sort().join(",")}`
     : null;
-  const guardrail = status === 412 ? "precondition_failed" : status === 416 ? "payload_too_large" : null;
+  const guardrail = status === 412
+    ? "precondition_failed"
+    : status === 416
+    ? "payload_too_large"
+    : status >= 500
+    ? "server_error"
+    : null;
   return { status, errorShape: errShape, guardrail };
 }
 
-/** Map an endpoint's accumulated probe history into the acculynx_write_catalog verdict enum. */
-function classifyVerdict(
+/** Endpoint operation_ids with no independent read-back path (Pitfall 5) — verdict caps at write-only. */
+const WRITE_ONLY_OPS = new Set(["postJobMessage", "postJobMessageReply", "postContactLog"]);
+
+/**
+ * Per operation_id: [key into the `seeds` map, human-readable evidence label]. The seeds-map
+ * key MUST match a real key in the `seeds` object below (Plan 04-03: this drove a bug where
+ * the display label "customFieldDefinitionId" was used to look up `seeds.customFieldId` and
+ * silently always missed — fixed by separating the lookup key from the label).
+ */
+const CHILD_ID_SEED_NAME: Record<string, [seedKey: string, label: string]> = {
+  postCompanyRepresentativeForJob: ["userId", "userId"],
+  postSalesOwnerForJob: ["userId", "userId"],
+  postAROwnerForJob: ["userId", "userId"],
+  deleteAROwnerForJob: ["userId", "userId (via postAROwnerForJob)"],
+  deleteSalesOwnerForJob: ["userId", "userId (via postSalesOwnerForJob)"],
+  postPaymentPaid: ["accountTypeId", "accountTypeId"],
+  postPaymentExpense: ["accountTypeId", "accountTypeId"],
+  putJobCustomFields: ["customFieldId", "customFieldDefinitionId"],
+  putContactCustomFields: ["customFieldId", "customFieldDefinitionId"],
+  putJobCustomFieldById: ["customFieldId", "customFieldDefinitionId"],
+  putContactCustomFieldById: ["customFieldId", "customFieldDefinitionId"],
+  postJobDocument: ["documentFolderId", "documentFolderId"],
+  putJobCategoriesForJob: ["jobCategoryId", "jobCategoryId"],
+  putWorkTypeForJob: ["workTypeId", "workTypeId"],
+  postJobMessageReply: ["messageId", "messageId (via postJobMessage)"],
+  putSubscription: ["subscriptionId", "subscriptionId (via postSubscription)"],
+  deleteSubscription: ["subscriptionId", "subscriptionId (via postSubscription)"],
+  postSubscriptionTestEvent: ["subscriptionId", "subscriptionId (via postSubscription)"],
+};
+
+/**
+ * Map an endpoint's accumulated probe evidence into the acculynx_write_catalog verdict
+ * enum via the pure, evidence-correct classifyVerdict2 (Plan 04-03 fix). Thin adapter that
+ * assembles a VerdictInput from the harness's mutable probe-loop state; the actual
+ * classification logic lives in sweep.ts so it stays unit-testable without a live sandbox.
+ */
+function classifyVerdictForRow(
   row: ChecklistRow,
   history: ProbeSignal[],
+  probeTopKeys: string[][],
   createdEntityId: string | null,
   neverProbed: boolean,
+  missingSeedId: boolean,
 ): string {
-  if (row.probeability === "blocked-by-dependency") return "blocked-by-dependency";
-  if (neverProbed) return "blocked-by-dependency";
-  if (row.operation_id === "postJobsSearch" || row.operation_id === "postContactsSearch") return "read-shaped";
-  const anySuccess = history.some((h) => h.status >= 200 && h.status < 300);
-  const allFail = history.every((h) => h.status >= 400);
-  const hasGuardrail = history.some((h) => h.guardrail);
-  if (allFail && history.length > 0) return "unsupported";
-  if (anySuccess && hasGuardrail) return "fragile-with-guardrail";
-  if (anySuccess && (row.operation_id === "postJobMessage" || row.operation_id === "postJobMessageReply" || row.operation_id === "postContactLog")) {
-    return "write-only";
-  }
-  if (anySuccess && createdEntityId === null && row.method === "POST") return "write-only";
-  if (anySuccess) return "writable";
-  return "blocked-by-dependency";
+  const input: VerdictInput = {
+    probeability: row.probeability,
+    neverProbed,
+    isSearchShaped: row.operation_id === "postJobsSearch" || row.operation_id === "postContactsSearch",
+    isWriteOnlyShaped: WRITE_ONLY_OPS.has(row.operation_id),
+    probes: history.map((h, i) => ({ status: h.status, topKeys: probeTopKeys[i] ?? [], guardrail: h.guardrail })),
+    createdEntityId,
+    method: row.method,
+    missingChildIdName: missingSeedId ? (CHILD_ID_SEED_NAME[row.operation_id]?.[1] ?? "unknown-child-id") : null,
+  };
+  return classifyVerdict2(input);
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -425,11 +527,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
     customFieldId: refData.customFieldDefinitionId,
     jobCategoryId: refData.jobCategoryId,
     leadSourceId: refData.leadSourceId,
-    workTypeId: null,
-    userId: null,
+    workTypeId: refData.workTypeId,
+    userId: refData.userId,
     messageId: null,
     subscriptionId: null,
   };
+
+  // Plan 04-03 bug #1: postContact/postJob are the dependency-root seeds and are
+  // provably WRITABLE (their 2xx responses seeded everything downstream), but the prior
+  // run never wrote a catalog row for either — they were skipped from the checklist walk
+  // below to avoid double-creating the shared parent entities. Write their catalog rows
+  // here, directly from the real seed-step evidence (never fabricated).
+  for (const s of seedSteps) {
+    if (s.op !== "postContact" && s.op !== "postJob") continue;
+    const path = s.op === "postContact" ? "/contacts" : "/jobs";
+    const succeeded = s.status >= 200 && s.status < 300;
+    const createdId = s.op === "postContact" ? contactId : jobId;
+    catalogRows.push({
+      endpoint_pattern: path,
+      method: "POST",
+      category: s.op === "postContact" ? "contacts" : "jobs",
+      verdict: succeeded ? "writable" : "unsupported",
+      tier: "deep",
+      red_team_dimensions_covered: [],
+      side_effect: succeeded ? "creates_entity" : "no_side_effect",
+      guardrail_notes: null,
+      source_account_key: SOURCE_ACCOUNT,
+      last_probe_status: s.status || null,
+      last_probed_at: new Date().toISOString(),
+      notes: `dependency-root seed step; status ${s.status}; ${
+        succeeded ? `created entity id ${createdId ? "present" : "MISSING despite 2xx"}` : "seed failed"
+      } — this id seeded the rest of the sweep's dependency chain`,
+      updated_at: new Date().toISOString(),
+    });
+    bump(succeeded ? "writable" : "unsupported");
+  }
 
   // 3. Tiered walk over the checklist, ordered by dependency (contact/job roots already
   //    seeded above; checklist rows are ordered tier then operation_id by the query).
@@ -483,6 +615,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     let lastCreatedEntityId: string | null = null;
     let anyProbe = false;
     const dimensionsCovered: string[] = [];
+    const probeTopKeys: string[][] = [];
 
     // Dimensions to run: deep tier iterates the full red_team_dimensions list to the
     // stop rule; smoke tier runs happy-path (dimension=null) + exactly 1 bad-input probe.
@@ -490,16 +623,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ? [null, ...row.red_team_dimensions] // happy-path first, then each red-team dimension
       : [null, "bad_input"];
 
+    // postJobDocument/postJobPhotoVideo are multipart/form-data per the OpenAPI index
+    // (Plan 04-03 fix) — build a FormData body instead of a JSON one for these two.
+    const isMultipart = row.operation_id === "postJobDocument" || row.operation_id === "postJobPhotoVideo";
+
     for (const dimension of dimensionPlan) {
       if (Date.now() >= deadline) break;
       if (row.tier === "deep" && dimension && shouldStopProbing(history)) break;
 
-      const body = row.method === "DELETE" ? undefined : buildRequestBody(row.operation_id, seeds, refData, dimension);
+      let body: unknown;
+      let formData: FormData | undefined;
+      if (row.method === "DELETE") {
+        body = undefined;
+      } else if (isMultipart && dimension !== "bad_input") {
+        formData = buildMultipartBody(row.operation_id, seeds);
+      } else if (isMultipart && dimension === "bad_input") {
+        // bad-input probe for the file-upload endpoints: send valid multipart shape but a
+        // foreign/nonexistent documentFolderId, still as multipart (sending JSON here would
+        // re-introduce the same content-type mismatch bug this plan fixes).
+        formData = new FormData();
+        formData.append("file", buildProbeFile("write-sweep-bad-input.gif", "image/gif"), "write-sweep-bad-input.gif");
+        if (row.operation_id === "postJobDocument") {
+          formData.append("documentFolderId", "00000000-0000-0000-0000-000000000000");
+        }
+      } else {
+        body = buildRequestBody(row.operation_id, seeds, refData, dimension);
+      }
+
       if (calls > 0) await sleep(PACE_MS);
-      const { status, ms, body: respBody } = await acculynxCall(row.method, url, body);
+      const { status, ms, body: respBody } = await acculynxCall(row.method, url, body, formData);
       calls++;
       anyProbe = true;
 
+      const respTopKeys = topKeys(respBody);
       const signal = classifySignal(status, respBody);
       history.push(signal); // happy-path AND red-team probes count toward stop-rule history
       if (dimension) dimensionsCovered.push(dimension);
@@ -511,6 +667,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (row.operation_id === "postJobMessage" && createdEntityId) seeds.messageId = createdEntityId;
       if (row.operation_id === "postSubscription" && createdEntityId) seeds.subscriptionId = createdEntityId;
 
+      probeTopKeys.push(respTopKeys);
+
       probeRows.push({
         probe_batch_id: batchId,
         probe_name: row.operation_id,
@@ -518,9 +676,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         method: row.method,
         http_status: status,
         response_ms: ms,
-        result_summary: { top_keys: topKeys(respBody), dimension: dimension ?? "happy_path" },
+        result_summary: { top_keys: respTopKeys, dimension: dimension ?? "happy_path" },
         payload_sample: redactSample(respBody),
-        request_body_sample: body ? redactSample(body) : null,
+        request_body_sample: formData ? { multipart: true, fields: [...formData.keys()] } : (body ? redactSample(body) : null),
         error: status >= 400 ? `HTTP ${status}` : null,
         red_team_dimension: dimension,
         side_effect_observed: status >= 200 && status < 300
@@ -540,6 +698,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       calls++;
       const secondSignal = classifySignal(second.status, second.body);
       history.push(secondSignal);
+      probeTopKeys.push(topKeys(second.body));
       dimensionsCovered.push("idempotency");
       probeRows.push({
         probe_batch_id: batchId,
@@ -560,8 +719,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const verdict = classifyVerdict(row, history, lastCreatedEntityId, !anyProbe);
+    // Detect whether this endpoint's known dependency child-id seed was unavailable in this
+    // sandbox (Plan 04-03: name it in evidence rather than silently guessing/faking it).
+    const childIdSeedKey = CHILD_ID_SEED_NAME[row.operation_id]?.[0] ?? null;
+    const missingSeedId = childIdSeedKey != null && !seeds[childIdSeedKey];
+
+    const verdict = classifyVerdictForRow(row, history, probeTopKeys, lastCreatedEntityId, !anyProbe, missingSeedId);
     bump(verdict);
+
+    const guardrailNote = history.some((h) => h.guardrail) ? history.find((h) => h.guardrail)?.guardrail ?? null : null;
+    const missingIdNote = missingSeedId
+      ? `missing child id in sandbox: ${CHILD_ID_SEED_NAME[row.operation_id]?.[1]} (reference GET returned no usable id)`
+      : null;
 
     catalogRows.push({
       endpoint_pattern: row.path,
@@ -571,11 +740,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       tier: row.tier,
       red_team_dimensions_covered: dimensionsCovered,
       side_effect: lastCreatedEntityId ? "creates_entity" : (verdict === "writable" || verdict === "fragile-with-guardrail" ? "mutates_entity" : "no_side_effect"),
-      guardrail_notes: history.some((h) => h.guardrail) ? history.find((h) => h.guardrail)?.guardrail ?? null : null,
+      guardrail_notes: verdict === "fragile-with-guardrail"
+        ? (guardrailNote ?? `reachable but failing across ${history.length} probe(s); see result_summary`)
+        : guardrailNote,
       source_account_key: SOURCE_ACCOUNT,
       last_probe_status: history.length ? history[history.length - 1].status : null,
       last_probed_at: new Date().toISOString(),
-      notes: `tier ${row.tier}; verdict ${verdict}; probes ${history.length}`,
+      notes: [`tier ${row.tier}; verdict ${verdict}; probes ${history.length}`, missingIdNote].filter(Boolean).join("; "),
       updated_at: new Date().toISOString(),
     });
   }
@@ -598,7 +769,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
     checklist_ops: checklist?.length ?? 0,
     probe_rows: probeRows.length,
     calls_made: calls,
-    seeds_harvested: { contactId: !!contactId, jobId: !!jobId, financialsId: !!financialsId },
+    seeds_harvested: {
+      contactId: !!contactId,
+      jobId: !!jobId,
+      financialsId: !!financialsId,
+      accountTypeId: !!refData.accountTypeId,
+      documentFolderId: !!refData.documentFolderId,
+      customFieldDefinitionId: !!refData.customFieldDefinitionId,
+      jobCategoryId: !!refData.jobCategoryId,
+      workTypeId: !!refData.workTypeId,
+      userId: !!refData.userId,
+      messageId: !!seeds.messageId,
+      subscriptionId: !!seeds.subscriptionId,
+    },
+    reference_data_missing: refData.missing, // Plan 04-03: names any ref GET that came back empty (evidence for blocked-by-dependency)
     verdicts,
     runtime_ms: Date.now() - started,
   });
