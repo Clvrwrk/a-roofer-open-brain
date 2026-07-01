@@ -12,6 +12,7 @@ import {
   type WorkStatus,
 } from "@lib/cadence";
 import { loadAgreementGapSurface } from "@lib/abc-price-gaps";
+import { loadPendingAccuLynxWriteSurface } from "@lib/acculynx-pending-write";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 import type { CommandCenterActor, WorkQueueDecision } from "@lib/access-control";
@@ -1265,13 +1266,40 @@ async function loadDepartmentSurfaceFresh(department: DepartmentId, env: Runtime
   }
 }
 
+/**
+ * Splice branch for the RQ-1 enqueue-gap closure: reads pending AccuLynx writes and maps
+ * them into LiveWorkItem[], regardless of department, so a pending write always appears on
+ * the dashboard. Wrapped in the same degrade-on-error pattern the department loaders use —
+ * a Supabase error here becomes an entry in `errors[]`, never a thrown exception that would
+ * take down the whole aggregate.
+ */
+async function loadPendingAccuLynxWriteSurfaceSafe(env: RuntimeEnv): Promise<{ items: LiveWorkItem[]; errors: string[] }> {
+  const { client, config } = createServerSupabaseClient(env);
+  if (!client) return { items: [], errors: config.missing };
+
+  try {
+    return await loadPendingAccuLynxWriteSurface(client);
+  } catch (error) {
+    return {
+      items: [],
+      errors: [error instanceof Error ? error.message : "acculynx_pending_write query failed"],
+    };
+  }
+}
+
 async function loadFreshCommandCenterSurface(env: RuntimeEnv): Promise<LiveCommandCenterSurface> {
-  const surfaces = await Promise.all(departments.map((department) => loadDepartmentSurface(department.id, env)));
-  const items = surfaces.flatMap((surface) => surface.items).sort((a, b) => {
+  const [surfaces, pendingWrites] = await Promise.all([
+    Promise.all(departments.map((department) => loadDepartmentSurface(department.id, env))),
+    loadPendingAccuLynxWriteSurfaceSafe(env),
+  ]);
+  const items = [...surfaces.flatMap((surface) => surface.items), ...pendingWrites.items].sort((a, b) => {
     const priorityRank: Record<LiveWorkPriority, number> = { critical: 4, high: 3, normal: 2, low: 1 };
     return priorityRank[b.priority] - priorityRank[a.priority] || b.valueAtRisk - a.valueAtRisk;
   });
-  const errors = surfaces.flatMap((surface) => surface.errors.map((error) => `${surface.department}: ${error}`));
+  const errors = [
+    ...surfaces.flatMap((surface) => surface.errors.map((error) => `${surface.department}: ${error}`)),
+    ...pendingWrites.errors.map((error) => `acculynx-write-action: ${error}`),
+  ];
   const blocked = items.filter((row) => row.status === "blocked").length;
   const needsReview = items.filter((row) => row.status === "needs_review").length;
   const totalValue = items.reduce((total, row) => total + row.valueAtRisk, 0);
