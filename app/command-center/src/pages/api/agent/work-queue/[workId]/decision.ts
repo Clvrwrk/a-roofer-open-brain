@@ -15,6 +15,12 @@ import {
   type LiveWorkItem,
   type LiveWorkPriority,
 } from "@lib/live-work";
+import {
+  mapPendingWriteToLiveWorkItem,
+  type AcculynxPendingWriteRow,
+} from "@lib/acculynx-pending-write";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+import { getRuntimeEnv } from "@lib/runtime-env";
 
 export const prerender = false;
 
@@ -92,6 +98,96 @@ async function loadFallbackWorkItem(decodedWorkId: string): Promise<LiveWorkItem
   return row ? buildPriceGapWorkItem(row) : null;
 }
 
+const ACCULYNX_WRITE_ACTION_PREFIX = "acculynx-write-action:";
+
+/**
+ * Fetch the full acculynx_pending_write row directly (bypassing the cached surface for
+ * freshness) so both the acculynx-write-action:* fallback lookup AND the edge-function
+ * invocation can share ONE source row — the edge invoke sends the COMPLETE body (lane,
+ * accountKey, targetEnv, payload, idempotencyKey) from this exact row, never a
+ * workKey-only body (Plan 01 contract: the edge function parses these directly from the
+ * request body and does not look up the row itself by workKey).
+ */
+async function loadPendingWriteSourceRow(workKey: string): Promise<AcculynxPendingWriteRow | null> {
+  const { client } = createServerSupabaseClient(getRuntimeEnv());
+  if (!client) return null;
+
+  const { data, error } = await client
+    .from("acculynx_pending_write")
+    .select(
+      "id,work_key,lane,target_env,account_key,endpoint,payload,dry_run_render,idempotency_key,status,approver,exec_result,department,created_by,created_at,updated_at",
+    )
+    .eq("work_key", workKey)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as AcculynxPendingWriteRow;
+}
+
+/**
+ * acculynx-write-action:* fallback lookup — mirrors loadFallbackWorkItem's price-gap
+ * pattern. Bypasses the cached surface for freshness, and maps via the SHARED
+ * mapPendingWriteToLiveWorkItem (T-05-17: never duplicate the mapper).
+ */
+async function loadFallbackAcculynxWriteItem(decodedWorkId: string): Promise<LiveWorkItem | null> {
+  if (!decodedWorkId.startsWith(ACCULYNX_WRITE_ACTION_PREFIX)) return null;
+
+  const workKey = decodedWorkId.slice(ACCULYNX_WRITE_ACTION_PREFIX.length);
+  const row = await loadPendingWriteSourceRow(workKey);
+  return row ? mapPendingWriteToLiveWorkItem(row) : null;
+}
+
+interface EdgeInvokeResult {
+  invoked: boolean;
+  status?: number;
+  body?: unknown;
+  error?: string;
+}
+
+/**
+ * Synchronously invoke the acculynx-write-action edge function with the FULL request
+ * body (OQ-3: no async/polling). The edge function self-persists to
+ * acculynx_pending_write.status/exec_result and acculynx_write_action_log — this
+ * function reflects the returned status, it does not re-persist (Plan 01 Task 3).
+ */
+async function invokeAcculynxWriteActionEdge(
+  row: AcculynxPendingWriteRow,
+  fetchImpl: typeof fetch = fetch,
+): Promise<EdgeInvokeResult> {
+  const env = getRuntimeEnv();
+  const supabaseUrl = (env.SUPABASE_URL ?? env.PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { invoked: false, error: "Supabase not configured: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" };
+  }
+
+  const body = {
+    lane: row.lane,
+    accountKey: row.account_key,
+    targetEnv: row.target_env,
+    payload: row.payload,
+    dryRun: false,
+    workKey: row.work_key,
+    idempotencyKey: row.idempotency_key,
+  };
+
+  try {
+    const res = await fetchImpl(`${supabaseUrl}/functions/v1/acculynx-write-action`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { invoked: true, status: res.status, body: json };
+  } catch (error) {
+    return { invoked: false, error: error instanceof Error ? error.message : "edge_fetch_failed" };
+  }
+}
+
 export const POST: APIRoute = async ({ request, params, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
@@ -100,6 +196,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
   const decodedWorkId = params.workId ? decodeURIComponent(params.workId) : "";
   let work = surface.items.find((candidate) => candidate.workKey === decodedWorkId || candidate.id === decodedWorkId) ?? null;
   work ??= await loadFallbackWorkItem(decodedWorkId);
+  work ??= await loadFallbackAcculynxWriteItem(decodedWorkId);
   if (!work) {
     return jsonApiResponse(
       {
@@ -142,11 +239,50 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     );
   }
 
+  const isAcculynxWriteAction = work.workflow === "acculynx-write-action";
+  const isApprove = decision === "approve";
+
+  // Resolve the full acculynx_pending_write source row up front (reused for both the D-09
+  // barrier #2 permission check below and the edge-function invocation after the decision
+  // is recorded) — this is the SAME source row that supplied lane/accountKey/targetEnv/payload
+  // to mapPendingWriteToLiveWorkItem, so barrier #2's target check and the eventual edge
+  // request body can never diverge.
+  const pendingWriteRow = isAcculynxWriteAction
+    ? await loadPendingWriteSourceRow(work.workKey.slice(ACCULYNX_WRITE_ACTION_PREFIX.length))
+    : null;
+
+  // D-09 barrier #2: a prod-target acculynx-write-action item cannot be approved unless
+  // the approver holds approval.decide_prod_write — enforced BEFORE any fetch, independent
+  // of the edge function's own assertTarget (barrier #1).
+  const isProdTarget = pendingWriteRow?.target_env === "prod";
+  if (isAcculynxWriteAction && isApprove && isProdTarget && !hasPermission(actor, "approval.decide_prod_write")) {
+    return jsonApiResponse(
+      {
+        error: "forbidden",
+        error_description:
+          "Approving a prod-target AccuLynx write requires the approval.decide_prod_write permission (D-09 barrier #2).",
+        actor: serializeActor(actor),
+      },
+      { status: 403 },
+    );
+  }
+
   const result = await recordLiveWorkDecision(work, actor, decision, note, {
     actionIntent: typeof payload.intent === "string" ? payload.intent : null,
     actionLabel: typeof payload.label === "string" ? payload.label : null,
     nextStep: typeof payload.nextStep === "string" ? payload.nextStep : null,
   });
+
+  // Synchronous edge-function invocation on approve only (SC4, OQ-3: no async/polling).
+  // The edge function self-persists status/exec_result to acculynx_pending_write and the
+  // audit row to acculynx_write_action_log — this endpoint reflects the returned status,
+  // it does not re-persist.
+  let edgeInvocation: EdgeInvokeResult | null = null;
+  if (isAcculynxWriteAction && isApprove) {
+    edgeInvocation = pendingWriteRow
+      ? await invokeAcculynxWriteActionEdge(pendingWriteRow)
+      : { invoked: false, error: "pending_write_row_not_found" };
+  }
 
   return jsonApiResponse({
     status: "accepted",
@@ -155,8 +291,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     memory: result.memory,
     workItem: result.workItem,
     item: serializeLiveWorkQueueItem(work, actor),
+    edgeInvocation: edgeInvocation ?? undefined,
     next: {
-      approve: "Human approval accepted; the owning agent may resume the run.",
+      approve: isAcculynxWriteAction
+        ? "Human approval accepted; the acculynx-write-action edge function was invoked synchronously (dryRun=false)."
+        : "Human approval accepted; the owning agent may resume the run.",
       reject: "Human rejection accepted; the owning agent should close or rework the packet.",
       needs_more_evidence: "Evidence request accepted; the owning agent should attach more support.",
       resume_agent: "Agent resume signal accepted; the runtime may continue from the last approved gate.",
