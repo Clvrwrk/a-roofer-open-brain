@@ -19,6 +19,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { loadProductionAccounts, resolveKey } from "./lib/accounts.ts";
 import { readWatermark, advanceWatermark } from "./lib/watermark.ts";
 import { markNotSeen } from "./lib/diff.ts";
+import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates } from "./resources/estimates.ts";
@@ -768,6 +769,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       api_response_ms: result.runtime_ms,
     }).eq("sync_batch_id", batchId);
 
+    // D-05a in-run alert (additive; env-guarded so local runs are unaffected). A
+    // partial_success means one or more resources errored — surface it to Slack. Never
+    // include a key/header (alerts.ts redacts defensively too).
+    if (errorCount > 0) {
+      const slackToken = Deno.env.get("SLACK_BOT_TOKEN");
+      const slackChannel = Deno.env.get("ACCULYNX_ALERT_SLACK_CHANNEL") ?? "C0BDF8QRF8A";
+      if (slackToken) {
+        await postSlackAlert(
+          slackToken,
+          slackChannel,
+          `⚠ acculynx-sync partial_success (batch ${batchId}): ${errorCount} resource error(s) — ${errorDetails.map((d: any) => d?.resource ?? d?.message ?? "error").join(", ")}`,
+        );
+      }
+    }
+
     return json(result);
   } catch (err) {
     const msg = (err as Error).message;
@@ -779,6 +795,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       error_details: [...errorDetails, { message: msg }],
       api_response_ms: Date.now() - started,
     }).eq("sync_batch_id", batchId);
+
+    // D-04/D-05a hard-failure alert to BOTH Slack and Sentry (edge-side richest context).
+    // Env-guarded + fire-and-forget; message carries batch id only, never a key/header.
+    const slackToken = Deno.env.get("SLACK_BOT_TOKEN");
+    const slackChannel = Deno.env.get("ACCULYNX_ALERT_SLACK_CHANNEL") ?? "C0BDF8QRF8A";
+    if (slackToken) await postSlackAlert(slackToken, slackChannel, `🔴 acculynx-sync FAILED (batch ${batchId}): ${msg}`);
+    const dsn = Deno.env.get("ACCULYNX_SENTRY_DSN");
+    if (dsn) await captureSentryError(dsn, err as Error, { batch_id: batchId });
+
     return json({ error: msg, batch_id: batchId }, 500);
   }
 });
