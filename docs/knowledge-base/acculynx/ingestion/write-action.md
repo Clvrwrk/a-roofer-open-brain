@@ -128,10 +128,49 @@ first write; accepted bottleneck if an owner is unavailable.
 > (Task 5). This session stops after sandbox proof (Task 3), so `PROD_WRITE_APPROVER_EMAILS` is set when
 > the prod payment is actually scheduled. Mechanism and roster choice are recorded here now.
 
-# Sandbox proof + first prod payment (SC3 evidence)
+# Sandbox proof (Task 3, 2026-07-01)
 
-_Filled at Tasks 3 and 5: the sandbox audit-row ids for the 3 lanes, and the first prod payment
-`acculynx_write_action_log` id._
+All 3 first-offload lanes were driven through the full loop (enqueue → surface → approve → edge execute
+→ audit) against disposable sandbox job `22e22f5d-fa31-4040-a776-6f75bff842f8`, driven by a
+**local_operator** (full `HUMAN_PERMISSIONS`, `departmentAccess: all`) via a localhost Command Center
+reading the prod DB and invoking the live edge fn. This session was authorized as "consider approved."
+
+| Lane | work_key | audit id | HTTP | result |
+|------|----------|----------|------|--------|
+| `postJobPaymentReceived` | `…:p5w3-pay-approve` | 1 | 201 | executed |
+| `postJobMessage` | `…:p5w3-msg-approve` | 2 | 201 | executed |
+| `postJobExternalReference` | `…:p5w3-extref-approve` | 3 | 201 | executed |
+| `postJobMessage` (reject) | `…:p5w3-msg-reject` | — | — | rejected, edge never invoked (SC4) |
+
+- **Idempotency proven:** re-approving the payment (same idempotency key `p5w3-pay-idem-anchor`) returned
+  HTTP 200 and produced **no 4th audit row** — exactly one sandbox payment fired.
+- **Reject proven (SC4):** the rejected item produced no audit row; the edge function was never invoked.
+
+## Findings from the sandbox proof (must fix before the Task 5 prod payment)
+
+1. **Approver is never captured (SC2 / T-05-23 blocker).** `acculynx_write_action_log` has **no
+   `approver` column**, the edge audit insert omits approver, and although `acculynx_pending_write.approver`
+   exists it is never populated (the edge's pending-write update doesn't set it, and the decision route's
+   edge-invoke body — `decision.ts invokeAcculynxWriteActionEdge` — omits the approver actor). Task 5
+   requires the prod audit row to record the approver. **Fix:** migration adding `approver` to
+   `acculynx_write_action_log`; decision route passes the approver identity in the edge body; edge writes
+   it to both the pending-write update and the audit row.
+2. **Reject never closes the pending write (queue hygiene / re-approve risk).** A rejected item stays
+   `status = pending_review` (only the edge, on approve, self-persists a terminal status). The schema
+   already allows `rejected`, so this is a wiring gap: the decision route must set
+   `acculynx_pending_write.status = 'rejected'` on reject. (The Task 3 reject test item was manually set to
+   `rejected` to keep the live queue clean.)
+3. **Double-prefixed workKey (cosmetic).** Passing a `workKey` that already starts with
+   `acculynx-write-action:` yields a doubled display key (the mapper prepends the prefix again). Callers
+   should pass a **bare** workKey; the enqueue route should defensively strip a leading prefix.
+4. **Slack notify not delivered (`not_in_channel`).** The D-08 notify posted `ok: false` — the notify bot
+   is not a member of the target channel. Non-fatal (notify-only), but D-08 isn't actually reaching Slack
+   until the bot is invited to the channel.
+
+# First prod payment (Task 5) — DEFERRED
+
+Not performed this session (user chose "deploy + sandbox only"). Prerequisites before Task 5: fix findings
+#1 and #2 above, set `PROD_WRITE_APPROVER_EMAILS` (primary owners) in Coolify, redeploy edge + CC.
 
 # Citations
 
