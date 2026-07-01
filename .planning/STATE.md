@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-07-01T09:36:29.435Z"
+last_updated: "2026-07-01T13:41:29.411Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 17
-  completed_plans: 15
-  percent: 43
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 04 (sandbox-write-capability-exploration-red-team) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-01
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [█████████░] 88%
 | Phase 02 P04 | 120m | 1 tasks | 10 files |
 | Phase 04 P01 | 10m | 5 tasks | 5 files |
 | Phase 04 P02 | 15m | 3 tasks | 1 files |
+| Phase 04 P03 | 40m | 3 tasks | 4 files |
 
 ### Decisions
 
@@ -61,6 +62,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 04]: [04-01]: Added read-shaped 6th verdict value to acculynx_write_catalog for the two search-shaped POSTs (Open Question 3).
 - [Phase 04]: [04-01]: Wave-0 write-sweep contracts (182/183 DDL+seed, sweep.ts pure core, reconcile SQL) applied+verified live in prod rnhmvcpsvtqjlffpsayu (3 tables, 38 checklist rows).
 - [Phase ?]: [Phase 04]: [04-02]: acculynx-write-sweep index.ts (609 lines) importing Wave 0 pure core; deployed ACTIVE v1 (verify_jwt=true) — sweep execution deferred to Wave 3.
+- [Phase 04]: [04-03]: Reserve 'unsupported' for genuinely-absent routes only — a reachable 4xx (ProblemDetails) or 5xx is route-exists evidence (classifyVerdict2); write-sweep run wsweep-2026-07-01T13-33-02-965Z probed 38/38, reconcile PASS, unsupported=0.
+- [Phase 04]: [04-03]: jobCategory.id is Int32 (unlike GUID-string ids elsewhere) — coerce harvested ref id back to number or a 404 System.Int32 cascades the dependency chain; durable AccuLynx quirk/guardrail.
+- [Phase 04]: [04-03]: Final write-verdict tally 38/38 — writable 12, write-only 5, fragile-with-guardrail 2, read-shaped 2, blocked-by-dependency 17 (evidence-backed, diminishing returns), unsupported 0.
 
 ### Pending Todos
 
@@ -79,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-01T09:36:29.431Z
+Last session: 2026-07-01T13:40:55.732Z
 Stopped at: Completed 04-02-PLAN.md (write-sweep index.ts built + deployed ACTIVE v1)
 Resume file: None
