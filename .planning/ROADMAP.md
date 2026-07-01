@@ -18,7 +18,7 @@ prove completeness with a realtime Executive Sales Pipeline dashboard that repla
 
 - [x] **Phase 1: Foundation — Account Registry & Read-Capability Discovery** - Map all 9 keys; exhaustively probe every READ endpoint in the sandbox; stand up the knowledge-folder skeleton. (completed 2026-06-30)
 - [x] **Phase 2: Multi-Location Full Ingestion** - Fan out the sync across all 8 production accounts and ingest every currently-unfed resource. (completed 2026-06-30)
-- [ ] **Phase 3: Commercial Cron Hardening** - Hourly, stable, observable, secure scheduling with healthchecks, alerting, and resumption.
+- [x] **Phase 3: Commercial Cron Hardening** - Hourly, stable, observable, secure scheduling with healthchecks, alerting, and resumption. (completed 2026-07-01)
 - [ ] **Phase 4: Sandbox Write-Capability Exploration & Red-Team** - Exercise every WRITE endpoint in the sandbox to diminishing returns; produce a live write-capability matrix.
 - [ ] **Phase 5: Read/Write Action Layer** - Human-approval-gated write wrappers on a contrib branch; begin offloading specific human tasks.
 - [ ] **Phase 6: AccuLynx Agent + OKF Knowledge Base** - A3-approved dedicated agent; finalized who/what/how/why/where/when knowledge folder wired to skills/memories/references.
@@ -105,13 +105,15 @@ Plans:
 - [x] 03-04-PLAN.md — Trust/provenance guardrails + rot guards + RLS deny-by-default (migs 177-180): legacy NULL triage → RLS revoke → rot-guard views → NOT NULL invariants
 
 **Wave 3** *(blocked on 03-02)*
-- [ ] 03-03-PLAN.md — Alerting: SQL check_acculynx_alerts() (4 D-05 conditions, mig 176) + edge-side lib/alerts.ts (Slack+Sentry, no-secret-in-payload)
+- [x] 03-03-PLAN.md — Alerting: SQL check_acculynx_alerts() (4 D-05 conditions, mig 176) + edge-side lib/alerts.ts (Slack+Sentry, no-secret-in-payload)
 
 **Wave 4** *(blocked on 03-02/03/04)*
-- [ ] 03-05-PLAN.md — Security review (/gsd-secure-phase + posture doc, D-13) + recovery runbook (D-15) + sync-pipeline.md update
+- [x] 03-05-PLAN.md — Security review (/gsd-secure-phase + posture doc, D-13) + recovery runbook (D-15) + sync-pipeline.md update
 
 **Wave 5** *(blocked on all prior — human-gated)*
-- [ ] 03-06-PLAN.md — 6-account expansion: D-08 tolerance gate → canary-then-batch enable (D-09)
+- [x] 03-06-PLAN.md — 6-account expansion: D-08 tolerance gate → canary-then-batch enable (D-09)
+
+**Status: COMPLETE (2026-07-01) — see [03-VERIFICATION.md](phases/03-commercial-cron-hardening/03-VERIFICATION.md).** All 4 success criteria met on live prod (`rnhmvcpsvtqjlffpsayu`): hourly cron active for all 8 accounts, pg_net reconciled (no perpetual pending), watermark-resumable + runbook, security review CLOSED T-03-01…T-03-11. All 8 accounts fully backfilled, zero cross-account bleed. Two accepted cosmetic residuals: georgia/insurance jobs phantom 7.4% delta (API count-overcount, data complete); alert *delivery* proof pending 2 human steps (03-03).
 
 ### Phase 4: Sandbox Write-Capability Exploration & Red-Team
 
