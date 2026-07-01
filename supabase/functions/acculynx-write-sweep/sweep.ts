@@ -87,6 +87,99 @@ export function shouldStopProbing(history: ProbeSignal[]): boolean {
   );
 }
 
+/**
+ * Plan 04-03 evidence-correctness fix: distinguish "route genuinely doesn't exist"
+ * (true unsupported) from "route exists, reachable, but this attempt's input/child-id
+ * was invalid or unavailable" (blocked-by-dependency / fragile-with-guardrail).
+ *
+ * AccuLynx's ProblemDetails error shape (RFC7807-flavored: type/title/status/detail/
+ * traceId top-level keys) on a 4xx is the strongest positive signal that the route
+ * EXISTS and was reached by the routing layer — the request just failed validation or
+ * referenced a resource that doesn't exist in this sandbox. A route that truly doesn't
+ * exist returns a bare 404/405 with none of those ProblemDetails keys (a generic platform
+ * 404, not a modeled API error), or a 405 (method not allowed on an otherwise-real path).
+ */
+const PROBLEM_DETAILS_KEYS = new Set(["type", "title", "status", "detail", "traceId"]);
+
+/**
+ * True when a 4xx/5xx response body's top-level keys look like AccuLynx's modeled
+ * ProblemDetails error shape (i.e. at least 2 of the 5 canonical keys are present).
+ * A route-not-found body (platform-level, not app-level) will have zero/near-zero
+ * overlap with this key set.
+ */
+export function looksLikeProblemDetails(topKeys: string[]): boolean {
+  const hits = topKeys.filter((k) => PROBLEM_DETAILS_KEYS.has(k));
+  return hits.length >= 2;
+}
+
+/**
+ * True when a probe's status+body indicate the route was reached and reasoned about by
+ * the API (validation error, missing-child-resource 404, or a 405 that still returned a
+ * ProblemDetails body) — i.e. NOT a genuinely-absent route. Used to gate the
+ * 'unsupported' verdict so it is reserved for real route-not-found (Plan 04-03 bug fix).
+ */
+export function isReachableRoute(status: number, topKeys: string[]): boolean {
+  if (status >= 200 && status < 300) return true; // any 2xx proves reachability
+  if (status === 500) return true; // 500 = reached the handler, it crashed (fragile, not absent)
+  if ((status === 404 || status === 405) && looksLikeProblemDetails(topKeys)) return true;
+  if (status >= 400 && status < 500 && looksLikeProblemDetails(topKeys)) return true;
+  return false;
+}
+
+/** One endpoint's full accumulated probe evidence, as needed by classifyVerdict2. */
+export interface VerdictInput {
+  /** 'blocked-by-dependency' | 'tier_gated' | 'probeable' from acculynx_write_checklist.probeability */
+  probeability: string;
+  /** true if this op was never actually probed (e.g. path params unresolvable) */
+  neverProbed: boolean;
+  /** true for the 2 search-shaped POSTs (postJobsSearch / postContactsSearch) */
+  isSearchShaped: boolean;
+  /** true for known write-only ops with no read-back path (messages/replies/logs) */
+  isWriteOnlyShaped: boolean;
+  /** per-probe (status, topKeys, wasBestEffortValidInput) triples for this endpoint */
+  probes: { status: number; topKeys: string[]; guardrail: string | null }[];
+  /** an entity id was created by any successful probe */
+  createdEntityId: string | null;
+  method: string;
+  /** if a required child id (e.g. userId/accountTypeId/customFieldDefinitionId) could not
+   * be harvested from the sandbox, name it here so a blocked-by-dependency verdict carries
+   * real evidence instead of a bare "no seed" note. */
+  missingChildIdName: string | null;
+}
+
+/**
+ * Evidence-correct verdict classifier (Plan 04-03 fix for the "unsupported over-assignment"
+ * bug). Reserves 'unsupported' for a route that is genuinely NOT reachable (no probe ever
+ * produced a reachable signal). A reachable 4xx after best-effort valid input classifies as
+ * 'blocked-by-dependency' (child id missing/unavailable) or 'fragile-with-guardrail' (5xx,
+ * or a guardrail was observed); read-shaped/write-only carve-outs are unchanged from Plan
+ * 04-02. Pure function — no network access — so it is unit-testable without a live sandbox.
+ */
+export function classifyVerdict2(input: VerdictInput): string {
+  if (input.probeability === "blocked-by-dependency") return "blocked-by-dependency";
+  if (input.neverProbed) return "blocked-by-dependency";
+  if (input.isSearchShaped) return "read-shaped";
+
+  const anySuccess = input.probes.some((p) => p.status >= 200 && p.status < 300);
+  const anyFive = input.probes.some((p) => p.status >= 500);
+  const anyGuardrail = input.probes.some((p) => p.guardrail);
+  const anyReachable = input.probes.some((p) => isReachableRoute(p.status, p.topKeys));
+
+  // Genuinely-absent route: NOTHING in the probe history was reachable at all.
+  if (!anyReachable) return "unsupported";
+
+  if (anySuccess && (anyFive || anyGuardrail)) return "fragile-with-guardrail";
+  if (!anySuccess && anyFive) return "fragile-with-guardrail";
+  if (anySuccess && input.isWriteOnlyShaped) return "write-only";
+  if (anySuccess && input.createdEntityId === null && input.method === "POST") return "write-only";
+  if (anySuccess) return "writable";
+
+  // Reachable but never succeeded (e.g. every attempt hit a validation 4xx because the
+  // required child id was unavailable in this sandbox) -> blocked-by-dependency, carrying
+  // the missing child id name as evidence rather than a bare verdict.
+  return "blocked-by-dependency";
+}
+
 /** Loose input shape shared by both address builders — caller supplies whatever it has. */
 export interface AddressInput {
   street1?: string;

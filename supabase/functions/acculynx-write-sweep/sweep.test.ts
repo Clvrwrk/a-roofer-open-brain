@@ -5,10 +5,14 @@ import {
   assertSandbox,
   buildContactAddress,
   buildJobAddress,
+  classifyVerdict2,
+  isReachableRoute,
+  looksLikeProblemDetails,
   pathParams,
   redactSample,
   SANDBOX_SECRET_NAME,
   shouldStopProbing,
+  type VerdictInput,
 } from "./sweep.ts";
 
 Deno.test("assertSandbox throws for any production key name", () => {
@@ -148,4 +152,171 @@ Deno.test("buildContactAddress and buildJobAddress apply Wichita/KS defaults whe
   const job = buildJobAddress({});
   assertEquals(job.city, "Wichita");
   assertEquals(job.state, "KS");
+});
+
+// --- Plan 04-03: evidence-correctness classifier tests ---
+
+Deno.test("looksLikeProblemDetails — true when >=2 canonical ProblemDetails keys present", () => {
+  assert(looksLikeProblemDetails(["type", "title", "status", "detail", "traceId"]));
+  assert(looksLikeProblemDetails(["title", "status"]));
+  assert(!looksLikeProblemDetails(["status"])); // only 1 key -> not enough
+  assert(!looksLikeProblemDetails(["message", "code"])); // platform 404, not AccuLynx ProblemDetails
+  assert(!looksLikeProblemDetails([]));
+});
+
+Deno.test("isReachableRoute — any 2xx is reachable regardless of body shape", () => {
+  assert(isReachableRoute(200, []));
+  assert(isReachableRoute(201, ["id"]));
+  assert(isReachableRoute(204, []));
+});
+
+Deno.test("isReachableRoute — 500 is reachable (handler crashed, route exists)", () => {
+  assert(isReachableRoute(500, []));
+  assert(isReachableRoute(500, ["message"]));
+});
+
+Deno.test("isReachableRoute — 400 with ProblemDetails body is reachable (validation error)", () => {
+  assert(isReachableRoute(400, ["type", "title", "status", "detail", "traceId"]));
+});
+
+Deno.test("isReachableRoute — 404 with ProblemDetails body is reachable (missing child resource, not route-not-found)", () => {
+  assert(isReachableRoute(404, ["type", "title", "status", "detail"]));
+});
+
+Deno.test("isReachableRoute — bare 404 with no ProblemDetails keys is NOT reachable (genuine route-not-found)", () => {
+  assert(!isReachableRoute(404, []));
+  assert(!isReachableRoute(404, ["message"]));
+});
+
+Deno.test("isReachableRoute — bare 405 with no ProblemDetails keys is NOT reachable (genuine method-not-allowed)", () => {
+  assert(!isReachableRoute(405, []));
+});
+
+function baseVerdictInput(overrides: Partial<VerdictInput>): VerdictInput {
+  return {
+    probeability: "probeable",
+    neverProbed: false,
+    isSearchShaped: false,
+    isWriteOnlyShaped: false,
+    probes: [],
+    createdEntityId: null,
+    method: "POST",
+    missingChildIdName: null,
+    ...overrides,
+  };
+}
+
+Deno.test("classifyVerdict2 — probeability blocked-by-dependency short-circuits", () => {
+  const v = classifyVerdict2(baseVerdictInput({ probeability: "blocked-by-dependency" }));
+  assertEquals(v, "blocked-by-dependency");
+});
+
+Deno.test("classifyVerdict2 — neverProbed -> blocked-by-dependency", () => {
+  const v = classifyVerdict2(baseVerdictInput({ neverProbed: true }));
+  assertEquals(v, "blocked-by-dependency");
+});
+
+Deno.test("classifyVerdict2 — search-shaped -> read-shaped even with a 200", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({ isSearchShaped: true, probes: [{ status: 200, topKeys: ["items"], guardrail: null }] }),
+  );
+  assertEquals(v, "read-shaped");
+});
+
+Deno.test("classifyVerdict2 — a genuinely-absent route (no reachable signal at all) -> unsupported", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      probes: [
+        { status: 404, topKeys: [], guardrail: null },
+        { status: 404, topKeys: ["message"], guardrail: null },
+      ],
+    }),
+  );
+  assertEquals(v, "unsupported");
+});
+
+Deno.test("classifyVerdict2 — reachable 400 ProblemDetails validation error (missing child id) -> blocked-by-dependency, NOT unsupported", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      probes: [{ status: 400, topKeys: ["type", "title", "status", "detail", "traceId"], guardrail: null }],
+      missingChildIdName: "userId",
+    }),
+  );
+  assertEquals(v, "blocked-by-dependency");
+});
+
+Deno.test("classifyVerdict2 — reachable 404 ProblemDetails (missing child resource) -> blocked-by-dependency, NOT unsupported", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      probes: [{ status: 404, topKeys: ["type", "title", "status", "detail"], guardrail: null }],
+      missingChildIdName: "documentFolderId",
+    }),
+  );
+  assertEquals(v, "blocked-by-dependency");
+});
+
+Deno.test("classifyVerdict2 — 500 on an otherwise-empty body -> fragile-with-guardrail (e.g. putTradeTypesForJob empty-body crash)", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      probes: [{ status: 500, topKeys: [], guardrail: null }],
+    }),
+  );
+  assertEquals(v, "fragile-with-guardrail");
+});
+
+Deno.test("classifyVerdict2 — success + a guardrail (e.g. 412) -> fragile-with-guardrail", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      probes: [
+        { status: 412, topKeys: ["type", "title", "status"], guardrail: "precondition_failed" },
+        { status: 201, topKeys: ["id"], guardrail: null },
+      ],
+      createdEntityId: "abc-123",
+    }),
+  );
+  assertEquals(v, "fragile-with-guardrail");
+});
+
+Deno.test("classifyVerdict2 — write-only shaped success with no created-entity read-back -> write-only", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      isWriteOnlyShaped: true,
+      probes: [{ status: 201, topKeys: ["id"], guardrail: null }],
+      createdEntityId: "msg-1",
+    }),
+  );
+  assertEquals(v, "write-only");
+});
+
+Deno.test("classifyVerdict2 — POST success with no created entity id -> write-only (side-channel, e.g. mutate-only POST)", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      method: "POST",
+      probes: [{ status: 204, topKeys: [], guardrail: null }],
+      createdEntityId: null,
+    }),
+  );
+  assertEquals(v, "write-only");
+});
+
+Deno.test("classifyVerdict2 — clean success with a created entity -> writable", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      method: "POST",
+      probes: [{ status: 201, topKeys: ["id"], guardrail: null }],
+      createdEntityId: "job-1",
+    }),
+  );
+  assertEquals(v, "writable");
+});
+
+Deno.test("classifyVerdict2 — PUT clean success (204, no body) -> writable", () => {
+  const v = classifyVerdict2(
+    baseVerdictInput({
+      method: "PUT",
+      probes: [{ status: 204, topKeys: [], guardrail: null }],
+      createdEntityId: null,
+    }),
+  );
+  assertEquals(v, "writable");
 });
