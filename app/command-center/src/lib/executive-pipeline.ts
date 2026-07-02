@@ -100,6 +100,17 @@ export interface LeaderboardRow {
   arBalance: number;
 }
 
+/** Checkpoint round 4, item 1: collected-vs-AR split for one stacked-bar segment
+ * (funnel-by-stage or rep leaderboard). `collected` = value - arOutstanding (never
+ * negative); `arOutstanding` = the summed balance_due for the same row set (currently
+ * $0 everywhere in production — see 07-UI-SPEC.md amendment #3 measurement — but the
+ * chart must render cleanly in that all-zero state and split correctly once real
+ * balance_due data lands). */
+export interface CollectedArSplit {
+  collected: number;
+  arOutstanding: number;
+}
+
 export interface FreshnessInput {
   accountKey: string;
   lastSyncAt: string | null;
@@ -176,6 +187,9 @@ export interface ExecutivePipelineDashboard {
   filters: Required<DashboardFilters>;
   window: { start: string; end: string; label: string };
   funnel: FunnelStage[];
+  /** Checkpoint round 4, item 1: the funnel stages plus their collected/AR split,
+   * for the stacked-bar chart. Same stage order/values as `funnel`. */
+  funnelWithSplit: FunnelStageWithSplit[];
   closeRate: CloseRateResult;
   newLeadsCount: number;
   marginByRegion: MarginByDimensionRow[];
@@ -183,6 +197,12 @@ export interface ExecutivePipelineDashboard {
   marginByCommercialResidential: MarginByDimensionRow[];
   marginByRep: MarginByDimensionRow[];
   leaderboard: LeaderboardRow[];
+  /** Checkpoint round 4, item 1: the leaderboard rows plus their collected/AR
+   * split, for the stacked-bar chart. Same rep order/values as `leaderboard`. */
+  leaderboardWithSplit: LeaderboardRowWithSplit[];
+  /** Checkpoint round 4, item 2: fixed trailing-7-calendar-day totals pill row,
+   * independent of the selector window; obeys the D-13 filter bar. */
+  trailing7d: Trailing7dTotals;
   locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
@@ -435,6 +455,68 @@ export function groupPipelineFunnel(rows: PipelineRow[]): FunnelStage[] {
   return Array.from(groups.entries())
     .map(([milestone, bucket]) => ({ milestone, count: bucket.count, value: bucket.value }))
     .sort((a, b) => b.value - a.value || a.milestone.localeCompare(b.milestone));
+}
+
+// ---------------------------------------------------------------------------
+// Pure core: collected/AR split for the stacked funnel + leaderboard charts
+// (checkpoint round 4, item 1)
+// ---------------------------------------------------------------------------
+
+/** Splits a row set's total value into "collected" (value - balance_due, floored at
+ * 0) and "arOutstanding" (summed balance_due, floored at 0 per row so a negative/
+ * credit balance_due never produces a negative AR segment). `value` is the same
+ * amountFor()-derived total the funnel/leaderboard already chart — this function
+ * does not recompute it, callers pass their own summed value so the split always
+ * agrees with the bar's total height. */
+function splitCollectedAr(rows: PipelineRow[], value: number): CollectedArSplit {
+  const arOutstanding = rows.reduce((sum, row) => sum + Math.max(0, toNumber(row.balance_due)), 0);
+  const collected = Math.max(0, value - arOutstanding);
+  return { collected, arOutstanding };
+}
+
+/** One stacked-bar segment for the funnel-by-stage chart: the stage's existing
+ * count/value plus the collected/AR split of that same value (checkpoint round 4,
+ * item 1). Reuses groupPipelineFunnel's exact milestone bucketing/sort so the
+ * stacked chart's stage order and totals never diverge from the existing funnel. */
+export interface FunnelStageWithSplit extends FunnelStage {
+  collected: number;
+  arOutstanding: number;
+}
+
+export function computeFunnelStagesWithSplit(rows: PipelineRow[]): FunnelStageWithSplit[] {
+  const stages = groupPipelineFunnel(rows);
+  const rowsByMilestone = new Map<string, PipelineRow[]>();
+  for (const row of rows) {
+    const milestone = compact(row.current_milestone, "unknown").toLowerCase();
+    const list = rowsByMilestone.get(milestone) ?? [];
+    list.push(row);
+    rowsByMilestone.set(milestone, list);
+  }
+
+  return stages.map((stage) => {
+    const split = splitCollectedAr(rowsByMilestone.get(stage.milestone) ?? [], stage.value);
+    return { ...stage, ...split };
+  });
+}
+
+/** One stacked-bar segment for the rep leaderboard chart: the rep's existing
+ * soldValue plus its collected/AR split (checkpoint round 4, item 1). Takes the
+ * already-built leaderboard rows (soldRows-derived) so the stacked chart's rep
+ * order/values never diverge from the existing leaderboard, and the row set used
+ * for the AR sum is the caller's own per-rep sold-row grouping. */
+export interface LeaderboardRowWithSplit extends LeaderboardRow {
+  collected: number;
+  arOutstanding: number;
+}
+
+export function computeLeaderboardWithSplit(
+  leaderboard: LeaderboardRow[],
+  soldRowsByRep: Map<string, PipelineRow[]>,
+): LeaderboardRowWithSplit[] {
+  return leaderboard.map((row) => {
+    const split = splitCollectedAr(soldRowsByRep.get(row.salesperson) ?? [], row.soldValue);
+    return { ...row, ...split };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -827,6 +909,108 @@ export function windowRange(token: WindowToken, now: Date): { start: Date; end: 
 }
 
 // ---------------------------------------------------------------------------
+// Pure core: trailing-7-day totals pill row (checkpoint round 4, item 2)
+// ---------------------------------------------------------------------------
+
+/** ALWAYS a fixed trailing 7-calendar-day window anchored at `now` — deliberately
+ * independent of the D-03 window-selector token (that is the entire point of this
+ * pill row: an always-current-at-a-glance strip that does not move when the user
+ * changes the KPI/chart window). Uses the same [start, end) day-boundary convention
+ * as windowRange's last_7_days case so the two stay visually consistent, but this
+ * one is NEVER driven by the selector. */
+export function trailing7DayRange(now: Date): { start: Date; end: Date } {
+  const end = startOfDay(now);
+  return { start: addDays(end, -7), end };
+}
+
+/** New-Leads count entering the leads queue within the trailing 7 days, keyed on
+ * lead_date (falling back to created_at, same convention as every other lead-count
+ * KPI in this module). */
+export interface Trailing7dPill {
+  count: number;
+  /** null when the pill has no dollar value (New Leads — count only, mirrors the
+   * leads queue's own value-exclusion rule, item 3 continuity). */
+  value: number | null;
+}
+
+export interface Trailing7dTotals {
+  newLeads: Trailing7dPill;
+  newPreClose: Trailing7dPill;
+  newContracts: Trailing7dPill;
+  invoiced: Trailing7dPill;
+  closed: Trailing7dPill;
+}
+
+export const EMPTY_TRAILING_7D: Trailing7dTotals = {
+  newLeads: { count: 0, value: null },
+  newPreClose: { count: 0, value: 0 },
+  newContracts: { count: 0, value: 0 },
+  invoiced: { count: 0, value: 0 },
+  closed: { count: 0, value: 0 },
+};
+
+/** Trailing-7-day totals across the five queues, each keyed on its own existing date
+ * signal (checkpoint round 4, item 2 — user spec): New Leads (lead_date/created_at,
+ * count only, no $), New Pre-close (prospects-with-an-estimate entering the queue,
+ * keyed on lead_date/created_at since prospect has no dedicated "entered prospect"
+ * date column — the row's crm_pipeline lifecycle-entry date), New Contracts (the
+ * Approved queue incl. completed-fold, keyed on approved_date/milestone_date/
+ * updated_at — same convention as computeAverageTicket/computeLocationRollup's sold
+ * window), Invoiced (invoiced queue, same approved/milestone/updated date signal),
+ * Closed (closed queue, same date signal). Fixed 7-day window via trailing7DayRange
+ * — NEVER the selector window. Assumes dead/cancelled rows already excluded from
+ * `rows` (same upstream filter point as every other aggregation in this module). */
+export function computeTrailing7dTotals(rows: PipelineRow[], now: Date): Trailing7dTotals {
+  const { start, end } = trailing7DayRange(now);
+  const inWindow = (date: Date | null) => Boolean(date && date >= start && date < end);
+
+  const totals: Trailing7dTotals = {
+    newLeads: { count: 0, value: null },
+    newPreClose: { count: 0, value: 0 },
+    newContracts: { count: 0, value: 0 },
+    invoiced: { count: 0, value: 0 },
+    closed: { count: 0, value: 0 },
+  };
+
+  for (const row of rows) {
+    const queue = queueForRow(row);
+    if (!queue) continue;
+
+    if (queue === "leads") {
+      if (inWindow(toDate(row.lead_date ?? row.created_at))) {
+        totals.newLeads.count += 1;
+      }
+      continue;
+    }
+
+    if (queue === "prospects") {
+      const estimate = estimateAmountFor(row);
+      if (estimate > 0 && inWindow(toDate(row.lead_date ?? row.created_at))) {
+        totals.newPreClose.count += 1;
+        totals.newPreClose.value = (totals.newPreClose.value ?? 0) + estimate;
+      }
+      continue;
+    }
+
+    const entryDate = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
+    if (!inWindow(entryDate)) continue;
+
+    if (queue === "approved") {
+      totals.newContracts.count += 1;
+      totals.newContracts.value = (totals.newContracts.value ?? 0) + contractAmountFor(row);
+    } else if (queue === "invoiced") {
+      totals.invoiced.count += 1;
+      totals.invoiced.value = (totals.invoiced.value ?? 0) + contractAmountFor(row);
+    } else if (queue === "closed") {
+      totals.closed.count += 1;
+      totals.closed.value = (totals.closed.value ?? 0) + contractAmountFor(row);
+    }
+  }
+
+  return totals;
+}
+
+// ---------------------------------------------------------------------------
 // Pure core: freshness badges (D-12)
 // ---------------------------------------------------------------------------
 
@@ -901,6 +1085,7 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     filters,
     window: { start: start.toISOString(), end: end.toISOString(), label },
     funnel: [],
+    funnelWithSplit: [],
     closeRate: { leadCount: 0, soldCount: 0, closeRate: 0, soldValue: 0, qualifier: "period-snapshot ratio, not a cohort conversion rate" },
     newLeadsCount: 0,
     marginByRegion: [],
@@ -908,6 +1093,8 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     marginByCommercialResidential: [],
     marginByRep: [],
     leaderboard: [],
+    leaderboardWithSplit: [],
+    trailing7d: { ...EMPTY_TRAILING_7D },
     locationRollup: [],
     arTotal: 0,
     freshness: [],
@@ -1131,12 +1318,20 @@ export async function loadExecutivePipelineDashboard(
     });
 
     const leaderboardMap = new Map<string, LeaderboardRow>();
+    // Checkpoint round 4, item 1: soldRows grouped by rep, so the leaderboard's
+    // stacked-bar collected/AR split can be computed from the SAME row set that
+    // produced each rep's soldValue (never a different window/filter).
+    const soldRowsByRep = new Map<string, PipelineRow[]>();
     for (const row of soldRows) {
       const salesperson = compact(row.primary_salesperson, "Unassigned");
       const entry = leaderboardMap.get(salesperson) ?? { salesperson, soldCount: 0, soldValue: 0, arBalance: 0 };
       entry.soldCount += 1;
       entry.soldValue += amountFor(row);
       leaderboardMap.set(salesperson, entry);
+
+      const soldList = soldRowsByRep.get(salesperson) ?? [];
+      soldList.push(row);
+      soldRowsByRep.set(salesperson, soldList);
     }
     for (const row of filteredPipeline) {
       const balance = toNumber(row.balance_due);
@@ -1161,6 +1356,17 @@ export async function loadExecutivePipelineDashboard(
       .map((row) => ({ ...row, closeRateSnapshot: computeSnapshotCloseRate(rowsByRep.get(row.salesperson) ?? []) }))
       .sort((a, b) => b.soldValue - a.soldValue);
 
+    // Checkpoint round 4, item 1: stacked-chart collected/AR split data, built from
+    // the SAME funnel/leaderboard rows above so stage order, rep order, and totals
+    // never diverge between the existing charts and the new stacked variants.
+    const funnelWithSplit = computeFunnelStagesWithSplit(filteredPipeline);
+    const leaderboardWithSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
+
+    // Checkpoint round 4, item 2: trailing-7-day pill row — fixed window anchored at
+    // `now`, computed over filteredPipeline so it obeys the D-13 filter bar but
+    // ignores the D-03 window-selector token entirely (user's explicit decision).
+    const trailing7d = computeTrailing7dTotals(filteredPipeline, now);
+
     const locationRollup = computeLocationRollup(filteredPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
 
     // Freshness badges: use every KNOWN production account so a location with zero jobs
@@ -1184,6 +1390,7 @@ export async function loadExecutivePipelineDashboard(
       filters: resolvedFilters,
       window: { start: start.toISOString(), end: end.toISOString(), label },
       funnel,
+      funnelWithSplit,
       closeRate,
       newLeadsCount,
       marginByRegion,
@@ -1191,6 +1398,8 @@ export async function loadExecutivePipelineDashboard(
       marginByCommercialResidential,
       marginByRep,
       leaderboard,
+      leaderboardWithSplit,
+      trailing7d,
       locationRollup,
       arTotal,
       freshness,

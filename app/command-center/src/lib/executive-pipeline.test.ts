@@ -3,10 +3,13 @@ import {
   computeAverageTicket,
   computeCloseRate,
   computeFreshnessBadges,
+  computeFunnelStagesWithSplit,
+  computeLeaderboardWithSplit,
   computeLocationRollup,
   computeMarginByDimension,
   computeQueueValues,
   computeSnapshotCloseRate,
+  computeTrailing7dTotals,
   deriveRegionOffice,
   deriveSegment,
   excludeClosedAndPaidInFull,
@@ -19,7 +22,9 @@ import {
   preClosePipelineValue,
   queueForRow,
   segmentForAccountKey,
+  trailing7DayRange,
   type AcculynxJobRow,
+  type LeaderboardRow,
   type PipelineRow,
 } from "@lib/executive-pipeline";
 
@@ -735,5 +740,233 @@ describe("compact currency formatter (checkpoint round 3, item 5)", () => {
   it("preserves the negative sign before the dollar mark", () => {
     expect(formatCompactCurrency(-5000)).toBe("-$5K");
     expect(formatCompactCurrency(-1_500_000)).toBe("-$1.5M");
+  });
+});
+
+describe("collected/AR split for stacked charts (checkpoint round 4, item 1)", () => {
+  it("computeFunnelStagesWithSplit: an all-zero-AR fixture (today's production reality) yields fully-collected stages with a zero AR segment", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "approved", contract_amount: 10000, primary_estimate_amount: 0, balance_due: 0 }),
+      makePipelineRow({ id: 2, current_milestone: "approved", contract_amount: 5000, primary_estimate_amount: 0, balance_due: 0 }),
+      makePipelineRow({ id: 3, current_milestone: "invoiced", contract_amount: 8000, primary_estimate_amount: 0, balance_due: 0 }),
+    ];
+
+    const stages = computeFunnelStagesWithSplit(pipeline);
+    const approved = stages.find((s) => s.milestone === "approved");
+    const invoiced = stages.find((s) => s.milestone === "invoiced");
+
+    expect(approved).toBeDefined();
+    expect(approved?.value).toBe(15000);
+    expect(approved?.collected).toBe(15000);
+    expect(approved?.arOutstanding).toBe(0);
+
+    expect(invoiced).toBeDefined();
+    expect(invoiced?.collected).toBe(8000);
+    expect(invoiced?.arOutstanding).toBe(0);
+  });
+
+  it("computeFunnelStagesWithSplit: a nonzero-AR fixture splits collected vs AR correctly per stage", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "invoiced", contract_amount: 10000, primary_estimate_amount: 0, balance_due: 4000 }),
+      makePipelineRow({ id: 2, current_milestone: "invoiced", contract_amount: 6000, primary_estimate_amount: 0, balance_due: 1000 }),
+    ];
+
+    const stages = computeFunnelStagesWithSplit(pipeline);
+    const invoiced = stages.find((s) => s.milestone === "invoiced");
+
+    expect(invoiced?.value).toBe(16000);
+    expect(invoiced?.arOutstanding).toBe(5000);
+    expect(invoiced?.collected).toBe(11000);
+  });
+
+  it("computeFunnelStagesWithSplit: floors the collected segment at 0 when AR exceeds the stage value (never negative)", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "invoiced", contract_amount: 1000, primary_estimate_amount: 0, balance_due: 5000 }),
+    ];
+
+    const stages = computeFunnelStagesWithSplit(pipeline);
+    const invoiced = stages.find((s) => s.milestone === "invoiced");
+
+    expect(invoiced?.arOutstanding).toBe(5000);
+    expect(invoiced?.collected).toBe(0);
+  });
+
+  it("computeFunnelStagesWithSplit: preserves the same stage set/order/values as groupPipelineFunnel", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "approved", contract_amount: 10000, balance_due: 0 }),
+      makePipelineRow({ id: 2, current_milestone: "prospect", primary_estimate_amount: 2000, contract_amount: 0, balance_due: 0 }),
+    ];
+
+    const baseline = groupPipelineFunnel(pipeline);
+    const withSplit = computeFunnelStagesWithSplit(pipeline);
+
+    expect(withSplit.map((s) => ({ milestone: s.milestone, count: s.count, value: s.value }))).toEqual(baseline);
+  });
+
+  it("computeLeaderboardWithSplit: an all-zero-AR fixture yields fully-collected reps with a zero AR segment", () => {
+    const leaderboard: LeaderboardRow[] = [{ salesperson: "Jamie Rep", soldCount: 2, soldValue: 15000, arBalance: 0 }];
+    const soldRowsByRep = new Map<string, PipelineRow[]>([
+      [
+        "Jamie Rep",
+        [
+          makePipelineRow({ id: 1, primary_salesperson: "Jamie Rep", contract_amount: 10000, balance_due: 0 }),
+          makePipelineRow({ id: 2, primary_salesperson: "Jamie Rep", contract_amount: 5000, balance_due: 0 }),
+        ],
+      ],
+    ]);
+
+    const withSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
+
+    expect(withSplit[0].collected).toBe(15000);
+    expect(withSplit[0].arOutstanding).toBe(0);
+  });
+
+  it("computeLeaderboardWithSplit: a nonzero-AR fixture splits collected vs AR per rep", () => {
+    const leaderboard: LeaderboardRow[] = [{ salesperson: "Jamie Rep", soldCount: 1, soldValue: 10000, arBalance: 3000 }];
+    const soldRowsByRep = new Map<string, PipelineRow[]>([
+      ["Jamie Rep", [makePipelineRow({ id: 1, primary_salesperson: "Jamie Rep", contract_amount: 10000, balance_due: 3000 })]],
+    ]);
+
+    const withSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
+
+    expect(withSplit[0].collected).toBe(7000);
+    expect(withSplit[0].arOutstanding).toBe(3000);
+  });
+
+  it("computeLeaderboardWithSplit: a rep missing from soldRowsByRep yields a fully-collected zero-AR row rather than throwing", () => {
+    const leaderboard: LeaderboardRow[] = [{ salesperson: "Ghost Rep", soldCount: 0, soldValue: 0, arBalance: 0 }];
+    const withSplit = computeLeaderboardWithSplit(leaderboard, new Map());
+
+    expect(withSplit[0].collected).toBe(0);
+    expect(withSplit[0].arOutstanding).toBe(0);
+  });
+});
+
+describe("trailing 7-day totals (checkpoint round 4, item 2)", () => {
+  const NOW = new Date("2026-07-01T12:00:00");
+
+  it("trailing7DayRange is a fixed 7-day window anchored at now (start of today back 7 days), independent of any selector token", () => {
+    const { start, end } = trailing7DayRange(NOW);
+    expect(end.getFullYear()).toBe(2026);
+    expect(end.getMonth()).toBe(6); // July (0-indexed)
+    expect(end.getDate()).toBe(1);
+    expect(end.getHours()).toBe(0);
+    expect(start.getDate()).toBe(24);
+    expect(end.getTime() - start.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it("counts a new lead inside the boundary and excludes one outside it (New Leads: count only, no $)", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "unassigned_lead", lead_date: "2026-06-26T12:00:00" }), // inside
+      makePipelineRow({ id: 2, current_milestone: "assigned_lead", lead_date: "2026-06-15T12:00:00" }), // outside (too old)
+      makePipelineRow({ id: 3, current_milestone: "lead", lead_date: "2026-07-01T12:00:00" }), // outside (on/after the exclusive end boundary)
+    ];
+
+    const totals = computeTrailing7dTotals(pipeline, NOW);
+
+    expect(totals.newLeads.count).toBe(1);
+    expect(totals.newLeads.value).toBeNull();
+  });
+
+  it("New Pre-close counts/values prospects-with-an-estimate inside the window, excluding prospects with no estimate", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        current_milestone: "prospect",
+        primary_estimate_amount: 4000,
+        contract_amount: 0,
+        lead_date: "2026-06-27T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 2,
+        current_milestone: "prospect",
+        primary_estimate_amount: 0,
+        contract_amount: 0,
+        lead_date: "2026-06-27T00:00:00Z",
+      }), // no estimate — excluded
+      makePipelineRow({
+        id: 3,
+        current_milestone: "prospect",
+        primary_estimate_amount: 3000,
+        contract_amount: 0,
+        lead_date: "2026-06-01T00:00:00Z",
+      }), // outside window
+    ];
+
+    const totals = computeTrailing7dTotals(pipeline, NOW);
+
+    expect(totals.newPreClose.count).toBe(1);
+    expect(totals.newPreClose.value).toBe(4000);
+  });
+
+  it("New Contracts counts the Approved queue (completed folded in) keyed on approved_date within the window", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "approved", contract_amount: 12000, approved_date: "2026-06-28T00:00:00Z" }),
+      makePipelineRow({ id: 2, current_milestone: "completed", contract_amount: 8000, approved_date: "2026-06-25T00:00:00Z" }),
+      makePipelineRow({ id: 3, current_milestone: "approved", contract_amount: 5000, approved_date: "2026-05-01T00:00:00Z" }), // outside
+    ];
+
+    const totals = computeTrailing7dTotals(pipeline, NOW);
+
+    expect(totals.newContracts.count).toBe(2);
+    expect(totals.newContracts.value).toBe(20000);
+  });
+
+  it("Invoiced and Closed each count/value their own queue within the window", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        current_milestone: "invoiced",
+        contract_amount: 7000,
+        approved_date: null,
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 2,
+        current_milestone: "closed",
+        contract_amount: 9000,
+        approved_date: null,
+        milestone_date: "2026-06-30T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 3,
+        current_milestone: "closed",
+        contract_amount: 1000,
+        approved_date: null,
+        milestone_date: "2026-01-01T00:00:00Z",
+      }), // outside
+    ];
+
+    const totals = computeTrailing7dTotals(pipeline, NOW);
+
+    expect(totals.invoiced.count).toBe(1);
+    expect(totals.invoiced.value).toBe(7000);
+    expect(totals.closed.count).toBe(1);
+    expect(totals.closed.value).toBe(9000);
+  });
+
+  it("returns all-zero totals (not NaN/throw) for an empty row set", () => {
+    const totals = computeTrailing7dTotals([], NOW);
+
+    expect(totals.newLeads).toEqual({ count: 0, value: null });
+    expect(totals.newPreClose).toEqual({ count: 0, value: 0 });
+    expect(totals.newContracts).toEqual({ count: 0, value: 0 });
+    expect(totals.invoiced).toEqual({ count: 0, value: 0 });
+    expect(totals.closed).toEqual({ count: 0, value: 0 });
+  });
+
+  it("dead/cancelled rows are excluded upstream — a caller passing pre-excluded rows never sees them counted", () => {
+    // queueForRow returns null for dead/cancelled (they are not in any QUEUE_*_MILESTONES
+    // set), so even an un-pre-filtered row is naturally skipped — this regression-guards
+    // that behavior without relying on the caller always remembering to pre-filter.
+    const pipeline = [
+      makePipelineRow({ id: 1, current_milestone: "dead", lead_date: "2026-06-28T00:00:00Z" }),
+      makePipelineRow({ id: 2, current_milestone: "cancelled", contract_amount: 5000, approved_date: "2026-06-28T00:00:00Z" }),
+    ];
+
+    const totals = computeTrailing7dTotals(pipeline, NOW);
+
+    expect(totals.newLeads.count).toBe(0);
+    expect(totals.newContracts.count).toBe(0);
   });
 });
