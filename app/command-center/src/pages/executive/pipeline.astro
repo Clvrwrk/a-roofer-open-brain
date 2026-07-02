@@ -2,8 +2,10 @@
 import AppShell from "../../layouts/AppShell.astro";
 import {
   KNOWN_ACCOUNT_KEYS,
+  formatCompactCurrency,
   loadExecutivePipelineDashboard,
   type DashboardFilters,
+  type QueueName,
   type WindowToken,
 } from "@lib/executive-pipeline";
 
@@ -19,9 +21,24 @@ const WINDOW_LABELS: Record<WindowToken, string> = {
 
 const COMMERCIAL_RESIDENTIAL_OPTIONS = ["Residential", "Commercial", "Property Management", "uncategorized"];
 
+const MAX_REP_LENGTH = 120;
+const SAFE_REP_PATTERN = /^[\w .,'’&()/-]+$/u;
+
 function pickAllowlisted<T extends string>(value: string | null, allowed: readonly T[]): T | undefined {
   if (!value) return undefined;
   return (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+// Checkpoint round 3, item 1: the Rep filter is data-driven, so it is sanitized (not
+// allowlisted against a fixed compile-time set) — same discipline as the JSON API
+// route (see pipeline.json.ts's sanitizeRep). Never built into a Supabase .eq()/.in()
+// call; only ever used for in-memory JS string-equality filtering downstream.
+function sanitizeRep(value: string | null): string | "all" | undefined {
+  if (!value) return undefined;
+  if (value === "all") return "all";
+  if (value.length > MAX_REP_LENGTH) return undefined;
+  if (!SAFE_REP_PATTERN.test(value)) return undefined;
+  return value;
 }
 
 // Seed initial filters from the query string (SSR-friendly first paint) — same
@@ -33,11 +50,13 @@ const seededCommercialResidential =
   params.get("type") === "all"
     ? "all"
     : pickAllowlisted(params.get("type"), COMMERCIAL_RESIDENTIAL_OPTIONS as readonly string[]);
+const seededRep = sanitizeRep(params.get("rep"));
 
 const initialFilters: DashboardFilters = {
   ...(seededWindow ? { window: seededWindow } : {}),
   ...(seededAccountKey ? { accountKey: seededAccountKey } : {}),
   ...(seededCommercialResidential ? { commercialResidential: seededCommercialResidential } : {}),
+  ...(seededRep ? { rep: seededRep } : {}),
 };
 
 const dashboard = await loadExecutivePipelineDashboard(initialFilters);
@@ -46,11 +65,6 @@ const ACCULYNX_JOB_BASE_URL = "https://proexteriors.acculynx.com/jobs";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
-}
-
-function formatTime(value: string | null) {
-  if (!value) return "no sync recorded";
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
 // One-line status strip (checkpoint rework directive 3) replaces the 9-pill wall.
@@ -79,8 +93,13 @@ const statusStripText =
 
 const freshnessByAccount = new Map(dashboard.freshness.map((badge) => [badge.accountKey, badge]));
 
-const closeRatePct = (dashboard.closeRate.closeRate * 100).toFixed(0);
-const closeRateCaption = `${closeRatePct}% of jobs in ${dashboard.window.label} (period snapshot)`;
+// Item 7: overall close rate KPI uses the count-based snapshot formula (window-
+// independent) — same numbers the location rows and rep leaderboard now show,
+// derived here from the residential/commercial split so the headline stays
+// consistent with item 4's Res/Com pills without a second loader round-trip.
+const overallCloseRatePct = (
+  ((dashboard.closeRateSplit.residential + dashboard.closeRateSplit.commercial) / 2) * 100
+).toFixed(0);
 
 const overallMargin = dashboard.marginByRegion.reduce(
   (acc, row) => {
@@ -103,17 +122,26 @@ function asData(value: unknown) {
   return JSON.stringify(value);
 }
 
+const QUEUE_LABELS: Record<QueueName, string> = {
+  leads: "Leads",
+  prospects: "Prospects",
+  approved: "Approved",
+  invoiced: "Invoiced",
+  closed: "Closed",
+};
+const QUEUE_ORDER: QueueName[] = ["leads", "prospects", "approved", "invoiced", "closed"];
+
 // Per-location rows drive the primary breakdown + D-09 drill-down (checkpoint rework
-// directive 6) — one row per production location (KNOWN_ACCOUNT_KEYS), not per margin
-// dimension, so location, margin coverage, and AR are all visible on one row.
+// directive 6) — one row per production location (KNOWN_ACCOUNT_KEYS), showing the
+// five-queue value/count breakdown + snapshot close rate (checkpoint round 3, item 3/7)
+// instead of the old flat pipeline/sold/leads metrics.
 interface LocationRow {
   accountKey: string;
-  pipelineValue: number;
-  soldValue: number;
-  leadCount: number;
   marginPct: number;
   coverageLabel: string;
   arValue: number;
+  queues: { queue: QueueName; label: string; count: number; value: number | null }[];
+  closeRateSnapshotPct: string;
   stale: boolean;
 }
 
@@ -126,11 +154,9 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
   const margin = marginByAccount.get(accountKey);
   const freshness = freshnessByAccount.get(accountKey);
   const rollup = rollupByAccount.get(accountKey);
+  const queuesByName = new Map((rollup?.queues ?? []).map((q) => [q.queue, q]));
   return {
     accountKey,
-    pipelineValue: rollup?.pipelineValue ?? 0,
-    soldValue: rollup?.soldValue ?? 0,
-    leadCount: rollup?.leadCount ?? 0,
     marginPct: margin?.marginPct ?? 0,
     coverageLabel: margin
       ? margin.coverage.jobsWithCostData > 0
@@ -138,6 +164,11 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
         : "no cost data"
       : "no data",
     arValue: rollup?.arValue ?? 0,
+    queues: QUEUE_ORDER.map((queue) => {
+      const q = queuesByName.get(queue);
+      return { queue, label: QUEUE_LABELS[queue], count: q?.count ?? 0, value: q?.value ?? (queue === "leads" ? null : 0) };
+    }),
+    closeRateSnapshotPct: (((rollup?.closeRateSnapshot ?? 0) * 100).toFixed(0)),
     stale: freshness ? freshness.tone !== "ready" : false,
   };
 });
@@ -181,6 +212,19 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
         </select>
       </label>
       <label class="select-label">
+        <span>Rep</span>
+        <select name="rep" data-filter="rep">
+          <option value="all" selected={dashboard.filters.rep === "all"}>All reps</option>
+          {
+            dashboard.knownReps.map((repName) => (
+              <option value={repName} selected={dashboard.filters.rep === repName}>
+                {repName}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+      <label class="select-label">
         <span>Window</span>
         <select name="window" data-filter="window">
           {
@@ -204,40 +248,134 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
     </div>
 
     <section class="epl-kpis" aria-label="Topline KPIs" data-kpi-grid>
-      <div class="epl-kpi" data-kpi="pipeline-value">
+      <div class="epl-kpi epl-kpi--split" data-kpi="pipeline-value">
         <span class="epl-kpi-lab">Pipeline Value</span>
         <strong class="epl-kpi-val" data-kpi-val="pipeline-value">{formatCurrency(dashboard.pipelineValueTotal)}</strong>
-        <small class="epl-kpi-sub">Cross-location, all open jobs</small>
+        <small class="epl-kpi-sub">Pre-close (prospects w/ estimate)</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="pipeline-value-residential">
+              {formatCompactCurrency(dashboard.pipelineValueSplit.residential)}
+            </span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="pipeline-value-commercial">
+              {formatCompactCurrency(dashboard.pipelineValueSplit.commercial)}
+            </span>
+          </span>
+        </span>
       </div>
 
-      <div class="epl-kpi" data-kpi="sold-value">
+      <div class="epl-kpi epl-kpi--split" data-kpi="sold-value">
         <span class="epl-kpi-lab">Sold Value</span>
         <strong class="epl-kpi-val" data-kpi-val="sold-value">{formatCurrency(dashboard.closeRate.soldValue)}</strong>
         <small class="epl-kpi-sub">{dashboard.window.label}</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="sold-value-residential">
+              {formatCompactCurrency(dashboard.soldValueSplit.residential)}
+            </span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="sold-value-commercial">
+              {formatCompactCurrency(dashboard.soldValueSplit.commercial)}
+            </span>
+          </span>
+        </span>
       </div>
 
-      <div class="epl-kpi" data-kpi="jobs-sold">
+      <div class="epl-kpi epl-kpi--split" data-kpi="jobs-sold">
         <span class="epl-kpi-lab">Jobs Sold</span>
         <strong class="epl-kpi-val" data-kpi-val="jobs-sold">{dashboard.closeRate.soldCount}</strong>
-        <small class="epl-kpi-sub" data-kpi-sub="jobs-sold">{closeRateCaption}</small>
+        <small class="epl-kpi-sub" data-kpi-sub="jobs-sold">{dashboard.window.label} (period snapshot)</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="jobs-sold-residential">{dashboard.jobsSoldSplit.residential}</span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="jobs-sold-commercial">{dashboard.jobsSoldSplit.commercial}</span>
+          </span>
+        </span>
       </div>
 
-      <div class="epl-kpi" data-kpi="close-rate">
+      <div class="epl-kpi epl-kpi--split" data-kpi="close-rate">
         <span class="epl-kpi-lab">Close Rate</span>
-        <strong class="epl-kpi-val" data-kpi-val="close-rate">{closeRatePct}%</strong>
-        <small class="epl-kpi-sub">Period snapshot qualifier</small>
+        <strong class="epl-kpi-val" data-kpi-val="close-rate">{overallCloseRatePct}%</strong>
+        <small class="epl-kpi-sub">Snapshot: Approved+Invoiced+Closed / all</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="close-rate-residential">
+              {(dashboard.closeRateSplit.residential * 100).toFixed(0)}%
+            </span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="close-rate-commercial">
+              {(dashboard.closeRateSplit.commercial * 100).toFixed(0)}%
+            </span>
+          </span>
+        </span>
       </div>
 
-      <div class="epl-kpi" data-kpi="new-leads">
+      <div class="epl-kpi epl-kpi--split" data-kpi="new-leads">
         <span class="epl-kpi-lab">New Leads</span>
         <strong class="epl-kpi-val" data-kpi-val="new-leads">{dashboard.newLeadsCount}</strong>
         <small class="epl-kpi-sub">{dashboard.window.label}</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="new-leads-residential">{dashboard.newLeadsSplit.residential}</span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="new-leads-commercial">{dashboard.newLeadsSplit.commercial}</span>
+          </span>
+        </span>
       </div>
 
-      <div class="epl-kpi" data-kpi="margin">
+      <div class="epl-kpi epl-kpi--split" data-kpi="margin">
         <span class="epl-kpi-lab">Margin %</span>
         <strong class="epl-kpi-val" data-kpi-val="margin">{overallMargin.covered > 0 ? `${avgMarginPct.toFixed(0)}%` : "—"}</strong>
         <small class="epl-kpi-sub" data-kpi-sub="margin">{marginCaption}</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="margin-residential">{dashboard.marginPctSplit.residential.toFixed(0)}%</span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="margin-commercial">{dashboard.marginPctSplit.commercial.toFixed(0)}%</span>
+          </span>
+        </span>
+      </div>
+
+      <div class="epl-kpi epl-kpi--split" data-kpi="average-ticket">
+        <span class="epl-kpi-lab">Average Ticket</span>
+        <strong class="epl-kpi-val" data-kpi-val="average-ticket">
+          {formatCurrency(dashboard.averageTicket.residential.avgTicket || dashboard.averageTicket.commercial.avgTicket)}
+        </strong>
+        <small class="epl-kpi-sub">Approved in {dashboard.window.label}</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="average-ticket-residential">
+              {formatCompactCurrency(dashboard.averageTicket.residential.avgTicket)}
+            </span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="average-ticket-commercial">
+              {formatCompactCurrency(dashboard.averageTicket.commercial.avgTicket)}
+            </span>
+          </span>
+        </span>
       </div>
 
       <div class="epl-kpi" data-kpi="ar-outstanding">
@@ -274,18 +412,18 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
                 </span>
                 <span class="epl-location-name">{row.accountKey}</span>
                 {row.stale && <span class="epl-stale-marker">stale</span>}
+                <span class="epl-queues">
+                  {row.queues.map((q) => (
+                    <span class="epl-queue" data-queue={q.queue}>
+                      <strong>{q.value === null ? q.count : formatCompactCurrency(q.value)}</strong>
+                      <span>{q.label}{q.value !== null ? ` (${q.count})` : ""}</span>
+                    </span>
+                  ))}
+                </span>
                 <span class="epl-mini">
                   <div>
-                    <strong>{formatCurrency(row.pipelineValue)}</strong>
-                    <span>Pipeline</span>
-                  </div>
-                  <div>
-                    <strong>{formatCurrency(row.soldValue)}</strong>
-                    <span>Sold</span>
-                  </div>
-                  <div>
-                    <strong>{row.leadCount}</strong>
-                    <span>Leads</span>
+                    <strong>{row.closeRateSnapshotPct}%</strong>
+                    <span>Close Rate</span>
                   </div>
                   <div>
                     <strong>{row.coverageLabel === "no cost data" || row.coverageLabel === "no data" ? "—" : `${row.marginPct.toFixed(0)}%`}</strong>

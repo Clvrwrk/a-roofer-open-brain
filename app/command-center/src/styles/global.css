@@ -3270,6 +3270,73 @@ a.vmpop-link:hover {
   white-space: nowrap;
 }
 
+/* Checkpoint round 3, item 4: Res/Com split pills inside one dense KPI card — a
+   slightly taller variant (still fixed-height, never grows) with a two-column value
+   row instead of a single big number. */
+.epl-kpi--split {
+  height: 108px;
+}
+
+.epl-kpi-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: 1px;
+}
+
+.epl-kpi-split-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.epl-kpi-split-lab {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.epl-kpi-split-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checkpoint round 3, item 3: per-queue value chips on the account bar row. */
+.epl-queues {
+  display: flex;
+  gap: var(--space-3);
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+
+.epl-queue {
+  text-align: right;
+}
+
+.epl-queue strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.epl-queue span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
 /* Charts stay in a fixed-height wrapper so Chart.js (responsive + no aspect
    ratio) cannot grow the surrounding card unboundedly. */
 .epl-chart-card {
