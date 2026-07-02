@@ -363,6 +363,36 @@ export async function syncJobWalk(
     );
     await archiveRaw(sb, syncBatchId, "job_insurance", insuranceEndpoint, insuranceStatus, insuranceBody);
     if (insuranceBody && typeof insuranceBody === "object" && !Array.isArray(insuranceBody)) {
+      // acculynx_job_insurance.insurance_company_id FKs to acculynx_insurance_carriers.id, a
+      // reference table designed in migration 169 ("Shared reference table... ingested in
+      // Plan 03") but never actually populated by any sync path — every insurance upsert with
+      // a non-null insuranceCompany.id was failing the FK (07-09 live-DB probe: 21/21 recent
+      // job_insurance errors were this FK violation). Upsert the carrier stub from the same
+      // response body (it already carries insuranceCompany.id/name) before the detail row, so
+      // the FK is satisfied without inventing a separate carrier-list sync resource.
+      const insuranceBodyAny = insuranceBody as { insuranceCompany?: { id?: string; name?: string } };
+      const carrierId = insuranceBodyAny?.insuranceCompany?.id ?? null;
+      if (carrierId) {
+        const { error: carrierError } = await sb.from("acculynx_insurance_carriers").upsert([{
+          id: carrierId,
+          name: insuranceBodyAny?.insuranceCompany?.name ?? null,
+          account_key: acct.account_key,
+          market: acct.market,
+          last_seen_by_api: ctx.now,
+          synced_at: ctx.now,
+        }]);
+        if (carrierError) {
+          await recordWalkError(
+            sb,
+            acct.account_key,
+            jobId,
+            "insurance_carrier",
+            syncBatchId,
+            carrierError.message,
+            insuranceStatus,
+          );
+        }
+      }
       const insRow = mapJobInsurance(insuranceBody, ctx);
       const { error } = await sb.from("acculynx_job_insurance").upsert([insRow]);
       if (error) {
@@ -391,7 +421,12 @@ export async function syncJobWalk(
       (Array.isArray(msBody) ? (msBody as unknown[]) : []);
     if (msItems.length > 0) {
       const msRows = msItems.map((m: any) => mapMilestoneHistoryItem(m, ctx));
-      const { error } = await sb.from("acculynx_job_milestone_history").upsert(msRows);
+      // onConflict targets the natural unique index (job_id, milestone_name, milestone_date):
+      // `id` is a GENERATED ALWAYS IDENTITY column on the live table and is never sent in
+      // msRows, so the upsert cannot rely on the (unsent) primary key as its default target.
+      const { error } = await sb
+        .from("acculynx_job_milestone_history")
+        .upsert(msRows, { onConflict: "job_id,milestone_name,milestone_date" });
       if (error) {
         await recordWalkError(
           sb,

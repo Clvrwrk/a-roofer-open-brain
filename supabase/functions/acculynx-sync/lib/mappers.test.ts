@@ -167,15 +167,22 @@ Deno.test("mapJobInsurance — missing fields default to null", () => {
   assertEquals(row.has_paperwork, null);
 });
 
+Deno.test("mapJobInsurance — 07-09 live-fix: empty-string dateOfLoss/claimFiledDate normalize to null", () => {
+  const raw = { dateOfLoss: "", claimFiledDate: "", claimNumber: "CLM-1" };
+  const row = mapJobInsurance(raw, CTX);
+  assertEquals(row.date_of_loss, null);
+  assertEquals(row.claim_filed_date, null);
+  assertEquals(row.claim_number, "CLM-1");
+});
+
 // ---------------------------------------------------------------------------
 // mapMilestoneHistoryItem
 // ---------------------------------------------------------------------------
 
-Deno.test("mapMilestoneHistoryItem — maps camelCase body to exact snake_case keys", () => {
+Deno.test("mapMilestoneHistoryItem — maps camelCase body to exact snake_case keys (07-09: id omitted, live column is GENERATED ALWAYS IDENTITY)", () => {
   const raw = { id: 555, milestoneName: "Approved", milestoneDate: "2026-06-01T00:00:00.000Z" };
   const row = mapMilestoneHistoryItem(raw, CTX);
   assertEquals(row, {
-    id: 555,
     job_id: "job-11",
     milestone_name: "Approved",
     milestone_date: "2026-06-01T00:00:00.000Z",
@@ -192,9 +199,9 @@ Deno.test("mapMilestoneHistoryItem — unknown API key does not appear as a top-
   assertEquals((row as Record<string, unknown>)["extraneous"], undefined);
 });
 
-Deno.test("mapMilestoneHistoryItem — missing fields default to null", () => {
+Deno.test("mapMilestoneHistoryItem — omits id (live GENERATED ALWAYS IDENTITY column) and defaults missing fields to null", () => {
   const row = mapMilestoneHistoryItem({}, CTX);
-  assertEquals(row.id, null);
+  assertEquals((row as Record<string, unknown>)["id"], undefined);
   assertEquals(row.milestone_name, null);
   assertEquals(row.milestone_date, null);
 });
@@ -252,6 +259,20 @@ Deno.test("mapInvoiceHeader — missing fields default to null", () => {
   assertEquals(row.invoice_number, null);
   assertEquals(row.total_price, null);
   assertEquals(row.balance_due, null);
+});
+
+Deno.test("mapInvoiceHeader — 07-09 live-fix: empty-string invoiceDate/createdDate normalize to null (void invoices), dueDate (text column) passes '' through unchanged", () => {
+  const raw = {
+    id: "inv-13",
+    invoiceDate: "",
+    dueDate: "",
+    createdDate: "",
+    currentInvoiceState: "Void",
+  };
+  const row = mapInvoiceHeader(raw, CTX);
+  assertEquals(row.invoice_date, null);
+  assertEquals(row.created_date, null);
+  assertEquals(row.due_date, "");
 });
 
 // ---------------------------------------------------------------------------
