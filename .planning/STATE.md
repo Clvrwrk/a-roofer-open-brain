@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
-status: ready_to_discuss
-stopped_at: Phase 7 UI-SPEC approved
-last_updated: "2026-07-02T02:30:05.040Z"
-last_activity: 2026-07-01
-last_activity_desc: Phase 06 closed with deferral; advanced to Phase 07 (Executive Sales Pipeline Dashboard, REQ-10)
+status: executing
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-07-02T04:27:31.948Z"
+last_activity: 2026-07-02
+last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 25
-  completed_plans: 24
+  total_plans: 29
+  completed_plans: 25
   percent: 71
 ---
 
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Phase: 07 (executive-sales-pipeline-dashboard) — NOT STARTED (next step: discuss)
-Plan: none yet (plans TBD at planning)
-Status: Phase 06 closed COMPLETE-WITH-DEFERRAL 2026-07-01 — `acculynx` subagent live-verified 3/3 (D-03 never-approve, REQ-09 injection-as-data); ob-acculynx roster identity deployed but inert, Slack/Coolify provisioning DEFERRED to the separate Slack project (resume recipe in 06-03-SUMMARY.md)
-Last activity: 2026-07-01 — Phase 06 closed with deferral; advanced to Phase 07 (Executive Sales Pipeline Dashboard, REQ-10)
+Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-02 — Phase 07 execution started
 
 Progress: [████████░░] 86%
 
@@ -60,6 +60,7 @@ Progress: [████████░░] 86%
 | Phase 05-read-write-action-layer P03 | 45min | 3 tasks | 6 files |
 | Phase 06 P01 | 20min | 2 tasks | 1 files |
 | Phase 06 P02 | 31min | 4 tasks | 8 files |
+| Phase 07 P01 | 6min | 2 tasks | 4 files |
 
 ### Decisions
 
@@ -86,6 +87,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 06]: [06-01]: A3 Status flipped pending → approved ONLY on Chris's explicit human signal (D-04 hard gate; T-06-01 guards against agent self-approval). Approved 2026-07-01. Wave 2 (Plans 03/04) now unblocked.
 - [Phase 06]: [06-02]: OKF AccuLynx bundle completed + link-navigable; api/index.md + data/index.md audit-only (already complete); SKILL.md frontmatter/bound_agents left for Plan 03 to avoid wave file-overlap.
 - [Phase 06]: [06-02]: MEMORY.md was at the 2,500-char cap; folded the OKF pointer in by consolidating the stale Phase 5 pick-up-here block (now complete) rather than deleting a durable fact (final 2,418).
+- [Phase 07]: [07-01]: acculynx_job_financials has no true GP field (worksheet_total > 0 on non-archived rows used as the primary-source proxy, currently 0 live matches) — invoiced-cost fallback via v_invoice_acculynx_match is the only live margin path — Live-DB re-verified at implementation time, matches RESEARCH.md exactly
+- [Phase 07]: [07-01]: marginByOffice reuses marginByRegion's computed array (both key off acculynx_jobs.account_key) rather than a duplicate aggregation, per Open Question 3's 'treat all 8 accounts as peer entries' recommendation — D-13 chose a plain global filter bar over a region/office split for v1
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T02:30:05.034Z
-Stopped at: Phase 7 UI-SPEC approved
-Resume file: .planning/phases/07-executive-sales-pipeline-dashboard/07-UI-SPEC.md
+Last session: 2026-07-02T04:27:31.944Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None

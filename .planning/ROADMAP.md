@@ -224,13 +224,13 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 4 plans (4 waves)
+**Plans**: 1/4 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — Data layer: install chart.js@4.5.1 (D-08) + `lib/executive-pipeline.ts` loader with a Supabase-free pure core (funnel, close-rate proxy, margin+coverage, region/office via account_key join, freshness) unit-tested per VALIDATION Wave 0
+- [x] 07-01-PLAN.md — Data layer: install chart.js@4.5.1 (D-08) + `lib/executive-pipeline.ts` loader with a Supabase-free pure core (funnel, close-rate proxy, margin+coverage, region/office via account_key join, freshness) unit-tested per VALIDATION Wave 0
 
 **Wave 2** *(blocked on 07-01)*
 
@@ -257,4 +257,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |
+| 7. Executive Sales Pipeline Dashboard | 1/4 | In Progress|  |
