@@ -21,10 +21,34 @@
 // present; a missing financials/rep row never nulls an existing real value — contract_amount
 // and balance_due are set to null only when NO financials row exists (first-sight/no data
 // yet), never used to blank out a previously-synced value with an absent-this-run read.
+//
+// POST-MILESTONE FIX ROUND (2026-07-02), item 1 — durable rep source (root cause of
+// KS-11 staying "Unassigned" even after backfill runs): repNameByJobId previously
+// carried ONLY this run's job-walk resolutions (Task 2a). A job walked in an EARLIER
+// run (and therefore skipped this run under D-16's unchanged-job skip) had no entry
+// in this run's map, so its crm_pipeline.primary_salesperson was never touched again —
+// which was fine UNTIL something upstream (a schema drift, a bad batch) blanked the
+// column, or the job was simply never re-walked after D-16 landed. The durable fix:
+// loadDurableRepsFromRaw() reads the LATEST /jobs/{id}/representatives payload already
+// archived in acculynx_raw for every job passed in (D-14 capture-first guarantees this
+// payload exists for every previously-walked job) and resolves it the same way
+// job-walk.ts's resolveCompanyRepName does. This durable map is merged UNDER the
+// in-memory repNameByJobId the caller passed in — current-run resolutions always win,
+// durable/raw-sourced ones fill every gap the current run's walk did not touch this
+// pass. Part (b) of the fix (never overwrite a real value with null) was ALREADY
+// correct — buildPipelineRow omits the `primary_salesperson` key entirely (not `null`)
+// whenever no name is resolved, so an upsert's ON CONFLICT DO UPDATE leaves whatever
+// crm_pipeline already has untouched. This durable load simply means far fewer jobs
+// ever reach buildPipelineRow with no resolved name at all.
 
 // deno-lint-ignore-file no-explicit-any
 
 const CHUNK_SIZE = 200;
+/** Cap on how many acculynx_raw representative rows we pull per account per run —
+ * keeps the durable-rep backfill query cost-bounded even on a large account. Ordered
+ * fetched_at DESC so, when truncated, the NEWEST payloads (most likely to reflect the
+ * current assignment) are the ones kept. */
+const RAW_REPS_QUERY_LIMIT = 4000;
 
 /** Shape of an acculynx_jobs row this module reads (account_key-scoped). */
 export interface JobRow {
@@ -234,6 +258,123 @@ export function buildPipelineRow(
   return row;
 }
 
+// ---------------------------------------------------------------------------
+// Durable rep source (post-milestone fix round, item 1) — reads the LATEST
+// /jobs/{id}/representatives payload already archived in acculynx_raw so a job
+// walked in an EARLIER run (and skipped this run under D-16) still resolves a
+// rep name, instead of relying solely on this run's in-memory walk map.
+// ---------------------------------------------------------------------------
+
+/** One row shape read back from acculynx_raw for representative resolution. */
+interface RawRepsRow {
+  api_endpoint: string;
+  payload: unknown;
+  fetched_at: string;
+}
+
+/**
+ * Pick the primary/company representative from a full /jobs/{id}/representatives
+ * collection response and resolve its user.id to a display name. Mirrors
+ * job-walk.ts's resolveCompanyRepName exactly (same KS-11 shape/fallback rules) —
+ * duplicated here rather than imported to keep this module's only cross-file
+ * dependency the shared mapper-free pure-function surface (crm-pipeline.ts has no
+ * existing import from job-walk.ts, and this keeps both modules independently
+ * testable without a circular import).
+ */
+export function resolveCompanyRepNameFromPayload(
+  repsBody: unknown,
+  userMap: Map<string, string>,
+): string | null {
+  const items: any[] = (repsBody as { items?: any[] })?.items ??
+    (Array.isArray(repsBody) ? (repsBody as any[]) : []);
+  if (items.length === 0) return null;
+  const companyRep = items.find((r) => r?.type === "CompanyRepresentative") ?? items[0];
+  const userId = companyRep?.user?.id ?? null;
+  if (!userId) return null;
+  return userMap.get(userId) ?? userId;
+}
+
+/**
+ * Extract the jobId embedded in an archived /jobs/{jobId}/representatives
+ * api_endpoint path (acculynx_raw carries no job_id column — the path is the only
+ * join key, same convention job-walk.ts's shouldWalkJob() already relies on for its
+ * `%/jobs/{jobId}%` LIKE match).
+ */
+export function jobIdFromRepsEndpoint(apiEndpoint: string): string | null {
+  // Excludes /representatives/sales-owner (the 204-empty sub-path job-walk.ts's own
+  // comments describe) — only the FULL-collection endpoint qualifies as a durable
+  // company-rep source. Match ends at end-of-string or a `?` (query string), never a
+  // trailing `/` (which would also match the sales-owner sub-path).
+  const m = apiEndpoint.match(/\/jobs\/([^/]+)\/representatives(?:\?|$)/);
+  return m?.[1] ?? null;
+}
+
+/**
+ * Loads the LATEST /representatives payload per job (from acculynx_raw) for the
+ * given job IDs, resolves each to a rep display name, and returns a
+ * Map<jobId, repName>. Pure given its inputs — the caller (loadDurableRepsFromRaw)
+ * owns the actual Supabase query; this function only shapes already-fetched rows,
+ * so it is unit-testable without a mocked client.
+ *
+ * Rows are expected pre-sorted newest-first (fetched_at DESC) by the caller's
+ * query — this function keeps the FIRST payload it sees per jobId and ignores any
+ * later (older) duplicate for the same job.
+ */
+export function latestRepNameByJobIdFromRawRows(
+  rows: RawRepsRow[],
+  userMap: Map<string, string>,
+): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    const jobId = jobIdFromRepsEndpoint(row.api_endpoint);
+    if (!jobId || result.has(jobId)) continue; // keep only the first (newest) per job
+    const repName = resolveCompanyRepNameFromPayload(row.payload, userMap);
+    if (repName) result.set(jobId, repName);
+  }
+  return result;
+}
+
+/**
+ * Queries acculynx_raw for the latest /representatives archive per job (bounded by
+ * RAW_REPS_QUERY_LIMIT, newest-first) and resolves each to a rep name via
+ * acculynx_users. Cost-bounded: one query filtered by api_endpoint LIKE
+ * '%/representatives' ordered fetched_at DESC LIMIT N, rather than one query per
+ * job — measured against production job counts (6,434 jobs across all accounts;
+ * RAW_REPS_QUERY_LIMIT keeps this a single indexed-scan-shaped query per account
+ * per run instead of thousands of per-job round-trips). Falls back to sales-owner
+ * shaped items when no CompanyRepresentative type is present (same fallback
+ * resolveCompanyRepNameFromPayload already applies).
+ */
+export async function loadDurableRepsFromRaw(
+  sb: any,
+  jobIds: string[],
+): Promise<Map<string, string>> {
+  if (jobIds.length === 0) return new Map();
+
+  const { data: users } = await sb.from("acculynx_users").select("id, display_name, first_name, last_name");
+  const userMap = new Map<string, string>();
+  for (const u of (users ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null }[]) {
+    const name = u.display_name || [u.first_name, u.last_name].filter(Boolean).join(" ") || u.id;
+    userMap.set(u.id, name);
+  }
+
+  const { data: rawRows, error } = await sb
+    .from("acculynx_raw")
+    .select("api_endpoint,payload,fetched_at")
+    .like("api_endpoint", "%/representatives")
+    .order("fetched_at", { ascending: false })
+    .limit(RAW_REPS_QUERY_LIMIT);
+  if (error || !rawRows) return new Map();
+
+  const jobIdSet = new Set(jobIds);
+  const relevantRows = (rawRows as RawRepsRow[]).filter((row) => {
+    const jobId = jobIdFromRepsEndpoint(row.api_endpoint);
+    return jobId !== null && jobIdSet.has(jobId);
+  });
+
+  return latestRepNameByJobIdFromRawRows(relevantRows, userMap);
+}
+
 /**
  * syncCrmPipeline(sb, acct, deadline, repNameByJobId) — account-scoped crm_pipeline
  * upsert reading this account's acculynx_jobs + acculynx_job_financials rows.
@@ -245,7 +386,9 @@ export function buildPipelineRow(
  * @param acct            - account row (account_key)
  * @param deadline         - epoch ms budget limit
  * @param repNameByJobId  - Map<jobId, repName> returned by syncJobWalk's
- *                          full-representatives fetch (Task 2a)
+ *                          full-representatives fetch (Task 2a) — resolutions from
+ *                          THIS run. Always takes precedence over the durable
+ *                          acculynx_raw-sourced fallback below (current-run wins).
  * @param batchId         - sync_batch_id for cross-referencing this run
  */
 export async function syncCrmPipeline(
@@ -280,12 +423,21 @@ export async function syncCrmPipeline(
     financialsByJobId.set(f.job_id, f);
   }
 
+  // Durable rep fallback (item 1): fills in a resolved name for any job THIS run's
+  // walk did not touch (skipped under D-16, or walked in an earlier sync). Merged
+  // UNDER repNameByJobId below — current-run resolutions always win.
+  const durableRepNameByJobId = await loadDurableRepsFromRaw(sb, jobs.map((j) => j.id));
+  const mergedRepNameByJobId = new Map<string, string>(durableRepNameByJobId);
+  for (const [jobId, repName] of repNameByJobId.entries()) {
+    mergedRepNameByJobId.set(jobId, repName); // current-run wins over durable fallback
+  }
+
   const nowIso = new Date().toISOString();
   const rows = jobs.map((job) =>
     buildPipelineRow(
       job,
       financialsByJobId.get(job.id) ?? null,
-      repNameByJobId.get(job.id) ?? null,
+      mergedRepNameByJobId.get(job.id) ?? null,
       batchId,
       nowIso,
     )

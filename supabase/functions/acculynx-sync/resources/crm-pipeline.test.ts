@@ -12,10 +12,24 @@
 //   (e) data_source === 'api_sync'
 //   (f) The crm_pipeline upsert targets onConflict: 'acculynx_job_id'
 //
+// POST-MILESTONE FIX ROUND (2026-07-02), item 1 — durable rep source, additionally asserts:
+//   (g) latestRepNameByJobIdFromRawRows resolves a job's rep from its LATEST acculynx_raw
+//       /representatives archive (KS-11 shape) when the row list is pre-sorted newest-first
+//   (h) A job absent from the CURRENT run's repNameByJobId map still gets
+//       primary_salesperson set in syncCrmPipeline's upsert, sourced from the durable
+//       acculynx_raw-backed fallback (loadDurableRepsFromRaw)
+//   (i) When a job appears in BOTH the current-run map and the durable fallback with
+//       different names, the CURRENT-RUN name wins (never overwritten by durable/raw)
+//
 // Run: deno test supabase/functions/acculynx-sync/resources/crm-pipeline.test.ts
 
 import { assertEquals, assertExists } from "jsr:@std/assert@1";
-import { buildPipelineRow, syncCrmPipeline } from "./crm-pipeline.ts";
+import {
+  buildPipelineRow,
+  jobIdFromRepsEndpoint,
+  latestRepNameByJobIdFromRawRows,
+  syncCrmPipeline,
+} from "./crm-pipeline.ts";
 import type { JobFinancialsRow, JobRow } from "./crm-pipeline.ts";
 
 // ---------------------------------------------------------------------------
@@ -91,8 +105,20 @@ Deno.test("buildPipelineRow — data_source is always api_sync", () => {
 // syncCrmPipeline tests (mocked Supabase client)
 // ---------------------------------------------------------------------------
 
-function makeCrmPipelineSb(jobs: JobRow[], financials: JobFinancialsRow[]) {
+interface RawRepsFixtureRow {
+  api_endpoint: string;
+  payload: unknown;
+  fetched_at: string;
+}
+
+function makeCrmPipelineSb(
+  jobs: JobRow[],
+  financials: JobFinancialsRow[],
+  options: { users?: { id: string; display_name?: string | null; first_name?: string | null; last_name?: string | null }[]; rawRepsRows?: RawRepsFixtureRow[] } = {},
+) {
   const upsertCalls: { table: string; rows: unknown[]; options?: unknown }[] = [];
+  const users = options.users ?? [];
+  const rawRepsRows = options.rawRepsRows ?? [];
 
   const sb = {
     from: (table: string) => {
@@ -107,6 +133,22 @@ function makeCrmPipelineSb(jobs: JobRow[], financials: JobFinancialsRow[]) {
         return {
           select: () => ({
             in: () => Promise.resolve({ data: financials, error: null }),
+          }),
+        };
+      }
+      if (table === "acculynx_users") {
+        return {
+          select: () => Promise.resolve({ data: users, error: null }),
+        };
+      }
+      if (table === "acculynx_raw") {
+        return {
+          select: () => ({
+            like: () => ({
+              order: () => ({
+                limit: () => Promise.resolve({ data: rawRepsRows, error: null }),
+              }),
+            }),
           }),
         };
       }
@@ -161,4 +203,112 @@ Deno.test("syncCrmPipeline — no jobs for account returns zero upserted, no ups
 
   assertEquals(result.upserted, 0);
   assertEquals(upsertCalls.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Item 1 (2026-07-02 fix round): durable rep source from acculynx_raw
+// ---------------------------------------------------------------------------
+
+const KS11_REPS_PAYLOAD = {
+  count: 1,
+  pageSize: 25,
+  pageStartIndex: 0,
+  items: [{ id: "rep-1", type: "CompanyRepresentative", user: { id: "779da1e7-ks11-rep" } }],
+};
+
+Deno.test("jobIdFromRepsEndpoint — extracts the jobId from an archived /jobs/{id}/representatives path", () => {
+  assertEquals(jobIdFromRepsEndpoint("/jobs/0c732e56-ks11/representatives"), "0c732e56-ks11");
+  assertEquals(jobIdFromRepsEndpoint("/jobs/abc-123/representatives?foo=bar"), "abc-123");
+  assertEquals(jobIdFromRepsEndpoint("/jobs/abc-123/representatives/sales-owner"), null);
+  assertEquals(jobIdFromRepsEndpoint("/jobs/abc-123/financials"), null);
+});
+
+Deno.test("latestRepNameByJobIdFromRawRows — resolves the KS-11 shape from a raw archive row", () => {
+  const userMap = new Map([["779da1e7-ks11-rep", "Bob Smolek"]]);
+  const rows = [
+    { api_endpoint: "/jobs/0c732e56-ks11/representatives", payload: KS11_REPS_PAYLOAD, fetched_at: "2026-06-15T00:00:00Z" },
+  ];
+
+  const result = latestRepNameByJobIdFromRawRows(rows, userMap);
+
+  assertEquals(result.get("0c732e56-ks11"), "Bob Smolek");
+});
+
+Deno.test("latestRepNameByJobIdFromRawRows — keeps only the FIRST (newest) row per job when duplicates exist", () => {
+  const userMap = new Map([
+    ["779da1e7-ks11-rep", "Bob Smolek"],
+    ["stale-rep-id", "Someone Else"],
+  ]);
+  // Caller contract: rows pre-sorted newest-first. The newest payload (index 0)
+  // must win even though an older payload for the same job follows it.
+  const rows = [
+    {
+      api_endpoint: "/jobs/0c732e56-ks11/representatives",
+      payload: KS11_REPS_PAYLOAD,
+      fetched_at: "2026-06-15T00:00:00Z",
+    },
+    {
+      api_endpoint: "/jobs/0c732e56-ks11/representatives",
+      payload: { items: [{ type: "CompanyRepresentative", user: { id: "stale-rep-id" } }] },
+      fetched_at: "2026-05-01T00:00:00Z",
+    },
+  ];
+
+  const result = latestRepNameByJobIdFromRawRows(rows, userMap);
+
+  assertEquals(result.get("0c732e56-ks11"), "Bob Smolek");
+});
+
+Deno.test("syncCrmPipeline — a job absent from this run's repNameByJobId still resolves primary_salesperson via the durable acculynx_raw fallback (KS-11)", async () => {
+  const { sb, upsertCalls } = makeCrmPipelineSb([KS11_JOB], [KS11_FINANCIALS], {
+    users: [{ id: "779da1e7-ks11-rep", display_name: "Bob Smolek" }],
+    rawRepsRows: [
+      { api_endpoint: "/jobs/0c732e56-ks11/representatives", payload: KS11_REPS_PAYLOAD, fetched_at: "2026-06-15T00:00:00Z" },
+    ],
+  });
+  const deadline = Date.now() + 60_000;
+
+  // Empty repNameByJobId: THIS run's walk did not touch job KS-11 (e.g. it was
+  // skipped under D-16, or walked in an earlier sync only) — the durable fallback
+  // must still resolve the name from acculynx_raw so KS-11 never stays Unassigned.
+  const result = await syncCrmPipeline(sb, { account_key: "wichita" }, deadline, new Map(), "batch-1");
+
+  assertEquals(result.upserted, 1);
+  const row = upsertCalls[0].rows[0] as Record<string, unknown>;
+  assertEquals(row.primary_salesperson, "Bob Smolek");
+});
+
+Deno.test("syncCrmPipeline — current-run repNameByJobId ALWAYS wins over the durable acculynx_raw fallback", async () => {
+  const { sb, upsertCalls } = makeCrmPipelineSb([KS11_JOB], [KS11_FINANCIALS], {
+    users: [{ id: "779da1e7-ks11-rep", display_name: "Bob Smolek (stale durable name)" }],
+    rawRepsRows: [
+      { api_endpoint: "/jobs/0c732e56-ks11/representatives", payload: KS11_REPS_PAYLOAD, fetched_at: "2026-06-15T00:00:00Z" },
+    ],
+  });
+  const deadline = Date.now() + 60_000;
+  const repMap = new Map([["0c732e56-ks11", "Bob Smolek (this run, fresh)"]]);
+
+  const result = await syncCrmPipeline(sb, { account_key: "wichita" }, deadline, repMap, "batch-1");
+
+  assertEquals(result.upserted, 1);
+  const row = upsertCalls[0].rows[0] as Record<string, unknown>;
+  assertEquals(row.primary_salesperson, "Bob Smolek (this run, fresh)");
+});
+
+Deno.test("syncCrmPipeline — a job with NEITHER a current-run rep NOR a durable acculynx_raw archive omits primary_salesperson (never nulls existing value)", async () => {
+  const { sb, upsertCalls } = makeCrmPipelineSb([KS11_JOB], [KS11_FINANCIALS], {
+    users: [],
+    rawRepsRows: [], // no prior /representatives archive for this job at all
+  });
+  const deadline = Date.now() + 60_000;
+
+  const result = await syncCrmPipeline(sb, { account_key: "wichita" }, deadline, new Map(), "batch-1");
+
+  assertEquals(result.upserted, 1);
+  const row = upsertCalls[0].rows[0] as Record<string, unknown>;
+  assertEquals(
+    Object.prototype.hasOwnProperty.call(row, "primary_salesperson"),
+    false,
+    "primary_salesperson must be omitted (never null) when no rep resolves from either source",
+  );
 });
