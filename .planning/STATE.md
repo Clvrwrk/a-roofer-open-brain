@@ -6,14 +6,14 @@ current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
 stopped_at: Phase 07 plan 02 complete (dashboard approved)
-last_updated: "2026-07-02T06:08:15.410Z"
+last_updated: "2026-07-02T06:13:39.141Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 27
   percent: 71
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 86%
 | Phase 06 P01 | 20min | 2 tasks | 1 files |
 | Phase 06 P02 | 31min | 4 tasks | 8 files |
 | Phase 07 P01 | 6min | 2 tasks | 4 files |
+| Phase 07 P03 | 15min | 2 tasks | 6 files |
 
 ### Decisions
 
@@ -89,6 +90,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 06]: [06-02]: MEMORY.md was at the 2,500-char cap; folded the OKF pointer in by consolidating the stale Phase 5 pick-up-here block (now complete) rather than deleting a durable fact (final 2,418).
 - [Phase 07]: [07-01]: acculynx_job_financials has no true GP field (worksheet_total > 0 on non-archived rows used as the primary-source proxy, currently 0 live matches) — invoiced-cost fallback via v_invoice_acculynx_match is the only live margin path — Live-DB re-verified at implementation time, matches RESEARCH.md exactly
 - [Phase 07]: [07-01]: marginByOffice reuses marginByRegion's computed array (both key off acculynx_jobs.account_key) rather than a duplicate aggregation, per Open Question 3's 'treat all 8 accounts as peer entries' recommendation — D-13 chose a plain global filter bar over a region/office split for v1
+- [Phase 07]: [07-03]: Deleted executive/[slug].astro outright rather than gutting it — pipeline.astro (static route, Wave 2) always wins Astro route resolution over the dynamic [slug] match, and grep confirmed no other executive sub-slug depends on the stub
+- [Phase 07]: [07-03]: Reworded two doc-comments in executive-pipeline.ts naming the deleted weekly-snapshot.ts, closing the plan's literal zero-hits-in-src/ grep gate rather than treating comment matches as an accepted exception
 
 ### Pending Todos
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T06:08:10.517Z
+Last session: 2026-07-02T06:13:03.685Z
 Stopped at: Phase 07 plan 02 complete (dashboard approved)
 Resume file: .planning/phases/07-executive-sales-pipeline-dashboard/07-03-PLAN.md

@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 
@@ -238,7 +238,7 @@ Plans:
 
 **Wave 3** *(blocked on 07-01/02)*
 
-- [ ] 07-03-PLAN.md — D-02 cutover: delete 7 weekly-snapshot files + retire the `[slug]` stub; rewire nav/prewarm/AppShell/healthz/sw to `/executive/pipeline`; build + full suite green (zero dangling imports)
+- [x] 07-03-PLAN.md — D-02 cutover: delete 7 weekly-snapshot files + retire the `[slug]` stub; rewire nav/prewarm/AppShell/healthz/sw to `/executive/pipeline`; build + full suite green (zero dangling imports)
 
 **Wave 4** *(blocked on 07-03 — human-gated deploy)*
 
@@ -257,4 +257,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 2/4 | In Progress|  |
+| 7. Executive Sales Pipeline Dashboard | 3/4 | In Progress|  |
