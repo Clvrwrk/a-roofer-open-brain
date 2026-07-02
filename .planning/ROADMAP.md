@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 
@@ -234,7 +234,7 @@ Plans:
 
 **Wave 2** *(blocked on 07-01)*
 
-- [ ] 07-02-PLAN.md — UI surface: `executive/pipeline.astro` SSR page (D-01) + `api/executive/pipeline.json` (filter-allowlisted, WorkOS-gated) + `scripts/executive-pipeline.ts` (Chart.js mount, D-13 filter bar, D-09 drill-down, D-11 5-min poll); human-verify checkpoint
+- [x] 07-02-PLAN.md — UI surface: `executive/pipeline.astro` SSR page (D-01) + `api/executive/pipeline.json` (filter-allowlisted, WorkOS-gated) + `scripts/executive-pipeline.ts` (Chart.js mount, D-13 filter bar, D-09 drill-down, D-11 5-min poll); human-verify checkpoint
 
 **Wave 3** *(blocked on 07-01/02)*
 
@@ -257,4 +257,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 1/4 | In Progress|  |
+| 7. Executive Sales Pipeline Dashboard | 2/4 | In Progress|  |
