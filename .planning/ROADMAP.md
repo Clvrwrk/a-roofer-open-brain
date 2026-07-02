@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 7/9 plans executed
+**Plans**: 8/9 plans executed
 
 Plans:
 
@@ -257,7 +257,7 @@ Plans:
 
 **Wave 7** *(blocked on 07-05/06)*
 
-- [ ] 07-08-PLAN.md — Webhook triggers (D-17): verify GET /webhooks/v2/topics + auth mechanism live, build+sandbox-prove the acculynx-webhook receiver Edge Function (untrusted-payload auth-verify), mig 187 event log; **blocking-human** prod subscription POST (sandbox-proven external write gate)
+- [x] 07-08-PLAN.md — Webhook triggers (D-17): verify GET /webhooks/v2/topics + auth mechanism live, build+sandbox-prove the acculynx-webhook receiver Edge Function (untrusted-payload auth-verify), mig 187 event log; **blocking-human** prod subscription POST (sandbox-proven external write gate)
 
 **Wave 8** *(blocked on 07-06/07/08 — final live re-verify)*
 
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 7/9 | In Progress|  |
+| 7. Executive Sales Pipeline Dashboard | 8/9 | In Progress|  |

@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-07-02T15:52:24.710Z"
+stopped_at: Completed 07-08-PLAN.md (live-fix + wichita canary proof); next is 07-09
+last_updated: "2026-07-02T20:29:47.706Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 34
-  completed_plans: 31
+  completed_plans: 32
   percent: 71
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 86%
 | Phase 07 P05 | 35min | 3 tasks | 6 files |
 | Phase 07 P06 | 50min | 4 tasks | 5 files |
 | Phase 07 P07 | 25min | 2 tasks | 4 files |
+| Phase 07 P08 | 55min | 5 tasks | 5 files |
 
 ### Decisions
 
@@ -101,6 +102,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 07]: [07-06]: D-18 budget rotation persists its cursor on the existing acculynx_sync_watermark table via account_key='__rotation__', resource_type='fanout_start' rather than a new table — reuses advanceWatermark()'s proven upsert contract.
 - [Phase 07]: dedupePipeline() collapses csv_initial/api_sync crm_pipeline duplicates by acculynx_job_id, preferring api_sync, applied at both the aggregate loader and the per-location drill-down path
 - [Phase 07]: sync-pipeline.md corrected to describe the live D-14..D-18 pipeline (capture-first, crm_pipeline restored on multiAccount cron, first-sight/change-driven pull, budget rotation, counted job-walk errors); dashboard-side dedup explicitly documented as NOT resolving the ~5,578 orphaned csv_initial rows at the source
+- [Phase 07]: [07-08 live-fix]: acculynx-webhook's real-vs-invented topic-name mismatch root-caused from the stored payload (DB row 7) - real envelope is flat {event, eventId, topicName, subscriptionId}; real topic strings promoted to primary routing entries, invented names kept as aliases
+- [Phase 07]: [07-08 live-fix]: accountKey resolved via a new subscriptionId-to-account_key JSON-object env secret (ACCULYNX_WEBHOOK_ACCOUNT_MAP), parsed once at module load, since the real AccuLynx envelope carries no account field at all
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T15:52:18.434Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-07-02T20:29:47.701Z
+Stopped at: Completed 07-08-PLAN.md (live-fix + wichita canary proof); next is 07-09
 Resume file: None
