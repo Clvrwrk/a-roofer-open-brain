@@ -281,6 +281,72 @@ fix commit). Contacts/estimates were already correct (they use `pageStartIndex` 
 **page number**, `+= 1`). Docs corrected: [read-capability](../api/read-capability.md#pagination-split-a-real-quirk).
 If a jobs sweep ever stalls again, first re-probe the endpoint's pagination unit.
 
+## Backfill rotation (Phase 7 gap closure, 2026-07-02)
+
+The 07-05..07-08 gap-closure plans rebuilt the sync to restore `crm_pipeline` writes,
+fix job-walk sub-resource mapping, and add D-15 first-sight / D-16 change-driven pull
+scheduling + D-18 fair-share account rotation. 07-09 deployed the rebuilt function
+(v39 as of this writing) and kicked off the D-18 backfill: every one of the ~6,434
+jobs across all 8 accounts gets its first-sight full pull (all job-walk sub-resource
+endpoints) over a paced, multi-run rotation — not one giant call.
+
+**Kickoff commands** — the default no-arg fan-out rotates across all 8 accounts
+automatically (D-18 persisted cursor); to target one starved account explicitly (as
+07-09 did for wichita, the account VERIFICATION.md flagged as budget-starved):
+```sql
+-- Default rotation (all enabled accounts, D-18 fair-share cursor):
+select public.trigger_acculynx_sync('{"multiAccount":true}'::jsonb);
+
+-- Targeted single-account backfill (own the account's full ~110s budget):
+select public.trigger_acculynx_sync('{"multiAccount":true,"accountFilter":["wichita"]}'::jsonb);
+```
+Or via the CLI (no secrets ever transit this call): `supabase db query --linked`
+with the same SQL piped on stdin.
+
+**Expected multi-run pacing — this is by design, not a fault.** Each invocation has a
+hard ~110s runtime budget (`RUNTIME_BUDGET_MS`, index.ts). For a never-before-walked
+account, job-walk (7 endpoints/job + pacing sleeps) processes roughly 25-35 jobs per
+run before the deadline is hit — `runAccountSync` returns before `syncCrmPipeline`
+ever executes for that account this run (logged as `"crmPipeline":"skipped"` in the
+`net._http_response` body, not an error). A 1,286-job account like wichita therefore
+takes **dozens of runs across several hours** to complete its first-sight pass; the
+hourly cron continues this automatically without any manual retrigger required.
+`syncCrmPipeline`, once it DOES get a turn within an account's budget, re-reads that
+account's ENTIRE `acculynx_jobs` + `acculynx_job_financials` and upserts all of them
+into `crm_pipeline` in one pass (chunked by 200) — it is not scoped to only the jobs
+job-walk touched that specific run, so the first successful crm_pipeline pass for an
+account backfills every job walked so far, not just the newest ones.
+
+**Watch progress:**
+```sql
+-- job-walk progress (last_walked_job_id advancing = forward progress, not stuck):
+select account_key, last_walked_job_id, last_sync_at
+from public.acculynx_sync_watermark where resource_type='job_walk' order by account_key;
+
+-- Mapper health — must stay at/near zero; a spike means a mapper is wrong, not a pacing issue:
+select resource_type, count(*) from public.acculynx_job_walk_errors
+where occurred_at > now() - interval '1 hour' and resolved_at is null
+group by resource_type order by count(*) desc;
+
+-- crm_pipeline coverage growing per account (the dashboard's actual data source):
+select count(*) from public.crm_pipeline
+where data_source='api_sync' and updated_at > now() - interval '2 hours';
+```
+
+**07-09 live findings (wichita canary of the backfill):** the very first triggered run
+surfaced 3 real mapper bugs the counted-error surface (07-05) was built to catch, all
+fixed same-session (see `git log --grep 07-09` for the 3 fix commits) — verify-live-DB
+over migration-file assumptions was required for two of them (a live schema
+`GENERATED ALWAYS AS IDENTITY` column not matching the 169 migration file, and a real
+AccuLynx milestone-history field shape `{date,name}` not the design-time-assumed
+`{milestoneDate,milestoneName}`), plus one silently-broken D-16 skip query
+(`acculynx_raw.created_at` does not exist; the real column is `fetched_at`) that had
+made every job look like first-sight forever. After all three fixes: 0 job-walk
+errors across multiple wichita runs, and the KS-11 ground-truth job (financials +
+representatives) resolved correctly against the live API (`approved_job_value
+30368.48`, `balance_due 17532.48`, company rep resolving to `Bob Smolek`) before
+`crm_pipeline` itself had a budget turn to persist it.
+
 ## Owners
 
 - **Ingestion / Data (AccuLynx):** owns watermark, backfill, and edge-fn recovery.
@@ -293,5 +359,5 @@ If a jobs sweep ever stalls again, first re-probe the endpoint's pagination unit
 
 [1] `scripts/verify-acculynx-cron.sql` — health gate (schedule + stuck-dispatch).
 [2] Migrations `173` (`acculynx_cron_dispatch`), `174` (`reconcile_acculynx_cron_outcomes()` + `*/10` cron), `175` (`v_acculynx_cron_outcomes` v2), `176` (`check_acculynx_alerts()` + `*/15` cron).
-[3] Edge Function `acculynx-sync` (v19), project `rnhmvcpsvtqjlffpsayu`; rollback target v12.
+[3] Edge Function `acculynx-sync` (v39 as of 07-09's gap-closure deploy), project `rnhmvcpsvtqjlffpsayu`; rollback target v12 (pre-Phase-7; the last known-good version before the crm_pipeline/job-walk rebuild).
 [4] [Sync Pipeline](sync-pipeline.md), [Account Registry](../accounts.md), [Auth & Rate Limits](../api/auth-and-limits.md).
