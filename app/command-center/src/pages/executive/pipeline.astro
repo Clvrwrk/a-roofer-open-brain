@@ -122,6 +122,12 @@ function asData(value: unknown) {
   return JSON.stringify(value);
 }
 
+// Checkpoint round 4, item 2: fixed trailing-7-calendar-day pills (New Leads/New
+// Pre-close/New Contracts/Invoiced/Closed) — always current, independent of the D-03
+// window selector, obeys the D-13 filter bar (dashboard.trailing7d is already computed
+// from the filtered pipeline in the loader).
+const trailing7dPills = dashboard.trailing7d;
+
 const QUEUE_LABELS: Record<QueueName, string> = {
   leads: "Leads",
   prospects: "Prospects",
@@ -385,18 +391,44 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
       </div>
     </section>
 
+    <section class="epl-t7" aria-label="Trailing 7 days" data-t7-row>
+      <span class="epl-t7-label">Trailing 7 days</span>
+      <div class="epl-t7-pills">
+        <div class="epl-t7-pill">
+          <strong data-t7-val="newLeads">{trailing7dPills.newLeads.count}</strong>
+          <span>New Leads</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="newPreClose">{formatCurrency(trailing7dPills.newPreClose.value ?? 0)}</strong>
+          <span data-t7-sub="newPreClose">New Pre-close · {trailing7dPills.newPreClose.count} job{trailing7dPills.newPreClose.count === 1 ? "" : "s"}</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="newContracts">{formatCurrency(trailing7dPills.newContracts.value ?? 0)}</strong>
+          <span data-t7-sub="newContracts">New Contracts · {trailing7dPills.newContracts.count} job{trailing7dPills.newContracts.count === 1 ? "" : "s"}</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="invoiced">{formatCurrency(trailing7dPills.invoiced.value ?? 0)}</strong>
+          <span data-t7-sub="invoiced">Invoiced · {trailing7dPills.invoiced.count} job{trailing7dPills.invoiced.count === 1 ? "" : "s"}</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="closed">{formatCurrency(trailing7dPills.closed.value ?? 0)}</strong>
+          <span data-t7-sub="closed">Closed · {trailing7dPills.closed.count} job{trailing7dPills.closed.count === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+    </section>
+
     <section class="live-metric-grid" aria-label="Pipeline charts" data-chart-grid style="grid-template-columns: repeat(2, minmax(0, 1fr));">
       <div class="live-metric-card epl-chart-card">
-        <span>Pipeline value by stage</span>
+        <span>Pipeline value by stage <em class="epl-chart-legend-note">Collected vs AR outstanding</em></span>
         <div class="epl-chart-wrap">
-          <canvas id="pipeline-funnel-chart" data-chart="funnel" data-chart-data={asData(dashboard.funnel)} />
+          <canvas id="pipeline-funnel-chart" data-chart="funnel" data-chart-data={asData(dashboard.funnelWithSplit)} />
         </div>
       </div>
 
       <div class="live-metric-card epl-chart-card">
-        <span>Rep leaderboard (sold value)</span>
+        <span>Rep leaderboard (sold value) <em class="epl-chart-legend-note">Collected vs AR outstanding</em></span>
         <div class="epl-chart-wrap">
-          <canvas id="pipeline-leaderboard-chart" data-chart="leaderboard" data-chart-data={asData(dashboard.leaderboard)} />
+          <canvas id="pipeline-leaderboard-chart" data-chart="leaderboard" data-chart-data={asData(dashboard.leaderboardWithSplit)} />
         </div>
       </div>
     </section>

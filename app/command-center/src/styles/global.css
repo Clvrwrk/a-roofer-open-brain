@@ -3337,6 +3337,70 @@ a.vmpop-link:hover {
   color: var(--text-muted);
 }
 
+/* Checkpoint round 4, item 2: trailing-7-day totals pill row — sits between the KPI
+   grid and the charts, dense Invoice-Audit chip styling (mirrors .iv-kpi's compact
+   card look, collapsed into a single-row strip of pills instead of a grid). Reuses
+   existing tokens only (no new hex/spacing added). */
+.epl-t7 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.epl-t7-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.epl-t7-pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.epl-t7-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  padding: var(--space-2) var(--space-4);
+  min-width: 108px;
+}
+
+.epl-t7-pill strong {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.epl-t7-pill span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* Chart card legend note (checkpoint round 4, item 1 — "Collected vs AR outstanding"). */
+.epl-chart-legend-note {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-left: var(--space-2);
+}
+
 /* Charts stay in a fixed-height wrapper so Chart.js (responsive + no aspect
    ratio) cannot grow the surrounding card unboundedly. */
 .epl-chart-card {

@@ -28,6 +28,11 @@ interface FunnelStage {
   value: number;
 }
 
+interface FunnelStageWithSplit extends FunnelStage {
+  collected: number;
+  arOutstanding: number;
+}
+
 interface MarginCoverage {
   jobsWithCostData: number;
   totalJobsInSlice: number;
@@ -48,6 +53,24 @@ interface LeaderboardRow {
   soldValue: number;
   arBalance: number;
   closeRateSnapshot: number;
+}
+
+interface LeaderboardRowWithSplit extends LeaderboardRow {
+  collected: number;
+  arOutstanding: number;
+}
+
+interface Trailing7dPill {
+  count: number;
+  value: number | null;
+}
+
+interface Trailing7dTotals {
+  newLeads: Trailing7dPill;
+  newPreClose: Trailing7dPill;
+  newContracts: Trailing7dPill;
+  invoiced: Trailing7dPill;
+  closed: Trailing7dPill;
 }
 
 interface FreshnessBadge {
@@ -99,6 +122,7 @@ interface ExecutivePipelineDashboard {
   filters: { window: string; accountKey: string; commercialResidential: string; rep: string };
   window: { start: string; end: string; label: string };
   funnel: FunnelStage[];
+  funnelWithSplit: FunnelStageWithSplit[];
   closeRate: CloseRateResult;
   newLeadsCount: number;
   marginByRegion: MarginByDimensionRow[];
@@ -106,6 +130,8 @@ interface ExecutivePipelineDashboard {
   marginByCommercialResidential: MarginByDimensionRow[];
   marginByRep: MarginByDimensionRow[];
   leaderboard: LeaderboardRow[];
+  leaderboardWithSplit: LeaderboardRowWithSplit[];
+  trailing7d: Trailing7dTotals;
   locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
@@ -156,6 +182,7 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   filters: { window: "last_7_days", accountKey: "all", commercialResidential: "all", rep: "all" },
   window: { start: "", end: "", label: "" },
   funnel: [],
+  funnelWithSplit: [],
   closeRate: { leadCount: 0, soldCount: 0, closeRate: 0, soldValue: 0, qualifier: "" },
   newLeadsCount: 0,
   marginByRegion: [],
@@ -163,6 +190,14 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   marginByCommercialResidential: [],
   marginByRep: [],
   leaderboard: [],
+  leaderboardWithSplit: [],
+  trailing7d: {
+    newLeads: { count: 0, value: null },
+    newPreClose: { count: 0, value: 0 },
+    newContracts: { count: 0, value: 0 },
+    invoiced: { count: 0, value: 0 },
+    closed: { count: 0, value: 0 },
+  },
   locationRollup: [],
   arTotal: 0,
   freshness: [],
@@ -213,7 +248,12 @@ function formatCompactCurrency(value: number): string {
 }
 
 // Semantic palette in fixed order (UI-SPEC.md Chart styling contract) — max 5-6 colors.
+// AR/outstanding segment reuses the app's --tertiary danger-red token (#c22326,
+// CHART_PALETTE[4] below — same hex the global stylesheet resolves --tertiary to),
+// per the checkpoint round 4 spec: "AR in Red ... the app's --error/danger token red".
 const CHART_PALETTE = ["#11133f", "#3b6b4c", "#0066cc", "#eaa221", "#c22326"];
+const COLLECTED_COLOR = CHART_PALETTE[0];
+const AR_COLOR = CHART_PALETTE[4];
 
 // ---------------------------------------------------------------------------
 // Chart.js mounts (client-side only — Pitfall 6). Canvases live inside a
@@ -222,6 +262,12 @@ const CHART_PALETTE = ["#11133f", "#3b6b4c", "#0066cc", "#eaa221", "#c22326"];
 // (checkpoint rework directive 5 — the cards-never-stop-expanding bug).
 // Checkpoint round 3, item 5: axis ticks and tooltip labels use compact
 // currency ($5K/$50K/$500K/$1M) — never full precision.
+// Checkpoint round 4, item 1: both charts are STACKED bars split into
+// "Collected" (primary color) and "AR outstanding" (danger red), with a
+// small inline custom plugin drawing white, centered dollar labels on each
+// segment — Chart.js core has no data-labels support and this dashboard adds
+// zero new dependencies (rule-12 surface stays closed) rather than pulling in
+// chartjs-plugin-datalabels.
 // ---------------------------------------------------------------------------
 
 let funnelChart: Chart | null = null;
@@ -243,16 +289,80 @@ const COMPACT_CURRENCY_TOOLTIP = {
   },
 };
 
-function mountFunnelChart(stages: FunnelStage[]) {
+// Minimum segment thickness (px, along the bar's length axis) a label must have to
+// draw — anything smaller (including a genuine $0 segment, e.g. today's all-zero AR
+// in production) is skipped so text never overflows/overlaps a sliver segment. This
+// keeps the chart rendering cleanly today (AR segment is zero-width everywhere) and
+// automatically "comes alive" with a legible label once real balance_due data lands.
+const MIN_LABEL_SEGMENT_PX = 24;
+// Minimum segment thickness (perpendicular to the bar's length axis — i.e. the bar's
+// own width/height) below which a label is also skipped, so a label never renders on
+// a bar too thin to hold text vertically/horizontally.
+const MIN_LABEL_BAR_THICKNESS_PX = 14;
+
+/** Inline custom Chart.js plugin (afterDatasetsDraw): draws a white, centered dollar
+ * label on every stacked-bar segment whose pixel size is large enough to hold text,
+ * and whose underlying value is non-zero (checkpoint round 4, item 1 — "skip drawing
+ * a label when a segment is too small to fit text or its value is $0"). Reads the
+ * segment's raw dollar value from `dataset.data[index]` (the same value already
+ * charted), so the label text always matches the bar it is drawn on. */
+const stackedSegmentLabelPlugin = {
+  id: "stackedSegmentLabel",
+  afterDatasetsDraw(chart: Chart) {
+    const { ctx } = chart;
+    const indexAxis = chart.options.indexAxis === "y" ? "y" : "x";
+
+    ctx.save();
+    ctx.font = "700 11px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const dataset of chart.data.datasets) {
+      const datasetIndex = chart.data.datasets.indexOf(dataset);
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) continue;
+
+      meta.data.forEach((element, index) => {
+        const rawValue = Number(dataset.data[index] ?? 0);
+        if (!Number.isFinite(rawValue) || rawValue <= 0) return; // skip $0 segments
+
+        const props = element.getProps(["x", "y", "base", "width", "height"], true) as {
+          x: number;
+          y: number;
+          base: number;
+          width: number;
+          height: number;
+        };
+
+        const lengthPx = indexAxis === "y" ? Math.abs(props.x - props.base) : Math.abs(props.base - props.y);
+        const thicknessPx = indexAxis === "y" ? props.height : props.width;
+        if (lengthPx < MIN_LABEL_SEGMENT_PX || thicknessPx < MIN_LABEL_BAR_THICKNESS_PX) return;
+
+        const centerX = indexAxis === "y" ? (props.x + props.base) / 2 : props.x;
+        const centerY = indexAxis === "y" ? props.y : (props.y + props.base) / 2;
+
+        ctx.fillText(formatCompactCurrency(rawValue), centerX, centerY);
+      });
+    }
+
+    ctx.restore();
+  },
+};
+Chart.register(stackedSegmentLabelPlugin);
+
+function mountFunnelChart(stages: FunnelStageWithSplit[]) {
   const canvas = document.getElementById("pipeline-funnel-chart") as HTMLCanvasElement | null;
   if (!canvas) return;
 
   const labels = stages.map((stage) => stage.milestone);
-  const data = stages.map((stage) => stage.value);
+  const collectedData = stages.map((stage) => stage.collected);
+  const arData = stages.map((stage) => stage.arOutstanding);
 
   if (funnelChart) {
     funnelChart.data.labels = labels;
-    funnelChart.data.datasets[0].data = data;
+    funnelChart.data.datasets[0].data = collectedData;
+    funnelChart.data.datasets[1].data = arData;
     funnelChart.update();
     return;
   }
@@ -262,34 +372,33 @@ function mountFunnelChart(stages: FunnelStage[]) {
     data: {
       labels,
       datasets: [
-        {
-          label: "Pipeline value by stage",
-          data,
-          backgroundColor: CHART_PALETTE[0],
-        },
+        { label: "Collected", data: collectedData, backgroundColor: COLLECTED_COLOR, stack: "value" },
+        { label: "AR outstanding", data: arData, backgroundColor: AR_COLOR, stack: "value" },
       ],
     },
     options: {
       indexAxis: "y",
       responsive: true,
       maintainAspectRatio: false,
-      scales: { x: { ticks: COMPACT_CURRENCY_TICK } },
-      plugins: { legend: { display: false }, tooltip: COMPACT_CURRENCY_TOOLTIP },
+      scales: { x: { stacked: true, ticks: COMPACT_CURRENCY_TICK }, y: { stacked: true } },
+      plugins: { legend: { display: true, position: "bottom" }, tooltip: COMPACT_CURRENCY_TOOLTIP },
     },
   });
 }
 
-function mountLeaderboardChart(rows: LeaderboardRow[]) {
+function mountLeaderboardChart(rows: LeaderboardRowWithSplit[]) {
   const canvas = document.getElementById("pipeline-leaderboard-chart") as HTMLCanvasElement | null;
   if (!canvas) return;
 
   const top = rows.slice(0, 8);
   const labels = top.map((row) => row.salesperson);
-  const data = top.map((row) => row.soldValue);
+  const collectedData = top.map((row) => row.collected);
+  const arData = top.map((row) => row.arOutstanding);
 
   if (leaderboardChart) {
     leaderboardChart.data.labels = labels;
-    leaderboardChart.data.datasets[0].data = data;
+    leaderboardChart.data.datasets[0].data = collectedData;
+    leaderboardChart.data.datasets[1].data = arData;
     leaderboardChart.update();
     return;
   }
@@ -299,25 +408,22 @@ function mountLeaderboardChart(rows: LeaderboardRow[]) {
     data: {
       labels,
       datasets: [
-        {
-          label: "Sold value by rep",
-          data,
-          backgroundColor: CHART_PALETTE[1],
-        },
+        { label: "Collected", data: collectedData, backgroundColor: COLLECTED_COLOR, stack: "value" },
+        { label: "AR outstanding", data: arData, backgroundColor: AR_COLOR, stack: "value" },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { ticks: COMPACT_CURRENCY_TICK } },
-      plugins: { legend: { display: false }, tooltip: COMPACT_CURRENCY_TOOLTIP },
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: COMPACT_CURRENCY_TICK } },
+      plugins: { legend: { display: true, position: "bottom" }, tooltip: COMPACT_CURRENCY_TOOLTIP },
     },
   });
 }
 
 function mountCharts(dashboard: ExecutivePipelineDashboard) {
-  mountFunnelChart(dashboard.funnel);
-  mountLeaderboardChart(dashboard.leaderboard);
+  mountFunnelChart(dashboard.funnelWithSplit);
+  mountLeaderboardChart(dashboard.leaderboardWithSplit);
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +672,32 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Trailing-7-day totals pill row (checkpoint round 4, item 2) — a fixed always-
+// current strip between the KPI grid and the charts. Text-node update only (dense
+// pills never change count, unlike the location rows), obeys the D-13 filter bar,
+// intentionally ignores the D-03 window-selector token.
+// ---------------------------------------------------------------------------
+
+function updateTrailingPill(key: keyof Trailing7dTotals, pill: Trailing7dPill) {
+  const valueEl = document.querySelector<HTMLElement>(`[data-t7-val="${key}"]`);
+  if (valueEl) {
+    valueEl.textContent = pill.value === null ? String(pill.count) : formatCurrency(pill.value);
+  }
+  const subEl = document.querySelector<HTMLElement>(`[data-t7-sub="${key}"]`);
+  if (subEl) {
+    subEl.textContent = pill.value === null ? "" : `${pill.count} job${pill.count === 1 ? "" : "s"}`;
+  }
+}
+
+function renderTrailing7d(dashboard: ExecutivePipelineDashboard) {
+  updateTrailingPill("newLeads", dashboard.trailing7d.newLeads);
+  updateTrailingPill("newPreClose", dashboard.trailing7d.newPreClose);
+  updateTrailingPill("newContracts", dashboard.trailing7d.newContracts);
+  updateTrailingPill("invoiced", dashboard.trailing7d.invoiced);
+  updateTrailingPill("closed", dashboard.trailing7d.closed);
+}
+
 // Checkpoint round 3, item 3/7: the per-location account bar rows carry queue
 // values + a snapshot close rate that change on every filter/poll refresh, so they
 // need a full DOM rebuild (unlike the flat KPI text nodes above). Rebuilds preserve
@@ -684,6 +816,7 @@ async function refetchDashboard(params: URLSearchParams, options: { preserveDril
     currentDashboard = dashboard;
     mountCharts(dashboard);
     renderKpis(dashboard);
+    renderTrailing7d(dashboard);
     updateStatusStrip(dashboard);
     renderLocationRows(dashboard);
 
@@ -748,3 +881,4 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 
 mountCharts(currentDashboard);
+renderTrailing7d(currentDashboard);
