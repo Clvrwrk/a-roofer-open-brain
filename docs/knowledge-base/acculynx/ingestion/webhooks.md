@@ -1,8 +1,8 @@
 ---
 type: Pipeline
 title: AccuLynx Webhook Trigger Layer
-description: The change-driven trigger side of the D-16 refresh loop — a public receiver Edge Function, sandbox-proven, with the prod subscription human-gated.
-tags: [acculynx, webhooks, edge-function, trigger, d-17, human-gate]
+description: The change-driven trigger side of the D-16 refresh loop — a public receiver Edge Function, live-proven against a wichita-only canary prod subscription.
+tags: [acculynx, webhooks, edge-function, trigger, d-17, human-gate, canary]
 timestamp: 2026-07-02T00:00:00Z
 ---
 
@@ -12,10 +12,14 @@ steady-state refresh is event-driven (D-16) rather than a blanket hourly re-pull
 impossible. It closes the trigger side of the D-16 change-driven refresh loop the 07-06 job walk
 implements on the pull side.
 
-> Status: Task 2 (receiver) and Task 3 (deploy + sandbox proof) are complete. The **prod subscription**
-> (`POST /webhooks/v2/subscriptions` against a production AccuLynx account) is a human-gated external
-> write — see [Prod Subscription (Task 4 — not yet fired)](#prod-subscription-task-4--not-yet-fired)
-> below. No prod subscription exists yet.
+> Status: **A wichita-only prod canary subscription is live** (created after human approval — see
+> [Canary Subscription (live)](#canary-subscription-live) below). The receiver's topic-routing map
+> initially used invented topic names and misrouted all three live canary deliveries
+> (`topic="unknown"`, `enqueued_action=null`) — this was found and fixed same-session; see
+> [Live envelope correction](#live-envelope-correction-2026-07-02) below. Re-fired proof: all three
+> topics now land correctly with the right `enqueued_action` and `account_key='wichita'`. The
+> remaining 7 production accounts are pending human green-light — see
+> [Rollout: remaining accounts](#rollout-remaining-accounts-pending-human-green-light).
 
 # Live topic catalog + auth mechanism (Task 0 decision)
 
@@ -37,10 +41,11 @@ subscription, i.e. Task 4). The receiver instead implements the **shared-secret-
   `openssl rand -hex 32` and provisioned as the Supabase Edge secret `ACCULYNX_WEBHOOK_TOKEN`. Never a
   literal in code, never logged (hard rule 2).
 - A second, independent check — the payload's `subscriptionId` — is compared constant-time against
-  `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID` once the prod subscription exists and that id is known. Until then
-  (**pending-subscription log-only mode**), this check is skipped so the sandbox proof and eventual
-  first live delivery can complete before the id is provisioned; the URL-token check alone still gates
-  every request.
+  `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID` once the prod subscription exists and that id is known.
+  **Update (2026-07-02):** this is no longer pending — the wichita canary subscription exists and
+  `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID` is provisioned as `ab5a7544-189b-4892-afe9-b19b5a02f46c`, so this
+  check is now active for wichita's deliveries. Pending-subscription log-only mode still applies to any
+  future subscription before its id is known (e.g. during the remaining-accounts rollout).
 - Both compares use a manual constant-time (XOR-accumulate) implementation
   (`constantTimeEqual` in `handler.ts`) — no early-exit `===`, so a mismatch cannot be timed to leak how
   many leading bytes matched.
@@ -49,21 +54,23 @@ subscription, i.e. Task 4). The receiver instead implements the **shared-secret-
   `event_id`-based replay defense (below) so even a captured/replayed valid request cannot re-trigger
   processing twice.
 
-**If AccuLynx is later confirmed to sign payloads with an HMAC header** (discoverable once a live
-subscription exists — see the Task 4 verification step), `verifyAuth` in `handler.ts` should be
-extended to check that signature FIRST, with the shared-secret-path retained as defense-in-depth, not
-replaced. This is called out explicitly so a future pass doesn't need to re-derive the decision.
+**If AccuLynx is later confirmed to sign payloads with an HMAC header** (no HMAC header has been
+observed across any live delivery so far, including the canary proof below) — `verifyAuth` in
+`handler.ts` should be extended to check that signature FIRST, with the shared-secret-path retained as
+defense-in-depth, not replaced. This is called out explicitly so a future pass doesn't need to
+re-derive the decision.
 
 # Receiver: `acculynx-webhook` Edge Function
 
 **Files:** `supabase/functions/acculynx-webhook/handler.ts` (pure, unit-tested logic),
 `supabase/functions/acculynx-webhook/index.ts` (thin `Deno.serve` HTTP wrapper — mirrors the
-`acculynx-write-action`/`action.ts` split), `supabase/functions/acculynx-webhook/index.test.ts` (28
-passing cases).
+`acculynx-write-action`/`action.ts` split), `supabase/functions/acculynx-webhook/index.test.ts` (47
+passing cases, including REAL-envelope regression tests added in the live-envelope-correction pass).
 
 **Deployed:** `supabase functions deploy acculynx-webhook --project-ref rnhmvcpsvtqjlffpsayu
---no-verify-jwt` (2026-07-02). The `--no-verify-jwt` flag is required and persisted in
-`supabase/config.toml` (`[functions.acculynx-webhook] verify_jwt = false`) — AccuLynx cannot send a
+--no-verify-jwt` (2026-07-02, redeployed same day after the routing fix). The `--no-verify-jwt` flag is
+required and persisted in `supabase/config.toml` (`[functions.acculynx-webhook] verify_jwt = false`) —
+AccuLynx cannot send a
 Supabase JWT, so the platform's default `verify_jwt=true` would reject every delivery; the receiver's
 own shared-secret-path check is the real auth gate.
 
@@ -81,11 +88,13 @@ own shared-secret-path check is the real auth gate.
    and `logEvent()`; nothing is `eval`'d, `Function()`'d, or `exec`'d (grep-asserted `== 0` in the
    acceptance criteria).
 4. **Every request is logged** to `acculynx_webhook_events` (mig 187) — verified or not — for audit.
-5. **Topic routing** (D-15/D-16):
-   - `job-created` (and dotted-form `job.created`) → `enqueued_action = first_sight_full_pull`.
-   - `financials-approved-value-changed` (and `job.financials.approved-value_changed`) →
+5. **Topic routing** (D-15/D-16) — see the corrected [routing table](#topic--enqueued_action-routing-table)
+   below for the full real-vs-alias mapping (corrected 2026-07-02):
+   - `job_created` (real; `job-created`/`job.created` kept as aliases) →
+     `enqueued_action = first_sight_full_pull`.
+   - `job.financials.approved-value_changed` (real; `financials-approved-value-changed` alias) →
      `enqueued_action = targeted_repull:financials`.
-   - `representatives-company-assigned` (and `job.representatives.company_assigned`) →
+   - `job.representatives.company_assigned` (real; `representatives-company-assigned` alias) →
      `enqueued_action = targeted_repull:representatives`.
    - Any other topic → no action (logged, not routed).
 6. **Enqueue, never inline** (T-07-08-03) — the routed action is dispatched via the existing
@@ -102,7 +111,59 @@ own shared-secret-path check is the real auth gate.
 No new npm/pip/cargo package was introduced (Deno std + the existing `supabase-js` client only —
 `T-07-08-SC`, no legitimacy gate needed).
 
-# Sandbox proof (Task 3)
+# Live envelope correction (2026-07-02)
+
+**What went wrong:** the receiver was designed and built (Tasks 0-3) against topic names D-17 had
+*named as targets* before any live subscription existed to confirm them against — the invented
+dash-form strings `job-created`, `financials-approved-value-changed`,
+`representatives-company-assigned`. When the wichita canary subscription (below) fired its first
+three real test-events, all three landed in `acculynx_webhook_events` with `signature_verified=true`
+(the auth chain worked correctly) but `topic="unknown"` and `enqueued_action=null` — the routing map
+simply didn't recognize the real strings.
+
+**Root cause (verified from the stored payload, DB row id 7):** AccuLynx's real envelope is **flat**,
+not the `{topic, jobId, accountKey}` shape assumed at design time:
+
+```json
+{
+  "event": { "job": { "id": "769609b9-...", "companyRepresentative": { "...": "..." } } },
+  "eventDateTime": "2026-07-02T20:16:12.98...Z",
+  "eventId": "88f261e9-91c6-435e-8528-3bf12a13e2ce",
+  "subscriptionId": "ab5a7544-189b-4892-afe9-b19b5a02f46c",
+  "topicName": "job.representatives.company_assigned"
+}
+```
+
+The real topic field is `topicName` (not `topic`), and the three live-observed values are
+`job_created`, `job.financials.approved-value_changed`, `job.representatives.company_assigned` — the
+dotted forms, confirmed live, not merely an alternate spelling of the dash-form guesses. The affected
+job's GUID is nested at `event.job.id`, not a top-level `jobId`. **There is no account identifier
+anywhere in the envelope** — AccuLynx doesn't tell the receiver which account a delivery came from.
+
+**Fix applied** (`handler.ts`/`index.ts`, same session):
+
+- The real topic strings are now the PRIMARY routing-map entries; the original invented dash-form
+  names are kept as harmless aliases (cost nothing, may still matter if any other integration assumed
+  them).
+- `extractTopic()`/`extractJobId()` read `topicName`/`event.job.id` first, falling back to the
+  legacy `topic`/`jobId` fixture fields — so the Task 3 sandbox-proof fixtures (fired before this
+  fix) still route correctly.
+- **`accountKeyForSubscription()` + `ACCULYNX_WEBHOOK_ACCOUNT_MAP`** (new): since the envelope carries
+  no account field, the account is derived from *which subscription delivered the event* — a stable
+  1:1 mapping, because each AccuLynx subscription is created against exactly one production account
+  (write-capability.md — the subscription endpoint is keyed by the calling account's Bearer key).
+  **Design choice:** a single JSON-object Edge secret, `ACCULYNX_WEBHOOK_ACCOUNT_MAP =
+  {"<subscriptionId>": "<account_key>", ...}`, parsed once at module load (not per-request, not a DB
+  round-trip). This was chosen over a DB-table mapping as the simplest durable option for the current
+  scale (up to 8 subscriptions, one per production account) — a table would add a query per request
+  for no benefit at this size; if the account count grows substantially or the map needs to change
+  without a redeploy/secret-rotation, revisit as a small lookup table.
+- Deployed: `supabase functions deploy acculynx-webhook --project-ref rnhmvcpsvtqjlffpsayu
+  --no-verify-jwt` (redeployed same session after the fix).
+- Re-fired all three real topics against the live canary — see
+  [Canary Subscription (live)](#canary-subscription-live) for the corrected result.
+
+# Sandbox proof (Task 3, historical — see the canary section below for the live-proven result)
 
 **What was proven, and how:** the deployed receiver was exercised directly over HTTPS with AccuLynx-
 shaped payloads (four scenarios below), using the same request/response contract a real AccuLynx
@@ -139,11 +200,14 @@ piped directly into `supabase secrets set`).
 
 # Topic → `enqueued_action` routing table
 
-| Topic (dash-form) | Topic (dotted-form) | `enqueued_action` | Pull |
+**Corrected 2026-07-02** — the real (live-confirmed) topic strings are now the primary map entries;
+the originally-assumed dash-form names are retained as harmless aliases only (never observed live).
+
+| Topic (REAL, live-confirmed) | Alias (dash-form, never observed live) | `enqueued_action` | Pull |
 |---|---|---|---|
-| `job-created` | `job.created` | `first_sight_full_pull` | D-15 first-sight full pull for the job's account |
-| `financials-approved-value-changed` | `job.financials.approved-value_changed` | `targeted_repull:financials` | D-16 targeted re-pull (account-scoped job walk) |
-| `representatives-company-assigned` | `job.representatives.company_assigned` | `targeted_repull:representatives` | D-16 targeted re-pull (account-scoped job walk) |
+| `job_created` | `job-created` / `job.created` | `first_sight_full_pull` | D-15 first-sight full pull for the job's account |
+| `job.financials.approved-value_changed` | `financials-approved-value-changed` | `targeted_repull:financials` | D-16 targeted re-pull (account-scoped job walk) |
+| `job.representatives.company_assigned` | `representatives-company-assigned` | `targeted_repull:representatives` | D-16 targeted re-pull (account-scoped job walk) |
 | anything else | — | `null` | none (logged only) |
 
 The pull is scoped by `accountKey` (via `trigger_acculynx_sync`'s `accountFilter`), not by individual
@@ -153,39 +217,97 @@ of that account's jobs. This is coarser than ideal (one webhook re-walks a whole
 existing, already-rate-limit-safe entry point rather than building a new one (plan instruction: "do NOT
 run the full pull inline" / "reuse whatever the 07-06 entry points expose").
 
-# Prod subscription (Task 4 — not yet fired)
+The `accountKey` used to scope the pull (and logged to `acculynx_webhook_events.account_key`) is
+resolved from the delivering `subscriptionId` via `ACCULYNX_WEBHOOK_ACCOUNT_MAP` — see
+[Live envelope correction](#live-envelope-correction-2026-07-02) above. An unmapped `subscriptionId`
+resolves to `accountKey = null`, which means **no pull is enqueued** (correct fail-closed behavior —
+better to silently no-op than fan out a pull against the wrong account).
 
-**Deferred to the human-gated checkpoint.** Creating `POST /webhooks/v2/subscriptions` against a
-**production** AccuLynx account is an external WRITE and, per hard rules + the D-17 write-gate posture,
-is fired only by a human after reviewing this document — never autonomously. See 07-08-PLAN.md Task 4
-for the full checkpoint text; summarized here for the reviewer:
+# Canary subscription (live)
 
-- **Endpoint:** `POST https://api.acculynx.com/webhooks/v2/subscriptions` (per-production-account
-  Bearer key — see [Account Registry](../accounts.md); each of the 8 production accounts needs its own
+**Human-approved wichita-only prod canary**, created 2026-07-02 after explicit human approval (per the
+Task 4 checkpoint below) — the first and, as of this writing, only production AccuLynx webhook
+subscription:
+
+| Field | Value |
+|---|---|
+| Account | `wichita` (production) |
+| `subscriptionId` | `ab5a7544-189b-4892-afe9-b19b5a02f46c` |
+| Status | `Enabled` |
+| Topics | `job_created`, `job.financials.approved-value_changed`, `job.representatives.company_assigned` |
+| Consumer URL | `https://rnhmvcpsvtqjlffpsayu.supabase.co/functions/v1/acculynx-webhook/<TOKEN>` |
+| Created | 2026-07-02 |
+
+**Secrets provisioned** (Supabase Edge secrets — never a literal in code, never logged, hard rule 2):
+
+- `ACCULYNX_WEBHOOK_TOKEN` — **rotated** at canary-creation time (fresh `openssl rand -hex 32`,
+  piped directly into `supabase secrets set`, never displayed).
+- `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID` — provisioned as `ab5a7544-189b-4892-afe9-b19b5a02f46c` (ends
+  pending-subscription log-only mode; `verifyAuth()`'s second check is now active for this
   subscription).
-- **Consumer URL:** `https://rnhmvcpsvtqjlffpsayu.supabase.co/functions/v1/acculynx-webhook/<TOKEN>`
-  where `<TOKEN>` is the live value of the `ACCULYNX_WEBHOOK_TOKEN` Edge secret (never paste the literal
-  value into the request body by hand from a terminal history — read it from the Supabase dashboard's
-  Edge Function secrets panel, or reuse the existing `supabase secrets set`-piped generation pattern if
-  rotating).
-- **Topics to subscribe:** `job-created` (or its dotted-form, whichever the live `GET /webhooks/v2/topics`
-  response returns first — CONFIRM the exact string live before subscribing, matching one of the two
-  forms `routeTopic()` already accepts), `financials-approved-value-changed`,
-  `representatives-company-assigned`.
-- **Exact request body shape is NOT yet confirmed live** — `write-capability.md` / docs/37 only proved
-  the endpoint exists and requires a `consumerUrl`-shaped field (`412 precondition_failed` without one);
-  the precise field name/casing and whether a `topics` array or per-topic subscriptions are required
-  should be confirmed against the live AccuLynx API docs (`apidocs.acculynx.com`) at Task 4 time, not
-  assumed from this doc.
-- **After creating each subscription:** fire `POST /subscriptions/{id}/test-event` per subscription and
-  confirm a live `acculynx_webhook_events` row lands with `signature_verified=true`. This is also the
-  first point to observe whether AccuLynx attaches any HMAC signature header — if so, extend
-  `verifyAuth()` per the note in the auth-mechanism section above.
+- `ACCULYNX_WEBHOOK_ACCOUNT_MAP` — provisioned as `{"ab5a7544-189b-4892-afe9-b19b5a02f46c":"wichita"}`
+  (added same-session as the routing fix, above).
+
+**Live proof — three real test-events fired via `POST
+/webhooks/v2/subscriptions/ab5a7544-.../test-event`** (2026-07-02, using the wichita production Bearer
+key read in-place from the environment, never echoed):
+
+| # | `topicName` fired | HTTP response | DB row (`acculynx_webhook_events`) |
+|---|---|---|---|
+| 1 | `job_created` | `202` | id=8, `signature_verified=true`, `topic=job_created`, `job_id=35588117-73d0-427c-bbe8-384f3b7eaf0b`, `account_key=wichita`, `enqueued_action=first_sight_full_pull` |
+| 2 | `job.financials.approved-value_changed` | `202` | id=9, `signature_verified=true`, `topic=job.financials.approved-value_changed`, `job_id=94d98446-59f2-4c14-93b2-e4043ffcf0e9`, `account_key=wichita`, `enqueued_action=targeted_repull:financials` |
+| 3 | `job.representatives.company_assigned` | `202` | id=10, `signature_verified=true`, `topic=job.representatives.company_assigned`, `job_id=754891ca-02ea-4c81-9ba9-f39fe4f57a1c`, `account_key=wichita`, `enqueued_action=targeted_repull:representatives` |
+
+All three: HTTP `202` from AccuLynx, correct auth chain (`signature_verified=true`), `event_id`
+captured, correct real topic string logged (no longer `unknown`), correct `enqueued_action`, correct
+`account_key='wichita'` (resolved via the new subscriptionId map). This supersedes the earlier
+same-session result (DB rows 5-7) where all three test-events passed auth but landed
+`topic=unknown`/`enqueued_action=null` due to the routing-map bug fixed above.
+
+**Note on test-event job GUIDs:** the `job_id` values above (e.g. `35588117-...`) are AccuLynx
+test-event placeholders, not real wichita jobs — `trigger_acculynx_sync` was still correctly invoked
+scoped to `accountFilter: ["wichita"]` (the account-level job-walk sweep, not a single-job fetch, per
+the routing-table note above), so the enqueue itself succeeds regardless of whether the placeholder
+job GUID resolves to anything in the account's real job list. A test-event's downstream pull
+legitimately no-op'ing (`processed=false` with a logged reason, if the walk cannot resolve the
+placeholder GUID) is expected and acceptable for test events — this is not a production-delivery
+failure mode, since real deliveries carry real job GUIDs.
+
+# Rollout: remaining accounts (pending human green-light)
+
+The wichita canary above is the ONLY production subscription. The remaining **7 production accounts**
+(see [Account Registry](../accounts.md)) are pending explicit human green-light before their own
+subscriptions are created — the D-17 write-gate posture (sandbox/canary-prove first, human-fire prod)
+applies per-account, not just once:
+
+- Each additional account needs its **own** `POST /webhooks/v2/subscriptions` call, authenticated with
+  that account's own Bearer key (the endpoint is per-account-keyed), using the **same** consumer URL
+  (`https://rnhmvcpsvtqjlffpsayu.supabase.co/functions/v1/acculynx-webhook/<TOKEN>` — the token is
+  shared across all subscriptions; it is a receiver-level shared secret, not per-subscription) and the
+  same three topics (`job_created`, `job.financials.approved-value_changed`,
+  `job.representatives.company_assigned`).
+- **`ACCULYNX_WEBHOOK_ACCOUNT_MAP` MUST be extended, not replaced**, with one new
+  `"<subscriptionId>": "<account_key>"` entry per new subscription — the map already supports multiple
+  entries (it's a plain JSON object), but each rollout step needs the new subscriptionId learned from
+  the `POST /subscriptions` response and added before (or promptly after) that account's first live
+  delivery, or that account's events will resolve `account_key=null` and silently fail to enqueue (the
+  same fail-closed behavior observed for an unmapped subscriptionId, by design — see the routing table
+  note above).
+- **`ACCULYNX_WEBHOOK_SUBSCRIPTION_ID`** (singular) only tracks ONE subscriptionId and is now a
+  vestigial defense-in-depth check for the wichita canary specifically — it does not need to
+  (and cannot) enumerate all 8 subscriptions. If/when multi-account rollout completes, consider
+  whether this check still adds value beyond the account map, or should be retired in favor of relying
+  on the map + per-subscription secrets alone.
+- Fire `POST /subscriptions/{id}/test-event` per new subscription and confirm a live
+  `acculynx_webhook_events` row lands with `signature_verified=true`, the correct real topic, the
+  correct new `account_key`, and a non-null `enqueued_action` — the same verification pattern proven
+  above for wichita.
 - **Rollback:** `DELETE /subscriptions/{subscriptionId}` per subscription — no data is destroyed on the
   brain side either way (`acculynx_webhook_events` rows are append-only audit history, hard rule 1).
-- **After the human confirms the prod subscriptionId(s):** provision `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID`
-  as an Edge secret (ends pending-subscription log-only mode) so `verifyAuth()`'s second check becomes
-  active.
+- **If AccuLynx is later confirmed to sign payloads with an HMAC header** (observable from a live
+  subscription's actual headers — none has been seen yet across all deliveries in this session):
+  extend `verifyAuth()` to check that signature FIRST, with the shared-secret-path retained as
+  defense-in-depth, not replaced.
 
 # Citations
 
