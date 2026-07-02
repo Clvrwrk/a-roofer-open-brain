@@ -24,6 +24,7 @@ import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates } from "./resources/estimates.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
+import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -539,8 +540,8 @@ async function runAccountSync(
   apiKey: string,
   deadline: number,
   batchId: string,
-): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string }> {
-  const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped" };
+): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
+  const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
 
   // --- Jobs (date-windowed; null watermark → 2000-01-01 full-history floor) ---
   try {
@@ -619,24 +620,51 @@ async function runAccountSync(
 
   if (Date.now() >= deadline) return result;
 
-  // --- Job Walk (sub-resources + invoice two-level) ---
+  // --- Job Walk (sub-resources + invoice two-level + full-representatives) ---
+  // repNameByJobId (Task 2a's Map<jobId, repName>) feeds syncCrmPipeline below so
+  // crm_pipeline.primary_salesperson picks up the full-representatives company rep
+  // this run resolved — even when this run's job-walk skipped most jobs under D-16,
+  // the map simply carries whichever jobs WERE walked this pass.
+  let repNameByJobId = new Map<string, string>();
   try {
     const jobWalkWm = await readWatermark(sb, acct.account_key, "job_walk");
 
-    // Load ordered job IDs for this account (sorted by created_date ASC for deterministic resumption)
+    // Load ordered job IDs + modified_date for this account (sorted by created_date ASC
+    // for deterministic resumption). modified_date feeds the D-16 change-driven skip.
     const { data: jobRows, error: jobErr } = await sb
       .from("acculynx_jobs")
-      .select("id")
+      .select("id, modified_date")
       .eq("account_key", acct.account_key)
       .order("created_date", { ascending: true });
     if (jobErr) throw new Error(`job IDs load: ${jobErr.message}`);
 
     const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
-    await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds, fetch, batchId);
+    const modifiedDateByJobId = new Map<string, string>();
+    for (const r of (jobRows ?? []) as { id: string; modified_date: string | null }[]) {
+      if (r.modified_date) modifiedDateByJobId.set(r.id, r.modified_date);
+    }
+    repNameByJobId = await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds, fetch, batchId, modifiedDateByJobId);
     result.jobWalk = "ok";
   } catch (e) {
     result.jobWalk = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
+  // --- crm_pipeline (VERIFICATION gap 1: the multiAccount hourly path never wrote this
+  // table — the only upsert lived in the retired legacySyncJobs, gated `if (!multiAccount)`.
+  // Restores the write path for all fan-out accounts, mapping financials ->
+  // contract_amount/balance_due and the full-representatives company rep ->
+  // primary_salesperson (VERIFICATION gap 3). Runs after job-walk so this run's
+  // freshly-synced acculynx_jobs/acculynx_job_financials rows and repNameByJobId are
+  // available to map forward. ---
+  try {
+    const crmResult = await syncCrmPipeline(sb, acct, deadline, repNameByJobId, batchId);
+    result.crmPipeline = crmResult.error ? `error: ${crmResult.error}` : `ok (${crmResult.upserted})`;
+  } catch (e) {
+    result.crmPipeline = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/crm-pipeline: ${(e as Error).message}`);
   }
 
   return result;
@@ -707,7 +735,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const filterSet = new Set(accountFilter);
         accounts = accounts.filter((a: { account_key: string }) => filterSet.has(a.account_key));
         result.accountFilter = accountFilter;
+      } else {
+        // D-18 (backfill rotation): rotate the STARTING account each run so a fixed
+        // registry-order fan-out never lets one account (colorado) exhaust the shared
+        // budget before another (wichita) gets a turn every single hour. A persisted
+        // cursor (advanceWatermark row account_key='__rotation__',
+        // resource_type='fanout_start') remembers which account_key led last run;
+        // this run starts at the NEXT account in registry order and wraps around.
+        // Only applies to the no-arg (accountFilter absent) default fan-out — an
+        // explicit accountFilter subset always overrides rotation.
+        const rotationWm = await readWatermark(sb, "__rotation__", "fanout_start");
+        const lastStart = rotationWm?.last_walked_job_id ?? null;
+        let rotateIdx = 0;
+        if (lastStart) {
+          const idx = accounts.findIndex((a: { account_key: string }) => a.account_key === lastStart);
+          if (idx >= 0) rotateIdx = (idx + 1) % accounts.length;
+        }
+        if (rotateIdx > 0) {
+          accounts = [...accounts.slice(rotateIdx), ...accounts.slice(0, rotateIdx)];
+        }
+        result.rotationStart = accounts[0]?.account_key ?? null;
       }
+
+      // D-18 fair-share budget: divide the remaining runtime budget across the
+      // not-yet-synced accounts in THIS run, recomputed after each account completes
+      // so an account that finishes early lets its remaining slice roll forward to
+      // the next account rather than being wasted. Preserves the serial loop (30
+      // req/s IP limit, T-02-07) — rotation changes ORDER and PER-ACCOUNT BUDGET,
+      // never concurrency (no Promise.all over accounts).
+      let remainingAccounts = accounts.length;
 
       // SERIAL loop — 30 req/s IP limit (T-02-07)
       for (const acct of accounts) {
@@ -718,10 +774,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
           // Warn with NAME only — hard rule 2 (T-02-05)
           console.warn(`[sync] secret ${acct.env_secret_name} not set — skipping ${acct.account_key}`);
           result.accounts[acct.account_key] = "skipped (no key)";
+          remainingAccounts--;
           continue;
         }
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, deadline, batchId);
+        // Fair-share per-account deadline: this account gets an even slice of
+        // whatever runtime remains, capped at the overall run deadline. The account
+        // may finish early (nothing to sync); it may also legitimately run past its
+        // slice on a slow page and simply hit the perAccountDeadline stop-check
+        // inside the resource syncs, same as the shared deadline did before.
+        const msRemaining = deadline - Date.now();
+        const perAccountShareMs = Math.max(0, Math.floor(msRemaining / Math.max(1, remainingAccounts)));
+        const perAccountDeadline = Math.min(deadline, Date.now() + perAccountShareMs);
+
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId);
+        remainingAccounts--;
+      }
+
+      // Persist the rotation cursor: the account that LED this run becomes the
+      // "last start" so next run's no-accountFilter fan-out begins at the following
+      // account in registry order (D-18). Only advance when rotation actually ran
+      // (no explicit accountFilter) and at least one account was in scope.
+      if (!accountFilter && accounts.length > 0) {
+        await advanceWatermark(sb, {
+          account_key: "__rotation__",
+          resource_type: "fanout_start",
+          last_walked_job_id: accounts[0].account_key,
+          last_sync_at: new Date().toISOString(),
+        });
       }
     }
 
