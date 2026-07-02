@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–5 COMPLETE** (Phase 5 write-action layer sandbox-proven; first live prod payment deferred by user until a real need). **Phase 6 (AccuLynx Agent + OKF Knowledge Base) IN PROGRESS** — A3 approved (D-04 gate cleared); OKF bundle (`docs/knowledge-base/acculynx/`) now complete + link-navigable, cited source of truth via the `acculynx-api` skill. **NEXT: `ob-acculynx` roster identity + Claude Code subagent build** (Plans 03/04), then Phase 7 (Executive Sales Pipeline dashboard). Branch `contrib/cleverwork/read-write-action-layer` — converge to main per Live⇄Dev alignment.
+**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–5 COMPLETE** (Phase 5 write-action layer sandbox-proven; first live prod payment deferred by user until a real need). **Phase 6 (AccuLynx Agent + OKF Knowledge Base) IN PROGRESS** — A3 approved (D-04 gate cleared); OKF bundle (`docs/knowledge-base/acculynx/`) now complete + link-navigable, cited source of truth via the `acculynx-api` skill. **NEXT (Phase 6 2/4 closed; 03/04 code-done + deployed @942649a, awaiting USER): (A) provision `ob-acculynx` (Slack bot + Coolify secrets) → "provisioned"; (B) verify the `acculynx` subagent → "approved". Then Phase 6 verify + Phase 7.** Converged (main=origin=contrib).
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
