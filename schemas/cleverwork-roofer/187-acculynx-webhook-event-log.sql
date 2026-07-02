@@ -23,6 +23,7 @@
 
 create table if not exists public.acculynx_webhook_events (
   id                  bigint generated always as identity primary key,
+  event_id            text, -- AccuLynx webhookEvent.eventId — the replay-defense key (unique when present)
   topic               text not null,
   job_id              text,
   account_key         text,
@@ -32,6 +33,8 @@ create table if not exists public.acculynx_webhook_events (
   enqueued_action     text,
   processed_at        timestamptz
 );
+-- Idempotent add for pre-existing deployments of this table (additive only):
+alter table public.acculynx_webhook_events add column if not exists event_id text;
 comment on table public.acculynx_webhook_events is
   'D-17 webhook trigger event log: one row per inbound acculynx-webhook POST (verified or not), for audit and for driving the D-15/D-16 pull-enqueue routing. signature_verified=false rows were rejected (401) and never enqueued a pull.';
 comment on column public.acculynx_webhook_events.payload is
@@ -41,6 +44,15 @@ comment on column public.acculynx_webhook_events.enqueued_action is
 
 create index if not exists idx_acculynx_webhook_events_topic_received
   on public.acculynx_webhook_events(topic, received_at);
+
+-- Replay defense (Task 0 decision, item 3): a VERIFIED event's eventId may land exactly once.
+-- Partial unique index — unverified/rejected rows (signature_verified=false) and legacy rows
+-- without an eventId are exempt so audit logging is never blocked by the constraint.
+create unique index if not exists uq_acculynx_webhook_events_event_id_verified
+  on public.acculynx_webhook_events(event_id)
+  where event_id is not null and signature_verified;
+comment on column public.acculynx_webhook_events.event_id is
+  'webhookEvent.eventId from the delivered payload — replay-defense key. Unique among verified rows (partial index); the receiver treats a conflict as a replay: 200-ack, no re-processing.';
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════════
 -- RLS + GRANT: deny-by-default posture, matching migrations 177 and 186
