@@ -80,7 +80,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const verified = verifyAuth(
-    { expectedToken: WEBHOOK_TOKEN, presentedToken, expectedSubscriptionId: WEBHOOK_SUBSCRIPTION_ID || undefined },
+    {
+      expectedToken: WEBHOOK_TOKEN,
+      presentedToken,
+      expectedSubscriptionId: WEBHOOK_SUBSCRIPTION_ID || undefined,
+      // Multi-subscription fix (2026-07-02): accept any subscriptionId already known to the
+      // account map, not just the single legacy ACCULYNX_WEBHOOK_SUBSCRIPTION_ID (wichita
+      // canary). WEBHOOK_ACCOUNT_MAP is parsed once at module load — never re-parsed per-request.
+      accountMap: WEBHOOK_ACCOUNT_MAP,
+    },
     payload,
   );
 

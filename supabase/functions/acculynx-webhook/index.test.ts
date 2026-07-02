@@ -193,6 +193,87 @@ Deno.test("verifyAuth — a forged payload cannot self-authorize by spoofing the
 });
 
 // ---------------------------------------------------------------------------
+// verifyAuth — multi-subscription fix (2026-07-02 post-plan, 8-account rollout). The single
+// expectedSubscriptionId design assumed exactly one prod subscription (the wichita canary);
+// once the remaining 7 accounts were subscribed, their deliveries carry DIFFERENT
+// subscriptionIds that legitimately do not match expectedSubscriptionId. verifyAuth() must
+// accept a subscriptionId that matches EITHER expectedSubscriptionId (back-compat) OR any key
+// of accountMap (multi-subscription).
+// ---------------------------------------------------------------------------
+
+const ROLLOUT_ACCOUNT_MAP: Record<string, string> = {
+  [WICHITA_SUBSCRIPTION_ID]: "wichita",
+  "9a9682ac-195b-4e81-94c0-742d1f3f5a5c": "colorado",
+  "514355b8-ae1c-42b8-b8d7-da55f721a363": "florida",
+  "5a8e9a9f-8419-4d77-8a56-8bad55b737d1": "georgia",
+  "8a4877f9-d979-48e0-9523-2e76faad8b65": "insurance_program",
+  "90e9f87f-559f-4317-9a2c-e2edd6e82171": "kansas_city",
+  "805e0746-62f3-4d4e-bfb3-89712eae21a4": "multi_family_commercial",
+  "efa8a7a1-da85-4808-ad10-43617a4427b8": "texas",
+};
+
+Deno.test("verifyAuth — a subscriptionId matching an accountMap key (not expectedSubscriptionId) verifies", () => {
+  const ok = verifyAuth(
+    {
+      expectedToken: TOKEN,
+      presentedToken: TOKEN,
+      expectedSubscriptionId: WICHITA_SUBSCRIPTION_ID, // legacy single-subscription check
+      accountMap: ROLLOUT_ACCOUNT_MAP,
+    },
+    { subscriptionId: "90e9f87f-559f-4317-9a2c-e2edd6e82171" }, // kansas_city — NOT expectedSubscriptionId
+  );
+  assertEquals(ok, true);
+});
+
+Deno.test("verifyAuth — a subscriptionId matching NEITHER expectedSubscriptionId NOR any accountMap key is rejected", () => {
+  const ok = verifyAuth(
+    {
+      expectedToken: TOKEN,
+      presentedToken: TOKEN,
+      expectedSubscriptionId: WICHITA_SUBSCRIPTION_ID,
+      accountMap: ROLLOUT_ACCOUNT_MAP,
+    },
+    { subscriptionId: "00000000-0000-0000-0000-000000000000" }, // unknown subscription
+  );
+  assertEquals(ok, false);
+});
+
+Deno.test("verifyAuth — back-compat: expectedSubscriptionId alone (empty accountMap) still verifies the wichita canary", () => {
+  const ok = verifyAuth(
+    {
+      expectedToken: TOKEN,
+      presentedToken: TOKEN,
+      expectedSubscriptionId: WICHITA_SUBSCRIPTION_ID,
+      accountMap: {},
+    },
+    { subscriptionId: WICHITA_SUBSCRIPTION_ID },
+  );
+  assertEquals(ok, true);
+});
+
+Deno.test("verifyAuth — empty expectedSubscriptionId AND empty accountMap = pending-subscription log-only mode (subscriptionId check skipped)", () => {
+  const ok = verifyAuth(
+    { expectedToken: TOKEN, presentedToken: TOKEN, expectedSubscriptionId: undefined, accountMap: {} },
+    { subscriptionId: "anything-or-nothing-at-all" },
+  );
+  assertEquals(ok, true);
+});
+
+Deno.test("verifyAuth — every accountMap entry other than the matching one still gets compared (no early exit) — asserted via a large map with the match last", () => {
+  // Not a timing-measurement test (that requires statistical sampling out of scope for a unit
+  // test) — this asserts CORRECTNESS of the no-early-exit accumulation logic: a match in the
+  // LAST position of a large map must still be found, proving the loop does not bail early.
+  const bigMap: Record<string, string> = {};
+  for (let i = 0; i < 50; i++) bigMap[`decoy-subscription-${i}`] = `decoy-account-${i}`;
+  bigMap["real-subscription-id"] = "real-account";
+  const ok = verifyAuth(
+    { expectedToken: TOKEN, presentedToken: TOKEN, expectedSubscriptionId: undefined, accountMap: bigMap },
+    { subscriptionId: "real-subscription-id" },
+  );
+  assertEquals(ok, true);
+});
+
+// ---------------------------------------------------------------------------
 // routeTopic (D-15/D-16) — body read positionally only, never eval/exec'd
 // ---------------------------------------------------------------------------
 

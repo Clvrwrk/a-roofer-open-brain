@@ -76,8 +76,20 @@ export interface AuthConfig {
   presentedToken: string | null;
   /** The subscriptionId AccuLynx confirmed for this consumer URL (Deno.env —
    * ACCULYNX_WEBHOOK_SUBSCRIPTION_ID). Empty/undefined = pending-subscription log-only mode:
-   * the subscriptionId check is skipped (not yet known) but the token check still applies. */
+   * the subscriptionId check is skipped (not yet known) but the token check still applies.
+   * Retained as a back-compat single-subscription check (vestigial once the account map covers
+   * every live subscription — see multi-subscription note below). */
   expectedSubscriptionId?: string;
+  /**
+   * Multi-subscription fix (2026-07-02 post-plan, 8-account rollout): the single
+   * expectedSubscriptionId design assumed exactly one prod subscription (the wichita canary).
+   * Once the remaining 7 accounts were subscribed, every one of their deliveries carries a
+   * DIFFERENT subscriptionId that legitimately does not match expectedSubscriptionId, so
+   * verifyAuth() must also accept a subscriptionId that matches ANY key of the (already-parsed)
+   * ACCULYNX_WEBHOOK_ACCOUNT_MAP. Optional — an empty/undefined map degrades to the
+   * single-subscription (or pending-subscription log-only) behavior unchanged.
+   */
+  accountMap?: Record<string, string>;
 }
 
 /**
@@ -152,21 +164,43 @@ export function constantTimeEqual(a: string | null | undefined, b: string | null
 // ---------------------------------------------------------------------------
 
 /**
- * Verifies the shared-secret-path mechanism (Task 0 decision):
+ * Verifies the shared-secret-path mechanism (Task 0 decision; extended 2026-07-02 for the
+ * 8-account rollout):
  *   1. The URL token segment must constant-time-match ACCULYNX_WEBHOOK_TOKEN.
- *   2. If expectedSubscriptionId is configured (non-empty), the payload's subscriptionId
- *      must also constant-time-match it. When expectedSubscriptionId is NOT yet configured
- *      (pending-subscription log-only mode — the prod subscription doesn't exist until the
- *      human-gated Task 4), this check is skipped so sandbox proof can complete before the
- *      subscriptionId is known.
+ *   2. The payload's subscriptionId must be a KNOWN subscription — either:
+ *      (a) it constant-time-matches expectedSubscriptionId (back-compat, single-subscription
+ *          check — still active for the wichita canary), OR
+ *      (b) it constant-time-matches ANY key of accountMap (multi-subscription — one entry per
+ *          rollout account).
+ *      Every key in accountMap is compared unconditionally (no early exit on first match) so
+ *      that iterating the map cannot leak, via timing, which position (if any) matched —
+ *      preserving the same constant-time discipline as the rest of this module. The two checks
+ *      are combined with OR: subscriptionId is accepted if EITHER passes.
+ *   3. When BOTH expectedSubscriptionId is empty/unset AND accountMap is empty — pending-
+ *      subscription log-only mode (no prod subscription exists yet) — the subscriptionId check
+ *      is skipped entirely so sandbox proof can complete before any subscriptionId is known.
  * Returns true only if every configured check passes.
  */
 export function verifyAuth(cfg: AuthConfig, payload: WebhookPayload): boolean {
   if (!cfg.expectedToken) return false; // never verify against an unset/empty expected token
   if (!constantTimeEqual(cfg.presentedToken, cfg.expectedToken)) return false;
-  if (cfg.expectedSubscriptionId) {
-    if (!constantTimeEqual(payload.subscriptionId, cfg.expectedSubscriptionId)) return false;
+
+  const accountMap = cfg.accountMap ?? {};
+  const mapKeys = Object.keys(accountMap);
+  const hasExpectedSubscriptionId = Boolean(cfg.expectedSubscriptionId);
+
+  if (hasExpectedSubscriptionId || mapKeys.length > 0) {
+    // Compare against EVERY configured candidate unconditionally (single expectedSubscriptionId
+    // plus every accountMap key) — accumulate with OR, never short-circuit/early-exit on the
+    // first match, so timing cannot reveal which candidate (if any) matched.
+    let subscriptionMatched = constantTimeEqual(payload.subscriptionId, cfg.expectedSubscriptionId);
+    for (const key of mapKeys) {
+      const keyMatched = constantTimeEqual(payload.subscriptionId, key);
+      subscriptionMatched = subscriptionMatched || keyMatched;
+    }
+    if (!subscriptionMatched) return false;
   }
+
   return true;
 }
 
