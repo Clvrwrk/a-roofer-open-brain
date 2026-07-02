@@ -193,6 +193,17 @@ Deno.test("mapMilestoneHistoryItem — maps camelCase body to exact snake_case k
   });
 });
 
+Deno.test("mapMilestoneHistoryItem — 07-09 live-fix: REAL AccuLynx field shape is {date, name}, not {milestoneDate, milestoneName}", () => {
+  // Copied verbatim shape from the live acculynx_raw payload for job
+  // 7993f5eb-13e1-47d8-91a1-c592568a7239 (07-09 wichita backfill probe): {"date":
+  // "2025-09-09T01:25:04Z", "name": "Lead"} -- confirms {milestoneDate, milestoneName} was
+  // never the real API shape, only the design-time assumption.
+  const raw = { date: "2025-09-09T01:25:04Z", name: "Lead" };
+  const row = mapMilestoneHistoryItem(raw, CTX);
+  assertEquals(row.milestone_name, "Lead");
+  assertEquals(row.milestone_date, "2025-09-09T01:25:04Z");
+});
+
 Deno.test("mapMilestoneHistoryItem — unknown API key does not appear as a top-level column", () => {
   const raw = { id: 556, milestoneName: "Closed", extraneous: "drop-me" };
   const row = mapMilestoneHistoryItem(raw, CTX);

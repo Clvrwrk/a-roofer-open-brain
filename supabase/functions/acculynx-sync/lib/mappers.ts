@@ -107,17 +107,25 @@ export function mapJobInsurance(raw: any, ctx: MapperCtx): Record<string, unknow
  *  this differs from the 169 migration file's plain `bigint primary key`, an example of the
  *  CLAUDE.md "verify against the live DB, not migration files" lesson). Postgres rejects any
  *  explicit non-DEFAULT value for a GENERATED ALWAYS column. Dedup instead relies on the
- *  existing natural unique index (job_id, milestone_name, milestone_date). */
+ *  existing natural unique index (job_id, milestone_name, milestone_date).
+ *
+ *  Real-field-first, invented-name fallback (07-09 live-fix, second bug in the same field):
+ *  the real AccuLynx milestone-history item shape is `{date, name}` (confirmed live via
+ *  acculynx_raw payload for job 7993f5eb-...), not the originally-assumed `{milestoneDate,
+ *  milestoneName}` -- the exact "design-time-assumed vs. real API field name" mismatch
+ *  documented in 07-08's webhook topic-routing fix. `name`/`date` are read first; the
+ *  original assumed names are kept as harmless fallbacks in case another AccuLynx surface
+ *  ever really does send the invented shape. */
 export function mapMilestoneHistoryItem(raw: any, ctx: MapperCtx): Record<string, unknown> {
   return {
     job_id: ctx.job_id ?? null,
-    milestone_name: raw?.milestoneName ?? null,
+    milestone_name: raw?.name ?? raw?.milestoneName ?? null,
     // milestone_date is NOT NULL at the DB level; no `""` case has been observed for this
-    // field (unlike invoice_date/dueDate), so it is left as `?? null` deliberately — if
-    // AccuLynx ever sends "" here, the NOT NULL constraint should fail loudly via
-    // recordWalkError() rather than have this mapper silently invent a null value for a
-    // required column.
-    milestone_date: raw?.milestoneDate ?? null,
+    // field (unlike invoice_date/dueDate), so it is left as `?? null` deliberately (no
+    // nullableDate wrap) — if AccuLynx ever sends "" here, the NOT NULL constraint should
+    // fail loudly via recordWalkError() rather than have this mapper silently invent a null
+    // value for a required column.
+    milestone_date: raw?.date ?? raw?.milestoneDate ?? null,
     account_key: ctx.account_key,
     market: ctx.market,
     last_seen_by_api: ctx.now,
