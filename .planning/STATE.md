@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
-stopped_at: Completed 07-08-PLAN.md (live-fix + wichita canary proof); next is 07-09
-last_updated: "2026-07-02T20:29:47.706Z"
+stopped_at: 07-09 Tasks 1-2 complete (deploy + backfill + KS-11 source-table verification); Task 3 human-verify checkpoint returned, awaiting human decision
+last_updated: "2026-07-02T21:21:18.721Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 34
-  completed_plans: 32
-  percent: 71
+  completed_plans: 33
+  percent: 86
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -66,6 +66,7 @@ Progress: [████████░░] 86%
 | Phase 07 P06 | 50min | 4 tasks | 5 files |
 | Phase 07 P07 | 25min | 2 tasks | 4 files |
 | Phase 07 P08 | 55min | 5 tasks | 5 files |
+| Phase 07 P09 | 120min | 2 tasks | 5 files |
 
 ### Decisions
 
@@ -104,6 +105,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 07]: sync-pipeline.md corrected to describe the live D-14..D-18 pipeline (capture-first, crm_pipeline restored on multiAccount cron, first-sight/change-driven pull, budget rotation, counted job-walk errors); dashboard-side dedup explicitly documented as NOT resolving the ~5,578 orphaned csv_initial rows at the source
 - [Phase 07]: [07-08 live-fix]: acculynx-webhook's real-vs-invented topic-name mismatch root-caused from the stored payload (DB row 7) - real envelope is flat {event, eventId, topicName, subscriptionId}; real topic strings promoted to primary routing entries, invented names kept as aliases
 - [Phase 07]: [07-08 live-fix]: accountKey resolved via a new subscriptionId-to-account_key JSON-object env secret (ACCULYNX_WEBHOOK_ACCOUNT_MAP), parsed once at module load, since the real AccuLynx envelope carries no account field at all
+- [Phase ?]: [Phase 07]: [07-09]: acculynx_job_insurance FK closed via a carrier stub upsert from the existing insurance response body, not a new carrier-list sync resource
+- [Phase ?]: [Phase 07]: [07-09]: milestone_date left on plain ?? null (NOT NULL column, no observed empty-string case) rather than wrapped in nullableDate() like the other date fields
+- [Phase ?]: [Phase 07]: [07-09]: did not manually force-complete the wichita backfill to 100% (29% reached, 0 errors sustained) — the hourly multiAccount cron continues the D-18 rotation automatically, matching the plan's own explicitly-anticipated multi-run pacing
 
 ### Pending Todos
 
@@ -122,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T20:29:47.701Z
-Stopped at: Completed 07-08-PLAN.md (live-fix + wichita canary proof); next is 07-09
+Last session: 2026-07-02T21:21:18.716Z
+Stopped at: 07-09 Tasks 1-2 complete (deploy + backfill + KS-11 source-table verification); Task 3 human-verify checkpoint returned, awaiting human decision
 Resume file: None
