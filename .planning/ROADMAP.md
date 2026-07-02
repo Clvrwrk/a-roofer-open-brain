@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 3/4 plans executed
+**Plans**: 9 plans (4 dashboard-surface + 5 gap-closure)
 
 Plans:
 
@@ -243,6 +243,25 @@ Plans:
 **Wave 4** *(blocked on 07-03 — human-gated deploy)*
 
 - [ ] 07-04-PLAN.md — OKF dashboard spec (D-07) + explain-then-ship deploy + live verify (SC4: buildCommit flip, `/weekly-snapshot` 404s); human-verify checkpoint
+
+*Gap closure (VERIFICATION 2026-07-02: 5/9 must-haves; the UI/deploy layer is live but crm_pipeline is frozen and sub-resource writes silently fail). Locked architecture D-14..D-18: capture-first raw archive, first-sight full pull, change-driven re-pull, webhook triggers, backfill rotation.*
+
+**Wave 5** *(gap closure — foundation)*
+
+- [ ] 07-05-PLAN.md — Schema+mappers: mig 186 acculynx_job_walk_errors + fifth check_acculynx_alerts() condition ([BLOCKING] apply-to-prod); job-walk.ts raw-archive-first (D-14) + explicit snake_case mappers for all 6 sub-resources + advanceWatermark() upsert fix (gaps 2 + watermark-half of 4)
+
+**Wave 6** *(blocked on 07-05; 07-06 and 07-07 run in parallel — disjoint files)*
+
+- [ ] 07-06-PLAN.md — crm_pipeline restoration on the multiAccount path + financials→contract_amount/balance_due + full /representatives→primary_salesperson (KS-11: Bob Smolek/$30,368/$17,532) + D-15 first-sight full pull + D-16 change-driven re-pull + D-18 budget rotation (gaps 1, 3, budget-half of 4)
+- [ ] 07-07-PLAN.md — csv/api dedup with api_sync precedence in the dashboard loader (gap 8) + sync-pipeline.md doc-drift correction to the live D-14..D-18 architecture (gaps 6/9)
+
+**Wave 7** *(blocked on 07-05/06)*
+
+- [ ] 07-08-PLAN.md — Webhook triggers (D-17): verify GET /webhooks/v2/topics + auth mechanism live, build+sandbox-prove the acculynx-webhook receiver Edge Function (untrusted-payload auth-verify), mig 187 event log; **blocking-human** prod subscription POST (sandbox-proven external write gate)
+
+**Wave 8** *(blocked on 07-06/07/08 — final live re-verify)*
+
+- [ ] 07-09-PLAN.md — Deploy rebuilt acculynx-sync + kick off D-18 backfill rotation; live-DB KS-11 anchor assertion; **re-run** the 07-04 Task 3 human-verify checkpoint on the live dashboard (all 8 locations current, honest freshness, no duplicates) — Phase 7 closes on approval
 
 ## Progress
 
