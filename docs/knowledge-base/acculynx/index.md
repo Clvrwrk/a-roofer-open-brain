@@ -39,6 +39,10 @@ YAML frontmatter, read directly by agents and humans, version-controlled, no dri
 * [Write-Action](ingestion/write-action.md) - the human-gated enqueue → approve → execute → audit loop (Phase 5)
 * [Runbook](ingestion/runbook.md) - ingestion recovery procedures
 
+# Executive dashboard (the WHAT, human-facing)
+
+* [Dashboard Spec](dashboard-spec.md) - the Executive Sales Pipeline dashboard (`/executive/pipeline`) as-built: KPIs, join map, margin-coverage contract, chart pick, freshness architecture (Phase 7, REQ-10)
+
 # Security
 
 * [Security](security/) - secrets, RLS, and the untrusted-content boundary
