@@ -3370,10 +3370,10 @@ a.vmpop-link:hover {
   flex-direction: column;
   gap: 1px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-lg, 12px);
   background: var(--surface);
   padding: var(--space-2) var(--space-4);
-  min-width: 108px;
+  min-width: 132px;
 }
 
 .epl-t7-pill strong {
@@ -3390,6 +3390,16 @@ a.vmpop-link:hover {
   letter-spacing: 0.03em;
   color: var(--text-muted);
   font-weight: 700;
+}
+
+.epl-t7-coverage {
+  font-size: 9px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.85;
 }
 
 /* Chart card legend note (checkpoint round 4, item 1 — "Collected vs AR outstanding"). */
@@ -3560,6 +3570,13 @@ a.vmpop-link:hover {
   color: var(--text-muted);
   font-size: 12px;
   padding: var(--space-2) 0;
+}
+
+.epl-jobs-hidden-caption {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+  padding: var(--space-1, 4px) 0 0;
 }
 
 @media (max-width: 1180px) {

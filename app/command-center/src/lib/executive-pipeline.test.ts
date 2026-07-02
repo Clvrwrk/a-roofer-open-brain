@@ -4,11 +4,14 @@ import {
   computeCloseRate,
   computeFreshnessBadges,
   computeFunnelStagesWithSplit,
+  computeHighestArAgingDays,
   computeLeaderboardWithSplit,
   computeLocationRollup,
   computeMarginByDimension,
   computeQueueValues,
   computeSnapshotCloseRate,
+  computeTotalOutstandingArFromInvoices,
+  computeTrailing7dPillsV2,
   computeTrailing7dTotals,
   dedupePipeline,
   deriveRegionOffice,
@@ -26,7 +29,9 @@ import {
   segmentForAccountKey,
   trailing7DayRange,
   type AcculynxJobRow,
+  type InvoiceAgingRow,
   type LeaderboardRow,
+  type MilestoneHistoryRow,
   type PipelineRow,
 } from "@lib/executive-pipeline";
 
@@ -1166,3 +1171,197 @@ describe("trailing 7-day totals (checkpoint round 4, item 2)", () => {
   });
 });
 
+describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
+  const NOW = new Date("2026-07-01T12:00:00");
+
+  it("Lead->Prospect: counts/values prospects-with-an-estimate whose EARLIEST Prospect history entry falls in the window", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "prospect",
+        primary_estimate_amount: 4000,
+        contract_amount: 0,
+        milestone_date: "2026-06-27T00:00:00Z",
+      }),
+    ];
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-1", milestone_name: "Prospect", milestone_date: "2026-06-27T00:00:00Z" },
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, history, [], NOW);
+
+    expect(pills.leadToProspect.count).toBe(1);
+    expect(pills.leadToProspect.value).toBe(4000);
+    expect(pills.leadToProspect.secondaryValue).toBeNull();
+    expect(pills.leadToProspect.source).toBe("history");
+  });
+
+  it("Lead->Prospect: falls back to milestone_date-entered-current-stage when no history row exists, and flags coverage as fallback", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "prospect",
+        primary_estimate_amount: 3500,
+        contract_amount: 0,
+        milestone_date: "2026-06-28T00:00:00Z",
+      }),
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+
+    expect(pills.leadToProspect.count).toBe(1);
+    expect(pills.leadToProspect.value).toBe(3500);
+    expect(pills.leadToProspect.source).toBe("fallback");
+    expect(pills.leadToProspect.coverageNote).toContain("0 of 1");
+  });
+
+  it("Prospect->Approved: counts jobs entering Approved in-window, value = contract value, secondaryValue = Monies Collected (approvedJobValue - balanceDue)", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 30368.48,
+        balance_due: 17532.48,
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+    ];
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-1", milestone_name: "Approved", milestone_date: "2026-06-29T00:00:00Z" },
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, history, [], NOW);
+
+    expect(pills.prospectToApproved.count).toBe(1);
+    expect(pills.prospectToApproved.value).toBe(30368.48);
+    expect(pills.prospectToApproved.secondaryValue).toBeCloseTo(30368.48 - 17532.48);
+    expect(pills.prospectToApproved.source).toBe("history");
+  });
+
+  it("Approved->Invoiced and Invoiced->Closed: secondaryValue is Outstanding AR (balance_due) for jobs entering each stage in-window", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-invoiced",
+        current_milestone: "invoiced",
+        contract_amount: 10000,
+        balance_due: 4000,
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 2,
+        acculynx_job_id: "job-closed",
+        current_milestone: "closed",
+        contract_amount: 8000,
+        balance_due: 500,
+        milestone_date: "2026-06-30T00:00:00Z",
+      }),
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+
+    expect(pills.approvedToInvoiced.count).toBe(1);
+    expect(pills.approvedToInvoiced.secondaryValue).toBe(4000);
+    expect(pills.invoicedToClosed.count).toBe(1);
+    expect(pills.invoicedToClosed.secondaryValue).toBe(500);
+  });
+
+  it("completed milestone folds into the Approved transition (item 3 convention preserved)", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "completed",
+        contract_amount: 6000,
+        balance_due: 0,
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+
+    expect(pills.prospectToApproved.count).toBe(1);
+  });
+
+  it("computeTotalOutstandingArFromInvoices sums balance_due across invoices, floored at 0 per invoice", () => {
+    const invoices: InvoiceAgingRow[] = [
+      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 500 },
+      { job_id: "job-2", invoice_date: "2026-06-01T00:00:00Z", balance_due: -50 }, // credit — never subtracts
+      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 1200 },
+    ];
+
+    expect(computeTotalOutstandingArFromInvoices(invoices)).toBe(1700);
+  });
+
+  it("computeHighestArAgingDays returns the oldest OPEN invoice's age in days, ignoring paid invoices", () => {
+    const invoices: InvoiceAgingRow[] = [
+      { job_id: "job-1", invoice_date: "2026-06-20T00:00:00Z", balance_due: 100 }, // 11 days old
+      { job_id: "job-2", invoice_date: "2026-05-01T00:00:00Z", balance_due: 0 }, // paid — ignored despite being older
+      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 300 }, // 30 days old — oldest open
+    ];
+
+    expect(computeHighestArAgingDays(invoices, NOW)).toBe(30);
+  });
+
+  it("computeHighestArAgingDays returns 0 when there are no open invoices with a usable date", () => {
+    expect(computeHighestArAgingDays([], NOW)).toBe(0);
+    expect(computeHighestArAgingDays([{ job_id: "job-1", invoice_date: null, balance_due: 500 }], NOW)).toBe(0);
+  });
+
+  it("totalMoniesCollectedThisWeek sums collected dollars across every non-lead/prospect row entering its stage in-window", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 10000,
+        balance_due: 3000,
+        milestone_date: "2026-06-28T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 2,
+        acculynx_job_id: "job-2",
+        current_milestone: "closed",
+        contract_amount: 5000,
+        balance_due: 0,
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 3,
+        acculynx_job_id: "job-3",
+        current_milestone: "approved",
+        contract_amount: 2000,
+        balance_due: 0,
+        approved_date: null, // must clear the fixture default too — entryDate falls back to milestone_date only when approved_date is absent
+        milestone_date: "2026-05-01T00:00:00Z", // outside window
+      }),
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+
+    expect(pills.totalMoniesCollectedThisWeek).toBe(10000 - 3000 + 5000);
+  });
+
+  it("scopes invoices to the jobIds present in the filtered pipeline (obeys the D-13 filter bar via rows)", () => {
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 5000 })];
+    const invoices: InvoiceAgingRow[] = [
+      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 200 },
+      { job_id: "job-OTHER-LOCATION", invoice_date: "2026-01-01T00:00:00Z", balance_due: 99999 },
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
+
+    expect(pills.totalOutstandingAr).toBe(200);
+  });
+
+  it("returns the documented all-zero/none shape for an empty pipeline", () => {
+    const pills = computeTrailing7dPillsV2([], [], [], NOW);
+
+    expect(pills.leadToProspect).toEqual({ count: 0, value: 0, secondaryValue: null, source: "none", coverageNote: "No jobs in this window" });
+    expect(pills.totalOutstandingAr).toBe(0);
+    expect(pills.highestArAgingDays).toBe(0);
+    expect(pills.totalMoniesCollectedThisWeek).toBe(0);
+  });
+});

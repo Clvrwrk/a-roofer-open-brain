@@ -207,9 +207,12 @@ export interface ExecutivePipelineDashboard {
   /** Checkpoint round 4, item 1: the leaderboard rows plus their collected/AR
    * split, for the stacked-bar chart. Same rep order/values as `leaderboard`. */
   leaderboardWithSplit: LeaderboardRowWithSplit[];
-  /** Checkpoint round 4, item 2: fixed trailing-7-calendar-day totals pill row,
-   * independent of the selector window; obeys the D-13 filter bar. */
-  trailing7d: Trailing7dTotals;
+  /** Fix round item 4 (2026-07-02): the 7-pill trailing-7-calendar-day row
+   * (Lead->Prospect, Prospect->Approved, Approved->Invoiced, Invoiced->Closed, Total
+   * Outstanding AR, Highest AR Aging, Total Monies Collected this week) — supersedes
+   * the prior 5-pill computeTrailing7dTotals shape. Fixed window, independent of the
+   * selector; obeys the D-13 filter bar. */
+  trailing7d: Trailing7dPillsV2;
   locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
@@ -1076,7 +1079,12 @@ export const EMPTY_TRAILING_7D: Trailing7dTotals = {
  * window), Invoiced (invoiced queue, same approved/milestone/updated date signal),
  * Closed (closed queue, same date signal). Fixed 7-day window via trailing7DayRange
  * — NEVER the selector window. Assumes dead/cancelled rows already excluded from
- * `rows` (same upstream filter point as every other aggregation in this module). */
+ * `rows` (same upstream filter point as every other aggregation in this module).
+ *
+ * SUPERSEDED by computeTrailing7dPillsV2 (fix round item 4, 2026-07-02) — retained
+ * (unused by the dashboard loader) only because it is still directly unit-tested and
+ * is cheap to keep as a documented prior contract; not removed per hard rule 1's
+ * "archive or deprecate; never delete" spirit applied to code history/tests. */
 export function computeTrailing7dTotals(rows: PipelineRow[], now: Date): Trailing7dTotals {
   const { start, end } = trailing7DayRange(now);
   const inWindow = (date: Date | null) => Boolean(date && date >= start && date < end);
@@ -1125,6 +1133,342 @@ export function computeTrailing7dTotals(rows: PipelineRow[], now: Date): Trailin
   }
 
   return totals;
+}
+
+// ---------------------------------------------------------------------------
+// Pure core: trailing-7-day PILL ROW V2 (fix round item 4, 2026-07-02) — replaces
+// the 5-pill row above with the 7 pills the user explicitly specified, normalized
+// to the REAL AccuLynx milestone flow order (lead -> prospect -> approved ->
+// invoiced -> closed; the user's own message inverted "approved/closed/invoiced" —
+// this implementation uses the real order and documents the normalization here).
+// ---------------------------------------------------------------------------
+
+/** One row shape read from acculynx_job_milestone_history for transition detection. */
+export interface MilestoneHistoryRow {
+  job_id: string;
+  milestone_name: string | null;
+  milestone_date: string | null;
+}
+
+/** One row shape read from acculynx_invoices for AR aging + point-in-time AR total. */
+export interface InvoiceAgingRow {
+  job_id: string;
+  invoice_date: string | null;
+  balance_due: number | string | null;
+}
+
+/** A transition pill: count + value of jobs that moved INTO the target stage within
+ * the trailing 7 days, plus an optional dollar signal specific to that transition
+ * (Monies Collected for Prospect->Approved; Outstanding AR for Approved->Invoiced and
+ * Invoiced->Closed). `coverageNote` is always populated (never omitted) so the UI can
+ * show "based on N of M jobs with history" whenever the milestone-history fallback
+ * path was used for any row in this pill — required per the fix round's "Coverage
+ * captions where history is sparse" instruction. */
+export interface TransitionPill {
+  count: number;
+  value: number;
+  /** Monies Collected (Prospect->Approved) or Outstanding AR (Approved->Invoiced,
+   * Invoiced->Closed) for the jobs in this transition — null for Lead->Prospect
+   * (the user's spec gives it only a count + value entering prospect, no secondary
+   * dollar signal). */
+  secondaryValue: number | null;
+  /** "history" when every job counted here had a real acculynx_job_milestone_history
+   * row for the target stage; "fallback" when at least one job used the
+   * milestone_date-entered-current-stage fallback instead (sparse-history case). */
+  source: "history" | "fallback" | "none";
+  coverageNote: string;
+}
+
+export interface Trailing7dPillsV2 {
+  leadToProspect: TransitionPill;
+  prospectToApproved: TransitionPill;
+  approvedToInvoiced: TransitionPill;
+  invoicedToClosed: TransitionPill;
+  /** Point-in-time (not windowed) total outstanding AR across every open invoice —
+   * same convention as the existing headline arTotal KPI, but sourced from
+   * acculynx_invoices.balance_due (item 4's own AR definition) rather than
+   * crm_pipeline.balance_due, so this pill and the invoices table can never disagree
+   * once both are populated. */
+  totalOutstandingAr: number;
+  /** Oldest open invoice's age in days (from acculynx_invoices.invoice_date, where
+   * balance_due > 0) — 0 when there are no open invoices with a usable date. */
+  highestArAgingDays: number;
+  /** Sum of (approved_job_value - balance_due) for the SAME trailing-7-day window,
+   * across every crm_pipeline row with a positive collected amount — "Monies
+   * Collected this week" (item 4's own definition, verified live: financials payload
+   * carries no separate payments total, so collected = approvedJobValue - balanceDue). */
+  totalMoniesCollectedThisWeek: number;
+}
+
+const EMPTY_TRANSITION_PILL: TransitionPill = {
+  count: 0,
+  value: 0,
+  secondaryValue: null,
+  source: "none",
+  coverageNote: "No jobs in this window",
+};
+
+export const EMPTY_TRAILING_7D_V2: Trailing7dPillsV2 = {
+  leadToProspect: { ...EMPTY_TRANSITION_PILL },
+  prospectToApproved: { ...EMPTY_TRANSITION_PILL, secondaryValue: 0 },
+  approvedToInvoiced: { ...EMPTY_TRANSITION_PILL, secondaryValue: 0 },
+  invoicedToClosed: { ...EMPTY_TRANSITION_PILL, secondaryValue: 0 },
+  totalOutstandingAr: 0,
+  highestArAgingDays: 0,
+  totalMoniesCollectedThisWeek: 0,
+};
+
+const MILESTONE_NAME_TARGETS: Record<"prospect" | "approved" | "invoiced" | "closed", Set<string>> = {
+  prospect: new Set(["prospect"]),
+  approved: new Set(["approved", "completed"]), // completed folds into approved, item 3 convention
+  invoiced: new Set(["invoiced"]),
+  closed: new Set(["closed"]),
+};
+
+/** Resolves, per job, the date it entered a target milestone — preferring a REAL
+ * acculynx_job_milestone_history row (matched case-insensitively against the target's
+ * milestone-name set) within the trailing-7-day window, and falling back to
+ * milestone_date-entered-current-stage (the row's OWN crm_pipeline.milestone_date)
+ * when no history row exists for that job/target at all. Returns
+ * { date, usedFallback } per job so callers can build an honest coverage caption. */
+function resolveTransitionDate(
+  row: PipelineRow,
+  target: "prospect" | "approved" | "invoiced" | "closed",
+  historyByJobId: Map<string, MilestoneHistoryRow[]>,
+): { date: Date | null; usedFallback: boolean } {
+  const jobId = row.acculynx_job_id;
+  const historyRows = jobId ? historyByJobId.get(jobId) ?? [] : [];
+  const targetNames = MILESTONE_NAME_TARGETS[target];
+
+  const matches = historyRows
+    .filter((h) => targetNames.has(compact(h.milestone_name, "").toLowerCase()))
+    .map((h) => toDate(h.milestone_date))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (matches.length > 0) {
+    // Earliest matching history entry = the date the job FIRST entered this stage.
+    return { date: matches[0], usedFallback: false };
+  }
+
+  // Fallback: milestone_date-entered-current-stage (only meaningful when the row's
+  // CURRENT queue actually IS the target — resolveTransitionDate is only ever called
+  // for rows already confirmed to be in that queue by the caller).
+  return { date: toDate(row.milestone_date), usedFallback: true };
+}
+
+function buildCoverageNote(historyCount: number, fallbackCount: number): string {
+  const total = historyCount + fallbackCount;
+  if (total === 0) return "No jobs in this window";
+  if (fallbackCount === 0) return `Based on ${total} of ${total} jobs with history`;
+  return `Based on ${historyCount} of ${total} jobs with history`;
+}
+
+/** Lead->Prospect: count + value of jobs whose EARLIEST "Prospect" milestone-history
+ * entry (or milestone_date fallback) falls in the trailing 7 days. Value = the
+ * prospect queue's own valuation rule (estimate-required, item 3 convention) — "value
+ * entering prospect" per the user's spec. No secondaryValue (spec gives this pill only
+ * count + value). */
+function computeLeadToProspectPill(
+  rows: PipelineRow[],
+  historyByJobId: Map<string, MilestoneHistoryRow[]>,
+  start: Date,
+  end: Date,
+): TransitionPill {
+  let count = 0;
+  let value = 0;
+  let historyHits = 0;
+  let fallbackHits = 0;
+
+  for (const row of rows) {
+    if (queueForRow(row) !== "prospects") continue;
+    const estimate = estimateAmountFor(row);
+    if (estimate <= 0) continue; // prospects queue's own valuation rule (item 3)
+
+    const { date, usedFallback } = resolveTransitionDate(row, "prospect", historyByJobId);
+    if (!date || date < start || date >= end) continue;
+
+    count += 1;
+    value += estimate;
+    if (usedFallback) fallbackHits += 1;
+    else historyHits += 1;
+  }
+
+  return {
+    count,
+    value,
+    secondaryValue: null,
+    source: fallbackHits > 0 ? "fallback" : historyHits > 0 ? "history" : "none",
+    coverageNote: buildCoverageNote(historyHits, fallbackHits),
+  };
+}
+
+/** Prospect->Approved / Approved->Invoiced / Invoiced->Closed: shared shape — count +
+ * contract value of jobs entering `target` within the trailing 7 days, plus a
+ * secondaryValue (Monies Collected for approved, Outstanding AR for invoiced/closed). */
+function computeContractTransitionPill(
+  rows: PipelineRow[],
+  historyByJobId: Map<string, MilestoneHistoryRow[]>,
+  target: "approved" | "invoiced" | "closed",
+  targetQueue: QueueName,
+  start: Date,
+  end: Date,
+  secondaryValueFor: (row: PipelineRow) => number,
+): TransitionPill {
+  let count = 0;
+  let value = 0;
+  let secondaryValue = 0;
+  let historyHits = 0;
+  let fallbackHits = 0;
+
+  for (const row of rows) {
+    if (queueForRow(row) !== targetQueue) continue;
+
+    const { date, usedFallback } = resolveTransitionDate(row, target, historyByJobId);
+    if (!date || date < start || date >= end) continue;
+
+    count += 1;
+    value += contractAmountFor(row);
+    secondaryValue += secondaryValueFor(row);
+    if (usedFallback) fallbackHits += 1;
+    else historyHits += 1;
+  }
+
+  return {
+    count,
+    value,
+    secondaryValue,
+    source: fallbackHits > 0 ? "fallback" : historyHits > 0 ? "history" : "none",
+    coverageNote: buildCoverageNote(historyHits, fallbackHits),
+  };
+}
+
+/** Per-job Monies Collected: approved_job_value - balance_due (item 4's own
+ * definition, verified live — the financials payload has no separate payments
+ * total). Floored at 0 so a data anomaly (balance_due > contract_amount) never
+ * produces a negative "collected" figure. */
+function moniesCollectedFor(row: PipelineRow): number {
+  return Math.max(0, contractAmountFor(row) - toNumber(row.balance_due));
+}
+
+/** Per-job Outstanding AR: balance_due, floored at 0 (a negative/credit balance_due
+ * never counts as outstanding AR — same floor convention as splitCollectedAr). */
+function outstandingArFor(row: PipelineRow): number {
+  return Math.max(0, toNumber(row.balance_due));
+}
+
+/** Builds the group-by-jobId map computeTrailing7dPillsV2 and its per-transition
+ * helpers share, so a caller with a flat MilestoneHistoryRow[] array (as loaded from
+ * acculynx_job_milestone_history) only groups it once. */
+export function groupMilestoneHistoryByJobId(rows: MilestoneHistoryRow[]): Map<string, MilestoneHistoryRow[]> {
+  const map = new Map<string, MilestoneHistoryRow[]>();
+  for (const row of rows) {
+    const list = map.get(row.job_id) ?? [];
+    list.push(row);
+    map.set(row.job_id, list);
+  }
+  return map;
+}
+
+/** Total outstanding AR (point-in-time, all open invoices) from acculynx_invoices —
+ * item 4's own AR definition, independent of the trailing-7-day window. */
+export function computeTotalOutstandingArFromInvoices(invoices: InvoiceAgingRow[]): number {
+  return invoices.reduce((sum, inv) => sum + Math.max(0, toNumber(inv.balance_due)), 0);
+}
+
+/** Highest AR aging (days): the oldest open invoice's age from its invoice_date,
+ * among invoices with balance_due > 0 and a parseable invoice_date. Returns 0 when
+ * there are no such invoices (never a fabricated/negative day count). */
+export function computeHighestArAgingDays(invoices: InvoiceAgingRow[], now: Date): number {
+  let oldestDays = 0;
+  for (const inv of invoices) {
+    if (toNumber(inv.balance_due) <= 0) continue;
+    const invoiceDate = toDate(inv.invoice_date);
+    if (!invoiceDate) continue;
+    const days = daysBetweenDates(invoiceDate, now);
+    if (days > oldestDays) oldestDays = days;
+  }
+  return oldestDays;
+}
+
+function daysBetweenDates(from: Date, to: Date): number {
+  const ms = to.getTime() - from.getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+/** The full 7-pill trailing-7-day row (fix round item 4). `rows` is the ALREADY
+ * filtered/deduped/excluded pipeline slice (same upstream filter point as every other
+ * aggregation — obeys the D-13 filter bar via the caller). `historyRows`/`invoices`
+ * are NOT filtered by the D-13 filter bar upstream (they carry no location/rep
+ * dimension of their own) — this function derives the relevant subset by matching
+ * job_id against `rows`, so the pills automatically respect whatever filter produced
+ * `rows`. */
+export function computeTrailing7dPillsV2(
+  rows: PipelineRow[],
+  historyRows: MilestoneHistoryRow[],
+  invoices: InvoiceAgingRow[],
+  now: Date,
+): Trailing7dPillsV2 {
+  const { start, end } = trailing7DayRange(now);
+  const historyByJobId = groupMilestoneHistoryByJobId(historyRows);
+
+  const jobIdSet = new Set(rows.map((r) => r.acculynx_job_id).filter((id): id is string => id !== null));
+  const relevantInvoices = invoices.filter((inv) => jobIdSet.has(inv.job_id));
+
+  const leadToProspect = computeLeadToProspectPill(rows, historyByJobId, start, end);
+  const prospectToApproved = computeContractTransitionPill(
+    rows,
+    historyByJobId,
+    "approved",
+    "approved",
+    start,
+    end,
+    moniesCollectedFor,
+  );
+  const approvedToInvoiced = computeContractTransitionPill(
+    rows,
+    historyByJobId,
+    "invoiced",
+    "invoiced",
+    start,
+    end,
+    outstandingArFor,
+  );
+  const invoicedToClosed = computeContractTransitionPill(
+    rows,
+    historyByJobId,
+    "closed",
+    "closed",
+    start,
+    end,
+    outstandingArFor,
+  );
+
+  const totalOutstandingAr = computeTotalOutstandingArFromInvoices(relevantInvoices);
+  const highestArAgingDays = computeHighestArAgingDays(relevantInvoices, now);
+
+  // Monies Collected this week: summed across every row (any queue) whose entry into
+  // its CURRENT stage falls in the trailing 7 days and has collected dollars — a
+  // superset view across the whole funnel, not just the Prospect->Approved pill's own
+  // secondaryValue (which is scoped to jobs transitioning specifically into Approved).
+  let totalMoniesCollectedThisWeek = 0;
+  for (const row of rows) {
+    const queue = queueForRow(row);
+    if (!queue || queue === "leads" || queue === "prospects") continue;
+    const entryDate = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
+    if (!entryDate || entryDate < start || entryDate >= end) continue;
+    totalMoniesCollectedThisWeek += moniesCollectedFor(row);
+  }
+
+  return {
+    leadToProspect,
+    prospectToApproved,
+    approvedToInvoiced,
+    invoicedToClosed,
+    totalOutstandingAr,
+    highestArAgingDays,
+    totalMoniesCollectedThisWeek,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1211,7 +1555,7 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     marginByRep: [],
     leaderboard: [],
     leaderboardWithSplit: [],
-    trailing7d: { ...EMPTY_TRAILING_7D },
+    trailing7d: { ...EMPTY_TRAILING_7D_V2 },
     locationRollup: [],
     arTotal: 0,
     freshness: [],
@@ -1249,32 +1593,41 @@ export async function loadExecutivePipelineDashboard(
   }
 
   try {
-    const [pipeline, jobs, financialsRaw, invoiceMatches, invoiceLines, watermarks, accounts] = await Promise.all([
-      selectAll<PipelineRow>(
-        client,
-        "crm_pipeline",
-        "id,acculynx_job_id,job_name,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
-      ),
-      selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
-      // acculynx_job_financials has 0% production coverage as of RESEARCH.md (1 archived
-      // sandbox row) — try-row-then-fallback per Pitfall 1; re-verified live at
-      // implementation time (see SUMMARY.md for the observed numbers).
-      selectAll<{ job_id: string; worksheet_total: number | string | null; archived_at: string | null }>(
-        client,
-        "acculynx_job_financials",
-        "job_id,worksheet_total,archived_at",
-        (query) => query.is("archived_at", null),
-      ),
-      selectAll<InvoiceMatchRow>(
-        client,
-        "v_invoice_acculynx_match",
-        "invoice_number,acculynx_job_id,matched",
-        (query) => query.eq("matched", true),
-      ),
-      selectAll<AbcInvoiceLineRow>(client, "abc_invoice_lines", "invoice_number,extended_price"),
-      selectAll<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,last_sync_at"),
-      selectAll<AcculynxAccountRow>(client, "acculynx_accounts", "account_key,label,program,market,state"),
-    ]);
+    const [pipeline, jobs, financialsRaw, invoiceMatches, invoiceLines, watermarks, accounts, milestoneHistory, invoiceAging] =
+      await Promise.all([
+        selectAll<PipelineRow>(
+          client,
+          "crm_pipeline",
+          "id,acculynx_job_id,job_name,client_name,client_job_number,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
+        ),
+        selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
+        // acculynx_job_financials has 0% production coverage as of RESEARCH.md (1 archived
+        // sandbox row) — try-row-then-fallback per Pitfall 1; re-verified live at
+        // implementation time (see SUMMARY.md for the observed numbers).
+        selectAll<{ job_id: string; worksheet_total: number | string | null; archived_at: string | null }>(
+          client,
+          "acculynx_job_financials",
+          "job_id,worksheet_total,archived_at",
+          (query) => query.is("archived_at", null),
+        ),
+        selectAll<InvoiceMatchRow>(
+          client,
+          "v_invoice_acculynx_match",
+          "invoice_number,acculynx_job_id,matched",
+          (query) => query.eq("matched", true),
+        ),
+        selectAll<AbcInvoiceLineRow>(client, "abc_invoice_lines", "invoice_number,extended_price"),
+        selectAll<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,last_sync_at"),
+        selectAll<AcculynxAccountRow>(client, "acculynx_accounts", "account_key,label,program,market,state"),
+        // Fix round item 4 (2026-07-02): milestone-history-backed transition pills.
+        // acculynx_job_milestone_history is now being ingested post-fix (item 1's
+        // job-walk phase already populates it) — sparse/empty for a while after
+        // this ships is expected and handled by the fallback + coverage caption.
+        selectAll<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
+        // acculynx_invoices — AR aging + point-in-time Total Outstanding AR (item 4's
+        // own AR definition, independent of crm_pipeline.balance_due).
+        selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due"),
+      ]);
 
     // Job-financials primary margin source: no true GP field is populated in
     // production (verified live at implementation time — see SUMMARY.md). Model
@@ -1484,10 +1837,12 @@ export async function loadExecutivePipelineDashboard(
     const funnelWithSplit = computeFunnelStagesWithSplit(filteredPipeline);
     const leaderboardWithSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
 
-    // Checkpoint round 4, item 2: trailing-7-day pill row — fixed window anchored at
-    // `now`, computed over filteredPipeline so it obeys the D-13 filter bar but
-    // ignores the D-03 window-selector token entirely (user's explicit decision).
-    const trailing7d = computeTrailing7dTotals(filteredPipeline, now);
+    // Fix round item 4 (2026-07-02): the 7-pill trailing-7-day row — fixed window
+    // anchored at `now`, computed over filteredPipeline so it obeys the D-13 filter
+    // bar but ignores the D-03 window-selector token entirely (same convention the
+    // superseded 5-pill row used). milestoneHistory/invoiceAging are unfiltered
+    // reads — computeTrailing7dPillsV2 derives the relevant subset by job_id.
+    const trailing7d = computeTrailing7dPillsV2(filteredPipeline, milestoneHistory, invoiceAging, now);
 
     const locationRollup = computeLocationRollup(filteredPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
 

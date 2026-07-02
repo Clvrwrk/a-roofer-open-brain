@@ -122,10 +122,11 @@ function asData(value: unknown) {
   return JSON.stringify(value);
 }
 
-// Checkpoint round 4, item 2: fixed trailing-7-calendar-day pills (New Leads/New
-// Pre-close/New Contracts/Invoiced/Closed) — always current, independent of the D-03
-// window selector, obeys the D-13 filter bar (dashboard.trailing7d is already computed
-// from the filtered pipeline in the loader).
+// Fix round item 4 (2026-07-02): the 7-pill trailing-7-calendar-day row (Lead->Prospect,
+// Prospect->Approved, Approved->Invoiced, Invoiced->Closed, Total Outstanding AR,
+// Highest AR Aging, Total Monies Collected this week) — always current, independent of
+// the D-03 window selector, obeys the D-13 filter bar (dashboard.trailing7d is already
+// computed from the filtered pipeline in the loader).
 const trailing7dPills = dashboard.trailing7d;
 
 const QUEUE_LABELS: Record<QueueName, string> = {
@@ -395,24 +396,36 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
       <span class="epl-t7-label">Trailing 7 days</span>
       <div class="epl-t7-pills">
         <div class="epl-t7-pill">
-          <strong data-t7-val="newLeads">{trailing7dPills.newLeads.count}</strong>
-          <span>New Leads</span>
+          <strong data-t7-val="leadToProspect">{formatCurrency(trailing7dPills.leadToProspect.value)}</strong>
+          <span data-t7-sub="leadToProspect">Lead → Prospect · {trailing7dPills.leadToProspect.count} job{trailing7dPills.leadToProspect.count === 1 ? "" : "s"}</span>
+          <span class="epl-t7-coverage" data-t7-coverage="leadToProspect">{trailing7dPills.leadToProspect.coverageNote}</span>
         </div>
         <div class="epl-t7-pill">
-          <strong data-t7-val="newPreClose">{formatCurrency(trailing7dPills.newPreClose.value ?? 0)}</strong>
-          <span data-t7-sub="newPreClose">New Pre-close · {trailing7dPills.newPreClose.count} job{trailing7dPills.newPreClose.count === 1 ? "" : "s"}</span>
+          <strong data-t7-val="prospectToApproved">{formatCurrency(trailing7dPills.prospectToApproved.value)}</strong>
+          <span data-t7-sub="prospectToApproved">Prospect → Approved · {trailing7dPills.prospectToApproved.count} job{trailing7dPills.prospectToApproved.count === 1 ? "" : "s"} · {formatCompactCurrency(trailing7dPills.prospectToApproved.secondaryValue ?? 0)} collected</span>
+          <span class="epl-t7-coverage" data-t7-coverage="prospectToApproved">{trailing7dPills.prospectToApproved.coverageNote}</span>
         </div>
         <div class="epl-t7-pill">
-          <strong data-t7-val="newContracts">{formatCurrency(trailing7dPills.newContracts.value ?? 0)}</strong>
-          <span data-t7-sub="newContracts">New Contracts · {trailing7dPills.newContracts.count} job{trailing7dPills.newContracts.count === 1 ? "" : "s"}</span>
+          <strong data-t7-val="approvedToInvoiced">{formatCurrency(trailing7dPills.approvedToInvoiced.value)}</strong>
+          <span data-t7-sub="approvedToInvoiced">Approved → Invoiced · {trailing7dPills.approvedToInvoiced.count} job{trailing7dPills.approvedToInvoiced.count === 1 ? "" : "s"} · {formatCompactCurrency(trailing7dPills.approvedToInvoiced.secondaryValue ?? 0)} AR</span>
+          <span class="epl-t7-coverage" data-t7-coverage="approvedToInvoiced">{trailing7dPills.approvedToInvoiced.coverageNote}</span>
         </div>
         <div class="epl-t7-pill">
-          <strong data-t7-val="invoiced">{formatCurrency(trailing7dPills.invoiced.value ?? 0)}</strong>
-          <span data-t7-sub="invoiced">Invoiced · {trailing7dPills.invoiced.count} job{trailing7dPills.invoiced.count === 1 ? "" : "s"}</span>
+          <strong data-t7-val="invoicedToClosed">{formatCurrency(trailing7dPills.invoicedToClosed.value)}</strong>
+          <span data-t7-sub="invoicedToClosed">Invoiced → Closed · {trailing7dPills.invoicedToClosed.count} job{trailing7dPills.invoicedToClosed.count === 1 ? "" : "s"} · {formatCompactCurrency(trailing7dPills.invoicedToClosed.secondaryValue ?? 0)} AR</span>
+          <span class="epl-t7-coverage" data-t7-coverage="invoicedToClosed">{trailing7dPills.invoicedToClosed.coverageNote}</span>
         </div>
         <div class="epl-t7-pill">
-          <strong data-t7-val="closed">{formatCurrency(trailing7dPills.closed.value ?? 0)}</strong>
-          <span data-t7-sub="closed">Closed · {trailing7dPills.closed.count} job{trailing7dPills.closed.count === 1 ? "" : "s"}</span>
+          <strong data-t7-val="totalOutstandingAr">{formatCurrency(trailing7dPills.totalOutstandingAr)}</strong>
+          <span>Total Outstanding AR</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="highestArAgingDays">{trailing7dPills.highestArAgingDays}d</strong>
+          <span>Highest AR Aging</span>
+        </div>
+        <div class="epl-t7-pill">
+          <strong data-t7-val="totalMoniesCollectedThisWeek">{formatCurrency(trailing7dPills.totalMoniesCollectedThisWeek)}</strong>
+          <span>Monies Collected this week</span>
         </div>
       </div>
     </section>

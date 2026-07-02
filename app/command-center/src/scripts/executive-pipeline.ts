@@ -60,17 +60,24 @@ interface LeaderboardRowWithSplit extends LeaderboardRow {
   arOutstanding: number;
 }
 
-interface Trailing7dPill {
+// Fix round item 4 (2026-07-02): the 7-pill trailing-7-day row's shape (mirrors
+// TransitionPill/Trailing7dPillsV2 in executive-pipeline.ts exactly).
+interface TransitionPill {
   count: number;
-  value: number | null;
+  value: number;
+  secondaryValue: number | null;
+  source: "history" | "fallback" | "none";
+  coverageNote: string;
 }
 
 interface Trailing7dTotals {
-  newLeads: Trailing7dPill;
-  newPreClose: Trailing7dPill;
-  newContracts: Trailing7dPill;
-  invoiced: Trailing7dPill;
-  closed: Trailing7dPill;
+  leadToProspect: TransitionPill;
+  prospectToApproved: TransitionPill;
+  approvedToInvoiced: TransitionPill;
+  invoicedToClosed: TransitionPill;
+  totalOutstandingAr: number;
+  highestArAgingDays: number;
+  totalMoniesCollectedThisWeek: number;
 }
 
 interface FreshnessBadge {
@@ -192,11 +199,13 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   leaderboard: [],
   leaderboardWithSplit: [],
   trailing7d: {
-    newLeads: { count: 0, value: null },
-    newPreClose: { count: 0, value: 0 },
-    newContracts: { count: 0, value: 0 },
-    invoiced: { count: 0, value: 0 },
-    closed: { count: 0, value: 0 },
+    leadToProspect: { count: 0, value: 0, secondaryValue: null, source: "none", coverageNote: "No jobs in this window" },
+    prospectToApproved: { count: 0, value: 0, secondaryValue: 0, source: "none", coverageNote: "No jobs in this window" },
+    approvedToInvoiced: { count: 0, value: 0, secondaryValue: 0, source: "none", coverageNote: "No jobs in this window" },
+    invoicedToClosed: { count: 0, value: 0, secondaryValue: 0, source: "none", coverageNote: "No jobs in this window" },
+    totalOutstandingAr: 0,
+    highestArAgingDays: 0,
+    totalMoniesCollectedThisWeek: 0,
   },
   locationRollup: [],
   arTotal: 0,
@@ -457,7 +466,20 @@ for (const card of kpiCards) {
 const locationDetailsList = Array.from(document.querySelectorAll<HTMLDetailsElement>("[data-location-row]"));
 const loadedLocations = new Set<string>();
 
-function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[]) {
+// Fix round item 2 (2026-07-02): only positive-value jobs are ever included in `jobs`
+// (the loader already filters $0-value rows out — see jobRowsForLocation). This
+// renders an honest "N zero-value jobs hidden" caption so the visible row count never
+// silently disagrees with what the location's queue counts imply, rather than just
+// shrinking the list with no explanation.
+function renderZeroValueCaption(wrap: HTMLElement, hiddenZeroValueCount: number) {
+  if (hiddenZeroValueCount <= 0) return;
+  const caption = document.createElement("p");
+  caption.className = "epl-jobs-hidden-caption";
+  caption.textContent = `${hiddenZeroValueCount} zero-value job${hiddenZeroValueCount === 1 ? "" : "s"} hidden`;
+  wrap.append(caption);
+}
+
+function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[], hiddenZeroValueCount: number) {
   wrap.replaceChildren();
 
   if (jobs.length === 0) {
@@ -465,6 +487,7 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[]) {
     empty.className = "epl-jobs-empty";
     empty.textContent = "No jobs match these filters";
     wrap.append(empty);
+    renderZeroValueCaption(wrap, hiddenZeroValueCount);
     return;
   }
 
@@ -520,6 +543,7 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[]) {
   tableWrap.className = "epl-jobs-table-wrap";
   tableWrap.append(table);
   wrap.append(tableWrap);
+  renderZeroValueCaption(wrap, hiddenZeroValueCount);
 }
 
 async function loadLocationJobs(details: HTMLDetailsElement) {
@@ -557,8 +581,8 @@ async function loadLocationJobs(details: HTMLDetailsElement) {
       wrap.append(failed);
       return;
     }
-    const result = (await response.json()) as { status: string; jobs: JobDrillRow[] };
-    renderJobsTable(wrap, result.jobs ?? []);
+    const result = (await response.json()) as { status: string; jobs: JobDrillRow[]; hiddenZeroValueCount?: number };
+    renderJobsTable(wrap, result.jobs ?? [], result.hiddenZeroValueCount ?? 0);
   } catch {
     loadedLocations.delete(accountKey);
     wrap.replaceChildren();
@@ -673,29 +697,52 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
 }
 
 // ---------------------------------------------------------------------------
-// Trailing-7-day totals pill row (checkpoint round 4, item 2) — a fixed always-
-// current strip between the KPI grid and the charts. Text-node update only (dense
-// pills never change count, unlike the location rows), obeys the D-13 filter bar,
-// intentionally ignores the D-03 window-selector token.
+// Trailing-7-day 7-pill row (fix round item 4, 2026-07-02) — a fixed always-current
+// strip between the KPI grid and the charts. Text-node update only (dense pills never
+// change count, unlike the location rows), obeys the D-13 filter bar, intentionally
+// ignores the D-03 window-selector token.
 // ---------------------------------------------------------------------------
 
-function updateTrailingPill(key: keyof Trailing7dTotals, pill: Trailing7dPill) {
+const TRANSITION_PILL_KEYS = ["leadToProspect", "prospectToApproved", "approvedToInvoiced", "invoicedToClosed"] as const;
+type TransitionPillKey = (typeof TRANSITION_PILL_KEYS)[number];
+
+const TRANSITION_PILL_LABELS: Record<TransitionPillKey, { title: string; secondary: string | null }> = {
+  leadToProspect: { title: "Lead → Prospect", secondary: null },
+  prospectToApproved: { title: "Prospect → Approved", secondary: "collected" },
+  approvedToInvoiced: { title: "Approved → Invoiced", secondary: "AR" },
+  invoicedToClosed: { title: "Invoiced → Closed", secondary: "AR" },
+};
+
+function updateTransitionPill(key: TransitionPillKey, pill: TransitionPill) {
   const valueEl = document.querySelector<HTMLElement>(`[data-t7-val="${key}"]`);
-  if (valueEl) {
-    valueEl.textContent = pill.value === null ? String(pill.count) : formatCurrency(pill.value);
-  }
+  if (valueEl) valueEl.textContent = formatCurrency(pill.value);
+
+  const labels = TRANSITION_PILL_LABELS[key];
   const subEl = document.querySelector<HTMLElement>(`[data-t7-sub="${key}"]`);
   if (subEl) {
-    subEl.textContent = pill.value === null ? "" : `${pill.count} job${pill.count === 1 ? "" : "s"}`;
+    const jobsText = `${labels.title} · ${pill.count} job${pill.count === 1 ? "" : "s"}`;
+    subEl.textContent = labels.secondary
+      ? `${jobsText} · ${formatCompactCurrency(pill.secondaryValue ?? 0)} ${labels.secondary}`
+      : jobsText;
   }
+
+  const coverageEl = document.querySelector<HTMLElement>(`[data-t7-coverage="${key}"]`);
+  if (coverageEl) coverageEl.textContent = pill.coverageNote;
 }
 
 function renderTrailing7d(dashboard: ExecutivePipelineDashboard) {
-  updateTrailingPill("newLeads", dashboard.trailing7d.newLeads);
-  updateTrailingPill("newPreClose", dashboard.trailing7d.newPreClose);
-  updateTrailingPill("newContracts", dashboard.trailing7d.newContracts);
-  updateTrailingPill("invoiced", dashboard.trailing7d.invoiced);
-  updateTrailingPill("closed", dashboard.trailing7d.closed);
+  for (const key of TRANSITION_PILL_KEYS) {
+    updateTransitionPill(key, dashboard.trailing7d[key]);
+  }
+
+  const arEl = document.querySelector<HTMLElement>('[data-t7-val="totalOutstandingAr"]');
+  if (arEl) arEl.textContent = formatCurrency(dashboard.trailing7d.totalOutstandingAr);
+
+  const agingEl = document.querySelector<HTMLElement>('[data-t7-val="highestArAgingDays"]');
+  if (agingEl) agingEl.textContent = `${dashboard.trailing7d.highestArAgingDays}d`;
+
+  const collectedEl = document.querySelector<HTMLElement>('[data-t7-val="totalMoniesCollectedThisWeek"]');
+  if (collectedEl) collectedEl.textContent = formatCurrency(dashboard.trailing7d.totalMoniesCollectedThisWeek);
 }
 
 // Checkpoint round 3, item 3/7: the per-location account bar rows carry queue
