@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-07-02T15:43:58.728Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-07-02T15:52:24.710Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 34
-  completed_plans: 29
+  completed_plans: 31
   percent: 71
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -64,6 +64,7 @@ Progress: [████████░░] 86%
 | Phase 07 P03 | 15min | 2 tasks | 6 files |
 | Phase 07 P05 | 35min | 3 tasks | 6 files |
 | Phase 07 P06 | 50min | 4 tasks | 5 files |
+| Phase 07 P07 | 25min | 2 tasks | 4 files |
 
 ### Decisions
 
@@ -98,6 +99,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 07]: [07-05]: Threaded sync_batch_id through syncJobWalk() and added it as a new required parameter on runAccountSync() in index.ts so acculynx_raw archive rows and acculynx_job_walk_errors rows correlate to a single sync run.
 - [Phase 07]: [07-06]: primary_salesperson merge is null-safe by key omission (not null-send) — when no rep name resolves this run, the field is left out of the upsert row entirely so ON CONFLICT DO UPDATE never blanks a real stored name (T-07-06-01).
 - [Phase 07]: [07-06]: D-18 budget rotation persists its cursor on the existing acculynx_sync_watermark table via account_key='__rotation__', resource_type='fanout_start' rather than a new table — reuses advanceWatermark()'s proven upsert contract.
+- [Phase 07]: dedupePipeline() collapses csv_initial/api_sync crm_pipeline duplicates by acculynx_job_id, preferring api_sync, applied at both the aggregate loader and the per-location drill-down path
+- [Phase 07]: sync-pipeline.md corrected to describe the live D-14..D-18 pipeline (capture-first, crm_pipeline restored on multiAccount cron, first-sight/change-driven pull, budget rotation, counted job-walk errors); dashboard-side dedup explicitly documented as NOT resolving the ~5,578 orphaned csv_initial rows at the source
 
 ### Pending Todos
 
@@ -116,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T15:43:58.722Z
-Stopped at: Completed 07-06-PLAN.md
+Last session: 2026-07-02T15:52:18.434Z
+Stopped at: Completed 07-07-PLAN.md
 Resume file: None
