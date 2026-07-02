@@ -110,7 +110,15 @@ const DEFAULT_USERS = [
   { id: "779da1e7-ks11-rep", display_name: "Bob Smolek", first_name: "Bob", last_name: "Smolek" },
 ];
 
-function makeWalkSb(users: unknown[] = DEFAULT_USERS) {
+interface WalkSbOptions {
+  users?: unknown[];
+  /** jobId -> newest prior acculynx_raw created_at (ISO string). Absent = first-sight. */
+  priorRawArchiveByJobId?: Record<string, string>;
+}
+
+function makeWalkSb(options: WalkSbOptions = {}) {
+  const users = options.users ?? DEFAULT_USERS;
+  const priorRawArchiveByJobId = options.priorRawArchiveByJobId ?? {};
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
   const insertCalls: { table: string; row: unknown }[] = [];
   const watermarkUpserts: unknown[] = [];
@@ -144,6 +152,24 @@ function makeWalkSb(users: unknown[] = DEFAULT_USERS) {
           // loadUserNameMap() awaits sb.from("acculynx_users").select(...) directly
           // (no further chaining) — resolve immediately with the mocked user rows.
           return Promise.resolve({ data: users, error: null });
+        }
+        if (table === "acculynx_raw") {
+          // shouldWalkJob() queries: select("created_at").like("api_endpoint", `%/jobs/${jobId}%`)
+          //   .order("created_at", {ascending:false}).limit(1)
+          return {
+            like: (_col: string, pattern: string) => ({
+              order: () => ({
+                limit: () => {
+                  // Extract the jobId embedded in the LIKE pattern (%/jobs/{jobId}%).
+                  const m = pattern.match(/\/jobs\/([^%]+)/);
+                  const jobId = m?.[1];
+                  const createdAt = jobId ? priorRawArchiveByJobId[jobId] : undefined;
+                  const data = createdAt ? [{ created_at: createdAt }] : [];
+                  return Promise.resolve({ data, error: null });
+                },
+              }),
+            }),
+          };
         }
         return {
           eq: () => ({
@@ -376,4 +402,107 @@ Deno.test("syncJobWalk — the representatives body is raw-archived (D-14)", asy
     (c) => c.table === "acculynx_raw" && (c.row as Record<string, unknown>).resource_type === "representatives",
   );
   assertEquals(repsRawInserts.length >= 1, true, "representatives response must be raw-archived to acculynx_raw");
+});
+
+// ---------------------------------------------------------------------------
+// Task 2b: D-15 first-sight full pull + D-16 change-driven re-pull
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobWalk — a first-sight job (no prior acculynx_raw rows) triggers the full pull", async () => {
+  const jobIds = ["job-first-sight"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-first-sight": ["inv-1"] });
+  // No priorRawArchiveByJobId entry for job-first-sight — first-sight.
+  const { sb } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const financialsHit = fetchedUrls.some((u) => u.includes("/jobs/job-first-sight/financials"));
+  const repsHit = fetchedUrls.some((u) => u.includes("/jobs/job-first-sight/representatives"));
+  assertEquals(financialsHit, true, "First-sight job must have /financials pulled");
+  assertEquals(repsHit, true, "First-sight job must have /representatives pulled");
+});
+
+Deno.test("syncJobWalk — an unchanged, already-fully-pulled job is skipped (D-16)", async () => {
+  const jobIds = ["job-unchanged"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-unchanged": [] });
+  // Prior archive exists AND is newer than modified_date -> unchanged -> skip.
+  const { sb, watermarkUpserts } = makeWalkSb({
+    priorRawArchiveByJobId: { "job-unchanged": "2026-07-01T12:00:00Z" },
+  });
+  const modifiedDateByJobId = new Map([["job-unchanged", "2026-06-01T00:00:00Z"]]);
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(
+    sb,
+    ACCT,
+    "test-api-key",
+    deadline,
+    watermark,
+    jobIds,
+    mockFetch,
+    "batch-1",
+    modifiedDateByJobId,
+  );
+
+  const financialsHit = fetchedUrls.some((u) => u.includes("/jobs/job-unchanged/financials"));
+  assertEquals(financialsHit, false, "An unchanged, already-pulled job must NOT be re-walked");
+  // The watermark must still advance past the skipped job so it isn't re-evaluated forever.
+  assertEquals(watermarkUpserts.length >= 1, true, "Watermark must still advance past a skipped job");
+});
+
+Deno.test("syncJobWalk — a changed job (modified_date newer than last archive) IS re-walked (D-16)", async () => {
+  const jobIds = ["job-changed"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-changed": [] });
+  const { sb } = makeWalkSb({
+    priorRawArchiveByJobId: { "job-changed": "2026-06-01T00:00:00Z" },
+  });
+  const modifiedDateByJobId = new Map([["job-changed", "2026-07-01T00:00:00Z"]]);
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(
+    sb,
+    ACCT,
+    "test-api-key",
+    deadline,
+    watermark,
+    jobIds,
+    mockFetch,
+    "batch-1",
+    modifiedDateByJobId,
+  );
+
+  const financialsHit = fetchedUrls.some((u) => u.includes("/jobs/job-changed/financials"));
+  assertEquals(financialsHit, true, "A job touched since its last archive must be re-walked");
+});
+
+Deno.test("syncJobWalk — the Task 2a jobId->repName Map still returns correctly after the scheduling wrap", async () => {
+  const jobIds = ["job-first-sight", "job-unchanged"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-first-sight": [], "job-unchanged": [] });
+  const { sb } = makeWalkSb({
+    priorRawArchiveByJobId: { "job-unchanged": "2026-07-01T12:00:00Z" },
+  });
+  const modifiedDateByJobId = new Map([["job-unchanged", "2026-06-01T00:00:00Z"]]);
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  const repMap = await syncJobWalk(
+    sb,
+    ACCT,
+    "test-api-key",
+    deadline,
+    watermark,
+    jobIds,
+    mockFetch,
+    "batch-1",
+    modifiedDateByJobId,
+  );
+
+  // job-first-sight is walked (first-sight) and resolves the KS-11 rep fixture.
+  assertEquals(repMap.get("job-first-sight"), "Bob Smolek");
+  // job-unchanged was skipped (D-16) and therefore has no rep-map entry this run.
+  assertEquals(repMap.has("job-unchanged"), false);
 });

@@ -27,8 +27,14 @@
 // seeded for this account (closes the unseeded-row no-op half of VERIFICATION gap 4).
 //
 // D-15 (first-sight full pull) / D-16 (change-driven re-pull): 07-06 Task 2b layers pull
-// SCHEDULING around this walk — see shouldFullyPull() below. Task 2a's full-representatives
-// fetch + jobId->repName Map contract is unchanged by that layer.
+// SCHEDULING around this walk via shouldWalkJob() — a job with zero prior acculynx_raw
+// rows is first-sight and always gets the full per-job endpoint set (D-15, unconditional
+// walk below already does this); a job that HAS prior raw archives is only re-walked when
+// acculynx_jobs.modified_date is newer than the newest prior archive for that job (D-16) —
+// an unchanged, already-fully-pulled job is skipped so the world is not re-pulled hourly
+// (6,434 jobs x ~15 endpoints vs the rate limit makes blanket hourly pulls impossible).
+// Task 2a's full-representatives fetch + jobId->repName Map contract is unchanged by this
+// scheduling layer — it wraps the walk, it does not alter what the walk does per job.
 //
 // GUID path params are URL-encoded (ASVS V5 / T-02-08).
 // apiKey is an explicit parameter — never a module-level constant (T-02-04 / Pitfall 3).
@@ -172,6 +178,56 @@ async function recordWalkError(
 }
 
 /**
+ * D-15/D-16 pull-scheduling decision for a single job.
+ *
+ * D-15 (first-sight full pull): if acculynx_raw has ZERO rows for this job's endpoints
+ * (matched via api_endpoint LIKE '%/jobs/{jobId}%' — acculynx_raw has no job_id column,
+ * so the job id embedded in the archived path is the join key), this is the job's first
+ * sight and it must get the full per-job GET surface — force=true, walk unconditionally.
+ *
+ * D-16 (change-driven re-pull): if prior raw archives DO exist, only re-walk when
+ * acculynx_jobs.modified_date is newer than the newest prior archive's created_at for
+ * this job — an unchanged, already-fully-pulled job is skipped (force=false, skip=true).
+ * A job with no modified_date on record (never diffed) is conservatively re-walked.
+ *
+ * @returns { walk: boolean, reason: 'first_sight' | 'changed' | 'unchanged' }
+ */
+async function shouldWalkJob(
+  sb: any,
+  jobId: string,
+  modifiedDate: string | null | undefined,
+): Promise<{ walk: boolean; reason: "first_sight" | "changed" | "unchanged" }> {
+  const { data: priorRows } = await sb
+    .from("acculynx_raw")
+    .select("created_at")
+    .like("api_endpoint", `%/jobs/${jobId}%`)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const newestArchive = priorRows?.[0]?.created_at ?? null;
+  if (!newestArchive) {
+    // D-15: no prior raw archive for this job at all — first-sight full pull.
+    return { walk: true, reason: "first_sight" };
+  }
+
+  if (!modifiedDate) {
+    // Conservative default: no modified_date to compare against — re-walk rather
+    // than risk silently skipping a job that has actually changed.
+    return { walk: true, reason: "changed" };
+  }
+
+  const modified = new Date(modifiedDate);
+  const archived = new Date(newestArchive);
+  if (isNaN(modified.getTime()) || isNaN(archived.getTime()) || modified > archived) {
+    // D-16: job touched since its last full archive — targeted re-pull.
+    return { walk: true, reason: "changed" };
+  }
+
+  // D-16: unchanged and already fully pulled — skip, do not blanket re-pull hourly.
+  return { walk: false, reason: "unchanged" };
+}
+
+/**
  * Walk known job IDs to sync sub-resources (invoices, financials, insurance,
  * milestone-history, job-contacts) for a single account.
  *
@@ -184,13 +240,18 @@ async function recordWalkError(
  * @param apiKey      - explicit per-account Bearer key (not module-level — Pitfall 3)
  * @param deadline    - epoch ms budget limit (Date.now() >= deadline → stop and save watermark)
  * @param watermark   - current watermark row (last_walked_job_id for resume)
- * @param jobIds      - ordered list of job IDs to walk (from acculynx_jobs for this account)
- * @param fetchFn     - injectable fetch function (defaults to global fetch for prod)
- * @param syncBatchId - the batch identifier threaded from index.ts, stamped on raw-archive
- *                      rows and error rows for cross-referencing a single sync run
- * @returns           - Map<jobId, repName> resolved from the full /representatives fetch
- *                      (07-06 Task 2a) — consumed by syncCrmPipeline() for
- *                      crm_pipeline.primary_salesperson.
+ * @param jobIds              - ordered list of job IDs to walk (from acculynx_jobs for this account)
+ * @param fetchFn             - injectable fetch function (defaults to global fetch for prod)
+ * @param syncBatchId         - the batch identifier threaded from index.ts, stamped on raw-archive
+ *                              rows and error rows for cross-referencing a single sync run
+ * @param modifiedDateByJobId - Map<jobId, acculynx_jobs.modified_date> used by the D-16
+ *                              change-driven skip (shouldWalkJob). A job absent from this
+ *                              map is treated as having no modified_date on record and is
+ *                              conservatively re-walked rather than risk a silent skip.
+ * @returns                   - Map<jobId, repName> resolved from the full /representatives
+ *                              fetch (07-06 Task 2a) — consumed by syncCrmPipeline() for
+ *                              crm_pipeline.primary_salesperson. Skipped jobs (D-16) are
+ *                              simply absent from the returned map for this run.
  */
 export async function syncJobWalk(
   sb: any,
@@ -201,6 +262,7 @@ export async function syncJobWalk(
   jobIds: string[],
   fetchFn: typeof fetch = fetch,
   syncBatchId?: string,
+  modifiedDateByJobId: Map<string, string> = new Map(),
 ): Promise<Map<string, string>> {
   const now = new Date().toISOString();
   const lastWalked = watermark?.last_walked_job_id ?? null;
@@ -219,6 +281,23 @@ export async function syncJobWalk(
     if (Date.now() >= deadline) break;
 
     const jobId = jobIds[i];
+
+    // D-15/D-16 pull scheduling: skip an unchanged, already-fully-pulled job rather
+    // than blanket re-pulling every job every run. A first-sight job (no prior
+    // acculynx_raw rows) always proceeds to the full walk below (D-15).
+    const { walk } = await shouldWalkJob(sb, jobId, modifiedDateByJobId.get(jobId));
+    if (!walk) {
+      // Still advance the watermark past a skipped job so resumption doesn't
+      // re-evaluate it every run within the same sweep.
+      await advanceWatermark(sb, {
+        account_key: acct.account_key,
+        resource_type: "job_walk",
+        last_walked_job_id: jobId,
+        last_sync_at: now,
+      });
+      continue;
+    }
+
     const encodedJobId = encodeURIComponent(jobId);
     const ctx = { ...ctxBase, job_id: jobId };
 
