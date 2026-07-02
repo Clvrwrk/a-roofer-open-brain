@@ -278,3 +278,96 @@ data."**
   it. `marginByRegion`'s `wichita` slice denominator dropped from 1,284 to 1,283 jobs
   (one closed job removed); the `unknown`-account slice dropped from 5,769 to 5,258
   (511 closed jobs with no resolvable `account_key`).
+
+## 2026-07-01 user-directed amendment #3 (checkpoint feedback round 3 — KPI/data-model rework)
+
+The round-3 human-verify checkpoint accepted the reworked layout ("layout accepted")
+but required a detailed KPI/data-model rework, verbatim spec supplied by the user
+(resolved via clarifying questions, then implemented exactly). This section
+supersedes round 2's exclusion rule and the flat per-location metrics; it does NOT
+change the layout system (toolbar/KPI-grid/expandable-rows) established in amendment
+#1.
+
+- **Exclusion rule changed: `dead`/`cancelled` replace `closed`/`paid in full`.**
+  Round 2's `EXCLUDED_MILESTONES` (`closed`, `paid in full`, `paid_in_full`) is
+  superseded — `closed` is no longer excluded; it is now its own visible queue
+  (below) with its AR outstanding shown. `EXCLUDED_MILESTONES` is now
+  `{ dead, cancelled }`, case-insensitive, applied at the same single filter point
+  (`excludeClosedAndPaidInFull()` — name retained for call-site continuity, semantics
+  updated) upstream of every KPI/chart/table/drill-down.
+- **Rep filter added.** A "Rep" `<select>` sits in `.epl-toolbar` alongside
+  Location/Type/Window, populated from `dashboard.knownReps` (distinct
+  `crm_pipeline.primary_salesperson` values present in the post-exclusion data).
+  Every KPI/chart/queue/drill-down obeys it. The rep value is data-driven (not a
+  fixed compile-time allowlist like account_key/window), so both the page and the
+  JSON route sanitize it (length cap + safe-character pattern) rather than
+  allowlist-match it — it is never built into a Supabase `.eq()`/`.in()` call, only
+  used for in-memory JS string-equality filtering, so there is no PostgREST
+  injection surface for the sanitizer to defend against; the check is defense in
+  depth.
+- **Assigned-rep field verified live:** `crm_pipeline.primary_salesperson` is the
+  ONLY populated assigned-rep-shaped field in production — `acculynx_jobs` (and its
+  `raw` AccuLynx API payload) carries no assigned-user/rep field at all (verified by
+  inspecting `raw`'s top-level keys across a 50-row sample: none match
+  assign/rep/owner/sales). Coverage: 5,959 of 7,053 crm_pipeline rows (84.5%)
+  overall; 1,416 of 1,670 rows (84.8%) after the dead/cancelled exclusion; 50
+  distinct reps post-exclusion. The Rep filter dropdown and the rep leaderboard both
+  key on this field.
+- **Queue model replaces the flat pipeline/sold/leads account-bar metrics.** Each
+  location row now shows five queue chips (Leads, Prospects, Approved, Invoiced,
+  Closed) via `computeQueueValues()`: Leads carry a count only (value intentionally
+  `null` — excluded from $ entirely); Prospects are counted/valued ONLY when
+  `primary_estimate_amount > 0` (their summed estimate value IS the headline
+  "Pipeline Value" pre-close KPI, via `preClosePipelineValue()`); Approved is
+  contract value of approved jobs with `completed` folded in (user decision);
+  Invoiced and Closed are contract value of their respective milestones. Closed's
+  AR outstanding renders via the existing per-location AR $ metric (live
+  `balance_due` is `$0` everywhere in production today — shown honestly as `$0`,
+  not hidden).
+- **KPI pills split Residential vs Commercial by ACCOUNT.** `segmentForAccountKey()`
+  classifies `multi_family_commercial` as the ONLY commercial account; every other
+  account (`insurance_program` + all six geo locations) is residential. Pipeline
+  Value, Sold Value, Jobs Sold, New Leads, Close Rate, and Margin % each render a
+  Res/Com two-column pill row (`.epl-kpi--split`/`.epl-kpi-split`) inside the same
+  dense, fixed-height `.epl-kpi` card (108px vs the base 92px — still never grows
+  with content). A new **Average Ticket** KPI was added: `computeAverageTicket()` =
+  (sum of contract value ÷ count) for jobs in the Approved queue (completed folded
+  in) whose approved/milestone/updated date falls in the selected window, computed
+  per segment.
+- **Close Rate is the user's exact count-based snapshot formula, ignoring the time
+  window.** `computeSnapshotCloseRate()` = count(Approved+Invoiced+Closed) ÷
+  count(Leads+Prospects+Approved+Invoiced+Closed), dead/cancelled already excluded,
+  `completed` counted inside Approved. This is a CURRENT SNAPSHOT — it does not use
+  `start`/`end` at all (user's explicit decision), unlike the pre-existing windowed
+  `computeCloseRate()` (still used for the Sold Value/Jobs Sold KPIs' windowed
+  counts). Computed per location (`LocationRollupRow.closeRateSnapshot`, shown on
+  each account bar) and per assigned rep (`RepLeaderboardRow.closeRateSnapshot`,
+  shown on the leaderboard); the KPI card shows the overall (residential/commercial
+  average) plus the item-4 Res/Com split.
+- **Compact currency formatting for charts and secondary numbers.** A new pure
+  `formatCompactCurrency()` renders $5K/$50K/$500K/$1M-style strings (never full
+  precision) — applied to: both Chart.js chart axis ticks and tooltip labels (via a
+  shared `ticks.callback`/`tooltip.callbacks.label`), the queue value chips on
+  account bars, and the Res/Com split pill values. Headline KPI numbers (the large
+  `.epl-kpi-val` figure) stay full-precision dollars per the user's explicit
+  exception. The client script (`executive-pipeline.ts`) carries its own copy of
+  the formatter (not imported — it is a browser bundle, mirrors the pure core
+  function's exact rounding/boundary behavior) so SSR and client re-renders never
+  disagree.
+- **Measured before/after (live prod DB, default "Last 7 Days" window, all
+  locations, round 2 -> round 3):** headline "Pipeline Value" KPI changes meaning
+  entirely — round 2's `pipelineValueTotal` was `$17,756,471.64` (all open jobs,
+  `contract_amount` or `primary_estimate_amount`, closed excluded); round 3's is
+  `$407,744.72` (prospects-with-an-estimate only, the new pre-close definition),
+  100% residential / $0 commercial in this window (no `multi_family_commercial`
+  prospect currently carries a `primary_estimate_amount > 0`). `closeRate` (the
+  legacy windowed KPI) is unchanged at leadCount 11 / soldCount 30 / soldValue
+  $6,082.28; the NEW snapshot close rate (`closeRateSplit`) is residential 58.9% /
+  commercial 0% (commercial has zero rows in any of the five queues in this slice).
+  `marginPctSplit` is 0%/0% in this window (no job in the filtered set today has
+  cost data via either the job-financials or invoice-cost path — the existing
+  "No cost data available" honesty caption still governs the overall Margin % card).
+  `averageTicket` is residential count=8/avgTicket=$0 (all 8 approved-in-window jobs
+  have `contract_amount = 0` in this data), commercial count=0. Full response
+  verified via `curl http://127.0.0.1:4321/api/executive/pipeline.json` against the
+  live prod DB in local dev.
