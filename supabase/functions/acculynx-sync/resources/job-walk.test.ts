@@ -112,7 +112,7 @@ const DEFAULT_USERS = [
 
 interface WalkSbOptions {
   users?: unknown[];
-  /** jobId -> newest prior acculynx_raw created_at (ISO string). Absent = first-sight. */
+  /** jobId -> newest prior acculynx_raw fetched_at (ISO string). Absent = first-sight. */
   priorRawArchiveByJobId?: Record<string, string>;
 }
 
@@ -154,8 +154,11 @@ function makeWalkSb(options: WalkSbOptions = {}) {
           return Promise.resolve({ data: users, error: null });
         }
         if (table === "acculynx_raw") {
-          // shouldWalkJob() queries: select("created_at").like("api_endpoint", `%/jobs/${jobId}%`)
-          //   .order("created_at", {ascending:false}).limit(1)
+          // shouldWalkJob() queries: select("fetched_at").like("api_endpoint", `%/jobs/${jobId}%`)
+          //   .order("fetched_at", {ascending:false}).limit(1) -- 07-09 live-fix: acculynx_raw's
+          // real timestamp column is `fetched_at`, not `created_at` (confirmed via
+          // information_schema against prod; the prior `created_at` column name silently
+          // broke this query in production, causing D-16 to never actually skip a job).
           return {
             like: (_col: string, pattern: string) => ({
               order: () => ({
@@ -163,8 +166,8 @@ function makeWalkSb(options: WalkSbOptions = {}) {
                   // Extract the jobId embedded in the LIKE pattern (%/jobs/{jobId}%).
                   const m = pattern.match(/\/jobs\/([^%]+)/);
                   const jobId = m?.[1];
-                  const createdAt = jobId ? priorRawArchiveByJobId[jobId] : undefined;
-                  const data = createdAt ? [{ created_at: createdAt }] : [];
+                  const fetchedAt = jobId ? priorRawArchiveByJobId[jobId] : undefined;
+                  const data = fetchedAt ? [{ fetched_at: fetchedAt }] : [];
                   return Promise.resolve({ data, error: null });
                 },
               }),

@@ -197,14 +197,21 @@ async function shouldWalkJob(
   jobId: string,
   modifiedDate: string | null | undefined,
 ): Promise<{ walk: boolean; reason: "first_sight" | "changed" | "unchanged" }> {
+  // acculynx_raw's timestamp column is `fetched_at`, not `created_at` (confirmed via
+  // information_schema against prod, 07-09 live-DB probe). Selecting a nonexistent column
+  // made this query fail silently every call (data always undefined/empty), so
+  // newestArchive was ALWAYS null and every job was misclassified as first_sight forever —
+  // D-16's change-driven skip never actually skipped a single job, meaning job-walk always
+  // consumed its full runtime budget and crm_pipeline was never reached (07-09 Task 1 probe:
+  // 3 consecutive wichita runs all logged crmPipeline:"skipped").
   const { data: priorRows } = await sb
     .from("acculynx_raw")
-    .select("created_at")
+    .select("fetched_at")
     .like("api_endpoint", `%/jobs/${jobId}%`)
-    .order("created_at", { ascending: false })
+    .order("fetched_at", { ascending: false })
     .limit(1);
 
-  const newestArchive = priorRows?.[0]?.created_at ?? null;
+  const newestArchive = priorRows?.[0]?.fetched_at ?? null;
   if (!newestArchive) {
     // D-15: no prior raw archive for this job at all — first-sight full pull.
     return { walk: true, reason: "first_sight" };
