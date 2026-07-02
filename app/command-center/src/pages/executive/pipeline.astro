@@ -42,13 +42,6 @@ const initialFilters: DashboardFilters = {
 
 const dashboard = await loadExecutivePipelineDashboard(initialFilters);
 
-const generatedAt = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  month: "short",
-}).format(new Date(dashboard.generatedAt));
-
 const ACCULYNX_JOB_BASE_URL = "https://proexteriors.acculynx.com/jobs";
 
 function formatCurrency(value: number) {
@@ -60,303 +53,272 @@ function formatTime(value: string | null) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-function formatRelative(value: string | null) {
-  if (!value) return "never";
+// One-line status strip (checkpoint rework directive 3) replaces the 9-pill wall.
+// Oldest sync among the known production locations; stale-count for the summary line.
+const oldestFreshness = dashboard.freshness.reduce<(typeof dashboard.freshness)[number] | null>((oldest, badge) => {
+  if (!badge.lastSyncAt) return oldest;
+  if (!oldest || !oldest.lastSyncAt) return badge;
+  return new Date(badge.lastSyncAt) < new Date(oldest.lastSyncAt) ? badge : oldest;
+}, null);
+
+function relativeHours(value: string | null) {
+  if (!value) return null;
   const ms = Date.now() - new Date(value).getTime();
-  const hours = Math.floor(ms / 3_600_000);
-  if (hours < 1) return "under an hour";
-  if (hours === 1) return "1h";
-  return `${hours}h`;
+  return Math.max(0, Math.floor(ms / 3_600_000));
 }
 
-function freshnessLabel(badge: (typeof dashboard.freshness)[number]) {
-  if (badge.tone === "ready") return `${badge.accountKey} · data as of ${formatTime(badge.lastSyncAt)}`;
-  return `${badge.accountKey} · stale — last synced ${formatRelative(badge.lastSyncAt)} ago`;
-}
+const staleCount = dashboard.freshness.filter((badge) => badge.tone !== "ready").length;
+const oldestHours = oldestFreshness ? relativeHours(oldestFreshness.lastSyncAt) : null;
+const overallTone = staleCount === 0 ? "ready" : dashboard.freshness.some((b) => b.tone === "critical") ? "critical" : "review";
+const statusStripText =
+  dashboard.status === "live"
+    ? `Data live${oldestHours !== null ? ` · oldest sync ${oldestHours}h ago` : ""}${
+        staleCount > 0 ? ` · ${staleCount} location${staleCount === 1 ? "" : "s"} stale` : ""
+      }`
+    : "Data unavailable — showing the last successful load.";
+
+const freshnessByAccount = new Map(dashboard.freshness.map((badge) => [badge.accountKey, badge]));
 
 const closeRatePct = (dashboard.closeRate.closeRate * 100).toFixed(0);
-const closeRateCaption = `${closeRatePct}% of jobs in ${dashboard.window.label} (${dashboard.closeRate.qualifier.replace("period-snapshot ratio", "period snapshot")})`;
+const closeRateCaption = `${closeRatePct}% of jobs in ${dashboard.window.label} (period snapshot)`;
 
-function jobDrillRecords(dimension: string, source: "region" | "office" | "commercialResidential" | "rep") {
-  // Drill-down job rows for a given breakdown slice — filtered client-side by the
-  // same dimension key the margin/breakdown row was computed against.
-  return dashboard.status === "live" ? { dimension, source } : { dimension, source };
-}
+const overallMargin = dashboard.marginByRegion.reduce(
+  (acc, row) => {
+    acc.covered += row.coverage.jobsWithCostData;
+    acc.total += row.coverage.totalJobsInSlice;
+    return acc;
+  },
+  { covered: 0, total: 0 },
+);
+const marginCaption =
+  overallMargin.covered === 0
+    ? "No cost data available yet"
+    : `${overallMargin.covered} of ${overallMargin.total} jobs have cost data`;
+const avgMarginPct =
+  overallMargin.covered > 0
+    ? dashboard.marginByRegion.reduce((sum, row) => sum + row.marginPct * row.coverage.jobsWithCostData, 0) / overallMargin.covered
+    : 0;
 
 function asData(value: unknown) {
   return JSON.stringify(value);
 }
+
+// Per-location rows drive the primary breakdown + D-09 drill-down (checkpoint rework
+// directive 6) — one row per production location (KNOWN_ACCOUNT_KEYS), not per margin
+// dimension, so location, margin coverage, and AR are all visible on one row.
+interface LocationRow {
+  accountKey: string;
+  pipelineValue: number;
+  soldValue: number;
+  leadCount: number;
+  marginPct: number;
+  coverageLabel: string;
+  arValue: number;
+  stale: boolean;
+}
+
+const marginByAccount = new Map(dashboard.marginByRegion.map((row) => [row.dimension, row]));
+const rollupByAccount = new Map(dashboard.locationRollup.map((row) => [row.accountKey, row]));
+
+const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
+  (key) => dashboard.filters.accountKey === "all" || dashboard.filters.accountKey === key,
+).map((accountKey) => {
+  const margin = marginByAccount.get(accountKey);
+  const freshness = freshnessByAccount.get(accountKey);
+  const rollup = rollupByAccount.get(accountKey);
+  return {
+    accountKey,
+    pipelineValue: rollup?.pipelineValue ?? 0,
+    soldValue: rollup?.soldValue ?? 0,
+    leadCount: rollup?.leadCount ?? 0,
+    marginPct: margin?.marginPct ?? 0,
+    coverageLabel: margin
+      ? margin.coverage.jobsWithCostData > 0
+        ? `${margin.coverage.jobsWithCostData}/${margin.coverage.totalJobsInSlice}`
+        : "no cost data"
+      : "no data",
+    arValue: rollup?.arValue ?? 0,
+    stale: freshness ? freshness.tone !== "ready" : false,
+  };
+});
 ---
 
 <AppShell title="Sales Pipeline" eyebrow="AccuLynx + Open Brain" activePage="executive">
-  <section class="snapshot-hero" aria-label="Executive sales pipeline summary">
-    <div>
-      <p class="eyebrow">Executive Sales Pipeline</p>
-      <h2>Cross-location pipeline value, close rate, and profitability-per-job — at a glance.</h2>
-    </div>
-    <div class="snapshot-health" aria-label="Freshness by location" data-freshness-strip>
-      {
-        dashboard.freshness.map((badge) => (
-          <span class="live-metric-card" data-tone={badge.tone} data-freshness-badge data-account-key={badge.accountKey}>
-            <span>{badge.accountKey}</span>
-            <small>{freshnessLabel(badge)}</small>
-          </span>
-        ))
-      }
-    </div>
-  </section>
+  <section class="epl" data-executive-pipeline>
+    {
+      dashboard.errors.length > 0 && (
+        <div class="snapshot-alert" role="status" data-dashboard-errors>
+          {dashboard.errors.map((error) => `${error} is unavailable right now — showing the last successful load.`).join(" ")}
+        </div>
+      )
+    }
 
-  {
-    dashboard.errors.length > 0 && (
-      <div class="snapshot-alert" role="status" data-dashboard-errors>
-        {dashboard.errors.map((error) => `${error} is unavailable right now — showing the last successful load.`).join(" ")}
+    <form class="epl-toolbar" aria-label="Global pipeline filters" data-filter-bar>
+      <label class="select-label">
+        <span>Location</span>
+        <select name="location" data-filter="location">
+          <option value="all" selected={dashboard.filters.accountKey === "all"}>All locations</option>
+          {
+            KNOWN_ACCOUNT_KEYS.map((key) => (
+              <option value={key} selected={dashboard.filters.accountKey === key}>
+                {key}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+      <label class="select-label">
+        <span>Type</span>
+        <select name="type" data-filter="type">
+          <option value="all" selected={dashboard.filters.commercialResidential === "all"}>All types</option>
+          {
+            COMMERCIAL_RESIDENTIAL_OPTIONS.map((option) => (
+              <option value={option} selected={dashboard.filters.commercialResidential === option}>
+                {option}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+      <label class="select-label">
+        <span>Window</span>
+        <select name="window" data-filter="window">
+          {
+            WINDOW_TOKENS.map((token) => (
+              <option value={token} selected={dashboard.filters.window === token}>
+                {WINDOW_LABELS[token]}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+      <span class="epl-spacer" />
+      <button type="button" class="segment" data-reset-filters>
+        Reset filters
+      </button>
+    </form>
+
+    <div class="epl-status" data-tone={overallTone} data-status-strip>
+      <span class="epl-status-dot" aria-hidden="true" />
+      <span data-status-text>{statusStripText}</span>
+    </div>
+
+    <section class="epl-kpis" aria-label="Topline KPIs" data-kpi-grid>
+      <div class="epl-kpi" data-kpi="pipeline-value">
+        <span class="epl-kpi-lab">Pipeline Value</span>
+        <strong class="epl-kpi-val" data-kpi-val="pipeline-value">{formatCurrency(dashboard.pipelineValueTotal)}</strong>
+        <small class="epl-kpi-sub">Cross-location, all open jobs</small>
       </div>
-    )
-  }
 
-  <form class="gap-filter-bar" aria-label="Global pipeline filters" data-filter-bar>
-    <label class="select-label">
-      <span>Location</span>
-      <select name="location" data-filter="location">
-        <option value="all" selected={dashboard.filters.accountKey === "all"}>All locations</option>
+      <div class="epl-kpi" data-kpi="sold-value">
+        <span class="epl-kpi-lab">Sold Value</span>
+        <strong class="epl-kpi-val" data-kpi-val="sold-value">{formatCurrency(dashboard.closeRate.soldValue)}</strong>
+        <small class="epl-kpi-sub">{dashboard.window.label}</small>
+      </div>
+
+      <div class="epl-kpi" data-kpi="jobs-sold">
+        <span class="epl-kpi-lab">Jobs Sold</span>
+        <strong class="epl-kpi-val" data-kpi-val="jobs-sold">{dashboard.closeRate.soldCount}</strong>
+        <small class="epl-kpi-sub" data-kpi-sub="jobs-sold">{closeRateCaption}</small>
+      </div>
+
+      <div class="epl-kpi" data-kpi="close-rate">
+        <span class="epl-kpi-lab">Close Rate</span>
+        <strong class="epl-kpi-val" data-kpi-val="close-rate">{closeRatePct}%</strong>
+        <small class="epl-kpi-sub">Period snapshot qualifier</small>
+      </div>
+
+      <div class="epl-kpi" data-kpi="new-leads">
+        <span class="epl-kpi-lab">New Leads</span>
+        <strong class="epl-kpi-val" data-kpi-val="new-leads">{dashboard.newLeadsCount}</strong>
+        <small class="epl-kpi-sub">{dashboard.window.label}</small>
+      </div>
+
+      <div class="epl-kpi" data-kpi="margin">
+        <span class="epl-kpi-lab">Margin %</span>
+        <strong class="epl-kpi-val" data-kpi-val="margin">{overallMargin.covered > 0 ? `${avgMarginPct.toFixed(0)}%` : "—"}</strong>
+        <small class="epl-kpi-sub" data-kpi-sub="margin">{marginCaption}</small>
+      </div>
+
+      <div class="epl-kpi" data-kpi="ar-outstanding">
+        <span class="epl-kpi-lab">AR Outstanding</span>
+        <strong class="epl-kpi-val" data-kpi-val="ar-outstanding">{formatCurrency(dashboard.arTotal)}</strong>
+        <small class="epl-kpi-sub">Across all reps</small>
+      </div>
+    </section>
+
+    <section class="live-metric-grid" aria-label="Pipeline charts" data-chart-grid style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+      <div class="live-metric-card epl-chart-card">
+        <span>Pipeline value by stage</span>
+        <div class="epl-chart-wrap">
+          <canvas id="pipeline-funnel-chart" data-chart="funnel" data-chart-data={asData(dashboard.funnel)} />
+        </div>
+      </div>
+
+      <div class="live-metric-card epl-chart-card">
+        <span>Rep leaderboard (sold value)</span>
+        <div class="epl-chart-wrap">
+          <canvas id="pipeline-leaderboard-chart" data-chart="leaderboard" data-chart-data={asData(dashboard.leaderboard)} />
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Locations" data-locations-section>
+      <div class="epl-locations" data-locations-list>
         {
-          KNOWN_ACCOUNT_KEYS.map((key) => (
-            <option value={key} selected={dashboard.filters.accountKey === key}>
-              {key}
-            </option>
+          locationRows.map((row) => (
+            <details class="epl-location" data-location-row data-account-key={row.accountKey}>
+              <summary>
+                <span class="epl-chev" aria-hidden="true">
+                  {"›"}
+                </span>
+                <span class="epl-location-name">{row.accountKey}</span>
+                {row.stale && <span class="epl-stale-marker">stale</span>}
+                <span class="epl-mini">
+                  <div>
+                    <strong>{formatCurrency(row.pipelineValue)}</strong>
+                    <span>Pipeline</span>
+                  </div>
+                  <div>
+                    <strong>{formatCurrency(row.soldValue)}</strong>
+                    <span>Sold</span>
+                  </div>
+                  <div>
+                    <strong>{row.leadCount}</strong>
+                    <span>Leads</span>
+                  </div>
+                  <div>
+                    <strong>{row.coverageLabel === "no cost data" || row.coverageLabel === "no data" ? "—" : `${row.marginPct.toFixed(0)}%`}</strong>
+                    <span>Margin · {row.coverageLabel}</span>
+                  </div>
+                  <div>
+                    <strong>{formatCurrency(row.arValue)}</strong>
+                    <span>AR</span>
+                  </div>
+                </span>
+                <span class="epl-bar" title={`${row.marginPct.toFixed(0)}% margin`}>
+                  <span class="epl-bar-fill" style={`width:${Math.max(0, Math.min(100, row.marginPct))}%`} />
+                </span>
+              </summary>
+              <div class="epl-location-body">
+                <div class="epl-jobs-table-wrap" data-jobs-wrap data-account-key={row.accountKey}>
+                  <p class="epl-jobs-loading" data-jobs-placeholder>Expand to load jobs&hellip;</p>
+                </div>
+              </div>
+            </details>
           ))
         }
-      </select>
-    </label>
-    <label class="select-label">
-      <span>Region</span>
-      <select name="region" data-filter="region">
-        <option value="all" selected={dashboard.filters.accountKey === "all"}>All regions</option>
-        {
-          KNOWN_ACCOUNT_KEYS.map((key) => (
-            <option value={key} selected={dashboard.filters.accountKey === key}>
-              {key}
-            </option>
-          ))
-        }
-      </select>
-    </label>
-    <label class="select-label">
-      <span>Type</span>
-      <select name="type" data-filter="type">
-        <option value="all" selected={dashboard.filters.commercialResidential === "all"}>All types</option>
-        {
-          COMMERCIAL_RESIDENTIAL_OPTIONS.map((option) => (
-            <option value={option} selected={dashboard.filters.commercialResidential === option}>
-              {option}
-            </option>
-          ))
-        }
-      </select>
-    </label>
-    <label class="select-label">
-      <span>Window</span>
-      <select name="window" data-filter="window">
-        {
-          WINDOW_TOKENS.map((token) => (
-            <option value={token} selected={dashboard.filters.window === token}>
-              {WINDOW_LABELS[token]}
-            </option>
-          ))
-        }
-      </select>
-    </label>
-    <button type="button" class="segment" data-reset-filters>
-      Reset filters
-    </button>
-  </form>
-
-  <section class="live-metric-grid" aria-label="Topline KPIs" data-kpi-grid>
-    <a
-      class="live-metric-card"
-      href="#pipeline-dashboard"
-      data-drilldown
-      data-kpi="funnel"
-      data-title="Pipeline value by stage"
-      data-value={formatCurrency(dashboard.pipelineValueTotal)}
-      data-caption="Cross-location funnel proxy"
-      data-records={asData(jobDrillRecords("funnel", "region"))}
-    >
-      <span>Pipeline value by stage</span>
-      <strong>{formatCurrency(dashboard.pipelineValueTotal)}</strong>
-      <small>Cross-location funnel — see chart below</small>
-      <canvas id="pipeline-funnel-chart" data-chart="funnel" data-chart-data={asData(dashboard.funnel)} height="160" />
-    </a>
-
-    <a
-      class="live-metric-card"
-      href="#pipeline-dashboard"
-      data-drilldown
-      data-kpi="jobs-sold"
-      data-title="Jobs sold"
-      data-value={String(dashboard.closeRate.soldCount)}
-      data-caption={closeRateCaption}
-      data-records={asData(jobDrillRecords("sold", "region"))}
-    >
-      <span>Jobs Sold + Close Rate</span>
-      <strong>{dashboard.closeRate.soldCount}</strong>
-      <small>{closeRateCaption}</small>
-    </a>
-
-    <a
-      class="live-metric-card"
-      href="#pipeline-dashboard"
-      data-drilldown
-      data-kpi="new-leads"
-      data-title="New leads volume"
-      data-value={String(dashboard.newLeadsCount)}
-      data-caption={`New leads in ${dashboard.window.label}`}
-      data-records={asData(jobDrillRecords("new-leads", "region"))}
-    >
-      <span>New Leads Volume</span>
-      <strong>{dashboard.newLeadsCount}</strong>
-      <small>New leads in {dashboard.window.label}, by location/source</small>
-    </a>
-
-    <a
-      class="live-metric-card"
-      href="#pipeline-dashboard"
-      data-drilldown
-      data-kpi="leaderboard"
-      data-title="Rep leaderboard + AR rollup"
-      data-value={formatCurrency(dashboard.arTotal)}
-      data-caption="AR rollup across all reps"
-      data-records={asData(dashboard.leaderboard)}
-    >
-      <span>Rep Leaderboard + AR Rollup</span>
-      <strong>{formatCurrency(dashboard.arTotal)}</strong>
-      <small>Top reps by sold value — see chart below</small>
-      <canvas id="pipeline-leaderboard-chart" data-chart="leaderboard" data-chart-data={asData(dashboard.leaderboard)} height="160" />
-    </a>
-  </section>
-
-  <section class="snapshot-section" aria-label="Profitability breakdowns" data-profitability-section>
-    <div class="snapshot-section-head">
-      <span aria-hidden="true">%</span>
-      <div>
-        <h3>Profitability Per Job</h3>
-        <p>Margin % first — job count is secondary. Never a bare percentage without coverage.</p>
       </div>
-    </div>
-
-    <div class="live-metric-grid" aria-label="Margin by region" data-breakdown="region">
-      {
-        dashboard.marginByRegion.map((row) => (
-          <a
-            class="live-metric-card"
-            href="#pipeline-dashboard"
-            data-drilldown
-            data-title={`Region: ${row.dimension}`}
-            data-value={row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "No cost data"}
-            data-caption={row.caption}
-            data-records={asData(jobDrillRecords(row.dimension, "region"))}
-          >
-            <span>{row.dimension}</span>
-            <strong>{row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "—"}</strong>
-            <small>{row.caption}</small>
-            <small>{row.coverage.totalJobsInSlice} jobs in slice</small>
-          </a>
-        ))
-      }
-    </div>
-
-    <div class="live-metric-grid" aria-label="Margin by commercial/residential" data-breakdown="commercial-residential">
-      {
-        dashboard.marginByCommercialResidential.map((row) => (
-          <a
-            class="live-metric-card"
-            href="#pipeline-dashboard"
-            data-drilldown
-            data-title={`Type: ${row.dimension}`}
-            data-value={row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "No cost data"}
-            data-caption={row.caption}
-            data-records={asData(jobDrillRecords(row.dimension, "commercialResidential"))}
-          >
-            <span>{row.dimension}</span>
-            <strong>{row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "—"}</strong>
-            <small>{row.caption}</small>
-            <small>{row.coverage.totalJobsInSlice} jobs in slice</small>
-          </a>
-        ))
-      }
-    </div>
-
-    <div class="live-metric-grid" aria-label="Margin by sales rep" data-breakdown="rep">
-      {
-        dashboard.marginByRep.map((row) => (
-          <a
-            class="live-metric-card"
-            href="#pipeline-dashboard"
-            data-drilldown
-            data-title={`Rep: ${row.dimension}`}
-            data-value={row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "No cost data"}
-            data-caption={row.caption}
-            data-records={asData(jobDrillRecords(row.dimension, "rep"))}
-          >
-            <span>{row.dimension}</span>
-            <strong>{row.coverage.jobsWithCostData > 0 ? `${row.marginPct.toFixed(0)}%` : "—"}</strong>
-            <small>{row.caption}</small>
-            <small>{row.coverage.totalJobsInSlice} jobs in slice</small>
-          </a>
-        ))
-      }
-    </div>
-  </section>
-
-  <section class="snapshot-layout" aria-label="Two-level drill-down">
-    <article class="snapshot-report" aria-label="Pipeline report">
-      <header class="snapshot-report-head">
-        <span class="snapshot-brand">Pro Exteriors Open Brain</span>
-        <h2>Executive Sales Pipeline</h2>
-        <p>{dashboard.window.label}</p>
-        <small>Generated {generatedAt}</small>
-      </header>
-
-      <div class="snapshot-section">
-        <p>Click any KPI or breakdown card above to view its filtered job-level table. Each row links out to AccuLynx.</p>
-      </div>
-    </article>
-
-    <aside class="snapshot-dashboard" id="pipeline-dashboard" aria-label="Active drilldown">
-      <div class="snapshot-dashboard-head">
-        <p class="eyebrow">View Jobs</p>
-        <h2 data-dashboard-title>Pipeline value by stage</h2>
-        <strong data-dashboard-value>{formatCurrency(dashboard.pipelineValueTotal)}</strong>
-        <span data-dashboard-caption>Cross-location funnel proxy</span>
-      </div>
-
-      <div class="snapshot-record-count">
-        <strong data-dashboard-count>0</strong>
-        <span>records in the selected slice</span>
-      </div>
-
-      <div class="snapshot-record-table-wrap">
-        <table class="snapshot-record-table">
-          <thead>
-            <tr>
-              <th scope="col">Job</th>
-              <th scope="col">Location</th>
-              <th scope="col">Stage</th>
-              <th scope="col">Value</th>
-              <th scope="col">AccuLynx</th>
-            </tr>
-          </thead>
-          <tbody data-dashboard-rows>
-            <tr>
-              <td colspan="5">No jobs match these filters</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </aside>
+    </section>
   </section>
 
   <script type="application/json" id="dashboard-data" set:html={JSON.stringify(dashboard)} />
   <script type="application/json" id="dashboard-config" set:html={JSON.stringify({ acculynxJobBaseUrl: ACCULYNX_JOB_BASE_URL })} />
   <script src="/src/scripts/executive-pipeline.ts"></script>
 </AppShell>
+
+<style>
+  .epl {
+    display: block;
+  }
+</style>

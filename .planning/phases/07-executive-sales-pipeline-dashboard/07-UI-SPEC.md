@@ -185,3 +185,55 @@ This reuses the exact 3-tone vocabulary already established by `LiveMetricGrid.a
 - [ ] Dimension 6 Registry Safety: PASS
 
 **Approval:** pending
+
+---
+
+## 2026-07-01 user-directed amendments (checkpoint feedback)
+
+The Task 3 human-verify checkpoint on 07-02 came back rejected ("grade F") with specific,
+verbatim directives. This section amends the contract above; where it conflicts with the
+original Layout & Composition / Copywriting sections, THIS section governs for 07-02 and
+any downstream plan touching `/executive/pipeline`.
+
+- **Hero/editorial text block removed entirely.** The original "Cross-location pipeline
+  value, close rate, and profitability-per-job — at a glance." headline (and the
+  `.snapshot-hero` wrapper) is gone. The page starts directly with the compact toolbar;
+  the `AppShell` page title ("Sales Pipeline") carries the labeling.
+- **Layout system changed from a bespoke `.snapshot-*`/`.live-metric-*` composition to
+  directly copying the vetted Invoice Audit system** (`app/command-center/src/pages/
+  accounting/invoice-audit.astro`'s `.iv-toolbar` / `.iv-kpis` / `.iv-office` pattern,
+  re-expressed as `.epl-toolbar` / `.epl-kpis` / `.epl-location` using the app's existing
+  design tokens, not a new palette): a compact single-row toolbar, a dense fixed-height
+  KPI stat-card grid (number-first, one small caption line, cards that NEVER grow with
+  content), a one-line status strip, and expandable per-location rows with inline
+  right-aligned metrics + a small progress bar. This supersedes the "9 freshness pills +
+  separate KPI row + separate profitability-breakdown grid + separate two-panel
+  drill-down" structure originally specified above.
+- **The 9-pill freshness wall is replaced by a one-line status strip**
+  ("● Data live · oldest sync {X}h ago · {N} locations stale") plus a small `stale`
+  marker inline on the affected per-location row(s) — never a wall of per-location pills.
+  The sandbox/non-production account is excluded from freshness display entirely (it is
+  not a business location); freshness now only considers `KNOWN_ACCOUNT_KEYS`.
+- **Chart count reduced to 2, both above the fold, both in a fixed-height wrapper**
+  (`.epl-chart-wrap`, ~220px canvas height inside a ~280px card) so
+  `maintainAspectRatio:false` + `responsive:true` cannot grow the surrounding card
+  unboundedly (the root cause of the "cards just never stop expanding" defect — no CSS
+  height was constraining the chart's parent). Funnel-by-stage and rep-leaderboard are
+  the only two charts; tables/rows carry the rest of the breakdown, per the Invoice Audit
+  precedent ("tables/rows beat chart walls for this app").
+- **Per-location expandable rows are now the primary breakdown AND the D-09 two-level
+  drill-down**, replacing the separate "profitability breakdown section" +
+  "two-level drill-down panel" from the original Layout & Composition Contract. One row
+  per production location (`KNOWN_ACCOUNT_KEYS`): inline right-aligned pipeline $, sold
+  $, leads, margin % + coverage caption, AR $, and a stale marker. Expanding a row lazily
+  fetches its job-level table from `/api/executive/pipeline.json?jobs=1&location=
+  {accountKey}&type={commercialResidential}` (new allowlisted params — `location` is
+  validated against the 8 `KNOWN_ACCOUNT_KEYS` before any query is built; the route
+  stays behind the WorkOS middleware gate, not added to any public allowlist). KPI-card
+  clicks scroll/highlight the location-rows section rather than opening a separate panel.
+  Job rows still link out to AccuLynx; honesty captions (margin coverage, close-rate
+  qualifier) render as small inline text, never prose paragraphs.
+- The mandatory honesty contracts (margin coverage caption, "No cost data available",
+  close-rate "period snapshot" qualifier) and the XSS discipline (AccuLynx free text via
+  `textContent`/attribute-safe DOM construction, never `innerHTML`) are unchanged and
+  still apply under the new layout.

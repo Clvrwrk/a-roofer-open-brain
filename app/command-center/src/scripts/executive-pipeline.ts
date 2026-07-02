@@ -62,6 +62,15 @@ interface CloseRateResult {
   qualifier: string;
 }
 
+interface LocationRollupRow {
+  accountKey: string;
+  pipelineValue: number;
+  soldValue: number;
+  soldCount: number;
+  leadCount: number;
+  arValue: number;
+}
+
 interface ExecutivePipelineDashboard {
   status: "live" | "degraded" | "unconfigured";
   generatedAt: string;
@@ -76,9 +85,19 @@ interface ExecutivePipelineDashboard {
   marginByCommercialResidential: MarginByDimensionRow[];
   marginByRep: MarginByDimensionRow[];
   leaderboard: LeaderboardRow[];
+  locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
   pipelineValueTotal: number;
+}
+
+interface JobDrillRow {
+  acculynxJobId: string | null;
+  jobName: string;
+  accountKey: string;
+  milestone: string;
+  contractAmount: number;
+  salesperson: string;
 }
 
 interface DashboardConfig {
@@ -113,6 +132,7 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   marginByCommercialResidential: [],
   marginByRep: [],
   leaderboard: [],
+  locationRollup: [],
   arTotal: 0,
   freshness: [],
   pipelineValueTotal: 0,
@@ -134,7 +154,10 @@ function formatCurrency(value: number) {
 const CHART_PALETTE = ["#11133f", "#3b6b4c", "#0066cc", "#eaa221", "#c22326"];
 
 // ---------------------------------------------------------------------------
-// Chart.js mounts (client-side only — Pitfall 6)
+// Chart.js mounts (client-side only — Pitfall 6). Canvases live inside a
+// fixed-height `.epl-chart-wrap` div (CSS-constrained), so responsive +
+// maintainAspectRatio:false cannot grow the surrounding card unboundedly
+// (checkpoint rework directive 5 — the cards-never-stop-expanding bug).
 // ---------------------------------------------------------------------------
 
 let funnelChart: Chart | null = null;
@@ -179,7 +202,7 @@ function mountLeaderboardChart(rows: LeaderboardRow[]) {
   const canvas = document.getElementById("pipeline-leaderboard-chart") as HTMLCanvasElement | null;
   if (!canvas) return;
 
-  const top = rows.slice(0, 10);
+  const top = rows.slice(0, 8);
   const labels = top.map((row) => row.salesperson);
   const data = top.map((row) => row.soldValue);
 
@@ -216,129 +239,148 @@ function mountCharts(dashboard: ExecutivePipelineDashboard) {
 }
 
 // ---------------------------------------------------------------------------
-// Two-level drill-down (D-09) — extends weekly-snapshot.ts's activate() pattern
+// KPI-click -> scroll/highlight the relevant location rows (D-09 primary
+// breakdown lives in the per-location expandable rows now, not a separate
+// drill-down panel — checkpoint rework directive 6).
 // ---------------------------------------------------------------------------
 
-const dashboardTitle = document.querySelector<HTMLElement>("[data-dashboard-title]");
-const dashboardValue = document.querySelector<HTMLElement>("[data-dashboard-value]");
-const dashboardCaption = document.querySelector<HTMLElement>("[data-dashboard-caption]");
-const dashboardCount = document.querySelector<HTMLElement>("[data-dashboard-count]");
-const dashboardRows = document.querySelector<HTMLTableSectionElement>("[data-dashboard-rows]");
+const locationsSection = document.querySelector<HTMLElement>("[data-locations-section]");
 
-function parseDrillTarget(trigger: HTMLElement): { dimension: string; source: string } | null {
-  try {
-    const parsed = JSON.parse(trigger.dataset.records ?? "null");
-    if (parsed && typeof parsed === "object" && "dimension" in parsed) {
-      return parsed as { dimension: string; source: string };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+function highlightLocations() {
+  if (!locationsSection) return;
+  locationsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  locationsSection.setAttribute("data-flash", "true");
+  window.setTimeout(() => locationsSection.removeAttribute("data-flash"), 900);
 }
 
-interface DrillJobRow {
-  jobName: string;
-  location: string;
-  stage: string;
-  value: string;
-  acculynxJobId: string | null;
+const kpiCards = Array.from(document.querySelectorAll<HTMLElement>("[data-kpi]"));
+for (const card of kpiCards) {
+  card.addEventListener("click", () => highlightLocations());
+  card.style.cursor = "pointer";
 }
 
-// The dashboard payload doesn't currently carry raw per-job rows to the client
-// (only aggregates) — the leaderboard array carries salesperson-level rows we
-// can render directly; for dimension-based breakdown clicks we render an
-// honest empty-state until a future plan wires per-job row passthrough. Never
-// fabricate synthetic job rows from aggregate data.
-function rowsForLeaderboard(row: LeaderboardRow): DrillJobRow[] {
-  return [
-    {
-      jobName: row.salesperson,
-      location: "—",
-      stage: "sold (window)",
-      value: formatCurrency(row.soldValue),
-      acculynxJobId: null,
-    },
-  ];
-}
+// ---------------------------------------------------------------------------
+// Per-location on-demand job table (D-09 drill-down) — extends the .iv-office
+// expandable-row pattern: expanding a row fetches its job-level table from
+// /api/executive/pipeline.json?jobs=1&location=...&type=... and renders it via
+// DOM nodes (textContent only — T-07-05, never innerHTML with AccuLynx free text).
+// ---------------------------------------------------------------------------
 
-function renderDrillRows(rows: DrillJobRow[]) {
-  if (!dashboardRows) return;
-  dashboardRows.replaceChildren();
+const locationDetailsList = Array.from(document.querySelectorAll<HTMLDetailsElement>("[data-location-row]"));
+const loadedLocations = new Set<string>();
 
-  if (rows.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 5;
-    cell.textContent = "No jobs match these filters";
-    row.append(cell);
-    dashboardRows.append(row);
+function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[]) {
+  wrap.replaceChildren();
+
+  if (jobs.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "epl-jobs-empty";
+    empty.textContent = "No jobs match these filters";
+    wrap.append(empty);
     return;
   }
 
-  for (const record of rows) {
+  const table = document.createElement("table");
+  table.className = "epl-jobs-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Job", "Stage", "Rep", "Value", "AccuLynx"]) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = label;
+    headRow.append(th);
+  }
+  thead.append(headRow);
+  table.append(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const job of jobs) {
     const tr = document.createElement("tr");
 
     const jobCell = document.createElement("td");
-    jobCell.textContent = record.jobName;
-
-    const locationCell = document.createElement("td");
-    locationCell.textContent = record.location;
+    jobCell.textContent = job.jobName;
 
     const stageCell = document.createElement("td");
-    stageCell.textContent = record.stage;
+    stageCell.textContent = job.milestone;
+
+    const repCell = document.createElement("td");
+    repCell.textContent = job.salesperson;
 
     const valueCell = document.createElement("td");
-    valueCell.textContent = record.value;
+    valueCell.className = "num";
+    valueCell.textContent = formatCurrency(job.contractAmount);
 
     const linkCell = document.createElement("td");
-    if (record.acculynxJobId) {
+    if (job.acculynxJobId) {
       const link = document.createElement("a");
-      link.href = `${config.acculynxJobBaseUrl}/${record.acculynxJobId}`;
+      link.href = `${config.acculynxJobBaseUrl}/${job.acculynxJobId}`;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      // Untrusted AccuLynx free text renders via textContent only — never innerHTML.
       link.textContent = "Open in AccuLynx";
       linkCell.append(link);
     } else {
       linkCell.textContent = "—";
     }
 
-    tr.append(jobCell, locationCell, stageCell, valueCell, linkCell);
-    dashboardRows.append(tr);
+    tr.append(jobCell, stageCell, repCell, valueCell, linkCell);
+    tbody.append(tr);
+  }
+  table.append(tbody);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "epl-jobs-table-wrap";
+  tableWrap.append(table);
+  wrap.append(tableWrap);
+}
+
+async function loadLocationJobs(details: HTMLDetailsElement) {
+  const accountKey = details.dataset.accountKey;
+  if (!accountKey) return;
+
+  const wrap = details.querySelector<HTMLElement>("[data-jobs-wrap]");
+  if (!wrap) return;
+
+  if (loadedLocations.has(accountKey)) return;
+  loadedLocations.add(accountKey);
+
+  const loading = document.createElement("p");
+  loading.className = "epl-jobs-loading";
+  loading.textContent = "Loading jobs…";
+  wrap.replaceChildren(loading);
+
+  try {
+    const params = new URLSearchParams({ jobs: "1", location: accountKey });
+    if (currentDashboard.filters.commercialResidential && currentDashboard.filters.commercialResidential !== "all") {
+      params.set("type", currentDashboard.filters.commercialResidential);
+    }
+    const response = await fetch(`/api/executive/pipeline.json?${params.toString()}`, {
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) {
+      loadedLocations.delete(accountKey);
+      wrap.replaceChildren();
+      const failed = document.createElement("p");
+      failed.className = "epl-jobs-empty";
+      failed.textContent = "Jobs are unavailable right now — try again shortly.";
+      wrap.append(failed);
+      return;
+    }
+    const result = (await response.json()) as { status: string; jobs: JobDrillRow[] };
+    renderJobsTable(wrap, result.jobs ?? []);
+  } catch {
+    loadedLocations.delete(accountKey);
+    wrap.replaceChildren();
+    const failed = document.createElement("p");
+    failed.className = "epl-jobs-empty";
+    failed.textContent = "Jobs are unavailable right now — try again shortly.";
+    wrap.append(failed);
   }
 }
 
-const triggers = Array.from(document.querySelectorAll<HTMLElement>("[data-drilldown]"));
-
-function activateTrigger(trigger: HTMLElement) {
-  const title = trigger.dataset.title ?? "Pipeline value by stage";
-  const value = trigger.dataset.value ?? "";
-  const caption = trigger.dataset.caption ?? "Filtered dashboard";
-  const target = parseDrillTarget(trigger);
-
-  for (const item of triggers) item.removeAttribute("aria-current");
-  trigger.setAttribute("aria-current", "true");
-
-  if (dashboardTitle) dashboardTitle.textContent = title;
-  if (dashboardValue) dashboardValue.textContent = value;
-  if (dashboardCaption) dashboardCaption.textContent = caption;
-
-  let rows: DrillJobRow[] = [];
-  if (target?.source === "leaderboard" || trigger.dataset.kpi === "leaderboard") {
-    rows = currentDashboard.leaderboard.flatMap(rowsForLeaderboard);
-  }
-
-  if (dashboardCount) dashboardCount.textContent = String(rows.length);
-  renderDrillRows(rows);
-}
-
-for (const trigger of triggers) {
-  trigger.addEventListener("click", (event) => {
-    // KPI/chart-segment triggers stay on-page (in-place drill-down swap) — never
-    // a full navigation/reload (D-11, UI-SPEC Auto-refresh & filter-change UX).
-    event.preventDefault();
-    activateTrigger(trigger);
+for (const details of locationDetailsList) {
+  details.addEventListener("toggle", () => {
+    if (details.open) void loadLocationJobs(details);
   });
 }
 
@@ -349,6 +391,8 @@ for (const trigger of triggers) {
 const filterForm = document.querySelector<HTMLFormElement>("[data-filter-bar]");
 const kpiGrid = document.querySelector<HTMLElement>("[data-kpi-grid]");
 const resetButton = document.querySelector<HTMLButtonElement>("[data-reset-filters]");
+const statusText = document.querySelector<HTMLElement>("[data-status-text]");
+const statusStrip = document.querySelector<HTMLElement>("[data-status-strip]");
 
 function currentFilterParams(): URLSearchParams {
   const params = new URLSearchParams();
@@ -360,6 +404,55 @@ function currentFilterParams(): URLSearchParams {
     }
   }
   return params;
+}
+
+function updateKpiCard(kpi: string, value: string, sub?: string) {
+  const valueEl = document.querySelector<HTMLElement>(`[data-kpi-val="${kpi}"]`);
+  if (valueEl) valueEl.textContent = value;
+  if (sub !== undefined) {
+    const subEl = document.querySelector<HTMLElement>(`[data-kpi-sub="${kpi}"]`);
+    if (subEl) subEl.textContent = sub;
+  }
+}
+
+function updateStatusStrip(dashboard: ExecutivePipelineDashboard) {
+  if (!statusText || !statusStrip) return;
+
+  const readyBadges = dashboard.freshness.filter((badge) => badge.tone === "ready");
+  const staleCount = dashboard.freshness.length - readyBadges.length;
+  const oldest = dashboard.freshness.reduce<FreshnessBadge | null>((acc, badge) => {
+    if (!badge.lastSyncAt) return acc;
+    if (!acc || !acc.lastSyncAt) return badge;
+    return new Date(badge.lastSyncAt) < new Date(acc.lastSyncAt) ? badge : acc;
+  }, null);
+  const oldestHours = oldest?.lastSyncAt ? Math.max(0, Math.floor((Date.now() - new Date(oldest.lastSyncAt).getTime()) / 3_600_000)) : null;
+
+  const tone = staleCount === 0 ? "ready" : dashboard.freshness.some((b) => b.tone === "critical") ? "critical" : "review";
+  statusStrip.setAttribute("data-tone", tone);
+
+  statusText.textContent =
+    dashboard.status === "live"
+      ? `Data live${oldestHours !== null ? ` · oldest sync ${oldestHours}h ago` : ""}${
+          staleCount > 0 ? ` · ${staleCount} location${staleCount === 1 ? "" : "s"} stale` : ""
+        }`
+      : "Data unavailable — showing the last successful load.";
+}
+
+function renderKpis(dashboard: ExecutivePipelineDashboard) {
+  const closeRatePct = (dashboard.closeRate.closeRate * 100).toFixed(0);
+
+  updateKpiCard("pipeline-value", formatCurrency(dashboard.pipelineValueTotal));
+  updateKpiCard("sold-value", formatCurrency(dashboard.closeRate.soldValue));
+  updateKpiCard("jobs-sold", String(dashboard.closeRate.soldCount), `${closeRatePct}% of jobs in ${dashboard.window.label} (period snapshot)`);
+  updateKpiCard("close-rate", `${closeRatePct}%`);
+  updateKpiCard("new-leads", String(dashboard.newLeadsCount));
+  updateKpiCard("ar-outstanding", formatCurrency(dashboard.arTotal));
+
+  const covered = dashboard.marginByRegion.reduce((sum, row) => sum + row.coverage.jobsWithCostData, 0);
+  const total = dashboard.marginByRegion.reduce((sum, row) => sum + row.coverage.totalJobsInSlice, 0);
+  const avgMargin =
+    covered > 0 ? dashboard.marginByRegion.reduce((sum, row) => sum + row.marginPct * row.coverage.jobsWithCostData, 0) / covered : 0;
+  updateKpiCard("margin", covered > 0 ? `${avgMargin.toFixed(0)}%` : "—", covered === 0 ? "No cost data available yet" : `${covered} of ${total} jobs have cost data`);
 }
 
 async function refetchDashboard(params: URLSearchParams, options: { preserveDrilldown?: boolean } = {}) {
@@ -374,12 +467,19 @@ async function refetchDashboard(params: URLSearchParams, options: { preserveDril
     const dashboard = (await response.json()) as ExecutivePipelineDashboard;
     currentDashboard = dashboard;
     mountCharts(dashboard);
+    renderKpis(dashboard);
+    updateStatusStrip(dashboard);
 
     // Silent poll and filter changes both re-render in place; the poll path
     // (preserveDrilldown) must NOT reset the user's active filters or close an
-    // open drill-down (D-11 / UI-SPEC Auto-refresh & filter-change UX).
+    // open drill-down (D-11 / UI-SPEC Auto-refresh & filter-change UX). Filter
+    // changes DO invalidate the per-location job cache since the filter (type)
+    // affects which jobs a location row would show.
     if (!options.preserveDrilldown) {
-      window.location.hash = "";
+      loadedLocations.clear();
+      for (const details of locationDetailsList) {
+        if (details.open) void loadLocationJobs(details);
+      }
     }
   } catch {
     // Network/parse failure: leave the last-good render in place (never crash the tab).
