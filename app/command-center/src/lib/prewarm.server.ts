@@ -2,6 +2,7 @@ import type { CommandCenterActor } from "@lib/access-control";
 import { persistActivityRollup } from "@lib/activity-rollups.server";
 import { loadAgreementGapSurface } from "@lib/abc-price-gaps";
 import { loadEstimateAudit } from "@lib/estimate-audit";
+import { loadExecutivePipelineDashboard } from "@lib/executive-pipeline";
 import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
 import { loadCommandCenterSurface } from "@lib/live-work";
 import { loadOrderAudit } from "@lib/order-audit";
@@ -9,7 +10,6 @@ import { loadPriceListCoverage } from "@lib/price-list-coverage";
 import { loadPriceListReviewHierarchy } from "@lib/price-list-review-hierarchy";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { loadVendorTerritorySurface } from "@lib/vendor-territories";
-import { loadWeeklySnapshot } from "@lib/weekly-snapshot";
 
 let prewarmStarted = false;
 let warmInFlight: Promise<CacheWarmResult[]> | null = null;
@@ -42,7 +42,7 @@ interface ActivityInput {
 const warmTargets: Array<{ name: string; run: () => Promise<unknown> }> = [
   { name: "command_center", run: () => loadCommandCenterSurface() },
   { name: "vendor_territories", run: () => loadVendorTerritorySurface() },
-  { name: "weekly_snapshot", run: () => loadWeeklySnapshot() },
+  { name: "executive_pipeline", run: () => loadExecutivePipelineDashboard() },
   { name: "agreement_gaps", run: () => loadAgreementGapSurface() },
   { name: "invoice_audit_summary", run: () => loadInvoiceAuditSummary(undefined, { force: true }) },
   { name: "price_list_review", run: () => loadPriceListReviewHierarchy() },

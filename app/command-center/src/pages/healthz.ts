@@ -54,7 +54,7 @@ export const GET: APIRoute = async () => {
         liveWorkItems: liveSurface?.items.length ?? 0,
         liveSurfaceStatus: liveSurface?.status ?? (supabase.configured ? "degraded" : "unconfigured"),
         liveSurfaceErrors: liveSurface?.errors ?? [],
-        requiredRoutes: ["/", "/weekly-snapshot", "/api/agent/work-queue"],
+        requiredRoutes: ["/", "/executive/pipeline", "/api/agent/work-queue"],
         trackedAgents: agentRuntimeStatuses.length,
         workOsConfigured: isWorkOsConfigured(),
         supabaseConfigured: supabase.configured,

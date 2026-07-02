@@ -92,7 +92,7 @@ export const navDepartments: NavDepartment[] = [
     icon: "executive",
     items: [
       { label: "Overview", href: "/executive", status: "built" },
-      { label: "Weekly Snapshot", href: "/weekly-snapshot", status: "built" },
+      { label: "Sales Pipeline", href: "/executive/pipeline", status: "built" },
     ],
   },
   {

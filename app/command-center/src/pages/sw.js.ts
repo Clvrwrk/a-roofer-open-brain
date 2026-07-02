@@ -10,7 +10,7 @@ const PAGE_ROUTES = [
   "/accounting/price-list/review",
   "/operations/order-audit",
   "/operations/estimate-audit",
-  "/weekly-snapshot",
+  "/executive/pipeline",
   "/accounting/vendor-regions",
   "/accounting",
   "/operations",

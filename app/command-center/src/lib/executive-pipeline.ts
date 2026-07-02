@@ -302,7 +302,8 @@ export function segmentForAccountKey(accountKey: string): Segment {
 }
 
 // ---------------------------------------------------------------------------
-// Shared helpers (copied verbatim / adapted from weekly-snapshot.ts)
+// Shared helpers (originally copied verbatim / adapted from the now-retired
+// weekly snapshot loader — see 07-03-SUMMARY.md for the D-02 cutover)
 // ---------------------------------------------------------------------------
 
 function toNumber(value: unknown): number {
@@ -397,7 +398,8 @@ export function formatCompactCurrency(value: number): string {
 }
 
 /** Mandatory pagination helper (RESEARCH.md Pattern 3 / Pitfall 3) — copied verbatim
- * from weekly-snapshot.ts's selectAll, since it is not exported from that module. */
+ * from the now-retired weekly snapshot loader's selectAll, since it was not exported
+ * from that module (see 07-03-SUMMARY.md for the D-02 cutover). */
 async function selectAll<T>(
   client: SupabaseClient,
   table: string,
