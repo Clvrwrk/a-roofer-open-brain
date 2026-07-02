@@ -224,11 +224,25 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: TBD
+**Plans**: 4 plans (4 waves)
 
 Plans:
 
-- [ ] 07-01: TBD (set during planning)
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Data layer: install chart.js@4.5.1 (D-08) + `lib/executive-pipeline.ts` loader with a Supabase-free pure core (funnel, close-rate proxy, margin+coverage, region/office via account_key join, freshness) unit-tested per VALIDATION Wave 0
+
+**Wave 2** *(blocked on 07-01)*
+
+- [ ] 07-02-PLAN.md — UI surface: `executive/pipeline.astro` SSR page (D-01) + `api/executive/pipeline.json` (filter-allowlisted, WorkOS-gated) + `scripts/executive-pipeline.ts` (Chart.js mount, D-13 filter bar, D-09 drill-down, D-11 5-min poll); human-verify checkpoint
+
+**Wave 3** *(blocked on 07-01/02)*
+
+- [ ] 07-03-PLAN.md — D-02 cutover: delete 7 weekly-snapshot files + retire the `[slug]` stub; rewire nav/prewarm/AppShell/healthz/sw to `/executive/pipeline`; build + full suite green (zero dangling imports)
+
+**Wave 4** *(blocked on 07-03 — human-gated deploy)*
+
+- [ ] 07-04-PLAN.md — OKF dashboard spec (D-07) + explain-then-ship deploy + live verify (SC4: buildCommit flip, `/weekly-snapshot` 404s); human-verify checkpoint
 
 ## Progress
 
