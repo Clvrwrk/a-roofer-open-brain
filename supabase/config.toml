@@ -411,3 +411,13 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# acculynx-webhook (Phase 7, plan 07-08, D-17): a public-facing receiver for AccuLynx
+# webhook POSTs. AccuLynx cannot send a Supabase JWT, so the platform's default
+# verify_jwt=true would reject every delivery. Auth is instead the receiver's own
+# shared-secret-path mechanism (URL token + optional subscriptionId, both constant-time
+# compared — see handler.ts). Deployed with --no-verify-jwt (2026-07-02); this section
+# persists that setting so a future `supabase functions deploy` without the flag does not
+# silently re-enable JWT verification and break the live subscription.
+[functions.acculynx-webhook]
+verify_jwt = false

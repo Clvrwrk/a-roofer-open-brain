@@ -6,4 +6,5 @@ How AccuLynx data gets into the brain, and how the API surface is mapped.
 * [Read-Capability Sweep](read-sweep.md) - the sandbox-only endpoint-discovery harness
 * [Write-Sweep](write-sweep.md) - the sandbox write red-team harness (Phase 4)
 * [Write-Action](write-action.md) - the human-gated enqueue → approve → execute → audit loop (Phase 5)
+* [Webhooks](webhooks.md) - the change-driven trigger layer (D-17): sandbox-proven receiver, human-gated prod subscription (Phase 7)
 * [Runbook](runbook.md) - ingestion recovery procedures
