@@ -24,6 +24,24 @@ const KNOWN_COMMERCIAL_RESIDENTIAL = new Set<string>([
   "uncategorized",
 ]);
 
+// Checkpoint round 3, item 1/6: the Rep filter is data-driven (crm_pipeline.primary_
+// salesperson values are not a fixed compile-time set like account_key/window). It is
+// never built into a Supabase .eq()/.in() call — the loader/jobRowsForLocation only
+// ever use it for a plain in-memory JS string-equality filter (see executive-pipeline.ts:
+// deriveSegment/jobRowsForLocation), so there is no PostgREST/SQL injection surface for
+// T-07-04 to exploit. Defense in depth: reject anything absurdly long or containing
+// characters that could not appear in a real AccuLynx salesperson name.
+const MAX_REP_LENGTH = 120;
+const SAFE_REP_PATTERN = /^[\w .,'’&()/-]+$/u;
+
+function sanitizeRep(value: string | null): string | "all" | undefined {
+  if (!value) return undefined;
+  if (value === "all") return "all";
+  if (value.length > MAX_REP_LENGTH) return undefined;
+  if (!SAFE_REP_PATTERN.test(value)) return undefined;
+  return value;
+}
+
 function pickAllowlisted<T extends string>(value: string | null, allowed: Set<T>): T | undefined {
   if (!value) return undefined;
   return allowed.has(value as T) ? (value as T) : undefined;
@@ -41,6 +59,7 @@ export const GET: APIRoute = async ({ url }) => {
     params.get("type") === "all"
       ? "all"
       : pickAllowlisted(params.get("type"), KNOWN_COMMERCIAL_RESIDENTIAL);
+  const rep = sanitizeRep(params.get("rep"));
 
   // Per-location job drill-down (D-09 checkpoint rework, directive 6): ?jobs=1 requests
   // the job-level table for ONE location instead of the aggregate dashboard. `location`
@@ -51,7 +70,7 @@ export const GET: APIRoute = async ({ url }) => {
     if (!jobsAccountKey) {
       return jsonResponse({ status: "live", jobs: [], error: null });
     }
-    const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all");
+    const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all", undefined, rep ?? "all");
     return jsonResponse(result);
   }
 
@@ -59,6 +78,7 @@ export const GET: APIRoute = async ({ url }) => {
     ...(window ? { window } : {}),
     ...(accountKey ? { accountKey } : {}),
     ...(commercialResidential ? { commercialResidential } : {}),
+    ...(rep ? { rep } : {}),
   };
 
   const dashboard = await loadExecutivePipelineDashboard(filters);
