@@ -1,8 +1,8 @@
 ---
 phase: 7
 slug: executive-sales-pipeline-dashboard
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-01
 ---
