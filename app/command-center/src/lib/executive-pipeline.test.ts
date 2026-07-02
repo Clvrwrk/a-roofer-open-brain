@@ -1,16 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeAverageTicket,
   computeCloseRate,
   computeFreshnessBadges,
   computeLocationRollup,
   computeMarginByDimension,
+  computeQueueValues,
+  computeSnapshotCloseRate,
   deriveRegionOffice,
+  deriveSegment,
   excludeClosedAndPaidInFull,
   filterByWindow,
+  formatCompactCurrency,
   groupPipelineFunnel,
   isExcludedMilestone,
   jobRowsForLocation,
   paginateRange,
+  preClosePipelineValue,
+  queueForRow,
+  segmentForAccountKey,
   type AcculynxJobRow,
   type PipelineRow,
 } from "@lib/executive-pipeline";
@@ -343,10 +351,22 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("excludes closed/paid-in-full jobs from the location drill-down (checkpoint feedback)", () => {
+  it("includes closed jobs in the location drill-down (checkpoint round 3: closed is a visible queue, not excluded)", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
     const pipeline = [
       makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved" }),
+    ];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(2);
+  });
+
+  it("excludes dead/cancelled jobs from the location drill-down (checkpoint round 3, item 2)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "dead" }),
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved" }),
     ];
 
@@ -357,33 +377,23 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
   });
 });
 
-describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate closed and paid in full data')", () => {
-  it("flags a row with current_milestone 'closed' as excluded", () => {
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "closed" }))).toBe(true);
+describe("dead/cancelled exclusion (checkpoint round 3, item 2: supersedes round 2's closed/paid-in-full exclusion)", () => {
+  it("flags a row with current_milestone 'dead' as excluded", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "dead" }))).toBe(true);
   });
 
-  it("flags a row with current_milestone 'paid in full' as excluded even though it never appears in production data today", () => {
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "paid in full" }))).toBe(true);
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "paid_in_full" }))).toBe(true);
+  it("flags a row with current_milestone 'cancelled' as excluded", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "cancelled" }))).toBe(true);
   });
 
   it("is case-insensitive (covers Title-Case acculynx_jobs vocabulary if it ever leaks into this field)", () => {
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Closed" }))).toBe(true);
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "CLOSED" }))).toBe(true);
-    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Paid In Full" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Dead" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Cancelled" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "CANCELLED" }))).toBe(true);
   });
 
-  it("does not flag other real production milestones (dead, cancelled, invoiced, completed, approved, prospect, leads)", () => {
-    for (const milestone of [
-      "dead",
-      "cancelled",
-      "invoiced",
-      "completed",
-      "approved",
-      "prospect",
-      "assigned_lead",
-      "unassigned_lead",
-    ]) {
+  it("does not flag other real production milestones (closed, invoiced, completed, approved, prospect, leads)", () => {
+    for (const milestone of ["closed", "invoiced", "completed", "approved", "prospect", "assigned_lead", "unassigned_lead"]) {
       expect(isExcludedMilestone(makePipelineRow({ current_milestone: milestone }))).toBe(false);
     }
   });
@@ -392,12 +402,12 @@ describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate
     expect(isExcludedMilestone(makePipelineRow({ current_milestone: null }))).toBe(false);
   });
 
-  it("excludeClosedAndPaidInFull drops only closed/paid-in-full rows from a mixed set, case-insensitively", () => {
+  it("excludeClosedAndPaidInFull drops only dead/cancelled rows from a mixed set, case-insensitively", () => {
     const rows = [
-      makePipelineRow({ id: 1, current_milestone: "closed" }),
-      makePipelineRow({ id: 2, current_milestone: "Closed" }),
+      makePipelineRow({ id: 1, current_milestone: "dead" }),
+      makePipelineRow({ id: 2, current_milestone: "Cancelled" }),
       makePipelineRow({ id: 3, current_milestone: "approved" }),
-      makePipelineRow({ id: 4, current_milestone: "dead" }),
+      makePipelineRow({ id: 4, current_milestone: "closed" }),
     ];
 
     const result = excludeClosedAndPaidInFull(rows);
@@ -407,19 +417,19 @@ describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate
 
   it("removes excluded-milestone rows from the funnel grouping entirely (not zeroed, not present)", () => {
     const rows = excludeClosedAndPaidInFull([
-      makePipelineRow({ id: 1, current_milestone: "closed", contract_amount: 50000 }),
+      makePipelineRow({ id: 1, current_milestone: "dead", contract_amount: 50000 }),
       makePipelineRow({ id: 2, current_milestone: "approved", contract_amount: 10000 }),
     ]);
     const funnel = groupPipelineFunnel(rows);
 
-    expect(funnel.find((stage) => stage.milestone === "closed")).toBeUndefined();
+    expect(funnel.find((stage) => stage.milestone === "dead")).toBeUndefined();
     expect(funnel.find((stage) => stage.milestone === "approved")).toBeDefined();
   });
 
   it("removes excluded-milestone rows from margin-by-dimension aggregation and its coverage denominator", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
     const pipeline = excludeClosedAndPaidInFull([
-      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed", contract_amount: 100000 }),
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "dead", contract_amount: 100000 }),
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved", contract_amount: 10000 }),
     ]);
     const financials = new Map([["job-2", { grossProfit: 2000 }]]);
@@ -430,11 +440,17 @@ describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate
     expect(wichita?.coverage.totalJobsInSlice).toBe(1);
   });
 
-  it("removes excluded-milestone rows from the per-location rollup (pipeline $, sold $, AR $)", () => {
+  it("removes excluded-milestone rows from the per-location rollup pre-close pipeline value and AR $ (checkpoint round 3, item 3)", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
     const pipeline = excludeClosedAndPaidInFull([
-      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed", contract_amount: 100000, balance_due: 5000 }),
-      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved", contract_amount: 10000, balance_due: 500 }),
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "dead", contract_amount: 100000, balance_due: 5000 }),
+      makePipelineRow({
+        id: 2,
+        acculynx_job_id: "job-2",
+        current_milestone: "prospect",
+        primary_estimate_amount: 10000,
+        balance_due: 500,
+      }),
     ]);
 
     const rollup = computeLocationRollup(pipeline, jobs, ["wichita"], new Date("2026-06-20"), new Date("2026-07-01"));
@@ -445,12 +461,279 @@ describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate
 
   it("removes excluded-milestone rows from close-rate sold-count (checkpoint feedback applied uniformly, per implementation contract)", () => {
     const pipeline = excludeClosedAndPaidInFull([
-      makePipelineRow({ id: 1, current_milestone: "closed", approved_date: "2026-06-28T00:00:00Z" }),
+      makePipelineRow({ id: 1, current_milestone: "dead", approved_date: "2026-06-28T00:00:00Z" }),
       makePipelineRow({ id: 2, current_milestone: "invoiced", approved_date: "2026-06-28T00:00:00Z" }),
     ]);
 
     const result = computeCloseRate(pipeline, new Date("2026-06-25"), new Date("2026-07-01"));
 
     expect(result.soldCount).toBe(1);
+  });
+});
+
+describe("segment classification (checkpoint round 3, item 4: segmentation is BY ACCOUNT)", () => {
+  it("classifies multi_family_commercial as commercial", () => {
+    expect(segmentForAccountKey("multi_family_commercial")).toBe("commercial");
+  });
+
+  it("classifies insurance_program as residential (only multi_family_commercial is commercial)", () => {
+    expect(segmentForAccountKey("insurance_program")).toBe("residential");
+  });
+
+  it("classifies every geo location account as residential", () => {
+    for (const key of ["colorado", "florida", "georgia", "kansas_city", "texas", "wichita"]) {
+      expect(segmentForAccountKey(key)).toBe("residential");
+    }
+  });
+
+  it("classifies an unresolvable/unknown account_key as residential (never fabricates a commercial segment)", () => {
+    expect(segmentForAccountKey("unknown")).toBe("residential");
+  });
+
+  it("deriveSegment wraps deriveRegionOffice + segmentForAccountKey for a row", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "multi_family_commercial" })];
+    const row = makePipelineRow({ acculynx_job_id: "job-1" });
+
+    expect(deriveSegment(row, jobs)).toBe("commercial");
+  });
+});
+
+describe("queue bucketing (checkpoint round 3, item 3)", () => {
+  it("buckets unassigned_lead/assigned_lead/lead into the leads queue with NO value (excluded entirely)", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "unassigned_lead", contract_amount: 5000 }),
+      makePipelineRow({ id: 2, current_milestone: "assigned_lead", contract_amount: 8000 }),
+    ];
+
+    const queues = computeQueueValues(rows);
+    const leads = queues.find((q) => q.queue === "leads");
+
+    expect(leads?.count).toBe(2);
+    expect(leads?.value).toBeNull();
+  });
+
+  it("buckets prospect ONLY when primary_estimate_amount > 0; excludes prospects with no estimate from count and value", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "prospect", primary_estimate_amount: 15000 }),
+      makePipelineRow({ id: 2, current_milestone: "prospect", primary_estimate_amount: 0 }),
+      makePipelineRow({ id: 3, current_milestone: "prospect", primary_estimate_amount: null }),
+    ];
+
+    const queues = computeQueueValues(rows);
+    const prospects = queues.find((q) => q.queue === "prospects");
+
+    expect(prospects?.count).toBe(1);
+    expect(prospects?.value).toBe(15000);
+  });
+
+  it("the prospects queue's summed estimate value IS the pre-close pipeline value", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "prospect", primary_estimate_amount: 15000 }),
+      makePipelineRow({ id: 2, current_milestone: "prospect", primary_estimate_amount: 22000 }),
+      makePipelineRow({ id: 3, current_milestone: "approved", contract_amount: 999999 }),
+    ];
+
+    const queues = computeQueueValues(rows);
+
+    expect(preClosePipelineValue(queues)).toBe(37000);
+  });
+
+  it("folds 'completed' into the approved queue (user decision, item 3)", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "approved", contract_amount: 10000 }),
+      makePipelineRow({ id: 2, current_milestone: "completed", contract_amount: 20000 }),
+    ];
+
+    const queues = computeQueueValues(rows);
+    const approved = queues.find((q) => q.queue === "approved");
+
+    expect(approved?.count).toBe(2);
+    expect(approved?.value).toBe(30000);
+    expect(queueForRow({ current_milestone: "completed" })).toBe("approved");
+  });
+
+  it("buckets invoiced and closed queues by contract value", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "invoiced", contract_amount: 12000 }),
+      makePipelineRow({ id: 2, current_milestone: "closed", contract_amount: 9000 }),
+    ];
+
+    const queues = computeQueueValues(rows);
+
+    expect(queues.find((q) => q.queue === "invoiced")).toEqual({ queue: "invoiced", count: 1, value: 12000 });
+    expect(queues.find((q) => q.queue === "closed")).toEqual({ queue: "closed", count: 1, value: 9000 });
+  });
+
+  it("returns null (not undefined/throw) for an unrecognized milestone", () => {
+    expect(queueForRow({ current_milestone: "some_unknown_value" })).toBeNull();
+    expect(queueForRow({ current_milestone: null })).toBeNull();
+  });
+});
+
+describe("Average Ticket per segment (checkpoint round 3, item 4)", () => {
+  it("computes avgTicket = sum(contract value) / count for jobs approved within the window, per segment", () => {
+    const jobs: AcculynxJobRow[] = [
+      makeJobRow({ id: "job-1", account_key: "wichita" }),
+      makeJobRow({ id: "job-2", account_key: "wichita" }),
+      makeJobRow({ id: "job-3", account_key: "multi_family_commercial" }),
+    ];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 10000,
+        approved_date: "2026-06-26T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 2,
+        acculynx_job_id: "job-2",
+        current_milestone: "approved",
+        contract_amount: 20000,
+        approved_date: "2026-06-27T00:00:00Z",
+      }),
+      makePipelineRow({
+        id: 3,
+        acculynx_job_id: "job-3",
+        current_milestone: "approved",
+        contract_amount: 90000,
+        approved_date: "2026-06-27T00:00:00Z",
+      }),
+    ];
+
+    const result = computeAverageTicket(pipeline, jobs, new Date("2026-06-20"), new Date("2026-06-30"));
+
+    expect(result.residential.avgTicket).toBeCloseTo(15000, 5);
+    expect(result.residential.count).toBe(2);
+    expect(result.commercial.avgTicket).toBeCloseTo(90000, 5);
+    expect(result.commercial.count).toBe(1);
+  });
+
+  it("includes 'completed' jobs (folded into approved) in Average Ticket", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "completed",
+        contract_amount: 40000,
+        milestone_date: "2026-06-26T00:00:00Z",
+      }),
+    ];
+
+    const result = computeAverageTicket(pipeline, jobs, new Date("2026-06-20"), new Date("2026-06-30"));
+
+    expect(result.residential.avgTicket).toBe(40000);
+    expect(result.residential.count).toBe(1);
+  });
+
+  it("excludes jobs approved outside the window", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 40000,
+        approved_date: "2026-05-01T00:00:00Z",
+      }),
+    ];
+
+    const result = computeAverageTicket(pipeline, jobs, new Date("2026-06-20"), new Date("2026-06-30"));
+
+    expect(result.residential.count).toBe(0);
+    expect(result.residential.avgTicket).toBe(0);
+  });
+
+  it("returns 0 avgTicket (not NaN) for a segment with zero approved jobs in the window", () => {
+    const result = computeAverageTicket([], [], new Date("2026-06-20"), new Date("2026-06-30"));
+
+    expect(result.residential.avgTicket).toBe(0);
+    expect(result.commercial.avgTicket).toBe(0);
+  });
+});
+
+describe("snapshot close rate (checkpoint round 3, item 7 — exact user formula)", () => {
+  it("computes count(Approved+Invoiced+Closed) / count(Leads+Prospects+Approved+Invoiced+Closed), ignoring the window", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "unassigned_lead" }),
+      makePipelineRow({ id: 2, current_milestone: "prospect", primary_estimate_amount: 5000 }),
+      makePipelineRow({ id: 3, current_milestone: "approved" }),
+      makePipelineRow({ id: 4, current_milestone: "invoiced" }),
+      makePipelineRow({ id: 5, current_milestone: "closed" }),
+    ];
+
+    // numerator = approved+invoiced+closed = 3; denominator = all 5 queue rows = 5
+    expect(computeSnapshotCloseRate(rows)).toBeCloseTo(0.6, 5);
+  });
+
+  it("counts a prospect toward the denominator even with no estimate value (count-based, not value-based)", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "prospect", primary_estimate_amount: 0 }),
+      makePipelineRow({ id: 2, current_milestone: "approved" }),
+    ];
+
+    // denominator counts BOTH rows (prospect counts even without an estimate);
+    // numerator counts only the approved row.
+    expect(computeSnapshotCloseRate(rows)).toBeCloseTo(0.5, 5);
+  });
+
+  it("counts 'completed' toward the numerator (folded into approved, item 3)", () => {
+    const rows = [makePipelineRow({ id: 1, current_milestone: "completed" }), makePipelineRow({ id: 2, current_milestone: "unassigned_lead" })];
+
+    expect(computeSnapshotCloseRate(rows)).toBeCloseTo(0.5, 5);
+  });
+
+  it("returns 0 (not NaN) when there are no rows in any of the five queues", () => {
+    expect(computeSnapshotCloseRate([])).toBe(0);
+  });
+
+  it("ignores dates entirely — a row far outside any window still counts (snapshot, not window-filtered)", () => {
+    const rows = [makePipelineRow({ id: 1, current_milestone: "approved", approved_date: "2020-01-01T00:00:00Z" })];
+
+    expect(computeSnapshotCloseRate(rows)).toBe(1);
+  });
+
+  it("computeLocationRollup exposes closeRateSnapshot per location, independent of the passed window", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "unassigned_lead" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "closed" }),
+    ];
+
+    const rollup = computeLocationRollup(pipeline, jobs, ["wichita"], new Date("2026-01-01"), new Date("2026-01-02"));
+
+    expect(rollup[0].closeRateSnapshot).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe("compact currency formatter (checkpoint round 3, item 5)", () => {
+  it("formats thousands as $NK, rounded to the nearest whole K", () => {
+    expect(formatCompactCurrency(5000)).toBe("$5K");
+    expect(formatCompactCurrency(50000)).toBe("$50K");
+    expect(formatCompactCurrency(500000)).toBe("$500K");
+  });
+
+  it("formats millions as $NM", () => {
+    expect(formatCompactCurrency(1_000_000)).toBe("$1M");
+    expect(formatCompactCurrency(1_500_000)).toBe("$1.5M");
+  });
+
+  it("formats sub-thousand values as a plain rounded dollar amount", () => {
+    expect(formatCompactCurrency(0)).toBe("$0");
+    expect(formatCompactCurrency(999)).toBe("$999");
+    expect(formatCompactCurrency(499.6)).toBe("$500");
+  });
+
+  it("handles the exact 1000/1,000,000 boundaries", () => {
+    expect(formatCompactCurrency(999)).toBe("$999");
+    expect(formatCompactCurrency(1000)).toBe("$1K");
+    expect(formatCompactCurrency(999_999)).toBe("$1000K");
+    expect(formatCompactCurrency(1_000_000)).toBe("$1M");
+  });
+
+  it("preserves the negative sign before the dollar mark", () => {
+    expect(formatCompactCurrency(-5000)).toBe("-$5K");
+    expect(formatCompactCurrency(-1_500_000)).toBe("-$1.5M");
   });
 });

@@ -17,6 +17,8 @@ export interface DashboardFilters {
   accountKey?: string | "all";
   /** job_category_name filter (residential/commercial/property management/uncategorized); "all" default. */
   commercialResidential?: string | "all";
+  /** Checkpoint round 3: assigned-rep filter (crm_pipeline.primary_salesperson); "all" default. */
+  rep?: string | "all";
 }
 
 export interface PipelineRow {
@@ -117,15 +119,54 @@ export interface RegionOfficeDerived {
   commercialResidential: string;
 }
 
+/** Checkpoint round 3 (user spec, item 4): segmentation is BY ACCOUNT.
+ * "commercial" = the multi_family_commercial account ONLY; every other account
+ * (insurance_program + all geo location accounts) = "residential". */
+export type Segment = "residential" | "commercial";
+
+/** Checkpoint round 3 (user spec, item 3): the five queues shown per location.
+ * "completed" folds into "approved" per the user's explicit decision. */
+export type QueueName = "leads" | "prospects" | "approved" | "invoiced" | "closed";
+
+/** Per-queue value + count for one location row (checkpoint round 3, item 3). Leads
+ * carry a count but no $ value (excluded from value entirely); prospects value is
+ * ONLY the sum of jobs with a primary_estimate_amount > 0 (the pre-close pipeline
+ * value); closed carries its own arValue (AR outstanding for that queue). */
+export interface QueueValue {
+  queue: QueueName;
+  count: number;
+  /** null for "leads" (value intentionally excluded, per user spec item 3). */
+  value: number | null;
+}
+
 /** One row per production location (account_key) — the inline right-aligned metrics
- * for the primary breakdown/expandable-row layout (checkpoint rework directive 6). */
+ * for the primary breakdown/expandable-row layout (checkpoint rework directive 6),
+ * reworked in checkpoint round 3 to show queue values + a snapshot close rate. */
 export interface LocationRollupRow {
   accountKey: string;
+  /** Pre-close pipeline value: prospects-with-estimate summed value (item 3). */
   pipelineValue: number;
   soldValue: number;
   soldCount: number;
   leadCount: number;
   arValue: number;
+  /** Per-queue value/count breakdown shown on the account bar (item 3). */
+  queues: QueueValue[];
+  /** Count-based, snapshot (window-independent) close rate for this location (item 7). */
+  closeRateSnapshot: number;
+}
+
+/** Checkpoint round 3, item 4: Average Ticket = (sum contract value / count) for jobs
+ * APPROVED within the selected window, computed per segment. */
+export interface AverageTicketResult {
+  residential: { avgTicket: number; count: number };
+  commercial: { avgTicket: number; count: number };
+}
+
+/** Checkpoint round 3, item 4: every headline KPI splits Residential vs Commercial. */
+export interface SegmentSplit {
+  residential: number;
+  commercial: number;
 }
 
 export interface ExecutivePipelineDashboard {
@@ -145,7 +186,19 @@ export interface ExecutivePipelineDashboard {
   locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
+  /** Headline "pipeline value" KPI = the pre-close pipeline value (item 3). */
   pipelineValueTotal: number;
+  /** Checkpoint round 3, item 4: Res/Com splits for every headline KPI. */
+  pipelineValueSplit: SegmentSplit;
+  soldValueSplit: SegmentSplit;
+  jobsSoldSplit: SegmentSplit;
+  newLeadsSplit: SegmentSplit;
+  closeRateSplit: SegmentSplit;
+  marginPctSplit: SegmentSplit;
+  averageTicket: AverageTicketResult;
+  /** Distinct assigned reps present in the (post-exclusion) data, for the Rep filter
+   * dropdown (item 1) — sourced from crm_pipeline.primary_salesperson (item 6). */
+  knownReps: string[];
 }
 
 /** One job row for the per-location drill-down table (D-09 checkpoint gap). Free-text
@@ -160,6 +213,13 @@ export interface JobDrillRow {
   salesperson: string;
 }
 
+/** One row per assigned rep for the leaderboard, reworked in checkpoint round 3 to
+ * carry a snapshot (window-independent) close rate keyed on the ASSIGNED rep field
+ * (crm_pipeline.primary_salesperson — item 6/item 7 "assigned Close Rate"). */
+export interface RepLeaderboardRow extends LeaderboardRow {
+  closeRateSnapshot: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -171,26 +231,19 @@ const FRESHNESS_SLA_MS = 60 * 60_000;
 const LEAD_MILESTONES = new Set(["unassigned_lead", "assigned_lead", "lead", "prospect"]);
 const SOLD_MILESTONES = new Set(["approved", "completed", "invoiced", "closed"]);
 
-/** Checkpoint feedback round 2 (user, verbatim): "we need to eliminate closed and paid
- * in full data". Live-DB verification (2026-07-01, crm_pipeline.current_milestone,
- * 7,053 rows) found NO distinct "paid in full" milestone value in either
- * crm_pipeline.current_milestone (lowercase) or acculynx_jobs.current_milestone
- * (Title Case) — the two vocabularies observed are:
- *   crm_pipeline:   dead, cancelled, closed, assigned_lead, prospect, invoiced,
- *                   approved, unassigned_lead, completed
- *   acculynx_jobs:  Cancelled, Closed, Lead, Invoiced, Prospect, Approved, Completed
- * `balance_due` is 0 across every milestone in production (not a populated AR
- * signal), so "paid in full" cannot be derived from a zero-balance heuristic either.
- * "closed" / "Closed" is the only literal match for the user's instruction and is
- * treated as covering both "closed" and "paid in full" (a closed job is, by
- * definition, fully invoiced/settled in this data model). Case-insensitive so it
- * also covers the Title-Case acculynx_jobs vocabulary if it ever leaks into this
- * field. Applied to the BASE row set before every aggregation (funnel, close rate,
- * margin breakdowns, location rollup, leaderboard, AR total, drill-down). */
-export const EXCLUDED_MILESTONES = new Set(["closed", "paid in full", "paid_in_full"]);
+/** Checkpoint round 3 (user spec, item 2 — supersedes round 2's closed/paid-in-full
+ * exclusion): "dead" and "cancelled" milestone jobs are FULLY EXCLUDED from every
+ * number on the dashboard. "closed" is no longer excluded — round 3 reinstates it as
+ * its own visible queue (item 3), shown with its AR outstanding. Case-insensitive so
+ * it also covers the Title-Case acculynx_jobs vocabulary (`Cancelled`) if it ever
+ * leaks into this field. Applied to the BASE row set before every aggregation (funnel,
+ * close rate, margin breakdowns, location rollup, leaderboard, AR total, drill-down,
+ * queue bucketing). */
+export const EXCLUDED_MILESTONES = new Set(["dead", "cancelled"]);
 
 /** Case-insensitive predicate: true when the row's milestone should be excluded from
- * every KPI/chart/table on the executive pipeline dashboard (checkpoint feedback). */
+ * every KPI/chart/table on the executive pipeline dashboard (checkpoint round 3, item 2:
+ * dead/cancelled fully excluded). */
 export function isExcludedMilestone(row: Pick<PipelineRow, "current_milestone">): boolean {
   const milestone = compact(row.current_milestone, "").toLowerCase();
   return EXCLUDED_MILESTONES.has(milestone);
@@ -198,8 +251,9 @@ export function isExcludedMilestone(row: Pick<PipelineRow, "current_milestone">)
 
 /** Applies isExcludedMilestone to a row set — the single filter point every loader
  * path (dashboard aggregation + per-location drill-down) must call before computing
- * anything, so "closed"/"paid in full" jobs never appear in any KPI, chart, breakdown,
- * or drill-down row. */
+ * anything, so "dead"/"cancelled" jobs never appear in any KPI, chart, breakdown, or
+ * drill-down row. Name retained from round 2 for call-site continuity; semantics now
+ * cover dead/cancelled (round 3, item 2) rather than closed/paid-in-full. */
 export function excludeClosedAndPaidInFull(rows: PipelineRow[]): PipelineRow[] {
   return rows.filter((row) => !isExcludedMilestone(row));
 }
@@ -217,6 +271,15 @@ export const KNOWN_ACCOUNT_KEYS = [
   "insurance_program",
   "multi_family_commercial",
 ] as const;
+
+/** Checkpoint round 3 (user spec, item 4): the ONLY commercial account_key.
+ * insurance_program + every geo location account are Residential. */
+const COMMERCIAL_ACCOUNT_KEY = "multi_family_commercial";
+
+/** Checkpoint round 3 (user spec, item 4): account -> Res/Com segmentation. */
+export function segmentForAccountKey(accountKey: string): Segment {
+  return accountKey === COMMERCIAL_ACCOUNT_KEY ? "commercial" : "residential";
+}
 
 // ---------------------------------------------------------------------------
 // Shared helpers (copied verbatim / adapted from weekly-snapshot.ts)
@@ -246,6 +309,19 @@ function amountFor(row: PipelineRow) {
   return Math.max(toNumber(row.contract_amount), toNumber(row.primary_estimate_amount));
 }
 
+/** Raw contract amount only (no estimate fallback) — used where the user spec
+ * distinguishes "contract value" (Approved/Invoiced/Closed queues, Average Ticket)
+ * from "estimate value" (Prospects queue, item 3). */
+function contractAmountFor(row: PipelineRow): number {
+  return toNumber(row.contract_amount);
+}
+
+/** Raw primary estimate amount only — used for the Prospects queue's
+ * estimate-required rule (item 3). */
+function estimateAmountFor(row: PipelineRow): number {
+  return toNumber(row.primary_estimate_amount);
+}
+
 function startOfDay(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
@@ -268,6 +344,36 @@ function startOfMonth(value: Date) {
 function startOfQuarter(value: Date) {
   const quarterMonth = Math.floor(value.getMonth() / 3) * 3;
   return new Date(value.getFullYear(), quarterMonth, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Pure core: compact currency formatting (checkpoint round 3, item 5)
+// ---------------------------------------------------------------------------
+
+/** Compact currency for chart ticks/data-labels and secondary big numbers (queue
+ * values on account bars) — never full precision, to avoid cognitive overload.
+ * Boundaries: <1000 shows a rounded dollar amount ($0-$999); 1000-999999 shows K
+ * (rounded to the nearest whole K, e.g. $5K, $50K, $500K); 1,000,000+ shows M with
+ * one decimal only when non-zero (e.g. $1M, $1.5M). Negative values keep the sign
+ * before the dollar mark (e.g. -$5K). Headline KPI numbers stay full-precision
+ * dollars per the user spec (item 5) — this formatter is NOT used there. */
+export function formatCompactCurrency(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+
+  if (abs >= 1_000_000) {
+    const millions = abs / 1_000_000;
+    const rounded = Math.round(millions * 10) / 10;
+    const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${sign}$${label}M`;
+  }
+
+  if (abs >= 1_000) {
+    const thousands = Math.round(abs / 1_000);
+    return `${sign}$${thousands}K`;
+  }
+
+  return `${sign}$${Math.round(abs)}`;
 }
 
 /** Mandatory pagination helper (RESEARCH.md Pattern 3 / Pitfall 3) — copied verbatim
@@ -332,6 +438,108 @@ export function groupPipelineFunnel(rows: PipelineRow[]): FunnelStage[] {
 }
 
 // ---------------------------------------------------------------------------
+// Pure core: queue bucketing (checkpoint round 3, item 3)
+// ---------------------------------------------------------------------------
+
+const QUEUE_LEAD_MILESTONES = new Set(["unassigned_lead", "assigned_lead", "lead"]);
+const QUEUE_PROSPECT_MILESTONES = new Set(["prospect"]);
+/** "completed" FOLDS INTO Approved per the user's explicit decision (item 3). */
+const QUEUE_APPROVED_MILESTONES = new Set(["approved", "completed"]);
+const QUEUE_INVOICED_MILESTONES = new Set(["invoiced"]);
+const QUEUE_CLOSED_MILESTONES = new Set(["closed"]);
+
+/** Maps a (case-insensitive, dead/cancelled-already-excluded) row to its queue, or
+ * null when the milestone is unrecognized (never fabricates a queue for unknown
+ * values — the row is simply excluded from every queue bucket, matching the funnel's
+ * "unknown" behavior elsewhere in this module). */
+export function queueForRow(row: Pick<PipelineRow, "current_milestone">): QueueName | null {
+  const milestone = compact(row.current_milestone, "").toLowerCase();
+  if (QUEUE_LEAD_MILESTONES.has(milestone)) return "leads";
+  if (QUEUE_PROSPECT_MILESTONES.has(milestone)) return "prospects";
+  if (QUEUE_APPROVED_MILESTONES.has(milestone)) return "approved";
+  if (QUEUE_INVOICED_MILESTONES.has(milestone)) return "invoiced";
+  if (QUEUE_CLOSED_MILESTONES.has(milestone)) return "closed";
+  return null;
+}
+
+/** Per-queue count + value for one row set (checkpoint round 3, item 3):
+ * - leads: value EXCLUDED entirely (null) — count only.
+ * - prospects: counted/valued ONLY when primary_estimate_amount > 0; the summed
+ *   estimate value across all rows here IS the pre-close pipeline value.
+ * - approved: contract value of approved jobs (completed folds in here).
+ * - invoiced: contract/invoiced value of invoiced jobs.
+ * - closed: closed contract value; arValue (AR outstanding) is surfaced separately
+ *   by the caller via balance_due, since QueueValue only carries count/value.
+ * Assumes dead/cancelled rows have ALREADY been excluded from `rows` (item 2). */
+export function computeQueueValues(rows: PipelineRow[]): QueueValue[] {
+  const buckets: Record<QueueName, { count: number; value: number }> = {
+    leads: { count: 0, value: 0 },
+    prospects: { count: 0, value: 0 },
+    approved: { count: 0, value: 0 },
+    invoiced: { count: 0, value: 0 },
+    closed: { count: 0, value: 0 },
+  };
+
+  for (const row of rows) {
+    const queue = queueForRow(row);
+    if (!queue) continue;
+
+    if (queue === "leads") {
+      buckets.leads.count += 1;
+      continue; // value intentionally excluded (item 3)
+    }
+
+    if (queue === "prospects") {
+      const estimate = estimateAmountFor(row);
+      if (estimate > 0) {
+        buckets.prospects.count += 1;
+        buckets.prospects.value += estimate;
+      }
+      continue; // prospects with no estimate are not counted/valued in this queue
+    }
+
+    // approved / invoiced / closed: contract value.
+    buckets[queue].count += 1;
+    buckets[queue].value += contractAmountFor(row);
+  }
+
+  return (Object.keys(buckets) as QueueName[]).map((queue) => ({
+    queue,
+    count: buckets[queue].count,
+    value: queue === "leads" ? null : buckets[queue].value,
+  }));
+}
+
+/** The headline "pipeline value" KPI: pre-close pipeline value = summed estimate
+ * value of prospects-with-an-estimate (item 3). Pulled out of computeQueueValues'
+ * result for callers that already have the queue array. */
+export function preClosePipelineValue(queues: QueueValue[]): number {
+  return queues.find((q) => q.queue === "prospects")?.value ?? 0;
+}
+
+/** Count-based, snapshot (window-independent) close rate — user spec item 7, exact
+ * formula: count(Approved + Invoiced + Closed) / count(Leads + Prospects + Approved +
+ * Invoiced + Closed). Ignores the time-window filter entirely (a CURRENT SNAPSHOT of
+ * the funnel, per the user's explicit decision) and assumes dead/cancelled rows have
+ * already been excluded from `rows`. Returns 0 when the denominator is 0 (no rows in
+ * any of the five queues). */
+export function computeSnapshotCloseRate(rows: PipelineRow[]): number {
+  let numerator = 0;
+  let denominator = 0;
+
+  for (const row of rows) {
+    const queue = queueForRow(row);
+    if (!queue) continue;
+    denominator += 1;
+    if (queue === "approved" || queue === "invoiced" || queue === "closed") {
+      numerator += 1;
+    }
+  }
+
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Pure core: close rate (snapshot-window proxy, Pitfall 4)
 // ---------------------------------------------------------------------------
 
@@ -378,6 +586,56 @@ export function deriveRegionOffice(row: PipelineRow, jobs: AcculynxJobRow[]): Re
   const commercialResidential = job?.job_category_name ? job.job_category_name : "uncategorized";
 
   return { accountKey, commercialResidential };
+}
+
+/** Checkpoint round 3 (user spec, item 4): a row's segment is derived from its
+ * account_key, NOT from job_category_name — only multi_family_commercial is
+ * "commercial"; everything else (including insurance_program) is "residential". */
+export function deriveSegment(row: PipelineRow, jobs: AcculynxJobRow[]): Segment {
+  return segmentForAccountKey(deriveRegionOffice(row, jobs).accountKey);
+}
+
+// ---------------------------------------------------------------------------
+// Pure core: Average Ticket per segment (checkpoint round 3, item 4)
+// ---------------------------------------------------------------------------
+
+/** Average Ticket = (sum of contract value / count) for jobs APPROVED within the
+ * selected time window, computed per segment (item 4). "Approved" here means the
+ * Approved QUEUE (queueForRow === "approved", which folds in "completed" per item 3),
+ * matched on approved_date/milestone_date/updated_at falling in [start, end] — the
+ * same windowing convention computeCloseRate uses elsewhere in this module. Assumes
+ * dead/cancelled rows have already been excluded from `rows`. */
+export function computeAverageTicket(
+  rows: PipelineRow[],
+  jobs: AcculynxJobRow[],
+  start: Date,
+  end: Date,
+): AverageTicketResult {
+  const totals: Record<Segment, { sum: number; count: number }> = {
+    residential: { sum: 0, count: 0 },
+    commercial: { sum: 0, count: 0 },
+  };
+
+  for (const row of rows) {
+    if (queueForRow(row) !== "approved") continue;
+    const date = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
+    if (!date || date < start || date >= addDays(end, 1)) continue;
+
+    const segment = deriveSegment(row, jobs);
+    totals[segment].sum += contractAmountFor(row);
+    totals[segment].count += 1;
+  }
+
+  return {
+    residential: {
+      avgTicket: totals.residential.count > 0 ? totals.residential.sum / totals.residential.count : 0,
+      count: totals.residential.count,
+    },
+    commercial: {
+      avgTicket: totals.commercial.count > 0 ? totals.commercial.sum / totals.commercial.count : 0,
+      count: totals.commercial.count,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -458,8 +716,12 @@ export function computeMarginByDimension(
 // ---------------------------------------------------------------------------
 
 /** Inline per-location metrics for the expandable-row primary breakdown (checkpoint
- * rework directive 6): pipeline $ (all open jobs), sold $/count (within window),
- * lead count (within window), and AR $ (point-in-time), one row per known account_key. */
+ * rework directive 6; reworked in checkpoint round 3 item 3/7 to carry the per-queue
+ * value breakdown and a snapshot close rate): pipeline $ (pre-close pipeline value —
+ * prospects-with-estimate, item 3), sold $/count (within window), lead count (within
+ * window), AR $ (point-in-time), the five-queue value/count array, and the
+ * window-independent snapshot close rate — one row per known account_key. Assumes
+ * dead/cancelled rows have already been excluded from `pipeline` (item 2). */
 export function computeLocationRollup(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
@@ -470,7 +732,8 @@ export function computeLocationRollup(
   return accountKeys.map((accountKey) => {
     const rows = pipeline.filter((row) => deriveRegionOffice(row, jobs).accountKey === accountKey);
 
-    const pipelineValue = rows.reduce((sum, row) => sum + amountFor(row), 0);
+    const queues = computeQueueValues(rows);
+    const pipelineValue = preClosePipelineValue(queues);
     const arValue = rows.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
 
     const soldRows = rows.filter((row) => {
@@ -486,7 +749,9 @@ export function computeLocationRollup(
       return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
     }).length;
 
-    return { accountKey, pipelineValue, soldValue, soldCount: soldRows.length, leadCount, arValue };
+    const closeRateSnapshot = computeSnapshotCloseRate(rows);
+
+    return { accountKey, pipelineValue, soldValue, soldCount: soldRows.length, leadCount, arValue, queues, closeRateSnapshot };
   });
 }
 
@@ -498,19 +763,22 @@ export function computeLocationRollup(
  * same account/commercial-residential filters the aggregate KPIs already obey. Reuses
  * deriveRegionOffice + amountFor so the drill-down table is consistent with the
  * aggregates it expands from. Never fabricates rows — only real crm_pipeline rows.
- * Excludes closed/paid-in-full jobs (checkpoint feedback round 2), same filter point
- * as the aggregate dashboard loader. */
+ * Excludes dead/cancelled jobs (checkpoint round 3, item 2 — supersedes round 2's
+ * closed/paid-in-full exclusion; closed jobs are now included since Closed is a
+ * visible queue, item 3), same filter point as the aggregate dashboard loader. */
 export function jobRowsForLocation(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
   accountKey: string,
   commercialResidential: string | "all" = "all",
+  rep: string | "all" = "all",
 ): JobDrillRow[] {
   return excludeClosedAndPaidInFull(pipeline)
     .filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (derived.accountKey !== accountKey) return false;
       if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
+      if (rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== rep) return false;
       return true;
     })
     .map((row) => {
@@ -618,6 +886,12 @@ interface WatermarkRow {
   last_sync_at: string | null;
 }
 
+const EMPTY_SEGMENT_SPLIT: SegmentSplit = { residential: 0, commercial: 0 };
+const EMPTY_AVERAGE_TICKET: AverageTicketResult = {
+  residential: { avgTicket: 0, count: 0 },
+  commercial: { avgTicket: 0, count: 0 },
+};
+
 function degradedDashboard(status: DashboardStatus, errors: string[], filters: Required<DashboardFilters>, now: Date): ExecutivePipelineDashboard {
   const { start, end, label } = windowRange(filters.window, now);
   return {
@@ -638,6 +912,14 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     arTotal: 0,
     freshness: [],
     pipelineValueTotal: 0,
+    pipelineValueSplit: { ...EMPTY_SEGMENT_SPLIT },
+    soldValueSplit: { ...EMPTY_SEGMENT_SPLIT },
+    jobsSoldSplit: { ...EMPTY_SEGMENT_SPLIT },
+    newLeadsSplit: { ...EMPTY_SEGMENT_SPLIT },
+    closeRateSplit: { ...EMPTY_SEGMENT_SPLIT },
+    marginPctSplit: { ...EMPTY_SEGMENT_SPLIT },
+    averageTicket: { residential: { ...EMPTY_AVERAGE_TICKET.residential }, commercial: { ...EMPTY_AVERAGE_TICKET.commercial } },
+    knownReps: [],
   };
 }
 
@@ -646,6 +928,7 @@ function resolveFilters(filters?: DashboardFilters): Required<DashboardFilters> 
     window: filters?.window ?? "last_7_days",
     accountKey: filters?.accountKey ?? "all",
     commercialResidential: filters?.commercialResidential ?? "all",
+    rep: filters?.rep ?? "all",
   };
 }
 
@@ -719,13 +1002,21 @@ export async function loadExecutivePipelineDashboard(
 
     const { start, end, label } = windowRange(resolvedFilters.window, now);
 
-    // Checkpoint feedback (round 2): exclude closed/paid-in-full jobs from the ENTIRE
-    // dataset before any filter bar or aggregation runs — one filter point upstream of
-    // the D-13 accountKey/commercialResidential filter below.
+    // Checkpoint round 3, item 2 (supersedes round 2's closed/paid-in-full exclusion):
+    // exclude dead/cancelled jobs from the ENTIRE dataset before any filter bar or
+    // aggregation runs — one filter point upstream of the D-13/rep filters below.
     const activePipeline = excludeClosedAndPaidInFull(pipeline);
 
-    // Apply the D-13 global filter bar (account_key / commercial-residential) before
-    // computing any KPI — every KPI, chart, and drill-down obeys the filter bar.
+    // Item 6: distinct assigned reps present in the (post-exclusion) data, for the
+    // Rep filter dropdown. Sourced from crm_pipeline.primary_salesperson — verified
+    // live as the only populated assigned-rep-shaped field (see SUMMARY.md for
+    // coverage numbers); acculynx_jobs carries no assigned-user field at all.
+    const knownReps = Array.from(
+      new Set(activePipeline.map((row) => compact(row.primary_salesperson, "")).filter((name) => name.length > 0)),
+    ).sort((a, b) => a.localeCompare(b));
+
+    // Apply the D-13 global filter bar (account_key / commercial-residential / rep)
+    // before computing any KPI — every KPI, chart, and drill-down obeys the filter bar.
     const filteredPipeline = activePipeline.filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (resolvedFilters.accountKey !== "all" && derived.accountKey !== resolvedFilters.accountKey) return false;
@@ -733,6 +1024,9 @@ export async function loadExecutivePipelineDashboard(
         resolvedFilters.commercialResidential !== "all" &&
         derived.commercialResidential !== resolvedFilters.commercialResidential
       ) {
+        return false;
+      }
+      if (resolvedFilters.rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== resolvedFilters.rep) {
         return false;
       }
       return true;
@@ -746,9 +1040,55 @@ export async function loadExecutivePipelineDashboard(
       return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
     }).length;
 
-    // Point-in-time KPIs (pipeline value, AR) ignore the window per D-03.
-    const pipelineValueTotal = filteredPipeline.reduce((sum, row) => sum + amountFor(row), 0);
+    // Item 3: the headline "pipeline value" KPI is the pre-close pipeline value
+    // (prospects-with-estimate summed value) — NOT amountFor() over the whole
+    // filtered set. Point-in-time KPIs (pipeline value, AR) ignore the window per D-03.
+    const queuesAll = computeQueueValues(filteredPipeline);
+    const pipelineValueTotal = preClosePipelineValue(queuesAll);
     const arTotal = filteredPipeline.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
+
+    // Item 4: every headline KPI splits Residential vs Commercial, segmented BY
+    // ACCOUNT (multi_family_commercial = commercial; everything else = residential).
+    const residentialRows = filteredPipeline.filter((row) => deriveSegment(row, jobs) === "residential");
+    const commercialRows = filteredPipeline.filter((row) => deriveSegment(row, jobs) === "commercial");
+
+    const pipelineValueSplit: SegmentSplit = {
+      residential: preClosePipelineValue(computeQueueValues(residentialRows)),
+      commercial: preClosePipelineValue(computeQueueValues(commercialRows)),
+    };
+
+    const closeRateResidential = computeCloseRate(residentialRows, start, end);
+    const closeRateCommercial = computeCloseRate(commercialRows, start, end);
+    const soldValueSplit: SegmentSplit = {
+      residential: closeRateResidential.soldValue,
+      commercial: closeRateCommercial.soldValue,
+    };
+    const jobsSoldSplit: SegmentSplit = {
+      residential: closeRateResidential.soldCount,
+      commercial: closeRateCommercial.soldCount,
+    };
+
+    const newLeadsSplit: SegmentSplit = {
+      residential: residentialRows.filter((row) => {
+        const milestone = compact(row.current_milestone, "").toLowerCase();
+        const date = toDate(row.lead_date ?? row.created_at);
+        return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
+      }).length,
+      commercial: commercialRows.filter((row) => {
+        const milestone = compact(row.current_milestone, "").toLowerCase();
+        const date = toDate(row.lead_date ?? row.created_at);
+        return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
+      }).length,
+    };
+
+    // Item 7: close rate splits are the count-based snapshot formula (window-
+    // independent), same as the location/rep close rates.
+    const closeRateSplit: SegmentSplit = {
+      residential: computeSnapshotCloseRate(residentialRows),
+      commercial: computeSnapshotCloseRate(commercialRows),
+    };
+
+    const averageTicket = computeAverageTicket(filteredPipeline, jobs, start, end);
 
     const marginByRegion = computeMarginByDimension(
       filteredPipeline,
@@ -773,6 +1113,17 @@ export async function loadExecutivePipelineDashboard(
       (row) => compact(row.primary_salesperson, "Unassigned"),
     );
 
+    // Item 4: margin % split by segment, weighted the same way the overall/location
+    // margin caption is (dollar-weighted average of jobs-with-cost-data).
+    const marginPctFor = (rows: PipelineRow[]): number => {
+      const byAll = computeMarginByDimension(rows, jobs, financialsByJobId, invoiceCostByJobId, () => "all");
+      return byAll[0]?.marginPct ?? 0;
+    };
+    const marginPctSplit: SegmentSplit = {
+      residential: marginPctFor(residentialRows),
+      commercial: marginPctFor(commercialRows),
+    };
+
     const soldRows = filteredPipeline.filter((row) => {
       const milestone = compact(row.current_milestone, "").toLowerCase();
       const date = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
@@ -795,7 +1146,20 @@ export async function loadExecutivePipelineDashboard(
       entry.arBalance += balance;
       leaderboardMap.set(salesperson, entry);
     }
-    const leaderboard = Array.from(leaderboardMap.values()).sort((a, b) => b.soldValue - a.soldValue);
+
+    // Item 6/7: "assigned Close Rate" per rep — count-based snapshot formula, keyed
+    // on the SAME assigned-rep field (primary_salesperson) the leaderboard already
+    // groups by, computed over that rep's full (window-independent) row set.
+    const rowsByRep = new Map<string, PipelineRow[]>();
+    for (const row of filteredPipeline) {
+      const salesperson = compact(row.primary_salesperson, "Unassigned");
+      const list = rowsByRep.get(salesperson) ?? [];
+      list.push(row);
+      rowsByRep.set(salesperson, list);
+    }
+    const leaderboard: RepLeaderboardRow[] = Array.from(leaderboardMap.values())
+      .map((row) => ({ ...row, closeRateSnapshot: computeSnapshotCloseRate(rowsByRep.get(row.salesperson) ?? []) }))
+      .sort((a, b) => b.soldValue - a.soldValue);
 
     const locationRollup = computeLocationRollup(filteredPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
 
@@ -831,6 +1195,14 @@ export async function loadExecutivePipelineDashboard(
       arTotal,
       freshness,
       pipelineValueTotal,
+      pipelineValueSplit,
+      soldValueSplit,
+      jobsSoldSplit,
+      newLeadsSplit,
+      closeRateSplit,
+      marginPctSplit,
+      averageTicket,
+      knownReps,
     };
   } catch (error) {
     return degradedDashboard(
@@ -847,13 +1219,16 @@ export async function loadExecutivePipelineDashboard(
 // ---------------------------------------------------------------------------
 
 /** Loads the job-level rows for ONE production location (account_key), applying the
- * optional commercial/residential filter. `accountKey` MUST already be allowlist-
- * validated by the caller (the API route) against KNOWN_ACCOUNT_KEYS — this function
- * does not re-validate, it trusts the caller per the route's allowlist gate. */
+ * optional commercial/residential and rep filters. `accountKey` MUST already be
+ * allowlist-validated by the caller (the API route) against KNOWN_ACCOUNT_KEYS —
+ * this function does not re-validate, it trusts the caller per the route's
+ * allowlist gate. `rep`, when provided, MUST already be validated by the caller
+ * against the dashboard's own knownReps list (item 6/route allowlist discipline). */
 export async function loadJobsForLocation(
   accountKey: string,
   commercialResidential: string | "all" = "all",
   env: RuntimeEnv = getRuntimeEnv(),
+  rep: string | "all" = "all",
 ): Promise<{ status: DashboardStatus; jobs: JobDrillRow[]; error: string | null }> {
   const { client, config } = createServerSupabaseClient(env);
 
@@ -871,7 +1246,7 @@ export async function loadJobsForLocation(
       selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
     ]);
 
-    return { status: "live", jobs: jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential), error: null };
+    return { status: "live", jobs: jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep), error: null };
   } catch (error) {
     return { status: "degraded", jobs: [], error: error instanceof Error ? error.message : "Job drill-down query failed" };
   }
