@@ -12,14 +12,19 @@ steady-state refresh is event-driven (D-16) rather than a blanket hourly re-pull
 impossible. It closes the trigger side of the D-16 change-driven refresh loop the 07-06 job walk
 implements on the pull side.
 
-> Status: **A wichita-only prod canary subscription is live** (created after human approval — see
-> [Canary Subscription (live)](#canary-subscription-live) below). The receiver's topic-routing map
-> initially used invented topic names and misrouted all three live canary deliveries
-> (`topic="unknown"`, `enqueued_action=null`) — this was found and fixed same-session; see
-> [Live envelope correction](#live-envelope-correction-2026-07-02) below. Re-fired proof: all three
-> topics now land correctly with the right `enqueued_action` and `account_key='wichita'`. The
-> remaining 7 production accounts are pending human green-light — see
-> [Rollout: remaining accounts](#rollout-remaining-accounts-pending-human-green-light).
+> Status: **All 8 production accounts have webhook subscriptions created** (human green-lit the
+> remaining 7 on 2026-07-02 — see [Rollout: 8/8 accounts subscribed](#rollout-88-accounts-subscribed-2026-07-02)
+> below). The receiver's topic-routing map initially used invented topic names and misrouted all
+> three live canary deliveries (`topic="unknown"`, `enqueued_action=null`) — this was found and
+> fixed same-session; see [Live envelope correction](#live-envelope-correction-2026-07-02) below.
+> A SECOND live-fix was required after the 7-account rollout: `verifyAuth()` only recognized the
+> single wichita canary `subscriptionId`, so all 7 new accounts' test-events landed
+> `signature_verified=false` despite HTTP 200 delivery — see
+> [Multi-subscription auth fix](#multi-subscription-auth-fix-2026-07-02-post-plan) below. That fix
+> is deployed and unit-tested; **live re-verification (firing test-events for the 7 new
+> subscriptions) is BLOCKED in the current session** by sandbox file-access permissions on the
+> root `.env` (needed to read each account's AccuLynx Bearer key) — see that section for the
+> precise blocker and required next step.
 
 # Live topic catalog + auth mechanism (Task 0 decision)
 
@@ -64,11 +69,13 @@ re-derive the decision.
 
 **Files:** `supabase/functions/acculynx-webhook/handler.ts` (pure, unit-tested logic),
 `supabase/functions/acculynx-webhook/index.ts` (thin `Deno.serve` HTTP wrapper — mirrors the
-`acculynx-write-action`/`action.ts` split), `supabase/functions/acculynx-webhook/index.test.ts` (47
-passing cases, including REAL-envelope regression tests added in the live-envelope-correction pass).
+`acculynx-write-action`/`action.ts` split), `supabase/functions/acculynx-webhook/index.test.ts` (52
+passing cases, including REAL-envelope regression tests added in the live-envelope-correction pass and
+multi-subscription auth tests added in the 2026-07-02 post-plan rollout fix).
 
 **Deployed:** `supabase functions deploy acculynx-webhook --project-ref rnhmvcpsvtqjlffpsayu
---no-verify-jwt` (2026-07-02, redeployed same day after the routing fix). The `--no-verify-jwt` flag is
+--no-verify-jwt` (2026-07-02, redeployed twice same day — once after the routing fix, once after the
+multi-subscription auth fix below). The `--no-verify-jwt` flag is
 required and persisted in `supabase/config.toml` (`[functions.acculynx-webhook] verify_jwt = false`) —
 AccuLynx cannot send a
 Supabase JWT, so the platform's default `verify_jwt=true` would reject every delivery; the receiver's
@@ -273,35 +280,101 @@ legitimately no-op'ing (`processed=false` with a logged reason, if the walk cann
 placeholder GUID) is expected and acceptable for test events — this is not a production-delivery
 failure mode, since real deliveries carry real job GUIDs.
 
-# Rollout: remaining accounts (pending human green-light)
+# Rollout: 8/8 accounts subscribed (2026-07-02)
 
-The wichita canary above is the ONLY production subscription. The remaining **7 production accounts**
-(see [Account Registry](../accounts.md)) are pending explicit human green-light before their own
-subscriptions are created — the D-17 write-gate posture (sandbox/canary-prove first, human-fire prod)
-applies per-account, not just once:
+The human green-lit the remaining **7 production accounts** (see [Account Registry](../accounts.md))
+on 2026-07-02. The orchestrator created all 7 subscriptions (each its own `POST
+/webhooks/v2/subscriptions` call, authenticated with that account's own Bearer key, using the same
+shared consumer URL/token and the same three topics) — all 7 calls returned HTTP `200`, and
+`ACCULYNX_WEBHOOK_ACCOUNT_MAP` was extended (not replaced) to all 8 entries (subscriptionId prefixes
+only, no full ids or secrets committed to docs):
 
-- Each additional account needs its **own** `POST /webhooks/v2/subscriptions` call, authenticated with
-  that account's own Bearer key (the endpoint is per-account-keyed), using the **same** consumer URL
-  (`https://rnhmvcpsvtqjlffpsayu.supabase.co/functions/v1/acculynx-webhook/<TOKEN>` — the token is
-  shared across all subscriptions; it is a receiver-level shared secret, not per-subscription) and the
-  same three topics (`job_created`, `job.financials.approved-value_changed`,
-  `job.representatives.company_assigned`).
-- **`ACCULYNX_WEBHOOK_ACCOUNT_MAP` MUST be extended, not replaced**, with one new
-  `"<subscriptionId>": "<account_key>"` entry per new subscription — the map already supports multiple
-  entries (it's a plain JSON object), but each rollout step needs the new subscriptionId learned from
-  the `POST /subscriptions` response and added before (or promptly after) that account's first live
-  delivery, or that account's events will resolve `account_key=null` and silently fail to enqueue (the
-  same fail-closed behavior observed for an unmapped subscriptionId, by design — see the routing table
-  note above).
-- **`ACCULYNX_WEBHOOK_SUBSCRIPTION_ID`** (singular) only tracks ONE subscriptionId and is now a
-  vestigial defense-in-depth check for the wichita canary specifically — it does not need to
-  (and cannot) enumerate all 8 subscriptions. If/when multi-account rollout completes, consider
-  whether this check still adds value beyond the account map, or should be retired in favor of relying
-  on the map + per-subscription secrets alone.
-- Fire `POST /subscriptions/{id}/test-event` per new subscription and confirm a live
-  `acculynx_webhook_events` row lands with `signature_verified=true`, the correct real topic, the
-  correct new `account_key`, and a non-null `enqueued_action` — the same verification pattern proven
-  above for wichita.
+| Account | Subscription id (prefix) |
+|---|---|
+| `wichita` (canary) | `ab5a7544-...` |
+| `colorado` | `9a9682ac-...` |
+| `florida` | `514355b8-...` |
+| `georgia` | `5a8e9a9f-...` |
+| `insurance_program` | `8a4877f9-...` |
+| `kansas_city` | `90e9f87f-...` |
+| `multi_family_commercial` | `805e0746-...` |
+| `texas` | `efa8a7a1-...` |
+
+The orchestrator then fired 7 test-events (one per new subscription) — all delivered (HTTP 200), but
+**all 7 landed `signature_verified=false`, `account_key=null`** in `acculynx_webhook_events`. This is
+the multi-subscription auth bug documented next, not a delivery or account-map problem.
+
+## Multi-subscription auth fix (2026-07-02, post-plan)
+
+**Root cause (verified in source, `handler.ts`):** `verifyAuth()`'s subscriptionId check compared
+`payload.subscriptionId` against the SINGLE env var `ACCULYNX_WEBHOOK_SUBSCRIPTION_ID` — provisioned
+at canary time as the wichita subscription's id only. This was a correct design for exactly one
+subscription; once 8 subscriptions existed, the other 7 accounts' deliveries legitimately carry a
+DIFFERENT `subscriptionId` that can never match that single value, so `verifyAuth()` rejected every
+one of them (auth check failed, hence `signature_verified=false` and no `account_key` resolution —
+`routeTopic()`/`accountKeyForSubscription()` were never even reached).
+
+**The one-subscription assumption was baked in at design time** (see
+[Live envelope correction](#live-envelope-correction-2026-07-02) above) because only the wichita canary
+existed when `AuthConfig`/`verifyAuth()` were built — `ACCULYNX_WEBHOOK_ACCOUNT_MAP` was added in that
+same pass for *routing* (account resolution) but `verifyAuth()`'s auth check was never updated to also
+consult it. **Lesson:** when a design decision is scoped to "the only instance that exists right now"
+(one canary subscription), leave an explicit TODO/flag at the exact line that assumption lives in, so
+a later rollout to N instances doesn't silently miss updating every place the assumption was encoded —
+here it was encoded twice (routing AND auth) and only the routing side got the account-map treatment.
+
+**Fix applied** (`handler.ts`/`index.ts`, this pass): `AuthConfig` gained an `accountMap` field.
+`verifyAuth()` now accepts a `subscriptionId` that constant-time-matches EITHER
+`expectedSubscriptionId` (back-compat, still covers the wichita canary) OR any key of `accountMap` —
+every map key is compared unconditionally (no early exit on the first match), preserving the same
+constant-time discipline as the rest of the module so timing cannot reveal which subscription (if any)
+matched. `index.ts` wires the already-parsed `WEBHOOK_ACCOUNT_MAP` into `verifyAuth`'s config. Empty
+`expectedSubscriptionId` + empty `accountMap` still falls back to pending-subscription log-only mode
+unchanged. 5 new unit tests cover: a map-key subscriptionId verifies, an unmapped id still rejects,
+back-compat single-id verification still works, and the empty-both log-only path. All 52 deno tests +
+`deno check` green.
+
+**Redeployed:** `supabase functions deploy acculynx-webhook --project-ref rnhmvcpsvtqjlffpsayu
+--no-verify-jwt` (2026-07-02, this pass). A bogus-token curl against the redeployed receiver still
+returns `401`, confirming the auth gate is intact for genuinely unauthenticated requests.
+
+**Live re-verification status: BLOCKED, not yet complete.** Re-firing test-events for the 7 new
+subscriptions (per the plan's step 4/5) requires reading each account's
+`PE_CC_<ACCOUNT>_ACCULYNX_API_KEY` from the root `.env` to authenticate the
+`POST /subscriptions/{id}/test-event` call. In this session, both the `Bash` and `Read` tools were
+**permission-denied against the root `.env` and the entire `config/` directory** (a sandbox-level
+file-access restriction, not a secret-content filter — even a line-count `grep -c "="` on the file was
+denied). No workaround (variable indirection, alternate tool path, etc.) was attempted beyond
+confirming the boundary is real; per hard rule 2 and the plan's explicit scope limit ("the ONLY
+AccuLynx writes permitted are the listed test-event POSTs"), this was not something to route around.
+
+**What IS verified as of this pass:**
+- The auth-fix code change (unit-tested, 52/52 green, `deno check` clean).
+- The redeploy succeeded (`supabase functions deploy` returned success).
+- A bogus-token request against the live redeployed receiver still 401s (auth gate not broken open).
+- DB rows 11-18 (`acculynx_webhook_events`) are the orchestrator's ORIGINAL pre-fix 7 test-event
+  fires (received 2026-07-02 21:46-21:50 UTC, before this pass's redeploy) — all
+  `signature_verified=false`, `account_key=null`, exactly matching the reported bug. These rows
+  predate the fix and are NOT evidence the fix works; they are the failure this fix targets.
+
+**Required next step (needs either human action or a session with `.env`/`config/` read access):**
+re-fire one `POST /subscriptions/{id}/test-event` per new subscription (ids listed above, full values
+in the account-map secret) and confirm each lands `signature_verified=true` with the correct
+`account_key` and a non-null `enqueued_action` — the same pattern already proven for wichita (rows
+8/9/10 above). Until that re-fire happens, the 7 non-wichita accounts' PRODUCTION webhook deliveries
+will silently fail auth in the same way (fail-closed: `401`, no pull enqueued) even though the code fix
+is deployed — this is a delivery-availability gap for 7 of 8 accounts, not a security regression (the
+fail-closed posture is exactly what T-07-08-01 requires when auth cannot be confirmed).
+
+## Rollout mechanics (for reference)
+
+- Each additional account's subscription used its own account's Bearer key against the per-account-keyed
+  `POST /webhooks/v2/subscriptions` endpoint, the SAME consumer URL/token (a receiver-level shared
+  secret, not per-subscription), and the same three topics (`job_created`,
+  `job.financials.approved-value_changed`, `job.representatives.company_assigned`).
+- **`ACCULYNX_WEBHOOK_SUBSCRIPTION_ID`** (singular) still only tracks the wichita canary's id — now
+  formally a back-compat/defense-in-depth check (see the fix above); `accountMap` is the mechanism that
+  actually covers all 8 subscriptions for auth purposes.
 - **Rollback:** `DELETE /subscriptions/{subscriptionId}` per subscription — no data is destroyed on the
   brain side either way (`acculynx_webhook_events` rows are append-only audit history, hard rule 1).
 - **If AccuLynx is later confirmed to sign payloads with an HMAC header** (observable from a live
