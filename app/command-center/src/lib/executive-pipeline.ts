@@ -136,6 +136,18 @@ export interface ExecutivePipelineDashboard {
   pipelineValueTotal: number;
 }
 
+/** One job row for the per-location drill-down table (D-09 checkpoint gap). Free-text
+ * fields (jobName, salesperson) originate in AccuLynx and MUST be rendered via
+ * textContent/attribute-safe paths client-side — never innerHTML (T-07-05). */
+export interface JobDrillRow {
+  acculynxJobId: string | null;
+  jobName: string;
+  accountKey: string;
+  milestone: string;
+  contractAmount: number;
+  salesperson: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -394,6 +406,41 @@ export function computeMarginByDimension(
   }
 
   return results.sort((a, b) => b.marginPct - a.marginPct || a.dimension.localeCompare(b.dimension));
+}
+
+// ---------------------------------------------------------------------------
+// Pure core: per-job drill-down rows for a location row expansion (D-09)
+// ---------------------------------------------------------------------------
+
+/** Builds the job-level rows for one account_key (production location), applying the
+ * same account/commercial-residential filters the aggregate KPIs already obey. Reuses
+ * deriveRegionOffice + amountFor so the drill-down table is consistent with the
+ * aggregates it expands from. Never fabricates rows — only real crm_pipeline rows. */
+export function jobRowsForLocation(
+  pipeline: PipelineRow[],
+  jobs: AcculynxJobRow[],
+  accountKey: string,
+  commercialResidential: string | "all" = "all",
+): JobDrillRow[] {
+  return pipeline
+    .filter((row) => {
+      const derived = deriveRegionOffice(row, jobs);
+      if (derived.accountKey !== accountKey) return false;
+      if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
+      return true;
+    })
+    .map((row) => {
+      const derived = deriveRegionOffice(row, jobs);
+      return {
+        acculynxJobId: row.acculynx_job_id,
+        jobName: compact(row.job_name, "Unnamed job"),
+        accountKey: derived.accountKey,
+        milestone: compact(row.current_milestone, "unknown").toLowerCase(),
+        contractAmount: amountFor(row),
+        salesperson: compact(row.primary_salesperson, "Unassigned"),
+      };
+    })
+    .sort((a, b) => b.contractAmount - a.contractAmount);
 }
 
 // ---------------------------------------------------------------------------
@@ -660,13 +707,18 @@ export async function loadExecutivePipelineDashboard(
     }
     const leaderboard = Array.from(leaderboardMap.values()).sort((a, b) => b.soldValue - a.soldValue);
 
-    // Freshness badges: use every account in the registry so a location with
-    // zero jobs still shows an honest (likely critical/no-sync) badge.
+    // Freshness badges: use every KNOWN production account so a location with zero jobs
+    // still shows an honest (likely critical/no-sync) badge. Excludes any non-production
+    // account row (e.g. "sandbox") that may exist in acculynx_accounts but is not one of
+    // the 8 real business locations (checkpoint rework directive 3).
+    const knownAccountKeySet = new Set<string>(KNOWN_ACCOUNT_KEYS);
     const watermarkByAccount = new Map(watermarks.map((w) => [w.account_key, w.last_sync_at]));
-    const freshnessInputs: FreshnessInput[] = accounts.map((account) => ({
-      accountKey: account.account_key,
-      lastSyncAt: watermarkByAccount.get(account.account_key) ?? null,
-    }));
+    const freshnessInputs: FreshnessInput[] = accounts
+      .filter((account) => knownAccountKeySet.has(account.account_key))
+      .map((account) => ({
+        accountKey: account.account_key,
+        lastSyncAt: watermarkByAccount.get(account.account_key) ?? null,
+      }));
     const freshness = computeFreshnessBadges(freshnessInputs, now);
 
     return {
@@ -694,5 +746,40 @@ export async function loadExecutivePipelineDashboard(
       resolvedFilters,
       now,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SSR loader: per-location job drill-down (D-09 checkpoint gap — Task 6 rework)
+// ---------------------------------------------------------------------------
+
+/** Loads the job-level rows for ONE production location (account_key), applying the
+ * optional commercial/residential filter. `accountKey` MUST already be allowlist-
+ * validated by the caller (the API route) against KNOWN_ACCOUNT_KEYS — this function
+ * does not re-validate, it trusts the caller per the route's allowlist gate. */
+export async function loadJobsForLocation(
+  accountKey: string,
+  commercialResidential: string | "all" = "all",
+  env: RuntimeEnv = getRuntimeEnv(),
+): Promise<{ status: DashboardStatus; jobs: JobDrillRow[]; error: string | null }> {
+  const { client, config } = createServerSupabaseClient(env);
+
+  if (!client) {
+    return { status: "unconfigured", jobs: [], error: config.missing.map((name) => `Missing ${name}`).join(", ") };
+  }
+
+  try {
+    const [pipeline, jobs] = await Promise.all([
+      selectAll<PipelineRow>(
+        client,
+        "crm_pipeline",
+        "id,acculynx_job_id,job_name,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
+      ),
+      selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
+    ]);
+
+    return { status: "live", jobs: jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential), error: null };
+  } catch (error) {
+    return { status: "degraded", jobs: [], error: error instanceof Error ? error.message : "Job drill-down query failed" };
   }
 }

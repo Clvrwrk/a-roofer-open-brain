@@ -6,6 +6,7 @@ import {
   deriveRegionOffice,
   filterByWindow,
   groupPipelineFunnel,
+  jobRowsForLocation,
   paginateRange,
   type AcculynxJobRow,
   type PipelineRow,
@@ -279,5 +280,63 @@ describe("window filtering", () => {
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe(2);
+  });
+});
+
+describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
+  it("returns only jobs whose derived account_key matches the requested location", () => {
+    const jobs: AcculynxJobRow[] = [
+      makeJobRow({ id: "job-1", account_key: "wichita" }),
+      makeJobRow({ id: "job-2", account_key: "colorado" }),
+    ];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", job_name: "Wichita Roof" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", job_name: "Colorado Roof" }),
+    ];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe("Wichita Roof");
+    expect(rows[0].accountKey).toBe("wichita");
+  });
+
+  it("further filters by commercial/residential when provided", () => {
+    const jobs: AcculynxJobRow[] = [
+      makeJobRow({ id: "job-1", account_key: "wichita", job_category_name: "Residential" }),
+      makeJobRow({ id: "job-2", account_key: "wichita", job_category_name: "Commercial" }),
+    ];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2" }),
+    ];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita", "Commercial");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].acculynxJobId).toBe("job-2");
+  });
+
+  it("sorts rows by contract amount descending and never fabricates rows", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 5000 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", contract_amount: 20000 }),
+    ];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].acculynxJobId).toBe("job-2");
+    expect(rows[1].acculynxJobId).toBe("job-1");
+  });
+
+  it("returns an empty array (not a fabricated row) when no jobs match the location", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "colorado" })];
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1" })];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(0);
   });
 });

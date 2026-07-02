@@ -3,6 +3,7 @@ import { jsonResponse } from "@lib/agent-auth";
 import {
   KNOWN_ACCOUNT_KEYS,
   loadExecutivePipelineDashboard,
+  loadJobsForLocation,
   type DashboardFilters,
   type WindowToken,
 } from "@lib/executive-pipeline";
@@ -40,6 +41,19 @@ export const GET: APIRoute = async ({ url }) => {
     params.get("type") === "all"
       ? "all"
       : pickAllowlisted(params.get("type"), KNOWN_COMMERCIAL_RESIDENTIAL);
+
+  // Per-location job drill-down (D-09 checkpoint rework, directive 6): ?jobs=1 requests
+  // the job-level table for ONE location instead of the aggregate dashboard. `location`
+  // MUST allowlist-validate against the 8 known account keys (Security V5 / T-07-04) —
+  // an unrecognized/missing location yields an empty result, never an unfiltered query.
+  if (params.get("jobs") === "1") {
+    const jobsAccountKey = pickAllowlisted(params.get("location"), KNOWN_ACCOUNT_KEY_SET);
+    if (!jobsAccountKey) {
+      return jsonResponse({ status: "live", jobs: [], error: null });
+    }
+    const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all");
+    return jsonResponse(result);
+  }
 
   const filters: DashboardFilters = {
     ...(window ? { window } : {}),
