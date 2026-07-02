@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   computeCloseRate,
   computeFreshnessBadges,
+  computeLocationRollup,
   computeMarginByDimension,
   deriveRegionOffice,
+  excludeClosedAndPaidInFull,
   filterByWindow,
   groupPipelineFunnel,
+  isExcludedMilestone,
   jobRowsForLocation,
   paginateRange,
   type AcculynxJobRow,
@@ -338,5 +341,116 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     const rows = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(0);
+  });
+
+  it("excludes closed/paid-in-full jobs from the location drill-down (checkpoint feedback)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved" }),
+    ];
+
+    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].acculynxJobId).toBe("job-2");
+  });
+});
+
+describe("closed/paid-in-full exclusion (checkpoint feedback round 2: 'eliminate closed and paid in full data')", () => {
+  it("flags a row with current_milestone 'closed' as excluded", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "closed" }))).toBe(true);
+  });
+
+  it("flags a row with current_milestone 'paid in full' as excluded even though it never appears in production data today", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "paid in full" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "paid_in_full" }))).toBe(true);
+  });
+
+  it("is case-insensitive (covers Title-Case acculynx_jobs vocabulary if it ever leaks into this field)", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Closed" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "CLOSED" }))).toBe(true);
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: "Paid In Full" }))).toBe(true);
+  });
+
+  it("does not flag other real production milestones (dead, cancelled, invoiced, completed, approved, prospect, leads)", () => {
+    for (const milestone of [
+      "dead",
+      "cancelled",
+      "invoiced",
+      "completed",
+      "approved",
+      "prospect",
+      "assigned_lead",
+      "unassigned_lead",
+    ]) {
+      expect(isExcludedMilestone(makePipelineRow({ current_milestone: milestone }))).toBe(false);
+    }
+  });
+
+  it("treats a null/empty current_milestone as not excluded", () => {
+    expect(isExcludedMilestone(makePipelineRow({ current_milestone: null }))).toBe(false);
+  });
+
+  it("excludeClosedAndPaidInFull drops only closed/paid-in-full rows from a mixed set, case-insensitively", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "closed" }),
+      makePipelineRow({ id: 2, current_milestone: "Closed" }),
+      makePipelineRow({ id: 3, current_milestone: "approved" }),
+      makePipelineRow({ id: 4, current_milestone: "dead" }),
+    ];
+
+    const result = excludeClosedAndPaidInFull(rows);
+
+    expect(result.map((row) => row.id)).toEqual([3, 4]);
+  });
+
+  it("removes excluded-milestone rows from the funnel grouping entirely (not zeroed, not present)", () => {
+    const rows = excludeClosedAndPaidInFull([
+      makePipelineRow({ id: 1, current_milestone: "closed", contract_amount: 50000 }),
+      makePipelineRow({ id: 2, current_milestone: "approved", contract_amount: 10000 }),
+    ]);
+    const funnel = groupPipelineFunnel(rows);
+
+    expect(funnel.find((stage) => stage.milestone === "closed")).toBeUndefined();
+    expect(funnel.find((stage) => stage.milestone === "approved")).toBeDefined();
+  });
+
+  it("removes excluded-milestone rows from margin-by-dimension aggregation and its coverage denominator", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = excludeClosedAndPaidInFull([
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed", contract_amount: 100000 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved", contract_amount: 10000 }),
+    ]);
+    const financials = new Map([["job-2", { grossProfit: 2000 }]]);
+
+    const byRegion = computeMarginByDimension(pipeline, jobs, financials, new Map(), (row, jobRows) => deriveRegionOffice(row, jobRows).accountKey);
+    const wichita = byRegion.find((row) => row.dimension === "wichita");
+
+    expect(wichita?.coverage.totalJobsInSlice).toBe(1);
+  });
+
+  it("removes excluded-milestone rows from the per-location rollup (pipeline $, sold $, AR $)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = excludeClosedAndPaidInFull([
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed", contract_amount: 100000, balance_due: 5000 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved", contract_amount: 10000, balance_due: 500 }),
+    ]);
+
+    const rollup = computeLocationRollup(pipeline, jobs, ["wichita"], new Date("2026-06-20"), new Date("2026-07-01"));
+
+    expect(rollup[0].pipelineValue).toBe(10000);
+    expect(rollup[0].arValue).toBe(500);
+  });
+
+  it("removes excluded-milestone rows from close-rate sold-count (checkpoint feedback applied uniformly, per implementation contract)", () => {
+    const pipeline = excludeClosedAndPaidInFull([
+      makePipelineRow({ id: 1, current_milestone: "closed", approved_date: "2026-06-28T00:00:00Z" }),
+      makePipelineRow({ id: 2, current_milestone: "invoiced", approved_date: "2026-06-28T00:00:00Z" }),
+    ]);
+
+    const result = computeCloseRate(pipeline, new Date("2026-06-25"), new Date("2026-07-01"));
+
+    expect(result.soldCount).toBe(1);
   });
 });

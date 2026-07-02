@@ -171,6 +171,39 @@ const FRESHNESS_SLA_MS = 60 * 60_000;
 const LEAD_MILESTONES = new Set(["unassigned_lead", "assigned_lead", "lead", "prospect"]);
 const SOLD_MILESTONES = new Set(["approved", "completed", "invoiced", "closed"]);
 
+/** Checkpoint feedback round 2 (user, verbatim): "we need to eliminate closed and paid
+ * in full data". Live-DB verification (2026-07-01, crm_pipeline.current_milestone,
+ * 7,053 rows) found NO distinct "paid in full" milestone value in either
+ * crm_pipeline.current_milestone (lowercase) or acculynx_jobs.current_milestone
+ * (Title Case) — the two vocabularies observed are:
+ *   crm_pipeline:   dead, cancelled, closed, assigned_lead, prospect, invoiced,
+ *                   approved, unassigned_lead, completed
+ *   acculynx_jobs:  Cancelled, Closed, Lead, Invoiced, Prospect, Approved, Completed
+ * `balance_due` is 0 across every milestone in production (not a populated AR
+ * signal), so "paid in full" cannot be derived from a zero-balance heuristic either.
+ * "closed" / "Closed" is the only literal match for the user's instruction and is
+ * treated as covering both "closed" and "paid in full" (a closed job is, by
+ * definition, fully invoiced/settled in this data model). Case-insensitive so it
+ * also covers the Title-Case acculynx_jobs vocabulary if it ever leaks into this
+ * field. Applied to the BASE row set before every aggregation (funnel, close rate,
+ * margin breakdowns, location rollup, leaderboard, AR total, drill-down). */
+export const EXCLUDED_MILESTONES = new Set(["closed", "paid in full", "paid_in_full"]);
+
+/** Case-insensitive predicate: true when the row's milestone should be excluded from
+ * every KPI/chart/table on the executive pipeline dashboard (checkpoint feedback). */
+export function isExcludedMilestone(row: Pick<PipelineRow, "current_milestone">): boolean {
+  const milestone = compact(row.current_milestone, "").toLowerCase();
+  return EXCLUDED_MILESTONES.has(milestone);
+}
+
+/** Applies isExcludedMilestone to a row set — the single filter point every loader
+ * path (dashboard aggregation + per-location drill-down) must call before computing
+ * anything, so "closed"/"paid in full" jobs never appear in any KPI, chart, breakdown,
+ * or drill-down row. */
+export function excludeClosedAndPaidInFull(rows: PipelineRow[]): PipelineRow[] {
+  return rows.filter((row) => !isExcludedMilestone(row));
+}
+
 /** The 8 production acculynx_accounts.account_key values (RESEARCH.md, Open Question 3:
  * treat program accounts (insurance_program, multi_family_commercial) as peer location
  * entries for v1's plain global filter bar, per D-13's discretion note). */
@@ -464,14 +497,16 @@ export function computeLocationRollup(
 /** Builds the job-level rows for one account_key (production location), applying the
  * same account/commercial-residential filters the aggregate KPIs already obey. Reuses
  * deriveRegionOffice + amountFor so the drill-down table is consistent with the
- * aggregates it expands from. Never fabricates rows — only real crm_pipeline rows. */
+ * aggregates it expands from. Never fabricates rows — only real crm_pipeline rows.
+ * Excludes closed/paid-in-full jobs (checkpoint feedback round 2), same filter point
+ * as the aggregate dashboard loader. */
 export function jobRowsForLocation(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
   accountKey: string,
   commercialResidential: string | "all" = "all",
 ): JobDrillRow[] {
-  return pipeline
+  return excludeClosedAndPaidInFull(pipeline)
     .filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (derived.accountKey !== accountKey) return false;
@@ -684,9 +719,14 @@ export async function loadExecutivePipelineDashboard(
 
     const { start, end, label } = windowRange(resolvedFilters.window, now);
 
+    // Checkpoint feedback (round 2): exclude closed/paid-in-full jobs from the ENTIRE
+    // dataset before any filter bar or aggregation runs — one filter point upstream of
+    // the D-13 accountKey/commercialResidential filter below.
+    const activePipeline = excludeClosedAndPaidInFull(pipeline);
+
     // Apply the D-13 global filter bar (account_key / commercial-residential) before
     // computing any KPI — every KPI, chart, and drill-down obeys the filter bar.
-    const filteredPipeline = pipeline.filter((row) => {
+    const filteredPipeline = activePipeline.filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (resolvedFilters.accountKey !== "all" && derived.accountKey !== resolvedFilters.accountKey) return false;
       if (

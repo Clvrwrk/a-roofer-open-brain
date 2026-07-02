@@ -237,3 +237,44 @@ any downstream plan touching `/executive/pipeline`.
   close-rate "period snapshot" qualifier) and the XSS discipline (AccuLynx free text via
   `textContent`/attribute-safe DOM construction, never `innerHTML`) are unchanged and
   still apply under the new layout.
+
+## 2026-07-01 user-directed amendment #2 (checkpoint feedback round 2 — data exclusion)
+
+The round-2 human-verify checkpoint accepted the reworked layout ("much better looking")
+but required one data change, verbatim: **"we need to eliminate closed and paid in full
+data."**
+
+- **Live-DB verification (2026-07-01, `crm_pipeline.current_milestone`, 7,053 rows):**
+  no distinct "paid in full" milestone value exists in production. The observed
+  vocabularies are `crm_pipeline` (lowercase): `dead` (4,443), `cancelled` (940),
+  `closed` (512), `assigned_lead` (332), `prospect` (257), `invoiced` (248),
+  `approved` (130), `unassigned_lead` (98), `completed` (93); and `acculynx_jobs`
+  (Title Case, 6,434 rows): `Cancelled` (5,021), `Closed` (575), `Lead` (260),
+  `Invoiced` (228), `Prospect` (189), `Approved` (98), `Completed` (63).
+  `balance_due` is `0` for every row across every milestone in production — not a
+  populated AR signal, so "paid in full" cannot be derived from a zero-balance
+  heuristic either. Per the implementation contract, `closed`/`Closed` is treated as
+  covering the user's "closed and paid in full" instruction (a closed job is, by
+  definition, fully invoiced/settled in this data model); `dead`/`cancelled` are
+  distinct existing milestones and were NOT touched — the user's instruction named
+  only closed + paid-in-full.
+- **Filter point:** `excludeClosedAndPaidInFull()` (case-insensitive; matches
+  `closed`, `paid in full`, `paid_in_full`) is exported from
+  `app/command-center/src/lib/executive-pipeline.ts` and applied to the base
+  `crm_pipeline` row set BEFORE the D-13 filter bar and every aggregation (funnel,
+  close rate, margin-by-region/office/commercial-residential/rep, per-location
+  rollup, leaderboard, AR total) and before the per-location job drill-down
+  (`jobRowsForLocation` / `?jobs=1`). One filter point, not per-KPI special cases.
+- **Measured before/after delta (live prod DB, default "Last 7 Days" window, all
+  locations):** `pipelineValueTotal` $33,494,893.45 -> $17,756,471.64 (-$15,738,421.81,
+  exactly the `closed` funnel bucket's value: 512 jobs). `newLeadsCount`,
+  `closeRate` (leadCount 11 / soldCount 30 / closeRate 2.73 / soldValue $6,082.28),
+  `leaderboard`, and `locationRollup` were unchanged in this window because none of
+  the `closed`-milestone jobs fell inside the "Last 7 Days" sold/lead date windows
+  that window uses (`approved_date`/`milestone_date`/`updated_at`) — the effect is
+  concentrated in the point-in-time `pipelineValueTotal`/`arTotal` KPIs and the
+  funnel chart, and would also reduce `soldCount`/`leaderboard` in any window where a
+  `closed`-milestone job's `approved_date`/`milestone_date`/`updated_at` falls inside
+  it. `marginByRegion`'s `wichita` slice denominator dropped from 1,284 to 1,283 jobs
+  (one closed job removed); the `unknown`-account slice dropped from 5,769 to 5,258
+  (511 closed jobs with no resolvable `account_key`).
