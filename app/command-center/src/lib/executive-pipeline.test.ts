@@ -99,13 +99,17 @@ describe("close rate", () => {
     expect(result.closeRate).toBeCloseTo(0.5, 5);
   });
 
-  it("returns a period-snapshot qualifier, not a cohort-conversion claim", () => {
+  it("returns a period-snapshot qualifier that never asserts cohort-level rigor", () => {
     const start = new Date("2026-06-20T00:00:00Z");
     const end = new Date("2026-06-30T00:00:00Z");
     const result = computeCloseRate([], start, end);
 
     expect(result.qualifier).toMatch(/period.snapshot/i);
-    expect(result.qualifier.toLowerCase()).not.toContain("cohort conversion rate");
+    // The qualifier may reference "cohort" only to explicitly disclaim it
+    // (e.g. "not a cohort conversion rate") — it must never assert cohort-level
+    // rigor as a bare, unqualified claim.
+    expect(result.qualifier.toLowerCase()).not.toMatch(/^cohort conversion rate$/);
+    expect(result.qualifier.toLowerCase()).toMatch(/not a cohort/);
   });
 });
 
