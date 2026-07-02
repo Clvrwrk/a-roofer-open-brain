@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-current_phase_name: acculynx-agent-okf-knowledge-base
-status: executing
-stopped_at: Phase 06 Plan 02 complete — OKF bundle completed + wired (Wave 1 done)
-last_updated: "2026-07-01T20:57:18.726Z"
+current_phase: 07
+current_phase_name: executive-sales-pipeline-dashboard
+status: ready_to_discuss
+stopped_at: Phase 06 closed COMPLETE-WITH-DEFERRAL (06-03 provisioning → separate Slack project; 06-04 verified 3/3) — Phase 07 next, start at discuss
+last_updated: "2026-07-01T21:45:00.000Z"
 last_activity: 2026-07-01
-last_activity_desc: Phase 06 Plan 02 executed — OKF AccuLynx bundle completed + wired (Wave 1 complete)
+last_activity_desc: Phase 06 closed with deferral (subagent live-verified; ob-acculynx provisioning moved to the Slack project); advanced to Phase 07
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 6
   total_plans: 25
-  completed_plans: 22
-  percent: 57
+  completed_plans: 24
+  percent: 86
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Complete, hourly-current, trustworthy AccuLynx data for every PE location — actionable by an agent within human-approved guardrails.
-**Current focus:** Phase 06 — acculynx-agent-okf-knowledge-base
+**Current focus:** Phase 07 — executive-sales-pipeline-dashboard
 
 ## Current Position
 
-Phase: 06 (acculynx-agent-okf-knowledge-base) — EXECUTING
-Plan: 2 of 4 complete (06-01 A3 approved; 06-02 OKF bundle completed + wired)
-Status: Wave 1 COMPLETE (Plans 01 + 02); Wave 2 (Plans 03/04 — ob-acculynx roster identity + Claude Code subagent) unblocked by A3 approval, next
-Last activity: 2026-07-01 — Phase 06 Plan 02 executed (OKF AccuLynx bundle completed, link-navigable, cited source of truth wired via acculynx-api skill + memory)
+Phase: 07 (executive-sales-pipeline-dashboard) — NOT STARTED (next step: discuss)
+Plan: none yet (plans TBD at planning)
+Status: Phase 06 closed COMPLETE-WITH-DEFERRAL 2026-07-01 — `acculynx` subagent live-verified 3/3 (D-03 never-approve, REQ-09 injection-as-data); ob-acculynx roster identity deployed but inert, Slack/Coolify provisioning DEFERRED to the separate Slack project (resume recipe in 06-03-SUMMARY.md)
+Last activity: 2026-07-01 — Phase 06 closed with deferral; advanced to Phase 07 (Executive Sales Pipeline Dashboard, REQ-10)
 
-Progress: [█████░░░░░] 57%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 

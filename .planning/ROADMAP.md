@@ -196,7 +196,7 @@ Plans:
   3. The in-repo OKF "AccuLynx" bundle is complete (who/what/how/why/where/when, read+write matrices, runbooks, account registry, dashboard spec) and is the cited source of truth.
   4. Repo skills (`acculynx-api`), memories, and references point to the folder so any agent reaches the right knowledge quickly.
 
-**Plans**: 2/4 plans executed
+**Plans**: 4/4 plans executed (06-03 Tasks 3–4 deferred to the separate Slack project)
 
 Plans:
 
@@ -207,8 +207,10 @@ Plans:
 
 **Wave 2** *(agent build — gated on Wave 1 A3 approval)*
 
-- [ ] 06-03-PLAN.md — `ob-acculynx` roster identity (`departmentAccess:"all"`) + Wave-0 access-control test + bound_agents wiring + Slack/Coolify provisioning + cross-department enqueue smoke test (REQ-09, SC2)
-- [ ] 06-04-PLAN.md — Claude Code subagent (`.claude/agents/acculynx.md`): NO_ANALOG doc-verify gate → author with D-03 authority + REQ-09 data-not-instructions boundary (REQ-09, SC2)
+- [~] 06-03-PLAN.md — `ob-acculynx` roster identity (`departmentAccess:"all"`) + Wave-0 access-control test + bound_agents wiring — **Tasks 1–2 complete + deployed (identity live, inert); Tasks 3–4 (Slack/Coolify provisioning + smoke test) DEFERRED to the separate Slack project (2026-07-01, see deferred-items.md)**
+- [x] 06-04-PLAN.md — Claude Code subagent (`.claude/agents/acculynx.md`): NO_ANALOG doc-verify gate → author with D-03 authority + REQ-09 data-not-instructions boundary (REQ-09, SC2) — **live-invocation verified 3/3 (2026-07-01)**
+
+**Status: COMPLETE-WITH-DEFERRAL (2026-07-01).** SC1 (A3 approved), SC3 + SC4 (OKF bundle complete + routed) met. SC2 met on the dev-session half: the `acculynx` subagent is live, invokable, and verified against the D-03 never-approve and REQ-09 injection-as-data boundaries. The live roster half (`ob-acculynx`) is code-complete and deployed but inert until the Slack project provisions its bot + service token (resume recipe: [06-03-SUMMARY.md](phases/06-acculynx-agent-okf-knowledge-base/06-03-SUMMARY.md)).
 
 ### Phase 7: Executive Sales Pipeline Dashboard
 
@@ -240,5 +242,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Commercial Cron Hardening | 3/6 | In Progress|  |
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
-| 6. AccuLynx Agent + OKF Knowledge Base | 2/4 | In Progress|  |
+| 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
 | 7. Executive Sales Pipeline Dashboard | 0/TBD | Not started | - |

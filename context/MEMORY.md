@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–5 COMPLETE** (Phase 5 write-action layer sandbox-proven; first live prod payment deferred by user until a real need). **Phase 6 (AccuLynx Agent + OKF Knowledge Base) IN PROGRESS** — A3 approved (D-04 gate cleared); OKF bundle (`docs/knowledge-base/acculynx/`) now complete + link-navigable, cited source of truth via the `acculynx-api` skill. **NEXT (Phase 6 2/4 closed; 03/04 code-done + deployed @942649a, awaiting USER): (A) provision `ob-acculynx` (Slack bot + Coolify secrets) → "provisioned"; (B) verify the `acculynx` subagent → "approved". Then Phase 6 verify + Phase 7.** Converged (main=origin=contrib).
+**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–6 COMPLETE** (5: first prod payment deferred until a real need; 6: closed-with-deferral 2026-07-01 — `acculynx` subagent live-verified 3/3; `ob-acculynx` roster deployed but INERT — Slack bot + Coolify secrets moved to the separate Slack project, resume recipe in 06-03-SUMMARY.md). **NEXT: Phase 7 — Executive Sales Pipeline Dashboard (REQ-10), start at `/gsd-discuss-phase 7`.** Converged (main=origin).
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
