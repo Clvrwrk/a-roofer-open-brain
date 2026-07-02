@@ -83,6 +83,31 @@ surface changes.
 - Access: keep the existing WorkOS gating as-is (viewer domains/roles unchanged) unless research
   surfaces a reason to restrict further.
 
+### Gap-closure ingestion architecture (added 2026-07-02, user-directed — LOCKED for the --gaps plans)
+- **D-14 (capture-first, map-second):** Every AccuLynx API response is archived to the append-only
+  `acculynx_raw` (endpoint + status + unfiltered payload) BEFORE any typed-table mapping. Mappers
+  project FROM raw (or from the same in-memory body they archived); a mapping failure must never
+  lose data — remediation is re-map-from-raw, not re-call-the-API. The current job-walk's
+  archive-nothing behavior is the defect class to eliminate.
+- **D-15 (first-sight full pull):** When a JobID is seen for the first time (no raw archive
+  entries), pull its ENTIRE per-job GET surface from the Phase-1 read matrix (~15 endpoints:
+  financials, representatives (all), contacts, insurance, milestone-history, invoices + lines,
+  estimates, documents metadata, messages, history, appointments, external-references, …) and
+  raw-archive all of it — even endpoints with no typed mapper yet. Goal: the brain always holds
+  the full unfiltered API pull per job.
+- **D-16 (change-driven re-pull, not blanket re-pull):** Steady-state refresh is driven by
+  `modifiedDate` watermark deltas and (once live) webhooks — a touched job gets its full endpoint
+  set refreshed; the world is NOT re-pulled hourly (rate math: 6,434 jobs × ~15 endpoints vs
+  10 req/s/key makes blanket hourly pulls impossible).
+- **D-17 (webhooks as triggers):** Verify `GET /webhooks/v2/topics` live; design a Supabase Edge
+  Function receiver; job-created topic → first-sight full pull, field-changed topics (e.g.
+  `job.financials.approved-value_changed`, `job.representatives.company_assigned`) → targeted
+  endpoint re-pull. `POST /webhooks/v2/subscriptions` is a WRITE: sandbox-proven first, human
+  approval before any prod subscription (testing posture + write gate).
+- **D-18 (backfill rotation):** The existing ~6,434 jobs get their first-sight full pull via a
+  paced, watermarked, per-account rotation (existing accountFilter lever; completes over days) —
+  this subsumes the wichita starvation fix.
+
 </decisions>
 
 <canonical_refs>
