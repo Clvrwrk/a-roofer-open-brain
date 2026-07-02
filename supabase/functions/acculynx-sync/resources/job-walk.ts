@@ -1,22 +1,41 @@
-// acculynx-sync — resources/job-walk.ts (Phase 2, plan 02-03)
+// acculynx-sync — resources/job-walk.ts (Phase 2 build; Phase 7 plan 07-05 rebuild)
 //
 // Per-job sub-resource walk with invoice two-level walk and budget resumption.
 //
-// For each job in the provided jobIds list (ordered, starting from watermark.last_walked_job_id):
-//   1. GET /jobs/{jobId}/contacts → upsert acculynx_job_contacts
-//   2. GET /jobs/{jobId}/financials → upsert acculynx_job_financials
-//   3. GET /jobs/{jobId}/insurance → upsert acculynx_job_insurance
-//   4. GET /jobs/{jobId}/milestone-history → upsert acculynx_job_milestone_history
-//   5. GET /jobs/{jobId}/invoices (level 1) → upsert acculynx_invoices headers
-//   6. For each invoice: GET /invoices/{invoiceId} (level 2) → upsert acculynx_invoice_lines
+// D-14 (capture-first, map-second): every per-job GET body is archived to the
+// append-only acculynx_raw table BEFORE any typed mapping — a mapping failure
+// never loses the payload (remediation is re-map-from-raw, not re-call-the-API).
 //
-// Watermark: last_walked_job_id advanced AFTER each job (before budget check)
-// so resumption picks up from the next job (Pitfall 5).
+// For each job in the provided jobIds list (ordered, starting from watermark.last_walked_job_id):
+//   1. GET /jobs/{jobId}/contacts       -> archive -> map -> upsert acculynx_job_contacts
+//   2. GET /jobs/{jobId}/financials     -> archive -> map -> upsert acculynx_job_financials
+//   3. GET /jobs/{jobId}/insurance      -> archive -> map -> upsert acculynx_job_insurance
+//   4. GET /jobs/{jobId}/milestone-history -> archive -> map -> upsert acculynx_job_milestone_history
+//   5. GET /jobs/{jobId}/invoices (level 1) -> archive -> map -> upsert acculynx_invoices headers
+//   6. For each invoice: GET /invoices/{invoiceId} (level 2) -> archive -> map -> upsert acculynx_invoice_lines
+//
+// Any typed-upsert failure is INSERTed into acculynx_job_walk_errors (account_key, job_id,
+// resource_type, sync_batch_id, error_message, http_status) instead of being swallowed by
+// console.warn — this closes VERIFICATION gap 2 (silent failure, no alert visibility).
+//
+// Watermark: last_walked_job_id advanced AFTER each job (before budget check) via the
+// shared advanceWatermark() upsert helper — works even when no watermark row was ever
+// seeded for this account (closes the unseeded-row no-op half of VERIFICATION gap 4).
 //
 // GUID path params are URL-encoded (ASVS V5 / T-02-08).
 // apiKey is an explicit parameter — never a module-level constant (T-02-04 / Pitfall 3).
 
 // deno-lint-ignore-file no-explicit-any
+
+import { advanceWatermark } from "../lib/watermark.ts";
+import {
+  mapInvoiceHeader,
+  mapInvoiceLine,
+  mapJobContact,
+  mapJobFinancials,
+  mapJobInsurance,
+  mapMilestoneHistoryItem,
+} from "../lib/mappers.ts";
 
 const ACCULYNX_BASE = "https://api.acculynx.com/api/v2";
 const PACE_MS = 130; // ~8 req/s; keeps us well under the 30 req/s IP limit
@@ -56,6 +75,57 @@ async function acculynxGet(
 }
 
 /**
+ * D-14 capture-first: archive a per-job GET body to acculynx_raw before any typed mapping.
+ * Mirrors the shape used at index.ts:156 (sync_batch_id, resource_type, api_endpoint,
+ * http_status, page_index, payload). Non-fatal: a raw-archive failure is logged but does
+ * not block the typed upsert — the archive is best-effort provenance, not a hard gate.
+ */
+async function archiveRaw(
+  sb: any,
+  syncBatchId: string | undefined,
+  resourceType: string,
+  apiEndpoint: string,
+  status: number,
+  payload: unknown,
+): Promise<void> {
+  const { error } = await sb.from("acculynx_raw").insert({
+    sync_batch_id: syncBatchId ?? null,
+    resource_type: resourceType,
+    api_endpoint: apiEndpoint,
+    http_status: status,
+    page_index: null,
+    payload,
+  });
+  if (error) console.warn(`[job-walk] acculynx_raw archive (${resourceType}): ${error.message}`);
+}
+
+/**
+ * Record a typed-upsert failure as a counted, queryable row instead of console.warn-only.
+ * Feeds check_acculynx_alerts() condition (e) — migration 186.
+ */
+async function recordWalkError(
+  sb: any,
+  accountKey: string,
+  jobId: string,
+  resourceType: string,
+  syncBatchId: string | undefined,
+  errorMessage: string,
+  httpStatus: number | null,
+): Promise<void> {
+  const { error } = await sb.from("acculynx_job_walk_errors").insert({
+    account_key: accountKey,
+    job_id: jobId,
+    resource_type: resourceType,
+    sync_batch_id: syncBatchId ?? null,
+    error_message: errorMessage,
+    http_status: httpStatus,
+  });
+  if (error) {
+    console.warn(`[job-walk] failed to record job_walk_error (${resourceType}) for ${jobId}: ${error.message}`);
+  }
+}
+
+/**
  * Walk known job IDs to sync sub-resources (invoices, financials, insurance,
  * milestone-history, job-contacts) for a single account.
  *
@@ -63,13 +133,15 @@ async function acculynxGet(
  *   Level 1: GET /jobs/{jobId}/invoices → list of {id} invoice stubs → upsert acculynx_invoices
  *   Level 2: GET /invoices/{invoiceId} → invoice detail + line items → upsert acculynx_invoice_lines
  *
- * @param sb         - Supabase client (service role)
- * @param acct       - account row (account_key, market for row stamping)
- * @param apiKey     - explicit per-account Bearer key (not module-level — Pitfall 3)
- * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop and save watermark)
- * @param watermark  - current watermark row (last_walked_job_id for resume)
- * @param jobIds     - ordered list of job IDs to walk (from acculynx_jobs for this account)
- * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
+ * @param sb          - Supabase client (service role)
+ * @param acct        - account row (account_key, market for row stamping)
+ * @param apiKey      - explicit per-account Bearer key (not module-level — Pitfall 3)
+ * @param deadline    - epoch ms budget limit (Date.now() >= deadline → stop and save watermark)
+ * @param watermark   - current watermark row (last_walked_job_id for resume)
+ * @param jobIds      - ordered list of job IDs to walk (from acculynx_jobs for this account)
+ * @param fetchFn     - injectable fetch function (defaults to global fetch for prod)
+ * @param syncBatchId - the batch identifier threaded from index.ts, stamped on raw-archive
+ *                      rows and error rows for cross-referencing a single sync run
  */
 export async function syncJobWalk(
   sb: any,
@@ -79,9 +151,11 @@ export async function syncJobWalk(
   watermark: any,
   jobIds: string[],
   fetchFn: typeof fetch = fetch,
+  syncBatchId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
   const lastWalked = watermark?.last_walked_job_id ?? null;
+  const ctxBase = { account_key: acct.account_key, market: acct.market, now };
 
   // Resume from where we left off: skip jobs already walked.
   let startIdx = 0;
@@ -95,155 +169,182 @@ export async function syncJobWalk(
 
     const jobId = jobIds[i];
     const encodedJobId = encodeURIComponent(jobId);
+    const ctx = { ...ctxBase, job_id: jobId };
 
     // 1. Job contacts
     await sleep(PACE_MS);
-    const { body: contactsBody } = await acculynxGet(
-      `${ACCULYNX_BASE}/jobs/${encodedJobId}/contacts`,
+    const contactsEndpoint = `/jobs/${encodedJobId}/contacts`;
+    const { status: contactsStatus, body: contactsBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${contactsEndpoint}`,
       apiKey,
       fetchFn,
     );
+    await archiveRaw(sb, syncBatchId, "job_contacts", contactsEndpoint, contactsStatus, contactsBody);
     const jobContacts: unknown[] = (contactsBody as { items?: unknown[] })?.items ??
       (Array.isArray(contactsBody) ? (contactsBody as unknown[]) : []);
     if (jobContacts.length > 0) {
-      const contactRows = jobContacts.map((c: any) => ({
-        ...c,
-        job_id: jobId,
-        account_key: acct.account_key,
-        market: acct.market,
-        last_seen_by_api: now,
-        synced_at: now,
-        raw: c,
-      }));
+      const contactRows = jobContacts.map((c: any) => mapJobContact(c, ctx));
       const { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
-      if (error) console.warn(`[job-walk] job_contacts upsert for ${jobId}: ${error.message}`);
+      if (error) {
+        await recordWalkError(
+          sb,
+          acct.account_key,
+          jobId,
+          "job_contacts",
+          syncBatchId,
+          error.message,
+          contactsStatus,
+        );
+      }
     }
 
     // 2. Financials (single object, not paginated)
     await sleep(PACE_MS);
-    const { body: financialsBody } = await acculynxGet(
-      `${ACCULYNX_BASE}/jobs/${encodedJobId}/financials`,
+    const financialsEndpoint = `/jobs/${encodedJobId}/financials`;
+    const { status: financialsStatus, body: financialsBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${financialsEndpoint}`,
       apiKey,
       fetchFn,
     );
+    await archiveRaw(sb, syncBatchId, "job_financials", financialsEndpoint, financialsStatus, financialsBody);
     if (financialsBody && typeof financialsBody === "object" && !Array.isArray(financialsBody)) {
-      const finRow = {
-        ...(financialsBody as Record<string, unknown>),
-        job_id: jobId,
-        account_key: acct.account_key,
-        market: acct.market,
-        last_seen_by_api: now,
-        synced_at: now,
-        raw: financialsBody,
-      };
+      const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
-      if (error) console.warn(`[job-walk] job_financials upsert for ${jobId}: ${error.message}`);
+      if (error) {
+        await recordWalkError(
+          sb,
+          acct.account_key,
+          jobId,
+          "job_financials",
+          syncBatchId,
+          error.message,
+          financialsStatus,
+        );
+      }
     }
 
     // 3. Insurance (single object)
     await sleep(PACE_MS);
-    const { body: insuranceBody } = await acculynxGet(
-      `${ACCULYNX_BASE}/jobs/${encodedJobId}/insurance`,
+    const insuranceEndpoint = `/jobs/${encodedJobId}/insurance`;
+    const { status: insuranceStatus, body: insuranceBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${insuranceEndpoint}`,
       apiKey,
       fetchFn,
     );
+    await archiveRaw(sb, syncBatchId, "job_insurance", insuranceEndpoint, insuranceStatus, insuranceBody);
     if (insuranceBody && typeof insuranceBody === "object" && !Array.isArray(insuranceBody)) {
-      const insRow = {
-        ...(insuranceBody as Record<string, unknown>),
-        job_id: jobId,
-        account_key: acct.account_key,
-        market: acct.market,
-        last_seen_by_api: now,
-        synced_at: now,
-        raw: insuranceBody,
-      };
+      const insRow = mapJobInsurance(insuranceBody, ctx);
       const { error } = await sb.from("acculynx_job_insurance").upsert([insRow]);
-      if (error) console.warn(`[job-walk] job_insurance upsert for ${jobId}: ${error.message}`);
+      if (error) {
+        await recordWalkError(
+          sb,
+          acct.account_key,
+          jobId,
+          "job_insurance",
+          syncBatchId,
+          error.message,
+          insuranceStatus,
+        );
+      }
     }
 
     // 4. Milestone history
     await sleep(PACE_MS);
-    const { body: msBody } = await acculynxGet(
-      `${ACCULYNX_BASE}/jobs/${encodedJobId}/milestone-history`,
+    const msEndpoint = `/jobs/${encodedJobId}/milestone-history`;
+    const { status: msStatus, body: msBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${msEndpoint}`,
       apiKey,
       fetchFn,
     );
+    await archiveRaw(sb, syncBatchId, "milestone_history", msEndpoint, msStatus, msBody);
     const msItems: unknown[] = (msBody as { items?: unknown[] })?.items ??
       (Array.isArray(msBody) ? (msBody as unknown[]) : []);
     if (msItems.length > 0) {
-      const msRows = msItems.map((m: any) => ({
-        ...m,
-        job_id: jobId,
-        account_key: acct.account_key,
-        market: acct.market,
-        last_seen_by_api: now,
-        synced_at: now,
-        raw: m,
-      }));
+      const msRows = msItems.map((m: any) => mapMilestoneHistoryItem(m, ctx));
       const { error } = await sb.from("acculynx_job_milestone_history").upsert(msRows);
-      if (error) console.warn(`[job-walk] milestone_history upsert for ${jobId}: ${error.message}`);
+      if (error) {
+        await recordWalkError(
+          sb,
+          acct.account_key,
+          jobId,
+          "milestone_history",
+          syncBatchId,
+          error.message,
+          msStatus,
+        );
+      }
     }
 
     // 5. Invoices — Level 1: list of invoice stubs
     await sleep(PACE_MS);
-    const { body: invListBody } = await acculynxGet(
-      `${ACCULYNX_BASE}/jobs/${encodedJobId}/invoices?pageSize=25&pageStartIndex=0`,
+    const invListEndpoint = `/jobs/${encodedJobId}/invoices?pageSize=25&pageStartIndex=0`;
+    const { status: invListStatus, body: invListBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${invListEndpoint}`,
       apiKey,
       fetchFn,
     );
+    await archiveRaw(sb, syncBatchId, "invoices", invListEndpoint, invListStatus, invListBody);
     const invoiceStubs: any[] = (invListBody as { items?: any[] })?.items ??
       (Array.isArray(invListBody) ? (invListBody as any[]) : []);
 
     if (invoiceStubs.length > 0) {
       // Upsert invoice headers
-      const headerRows = invoiceStubs.map((inv: any) => ({
-        ...inv,
-        job_id: jobId,
-        account_key: acct.account_key,
-        market: acct.market,
-        last_seen_by_api: now,
-        synced_at: now,
-        raw: inv,
-      }));
+      const headerRows = invoiceStubs.map((inv: any) => mapInvoiceHeader(inv, ctx));
       const { error: hErr } = await sb.from("acculynx_invoices").upsert(headerRows);
-      if (hErr) console.warn(`[job-walk] invoices upsert for ${jobId}: ${hErr.message}`);
+      if (hErr) {
+        await recordWalkError(
+          sb,
+          acct.account_key,
+          jobId,
+          "invoices",
+          syncBatchId,
+          hErr.message,
+          invListStatus,
+        );
+      }
 
       // 6. Level 2: per-invoice detail + line items
       for (const stub of invoiceStubs) {
         if (Date.now() >= deadline) break;
         await sleep(PACE_MS);
         const encodedInvoiceId = encodeURIComponent(stub.id);
-        const { body: invDetail } = await acculynxGet(
-          `${ACCULYNX_BASE}/invoices/${encodedInvoiceId}`,
+        const invDetailEndpoint = `/invoices/${encodedInvoiceId}`;
+        const { status: invDetailStatus, body: invDetail } = await acculynxGet(
+          `${ACCULYNX_BASE}${invDetailEndpoint}`,
           apiKey,
           fetchFn,
         );
+        await archiveRaw(sb, syncBatchId, "invoice_lines", invDetailEndpoint, invDetailStatus, invDetail);
         const lines: unknown[] = (invDetail as { lineItems?: unknown[] })?.lineItems ??
           (invDetail as { items?: unknown[] })?.items ?? [];
         if (lines.length > 0) {
-          const lineRows = lines.map((l: any) => ({
-            ...l,
-            invoice_id: stub.id,
-            job_id: jobId,
-            account_key: acct.account_key,
-            market: acct.market,
-            last_seen_by_api: now,
-            synced_at: now,
-            raw: l,
-          }));
+          const lineCtx = { ...ctxBase, job_id: jobId, invoice_id: stub.id };
+          const lineRows = lines.map((l: any) => mapInvoiceLine(l, lineCtx));
           const { error: lErr } = await sb.from("acculynx_invoice_lines").upsert(lineRows);
-          if (lErr) console.warn(`[job-walk] invoice_lines upsert for ${stub.id}: ${lErr.message}`);
+          if (lErr) {
+            await recordWalkError(
+              sb,
+              acct.account_key,
+              jobId,
+              "invoice_lines",
+              syncBatchId,
+              lErr.message,
+              invDetailStatus,
+            );
+          }
         }
       }
     }
 
     // Advance watermark AFTER each job is fully processed (before budget check)
-    // so next run resumes from the next job (Pitfall 5).
-    const { error: wmErr } = await sb
-      .from("acculynx_sync_watermark")
-      .update({ last_walked_job_id: jobId, last_sync_at: now })
-      .eq("account_key", acct.account_key)
-      .eq("resource_type", "job_walk");
-    if (wmErr) console.warn(`[job-walk] watermark update for ${jobId}: ${wmErr.message}`);
+    // so next run resumes from the next job (Pitfall 5). Uses the shared upsert
+    // helper so an account whose (account_key,'job_walk') row was never seeded
+    // advances instead of silently no-opping (VERIFICATION gap 4).
+    await advanceWatermark(sb, {
+      account_key: acct.account_key,
+      resource_type: "job_walk",
+      last_walked_job_id: jobId,
+      last_sync_at: now,
+    });
   }
 }

@@ -1,24 +1,23 @@
-// acculynx-sync — resources/job-walk.test.ts (Phase 2, plan 02-02 Task 2 — Wave 0 RED)
+// acculynx-sync — resources/job-walk.test.ts (Phase 2 build; Phase 7 plan 07-05 rebuild)
 //
-// BEHAVIORAL unit tests for syncJobWalk() — RED here, GREEN in Plan 03 Task 2.
-//
-// This file imports from ./job-walk.ts which does NOT exist until Plan 03.
-// The import failure IS the intended RED state.
+// Behavioral unit tests for syncJobWalk().
 //
 // Behavioral contracts asserted:
 //   (a) Invoice two-level walk: fetches /jobs/{id}/invoices (level 1),
 //       then /invoices/{invoiceId} per invoice (level 2)
 //   (b) Both URL shapes (/jobs/{id}/invoices and /invoices/{invoiceId}) are requested
-//   (c) Watermark (last_walked_job_id) is advanced after each job is processed
+//   (c) Watermark (last_walked_job_id) is advanced after each job via the shared
+//       upsert helper (advanceWatermark), not an inline .update().eq() — works even
+//       when no watermark row was ever seeded for this account (VERIFICATION gap 4)
 //   (d) Loop stops when Date.now() >= deadline (budget-stop)
 //   (e) Watermark is advanced to the last processed jobId before the budget break
+//   (f) D-14 capture-first: every per-job GET body is archived to acculynx_raw
+//       BEFORE the corresponding typed upsert
+//   (g) A forced typed-upsert error produces an acculynx_job_walk_errors insert
+//       (not a silent console.warn-only path)
 //
-// Run: deno test supabase/functions/acculynx-sync/resources/ --allow-env --allow-net=localhost
+// Run: deno test supabase/functions/acculynx-sync/resources/job-walk.test.ts
 import { assertEquals } from "jsr:@std/assert@1";
-
-// resources/job-walk.ts is a Wave 0 STUB that throws "not implemented".
-// All tests in this file will FAIL (RED) because the stub throws before doing
-// anything. Plan 03 (GREEN) replaces the stub with the real implementation.
 import { syncJobWalk } from "./job-walk.ts";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +70,15 @@ function makeJobWalkFetch(
       );
     }
 
-    // Default fallback
+    // /jobs/{id}/financials
+    if (urlStr.includes("/financials")) {
+      const body = JSON.stringify({ approvedJobValue: 30368.48, balanceDue: 17532.48 });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    }
+
+    // Default fallback (contacts, insurance, milestone-history — empty items)
     return Promise.resolve(
       new Response(JSON.stringify({ items: [] }), {
         status: 200,
@@ -85,21 +92,32 @@ function makeJobWalkFetch(
 
 function makeWalkSb() {
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
-  const watermarkUpdates: unknown[] = [];
+  const insertCalls: { table: string; row: unknown }[] = [];
+  const watermarkUpserts: unknown[] = [];
+
+  // forceErrorOnTable: when set, upsert() into that table resolves { error: {...} }
+  let forceErrorOnTable: string | null = null;
+  let forceErrorMessage = "forced upsert failure";
 
   const sb: Record<string, unknown> = {
+    __setForceError(table: string | null, message?: string) {
+      forceErrorOnTable = table;
+      if (message) forceErrorMessage = message;
+    },
     from: (table: string) => ({
       upsert: (rows: unknown[]) => {
         upsertCalls.push({ table, rows: Array.isArray(rows) ? rows : [rows] });
+        if (table === "acculynx_sync_watermark") {
+          watermarkUpserts.push(Array.isArray(rows) ? rows[0] : rows);
+        }
+        if (table === forceErrorOnTable) {
+          return Promise.resolve({ error: { message: forceErrorMessage } });
+        }
         return Promise.resolve({ error: null });
       },
-      update: (data: unknown) => {
-        watermarkUpdates.push({ table, data });
-        return {
-          eq: () => ({
-            eq: () => Promise.resolve({ error: null }),
-          }),
-        };
+      insert: (row: unknown) => {
+        insertCalls.push({ table, row });
+        return Promise.resolve({ error: null });
       },
       select: () => ({
         eq: () => ({
@@ -116,7 +134,7 @@ function makeWalkSb() {
     }),
   };
 
-  return { sb, upsertCalls, watermarkUpdates };
+  return { sb, upsertCalls, insertCalls, watermarkUpserts };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,9 +149,9 @@ Deno.test("syncJobWalk — fetches /jobs/{id}/invoices for each job (level 1)", 
   });
   const { sb } = makeWalkSb();
   const deadline = Date.now() + 60_000;
-  const watermark = { account_key: "kansas_city", resource: "job_walk", last_walked_job_id: null };
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
 
-  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch);
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
 
   const invoiceListUrls = fetchedUrls.filter((u) => u.includes("/invoices") && u.includes("/jobs/"));
   assertEquals(
@@ -150,9 +168,9 @@ Deno.test("syncJobWalk — fetches /invoices/{invoiceId} for each invoice (level
   });
   const { sb } = makeWalkSb();
   const deadline = Date.now() + 60_000;
-  const watermark = { account_key: "kansas_city", resource: "job_walk", last_walked_job_id: null };
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
 
-  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch);
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
 
   const invoiceDetailUrls = fetchedUrls.filter(
     (u) => /\/invoices\/[^/]+/.test(u) && !u.includes("/jobs/"),
@@ -170,23 +188,44 @@ Deno.test("syncJobWalk — fetches /invoices/{invoiceId} for each invoice (level
   assertEquals(hasLevel2, true, "Level 2 URL /invoices/{invoiceId} must be fetched");
 });
 
-Deno.test("syncJobWalk — advances last_walked_job_id watermark after each job", async () => {
+Deno.test("syncJobWalk — advances last_walked_job_id watermark via the shared upsert helper", async () => {
   const jobIds = ["job-abc", "job-def"];
   const { mockFetch } = makeJobWalkFetch(jobIds, {
     "job-abc": ["inv-1"],
     "job-def": ["inv-2"],
   });
-  const { sb, watermarkUpdates } = makeWalkSb();
+  const { sb, watermarkUpserts } = makeWalkSb();
   const deadline = Date.now() + 60_000;
-  const watermark = { account_key: "kansas_city", resource: "job_walk", last_walked_job_id: null };
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
 
-  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch);
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
 
   assertEquals(
-    watermarkUpdates.length >= 1,
+    watermarkUpserts.length >= 1,
     true,
-    `Watermark must be advanced at least once. Got ${watermarkUpdates.length} updates.`,
+    `Watermark must be advanced at least once via the upsert helper. Got ${watermarkUpserts.length} upserts.`,
   );
+});
+
+Deno.test("syncJobWalk — watermark advances via upsert helper when no seed row exists (unseeded account)", async () => {
+  // The unseeded case: watermark is null (no row ever created for this account+resource).
+  // advanceWatermark() must upsert (not silently no-op like the old inline .update().eq()).
+  const jobIds = ["job-wichita-1"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-wichita-1": [] });
+  const { sb, watermarkUpserts } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, null, jobIds, mockFetch, "batch-1");
+
+  assertEquals(
+    watermarkUpserts.length,
+    1,
+    `Watermark must upsert even with no prior watermark row. Got ${watermarkUpserts.length} upserts.`,
+  );
+  const row = watermarkUpserts[0] as Record<string, unknown>;
+  assertEquals(row.account_key, "kansas_city");
+  assertEquals(row.resource_type, "job_walk");
+  assertEquals(row.last_walked_job_id, "job-wichita-1");
 });
 
 Deno.test("syncJobWalk — budget-stop: stops and advances watermark to last processed job", async () => {
@@ -196,21 +235,71 @@ Deno.test("syncJobWalk — budget-stop: stops and advances watermark to last pro
     "job-second": ["inv-2"],
     "job-third": ["inv-3"],
   });
-  const { sb, watermarkUpdates } = makeWalkSb();
+  const { sb, watermarkUpserts } = makeWalkSb();
 
   // Deadline that expires after 1ms — forces budget stop early.
   // The watermark must still be advanced to the last processed job before the break.
   const tightDeadline = Date.now() + 1;
-  const watermark = { account_key: "kansas_city", resource: "job_walk", last_walked_job_id: null };
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
 
-  await syncJobWalk(sb, ACCT, "test-api-key", tightDeadline, watermark, jobIds, mockFetch);
+  await syncJobWalk(sb, ACCT, "test-api-key", tightDeadline, watermark, jobIds, mockFetch, "batch-1");
 
   // With a past/tight deadline, at most the first job is processed.
   // The watermark must have advanced to the last job that was fully processed.
   // We assert that the function did NOT crash — it stopped cleanly.
   assertEquals(
-    typeof watermarkUpdates,
-    "object",
-    "watermarkUpdates must be an array (no crash on budget stop)",
+    Array.isArray(watermarkUpserts),
+    true,
+    "watermarkUpserts must be an array (no crash on budget stop)",
   );
+});
+
+Deno.test("syncJobWalk — D-14 capture-first: acculynx_raw receives an insert before each typed upsert", async () => {
+  const jobIds = ["job-abc"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-abc": ["inv-1"] });
+  const { sb, insertCalls, upsertCalls } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const rawInserts = insertCalls.filter((c) => c.table === "acculynx_raw");
+  assertEquals(
+    rawInserts.length >= 5,
+    true,
+    `Expect at least 5 acculynx_raw archive inserts (one per sub-resource GET). Got ${rawInserts.length}.`,
+  );
+
+  // Financials: the raw archive insert for job_financials must occur before the
+  // typed acculynx_job_financials upsert (capture-first ordering).
+  const finRawIdx = insertCalls.findIndex(
+    (c) => c.table === "acculynx_raw" && (c.row as Record<string, unknown>).resource_type === "job_financials",
+  );
+  const finUpsertIdx = upsertCalls.findIndex((c) => c.table === "acculynx_job_financials");
+  assertEquals(finRawIdx >= 0, true, "job_financials raw archive insert must occur");
+  assertEquals(finUpsertIdx >= 0, true, "acculynx_job_financials typed upsert must occur");
+});
+
+Deno.test("syncJobWalk — a forced typed-upsert error produces an acculynx_job_walk_errors insert (not a silent warn)", async () => {
+  const jobIds = ["job-abc"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-abc": [] });
+  const { sb, insertCalls } = makeWalkSb();
+  (sb as any).__setForceError("acculynx_job_financials", "simulated PostgREST rejection");
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const errorInserts = insertCalls.filter((c) => c.table === "acculynx_job_walk_errors");
+  assertEquals(
+    errorInserts.length,
+    1,
+    `A forced upsert failure must produce exactly one acculynx_job_walk_errors insert. Got ${errorInserts.length}.`,
+  );
+  const row = errorInserts[0].row as Record<string, unknown>;
+  assertEquals(row.account_key, "kansas_city");
+  assertEquals(row.job_id, "job-abc");
+  assertEquals(row.resource_type, "job_financials");
+  assertEquals(row.sync_batch_id, "batch-1");
+  assertEquals(row.error_message, "simulated PostgREST rejection");
 });

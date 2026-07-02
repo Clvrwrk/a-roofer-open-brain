@@ -538,6 +538,7 @@ async function runAccountSync(
   acct: { account_key: string; env_secret_name: string; label: string | null; market: string | null; state: string | null },
   apiKey: string,
   deadline: number,
+  batchId: string,
 ): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string }> {
   const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped" };
 
@@ -631,7 +632,7 @@ async function runAccountSync(
     if (jobErr) throw new Error(`job IDs load: ${jobErr.message}`);
 
     const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
-    await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds);
+    await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds, fetch, batchId);
     result.jobWalk = "ok";
   } catch (e) {
     result.jobWalk = `error: ${(e as Error).message}`;
@@ -720,7 +721,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, deadline);
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, deadline, batchId);
       }
     }
 
