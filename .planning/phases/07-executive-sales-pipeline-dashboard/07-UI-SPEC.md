@@ -371,3 +371,80 @@ change the layout system (toolbar/KPI-grid/expandable-rows) established in amend
   have `contract_amount = 0` in this data), commercial count=0. Full response
   verified via `curl http://127.0.0.1:4321/api/executive/pipeline.json` against the
   live prod DB in local dev.
+
+## 2026-07-01 user-directed amendment #4 (checkpoint feedback round 4 — stacked charts + trailing-7d pills)
+
+The round-4 human-verify checkpoint accepted the layout and data model (round 3)
+and requested two additive enhancements, verbatim spec supplied by the user. Both
+build on the existing pure-core/loader/client-script structure without altering the
+accepted layout or KPI/queue model.
+
+- **Both charts (funnel-by-stage, rep leaderboard) are now STACKED bars split into
+  "Collected" and "AR outstanding."** New pure-core functions —
+  `computeFunnelStagesWithSplit()` and `computeLeaderboardWithSplit()` — derive each
+  bar's two segments from the SAME row set/value that already produces the existing
+  `funnel`/`leaderboard` arrays (`collected = value - arOutstanding`, floored at 0;
+  `arOutstanding` = summed `balance_due`, floored at 0 per row). The dashboard payload
+  carries both the original arrays (unchanged, still used elsewhere) and new
+  `funnelWithSplit`/`leaderboardWithSplit` arrays for the charts. AR outstanding
+  renders in `--tertiary` (`#c22326`) — the app's existing danger-red token, already
+  used as `CHART_PALETTE[4]` — never a new/arbitrary hex; "Collected" renders in
+  `--primary` (`CHART_PALETTE[0]`).
+- **White, centered data labels via a small inline custom Chart.js plugin**
+  (`stackedSegmentLabelPlugin`, registered once via `Chart.register`), NOT
+  `chartjs-plugin-datalabels` — zero new dependencies, rule-12 third-party-tool gate
+  surface stays closed. The plugin hooks `afterDatasetsDraw`, reads each stacked
+  segment's Chart.js element geometry (`getProps(["x","y","base","width","height"])`),
+  and `ctx.fillText`s the segment's compact-currency value centered on it. A label is
+  skipped (not drawn) when the segment's value is exactly `$0` OR its pixel size is
+  below a legibility floor (24px along the bar's length axis, 14px across its
+  thickness) — this is what keeps the chart rendering cleanly today, since
+  `balance_due` is `$0` for every row in production (verified live, same measurement
+  as amendment #3): every AR segment is a zero-width sliver with no label, and every
+  Collected segment renders as the full bar with its label. The dashboard will "come
+  alive" with a visible red AR segment + label the moment any row's `balance_due`
+  data lands, with no code change required.
+- **Trailing-7-day totals pill row, fixed window, filter-bar-aware.** A new dense pill
+  row (`.epl-t7`/`.epl-t7-pills`/`.epl-t7-pill`, styled like the app's existing
+  Invoice-Audit chips — reuses existing tokens only) renders between the KPI card grid
+  and the charts. New pure-core `computeTrailing7dTotals(rows, now)` +
+  `trailing7DayRange(now)` compute a window that is ALWAYS `[startOfToday - 7 days,
+  startOfToday)` — deliberately independent of the D-03 window-selector token (the
+  user's explicit point: this strip is always-current at a glance, it does not move
+  when the KPI/chart window changes) — but the row set passed in IS the
+  filter-bar-filtered pipeline (`filteredPipeline`), so Location/Region/Type/Rep
+  filters apply. Five pills, each keyed on its queue's existing date signal (no new
+  date columns): **New Leads** (leads queue, `lead_date`/`created_at`, count only — no
+  `$`, mirrors the leads queue's own value-exclusion rule from amendment #3);
+  **New Pre-close** (prospects-with-an-estimate entering the queue, same
+  `lead_date`/`created_at` signal — there is no separate "entered prospect" date
+  column — `$` + count); **New Contracts** (the Approved queue incl. `completed`-fold,
+  keyed on `approved_date`/`milestone_date`/`updated_at`, same convention
+  `computeAverageTicket`/`computeLocationRollup` already use — `$` + count);
+  **Invoiced** (Invoiced queue, same approved/milestone/updated signal, `$` + count);
+  **Closed** (Closed queue, same signal, `$` + count). Assumes dead/cancelled rows are
+  already excluded upstream (same single filter point as every other aggregation in
+  `executive-pipeline.ts`); `queueForRow()` returning `null` for dead/cancelled is a
+  second, independent guard against a caller ever double-counting them here.
+- **Measured live (prod DB, default "Last 7 Days" window, all locations, round 3 ->
+  round 4):** `funnelWithSplit`'s largest stage is `closed` — count 512, value
+  $15,738,421.81, `collected` $15,738,421.81, `arOutstanding` $0 (confirms the
+  all-zero-AR reality the plugin is designed to render cleanly against).
+  `leaderboardWithSplit` top row is Billy Cowell — soldValue $6,082.28, collected
+  $6,082.28, arOutstanding $0. `trailing7d` (fixed window, independent of the "Last 7
+  Days" selector default though they coincide here): New Leads count 8 (no $); New
+  Pre-close count 0 / $0 (no prospect entered with an estimate in the trailing 7 days
+  at fetch time); New Contracts count 8 / $0 (all 8 approved-in-window jobs have
+  `contract_amount = 0` in this data, same gap noted in amendment #3's Average Ticket
+  measurement); Invoiced count 22 / $0 (same `contract_amount = 0` gap); Closed count
+  0 / $0. Full response verified via `curl
+  http://127.0.0.1:4321/api/executive/pipeline.json` against the live prod DB in local
+  dev; SSR-embedded `#dashboard-data` JSON blob confirmed to carry `funnelWithSplit`
+  (7 stages), `leaderboardWithSplit` (4 reps), and `trailing7d` for client-side
+  hydration.
+- **Tests:** 14 new vitest cases added to `executive-pipeline.test.ts` covering the
+  all-zero-AR case, a nonzero-AR fixture (collected/AR split math, including the
+  floor-at-0 case when AR exceeds a segment's value), a rep missing from the sold-rows
+  map, the fixed trailing-7-day window boundary, each of the five pill queues'
+  in-window/out-of-window fixtures, and the empty/all-zero-totals case. Full suite:
+  171 passing (157 baseline + 14 new).
