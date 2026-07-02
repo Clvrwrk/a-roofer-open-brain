@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 9 plans (4 dashboard-surface + 5 gap-closure)
+**Plans**: 5/9 plans executed
 
 Plans:
 
@@ -242,13 +242,13 @@ Plans:
 
 **Wave 4** *(blocked on 07-03 — human-gated deploy)*
 
-- [ ] 07-04-PLAN.md — OKF dashboard spec (D-07) + explain-then-ship deploy + live verify (SC4: buildCommit flip, `/weekly-snapshot` 404s); human-verify checkpoint
+- [x] 07-04-PLAN.md — OKF dashboard spec (D-07) + explain-then-ship deploy + live verify (SC4: buildCommit flip, `/weekly-snapshot` 404s); human-verify checkpoint
 
 *Gap closure (VERIFICATION 2026-07-02: 5/9 must-haves; the UI/deploy layer is live but crm_pipeline is frozen and sub-resource writes silently fail). Locked architecture D-14..D-18: capture-first raw archive, first-sight full pull, change-driven re-pull, webhook triggers, backfill rotation.*
 
 **Wave 5** *(gap closure — foundation)*
 
-- [ ] 07-05-PLAN.md — Schema+mappers: mig 186 acculynx_job_walk_errors + fifth check_acculynx_alerts() condition ([BLOCKING] apply-to-prod); job-walk.ts raw-archive-first (D-14) + explicit snake_case mappers for all 6 sub-resources + advanceWatermark() upsert fix (gaps 2 + watermark-half of 4)
+- [x] 07-05-PLAN.md — Schema+mappers: mig 186 acculynx_job_walk_errors + fifth check_acculynx_alerts() condition ([BLOCKING] apply-to-prod); job-walk.ts raw-archive-first (D-14) + explicit snake_case mappers for all 6 sub-resources + advanceWatermark() upsert fix (gaps 2 + watermark-half of 4)
 
 **Wave 6** *(blocked on 07-05; 07-06 and 07-07 run in parallel — disjoint files)*
 
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 3/4 | In Progress|  |
+| 7. Executive Sales Pipeline Dashboard | 5/9 | In Progress|  |

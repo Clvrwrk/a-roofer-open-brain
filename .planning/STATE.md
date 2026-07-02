@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
-stopped_at: Phase 7 gap-closure plans 05-09 verified — ready for --gaps-only execution
-last_updated: "2026-07-02T15:06:34.627Z"
+stopped_at: Completed 07-05-PLAN.md
+last_updated: "2026-07-02T15:31:25.804Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 34
-  completed_plans: 28
+  completed_plans: 29
   percent: 71
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 4 of 4
+Plan: 2 of 9
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -62,6 +62,7 @@ Progress: [████████░░] 86%
 | Phase 06 P02 | 31min | 4 tasks | 8 files |
 | Phase 07 P01 | 6min | 2 tasks | 4 files |
 | Phase 07 P03 | 15min | 2 tasks | 6 files |
+| Phase 07 P05 | 35min | 3 tasks | 6 files |
 
 ### Decisions
 
@@ -92,6 +93,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 07]: [07-01]: marginByOffice reuses marginByRegion's computed array (both key off acculynx_jobs.account_key) rather than a duplicate aggregation, per Open Question 3's 'treat all 8 accounts as peer entries' recommendation — D-13 chose a plain global filter bar over a region/office split for v1
 - [Phase 07]: [07-03]: Deleted executive/[slug].astro outright rather than gutting it — pipeline.astro (static route, Wave 2) always wins Astro route resolution over the dynamic [slug] match, and grep confirmed no other executive sub-slug depends on the stub
 - [Phase 07]: [07-03]: Reworded two doc-comments in executive-pipeline.ts naming the deleted weekly-snapshot.ts, closing the plan's literal zero-hits-in-src/ grep gate rather than treating comment matches as an accepted exception
+- [Phase 07]: [07-05]: Consolidated per-sub-resource job-walk error recording into a shared recordWalkError() helper (DRY) instead of six inline console.warn replacements — verified functionally via a forced-failure test rather than the plan's literal grep count.
+- [Phase 07]: [07-05]: Threaded sync_batch_id through syncJobWalk() and added it as a new required parameter on runAccountSync() in index.ts so acculynx_raw archive rows and acculynx_job_walk_errors rows correlate to a single sync run.
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T15:06:34.617Z
-Stopped at: Phase 7 gap-closure plans 05-09 verified — ready for --gaps-only execution
-Resume file: .planning/phases/07-executive-sales-pipeline-dashboard/07-05-PLAN.md
+Last session: 2026-07-02T15:31:25.799Z
+Stopped at: Completed 07-05-PLAN.md
+Resume file: None
