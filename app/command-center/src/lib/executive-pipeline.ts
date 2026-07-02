@@ -117,6 +117,17 @@ export interface RegionOfficeDerived {
   commercialResidential: string;
 }
 
+/** One row per production location (account_key) — the inline right-aligned metrics
+ * for the primary breakdown/expandable-row layout (checkpoint rework directive 6). */
+export interface LocationRollupRow {
+  accountKey: string;
+  pipelineValue: number;
+  soldValue: number;
+  soldCount: number;
+  leadCount: number;
+  arValue: number;
+}
+
 export interface ExecutivePipelineDashboard {
   status: DashboardStatus;
   generatedAt: string;
@@ -131,6 +142,7 @@ export interface ExecutivePipelineDashboard {
   marginByCommercialResidential: MarginByDimensionRow[];
   marginByRep: MarginByDimensionRow[];
   leaderboard: LeaderboardRow[];
+  locationRollup: LocationRollupRow[];
   arTotal: number;
   freshness: FreshnessBadge[];
   pipelineValueTotal: number;
@@ -409,6 +421,43 @@ export function computeMarginByDimension(
 }
 
 // ---------------------------------------------------------------------------
+// Pure core: per-location rollup (D-05 primary breakdown row metrics)
+// ---------------------------------------------------------------------------
+
+/** Inline per-location metrics for the expandable-row primary breakdown (checkpoint
+ * rework directive 6): pipeline $ (all open jobs), sold $/count (within window),
+ * lead count (within window), and AR $ (point-in-time), one row per known account_key. */
+export function computeLocationRollup(
+  pipeline: PipelineRow[],
+  jobs: AcculynxJobRow[],
+  accountKeys: readonly string[],
+  start: Date,
+  end: Date,
+): LocationRollupRow[] {
+  return accountKeys.map((accountKey) => {
+    const rows = pipeline.filter((row) => deriveRegionOffice(row, jobs).accountKey === accountKey);
+
+    const pipelineValue = rows.reduce((sum, row) => sum + amountFor(row), 0);
+    const arValue = rows.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
+
+    const soldRows = rows.filter((row) => {
+      const milestone = compact(row.current_milestone, "").toLowerCase();
+      const date = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
+      return SOLD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
+    });
+    const soldValue = soldRows.reduce((sum, row) => sum + amountFor(row), 0);
+
+    const leadCount = rows.filter((row) => {
+      const milestone = compact(row.current_milestone, "").toLowerCase();
+      const date = toDate(row.lead_date ?? row.created_at);
+      return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
+    }).length;
+
+    return { accountKey, pipelineValue, soldValue, soldCount: soldRows.length, leadCount, arValue };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Pure core: per-job drill-down rows for a location row expansion (D-09)
 // ---------------------------------------------------------------------------
 
@@ -550,6 +599,7 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     marginByCommercialResidential: [],
     marginByRep: [],
     leaderboard: [],
+    locationRollup: [],
     arTotal: 0,
     freshness: [],
     pipelineValueTotal: 0,
@@ -707,6 +757,8 @@ export async function loadExecutivePipelineDashboard(
     }
     const leaderboard = Array.from(leaderboardMap.values()).sort((a, b) => b.soldValue - a.soldValue);
 
+    const locationRollup = computeLocationRollup(filteredPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
+
     // Freshness badges: use every KNOWN production account so a location with zero jobs
     // still shows an honest (likely critical/no-sync) badge. Excludes any non-production
     // account row (e.g. "sandbox") that may exist in acculynx_accounts but is not one of
@@ -735,6 +787,7 @@ export async function loadExecutivePipelineDashboard(
       marginByCommercialResidential,
       marginByRep,
       leaderboard,
+      locationRollup,
       arTotal,
       freshness,
       pipelineValueTotal,
