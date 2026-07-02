@@ -68,7 +68,7 @@ export const GET: APIRoute = async ({ url }) => {
   if (params.get("jobs") === "1") {
     const jobsAccountKey = pickAllowlisted(params.get("location"), KNOWN_ACCOUNT_KEY_SET);
     if (!jobsAccountKey) {
-      return jsonResponse({ status: "live", jobs: [], error: null });
+      return jsonResponse({ status: "live", jobs: [], hiddenZeroValueCount: 0, error: null });
     }
     const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all", undefined, rep ?? "all");
     return jsonResponse(result);

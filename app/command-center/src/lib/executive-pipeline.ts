@@ -25,6 +25,13 @@ export interface PipelineRow {
   id: number | string;
   acculynx_job_id: string | null;
   job_name: string | null;
+  /** Fix round item 3 (2026-07-02): the client-ish name AccuLynx job names parse out
+   * (parseJobName's `rest` in the sync's buildPipelineRow) — used as a display-name
+   * fallback when job_name itself is empty or purely a numeric job number. */
+  client_name: string | null;
+  /** Fix round item 3: the AccuLynx job number (may itself be purely numeric) — used
+   * for the "Unnamed job (job_number)" display fallback, never shown bare as a name. */
+  client_job_number: string | null;
   location_city: string | null;
   location_state: string | null;
   market: string | null;
@@ -233,6 +240,19 @@ export interface JobDrillRow {
   salesperson: string;
 }
 
+/** Fix round item 2 (2026-07-02, user feedback: "only jobs with value should show"):
+ * jobRowsForLocation's result — the visible (positive-value) rows plus an honest count
+ * of how many zero-value jobs were hidden from the list, so the drill-down's row count
+ * never silently disagrees with the location's queue counts (which stay unchanged —
+ * they are queue counts, not "rows visible in this table"). */
+export interface JobDrillResult {
+  rows: JobDrillRow[];
+  /** Count of jobs matching the same location/type/rep filters that were excluded
+   * from `rows` for having $0 value (contractAmount <= 0) — never silently dropped,
+   * always surfaced so the UI can render "N zero-value jobs hidden". */
+  hiddenZeroValueCount: number;
+}
+
 /** One row per assigned rep for the leaderboard, reworked in checkpoint round 3 to
  * carry a snapshot (window-independent) close rate keyed on the ASSIGNED rep field
  * (crm_pipeline.primary_salesperson — item 6/item 7 "assigned Close Rate"). */
@@ -357,6 +377,47 @@ function toDate(value: string | null | undefined): Date | null {
 function compact(value: unknown, fallback = "Unknown") {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+/** True when a trimmed string is entirely digits/dashes (checkpoint fix round item 3
+ * live diagnosis: crm_pipeline.job_name falls back to the raw AccuLynx job_number —
+ * `job.job_name || job.job_number || "(unnamed)"` in the sync's buildPipelineRow —
+ * whenever AccuLynx's own jobName field is empty. AccuLynx job numbers are frequently
+ * bare digit strings (e.g. "48213"), which rendered as a "weird number" in place of a
+ * job name in the drill-down/leaderboard tables). Matches a purely numeric string, or
+ * a numeric string with internal dashes (e.g. "482-13"), so a job number is never
+ * mistaken for a real client-ish name. */
+function isPureNumericLabel(value: string): boolean {
+  return /^[0-9][0-9-]*$/.test(value);
+}
+
+/** Fix round item 3 (2026-07-02, user feedback: "what's with the weird numbers for
+ * names"): the DISPLAY-layer fallback chain for a job's name, applied AFTER the sync
+ * has already written crm_pipeline.job_name (never changes the stored value — this is
+ * presentation only, so no backfill/migration is required to fix historical rows).
+ *
+ * Convention (documented per the fix round's "pick the clean convention" instruction):
+ *   1. A real, non-empty, non-purely-numeric job_name is used as-is (the common case).
+ *   2. A job_name that IS purely numeric/dash (i.e. AccuLynx's own jobName was empty
+ *      and buildPipelineRow's `|| job.job_number` fallback kicked in) is treated the
+ *      same as "no name" — never shown bare — and instead renders
+ *      "client_name · job_number" when client_name is available, else
+ *      "Unnamed job (job_number)".
+ *   3. A genuinely empty job_name (should be rare — buildPipelineRow's own fallback
+ *      chain ends in "(unnamed)") falls back the same way as case 2.
+ */
+export function formatJobDisplayName(row: Pick<PipelineRow, "job_name" | "client_name" | "client_job_number">): string {
+  const jobName = String(row.job_name ?? "").trim();
+  const isRealName = jobName.length > 0 && jobName !== "(unnamed)" && !isPureNumericLabel(jobName);
+  if (isRealName) return jobName;
+
+  const clientName = String(row.client_name ?? "").trim();
+  const jobNumber = String(row.client_job_number ?? "").trim() || jobName; // job_name IS the number in the fallback case
+
+  if (clientName.length > 0 && !isPureNumericLabel(clientName)) {
+    return jobNumber.length > 0 ? `${clientName} · ${jobNumber}` : clientName;
+  }
+  return jobNumber.length > 0 ? `Unnamed job (${jobNumber})` : "Unnamed job";
 }
 
 function amountFor(row: PipelineRow) {
@@ -882,34 +943,55 @@ export function computeLocationRollup(
  * aggregates it expands from. Never fabricates rows — only real crm_pipeline rows.
  * Excludes dead/cancelled jobs (checkpoint round 3, item 2 — supersedes round 2's
  * closed/paid-in-full exclusion; closed jobs are now included since Closed is a
- * visible queue, item 3), same filter point as the aggregate dashboard loader. */
+ * visible queue, item 3), same filter point as the aggregate dashboard loader.
+ *
+ * Fix round item 2 (2026-07-02, user feedback: "way too many data gaps, how are jobs
+ * with zero value showing, only jobs with value should show"): a job with contractAmount
+ * <= 0 (amountFor() — the same max(contract_amount, primary_estimate_amount) fallback
+ * used everywhere else in this module) is EXCLUDED from the visible `rows`, but still
+ * counted in `hiddenZeroValueCount` so the UI can render an honest "N zero-value jobs
+ * hidden" caption rather than silently shrinking the list. Aggregate queue counts
+ * (computeQueueValues et al.) are UNCHANGED by this — they are queue-membership counts,
+ * not "rows visible in this drill-down table", and the user's spec explicitly says those
+ * stay as-is ("values already honest"). */
 export function jobRowsForLocation(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
   accountKey: string,
   commercialResidential: string | "all" = "all",
   rep: string | "all" = "all",
-): JobDrillRow[] {
-  return excludeClosedAndPaidInFull(dedupePipeline(pipeline))
-    .filter((row) => {
-      const derived = deriveRegionOffice(row, jobs);
-      if (derived.accountKey !== accountKey) return false;
-      if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
-      if (rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== rep) return false;
-      return true;
-    })
-    .map((row) => {
-      const derived = deriveRegionOffice(row, jobs);
-      return {
-        acculynxJobId: row.acculynx_job_id,
-        jobName: compact(row.job_name, "Unnamed job"),
-        accountKey: derived.accountKey,
-        milestone: compact(row.current_milestone, "unknown").toLowerCase(),
-        contractAmount: amountFor(row),
-        salesperson: compact(row.primary_salesperson, "Unassigned"),
-      };
-    })
-    .sort((a, b) => b.contractAmount - a.contractAmount);
+): JobDrillResult {
+  const filtered = excludeClosedAndPaidInFull(dedupePipeline(pipeline)).filter((row) => {
+    const derived = deriveRegionOffice(row, jobs);
+    if (derived.accountKey !== accountKey) return false;
+    if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
+    if (rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== rep) return false;
+    return true;
+  });
+
+  let hiddenZeroValueCount = 0;
+  const rows: JobDrillRow[] = [];
+
+  for (const row of filtered) {
+    const contractAmount = amountFor(row);
+    if (contractAmount <= 0) {
+      hiddenZeroValueCount += 1;
+      continue;
+    }
+    const derived = deriveRegionOffice(row, jobs);
+    rows.push({
+      acculynxJobId: row.acculynx_job_id,
+      jobName: formatJobDisplayName(row),
+      accountKey: derived.accountKey,
+      milestone: compact(row.current_milestone, "unknown").toLowerCase(),
+      contractAmount,
+      salesperson: compact(row.primary_salesperson, "Unassigned"),
+    });
+  }
+
+  rows.sort((a, b) => b.contractAmount - a.contractAmount);
+
+  return { rows, hiddenZeroValueCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -1478,11 +1560,16 @@ export async function loadJobsForLocation(
   commercialResidential: string | "all" = "all",
   env: RuntimeEnv = getRuntimeEnv(),
   rep: string | "all" = "all",
-): Promise<{ status: DashboardStatus; jobs: JobDrillRow[]; error: string | null }> {
+): Promise<{ status: DashboardStatus; jobs: JobDrillRow[]; hiddenZeroValueCount: number; error: string | null }> {
   const { client, config } = createServerSupabaseClient(env);
 
   if (!client) {
-    return { status: "unconfigured", jobs: [], error: config.missing.map((name) => `Missing ${name}`).join(", ") };
+    return {
+      status: "unconfigured",
+      jobs: [],
+      hiddenZeroValueCount: 0,
+      error: config.missing.map((name) => `Missing ${name}`).join(", "),
+    };
   }
 
   try {
@@ -1490,13 +1577,19 @@ export async function loadJobsForLocation(
       selectAll<PipelineRow>(
         client,
         "crm_pipeline",
-        "id,acculynx_job_id,job_name,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
+        "id,acculynx_job_id,job_name,client_name,client_job_number,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
       ),
       selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
     ]);
 
-    return { status: "live", jobs: jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep), error: null };
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep);
+    return { status: "live", jobs: rows, hiddenZeroValueCount, error: null };
   } catch (error) {
-    return { status: "degraded", jobs: [], error: error instanceof Error ? error.message : "Job drill-down query failed" };
+    return {
+      status: "degraded",
+      jobs: [],
+      hiddenZeroValueCount: 0,
+      error: error instanceof Error ? error.message : "Job drill-down query failed",
+    };
   }
 }

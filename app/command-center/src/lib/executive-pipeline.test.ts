@@ -16,6 +16,7 @@ import {
   excludeClosedAndPaidInFull,
   filterByWindow,
   formatCompactCurrency,
+  formatJobDisplayName,
   groupPipelineFunnel,
   isExcludedMilestone,
   jobRowsForLocation,
@@ -34,6 +35,8 @@ function makePipelineRow(overrides: Partial<PipelineRow> = {}): PipelineRow {
     id: 1,
     acculynx_job_id: "job-1",
     job_name: "Test Job",
+    client_name: "Test Client",
+    client_job_number: "1001",
     location_city: "Wichita",
     location_state: "KS",
     market: "sedgwick_ks",
@@ -311,7 +314,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", job_name: "Colorado Roof" }),
     ];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(1);
     expect(rows[0].jobName).toBe("Wichita Roof");
@@ -328,7 +331,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       makePipelineRow({ id: 2, acculynx_job_id: "job-2" }),
     ];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita", "Commercial");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita", "Commercial");
 
     expect(rows).toHaveLength(1);
     expect(rows[0].acculynxJobId).toBe("job-2");
@@ -341,7 +344,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", contract_amount: 20000 }),
     ];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(2);
     expect(rows[0].acculynxJobId).toBe("job-2");
@@ -352,7 +355,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "colorado" })];
     const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1" })];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(0);
   });
@@ -364,7 +367,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved" }),
     ];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(2);
   });
@@ -376,10 +379,127 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "approved" }),
     ];
 
-    const rows = jobRowsForLocation(pipeline, jobs, "wichita");
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
     expect(rows).toHaveLength(1);
     expect(rows[0].acculynxJobId).toBe("job-2");
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix round item 2 (2026-07-02): zero-value jobs hidden from the drill-down list
+  // -------------------------------------------------------------------------
+
+  it("excludes a $0-value job from rows and counts it in hiddenZeroValueCount", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 0, primary_estimate_amount: 0 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", contract_amount: 15000, primary_estimate_amount: 0 }),
+    ];
+
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].acculynxJobId).toBe("job-2");
+    expect(hiddenZeroValueCount).toBe(1);
+  });
+
+  it("counts a negative-value job (bad data) as hidden too — never shows a non-positive value row", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: -500, primary_estimate_amount: 0 })];
+
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(0);
+    expect(hiddenZeroValueCount).toBe(1);
+  });
+
+  it("hiddenZeroValueCount is 0 when every matching job has a positive value", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 8000 })];
+
+    const { hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(hiddenZeroValueCount).toBe(0);
+  });
+
+  it("hiddenZeroValueCount only counts zero-value jobs matching the location/type/rep filters, not the whole dataset", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "colorado" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 5000, primary_estimate_amount: 0 }),
+      // A zero-value job in a DIFFERENT location must not inflate wichita's hidden count.
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", contract_amount: 0, primary_estimate_amount: 0 }),
+    ];
+
+    const { hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(hiddenZeroValueCount).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix round item 3 (2026-07-02): a job whose crm_pipeline.job_name fell back to a
+  // bare AccuLynx job_number never renders as a bare number in the drill-down.
+  // -------------------------------------------------------------------------
+
+  it("renders a client-name/job-number label instead of a bare numeric job_name (the 'weird numbers for names' bug)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        job_name: "48213", // buildPipelineRow's job_number fallback: AccuLynx jobName was empty
+        client_name: "Smith Reroof",
+        client_job_number: "48213",
+        contract_amount: 12000,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jobName).toBe("Smith Reroof · 48213");
+    expect(rows[0].jobName).not.toBe("48213");
+  });
+});
+
+describe("formatJobDisplayName (checkpoint fix round item 3: never render a bare job number as a name)", () => {
+  it("uses job_name as-is when it is a real, non-numeric name", () => {
+    expect(
+      formatJobDisplayName({ job_name: "KS-11: Smolek Reroof", client_name: "Smolek", client_job_number: "KS-11" }),
+    ).toBe("KS-11: Smolek Reroof");
+  });
+
+  it("falls back to 'client_name · job_number' when job_name is purely numeric", () => {
+    expect(formatJobDisplayName({ job_name: "48213", client_name: "Smith", client_job_number: "48213" })).toBe(
+      "Smith · 48213",
+    );
+  });
+
+  it("falls back to 'client_name · job_number' when job_name has internal dashes but is otherwise numeric", () => {
+    expect(formatJobDisplayName({ job_name: "482-13", client_name: "Jones", client_job_number: "482-13" })).toBe(
+      "Jones · 482-13",
+    );
+  });
+
+  it("falls back to 'Unnamed job (job_number)' when job_name is numeric and client_name is empty", () => {
+    expect(formatJobDisplayName({ job_name: "48213", client_name: null, client_job_number: "48213" })).toBe(
+      "Unnamed job (48213)",
+    );
+  });
+
+  it("falls back to 'Unnamed job (job_number)' when job_name is the literal '(unnamed)' sentinel", () => {
+    expect(formatJobDisplayName({ job_name: "(unnamed)", client_name: null, client_job_number: "77001" })).toBe(
+      "Unnamed job (77001)",
+    );
+  });
+
+  it("falls back to plain 'Unnamed job' when nothing is available at all", () => {
+    expect(formatJobDisplayName({ job_name: null, client_name: null, client_job_number: null })).toBe("Unnamed job");
+  });
+
+  it("never treats a purely-numeric client_name as a real client-ish label either", () => {
+    expect(formatJobDisplayName({ job_name: "48213", client_name: "48213", client_job_number: "48213" })).toBe(
+      "Unnamed job (48213)",
+    );
   });
 });
 
@@ -1045,3 +1165,4 @@ describe("trailing 7-day totals (checkpoint round 4, item 2)", () => {
     expect(totals.newContracts.count).toBe(0);
   });
 });
+
