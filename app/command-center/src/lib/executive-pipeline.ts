@@ -278,6 +278,39 @@ export function excludeClosedAndPaidInFull(rows: PipelineRow[]): PipelineRow[] {
   return rows.filter((row) => !isExcludedMilestone(row));
 }
 
+/** VERIFICATION gap 8 (07-07): crm_pipeline can carry both a legacy `csv_initial` row
+ * and a live `api_sync` row for the same underlying AccuLynx job (e.g. KS-11: a
+ * stale-valued csv_initial row plus a $0/unassigned api_sync row). Every KPI must
+ * count each job once. Rows sharing a non-null acculynx_job_id are collapsed to a
+ * single row, preferring data_source === "api_sync" over any other value (falls back
+ * to the first row seen if no api_sync row exists in the group). Rows with a null
+ * acculynx_job_id have no join key to merge on and are passed through unchanged —
+ * collapsing them together would silently drop distinct legacy jobs. Must run BEFORE
+ * any KPI aggregation (funnel counts, pipeline value, close rate, etc.). */
+export function dedupePipeline(rows: PipelineRow[]): PipelineRow[] {
+  const byJobId = new Map<string, PipelineRow>();
+  const unkeyed: PipelineRow[] = [];
+
+  for (const row of rows) {
+    if (!row.acculynx_job_id) {
+      unkeyed.push(row);
+      continue;
+    }
+    const existing = byJobId.get(row.acculynx_job_id);
+    if (!existing) {
+      byJobId.set(row.acculynx_job_id, row);
+      continue;
+    }
+    if (row.data_source === "api_sync" && existing.data_source !== "api_sync") {
+      byJobId.set(row.acculynx_job_id, row);
+    }
+    // Otherwise keep `existing` — either it's already api_sync, or neither row is
+    // api_sync and the first-seen row wins (fallback per <action> spec).
+  }
+
+  return [...unkeyed, ...byJobId.values()];
+}
+
 /** The 8 production acculynx_accounts.account_key values (RESEARCH.md, Open Question 3:
  * treat program accounts (insurance_program, multi_family_commercial) as peer location
  * entries for v1's plain global filter bar, per D-13's discretion note). */
@@ -857,7 +890,7 @@ export function jobRowsForLocation(
   commercialResidential: string | "all" = "all",
   rep: string | "all" = "all",
 ): JobDrillRow[] {
-  return excludeClosedAndPaidInFull(pipeline)
+  return excludeClosedAndPaidInFull(dedupePipeline(pipeline))
     .filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (derived.accountKey !== accountKey) return false;
@@ -1191,10 +1224,15 @@ export async function loadExecutivePipelineDashboard(
 
     const { start, end, label } = windowRange(resolvedFilters.window, now);
 
+    // VERIFICATION gap 8 (07-07): collapse csv_initial/api_sync duplicate rows for the
+    // same acculynx_job_id (api_sync wins) BEFORE any exclusion/filter/aggregation, so
+    // every downstream KPI counts each underlying job at most once.
+    const dedupedPipeline = dedupePipeline(pipeline);
+
     // Checkpoint round 3, item 2 (supersedes round 2's closed/paid-in-full exclusion):
     // exclude dead/cancelled jobs from the ENTIRE dataset before any filter bar or
     // aggregation runs — one filter point upstream of the D-13/rep filters below.
-    const activePipeline = excludeClosedAndPaidInFull(pipeline);
+    const activePipeline = excludeClosedAndPaidInFull(dedupedPipeline);
 
     // Item 6: distinct assigned reps present in the (post-exclusion) data, for the
     // Rep filter dropdown. Sourced from crm_pipeline.primary_salesperson — verified

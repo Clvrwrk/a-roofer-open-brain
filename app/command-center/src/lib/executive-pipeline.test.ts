@@ -10,6 +10,7 @@ import {
   computeQueueValues,
   computeSnapshotCloseRate,
   computeTrailing7dTotals,
+  dedupePipeline,
   deriveRegionOffice,
   deriveSegment,
   excludeClosedAndPaidInFull,
@@ -473,6 +474,80 @@ describe("dead/cancelled exclusion (checkpoint round 3, item 2: supersedes round
     const result = computeCloseRate(pipeline, new Date("2026-06-25"), new Date("2026-07-01"));
 
     expect(result.soldCount).toBe(1);
+  });
+});
+
+describe("csv/api dedup with data_source precedence (VERIFICATION gap 8 / 07-07)", () => {
+  it("collapses two rows sharing an acculynx_job_id to the api_sync row, regardless of order", () => {
+    const csvRow = makePipelineRow({ id: 1, acculynx_job_id: "job-KS-11", data_source: "csv_initial", contract_amount: 5000 });
+    const apiRow = makePipelineRow({ id: 2, acculynx_job_id: "job-KS-11", data_source: "api_sync", contract_amount: 0 });
+
+    const resultCsvFirst = dedupePipeline([csvRow, apiRow]);
+    expect(resultCsvFirst).toHaveLength(1);
+    expect(resultCsvFirst[0].data_source).toBe("api_sync");
+    expect(resultCsvFirst[0].id).toBe(2);
+
+    const resultApiFirst = dedupePipeline([apiRow, csvRow]);
+    expect(resultApiFirst).toHaveLength(1);
+    expect(resultApiFirst[0].data_source).toBe("api_sync");
+    expect(resultApiFirst[0].id).toBe(2);
+  });
+
+  it("preserves both rows with a null acculynx_job_id (no join key to merge on)", () => {
+    const rows = [
+      makePipelineRow({ id: 1, acculynx_job_id: null, data_source: "csv_initial" }),
+      makePipelineRow({ id: 2, acculynx_job_id: null, data_source: "csv_initial" }),
+    ];
+
+    const result = dedupePipeline(rows);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((row) => row.id).sort()).toEqual([1, 2]);
+  });
+
+  it("falls back to the first row when neither duplicate is api_sync", () => {
+    const rows = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", data_source: "csv_initial", job_name: "First" }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-1", data_source: "csv_initial", job_name: "Second" }),
+    ];
+
+    const result = dedupePipeline(rows);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].job_name).toBe("First");
+  });
+
+  it("leaves a single unique acculynx_job_id row untouched", () => {
+    const rows = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", data_source: "api_sync" })];
+
+    expect(dedupePipeline(rows)).toEqual(rows);
+  });
+
+  it("KS-11 case: a pipeline-value/funnel aggregate over the duplicate pair counts the job once, using the api_sync amount", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-KS-11",
+        data_source: "csv_initial",
+        current_milestone: "prospect",
+        primary_estimate_amount: 30368.48,
+      }),
+      makePipelineRow({
+        id: 2,
+        acculynx_job_id: "job-KS-11",
+        data_source: "api_sync",
+        current_milestone: "prospect",
+        primary_estimate_amount: 0,
+      }),
+    ];
+
+    const deduped = dedupePipeline(pipeline);
+    const funnel = groupPipelineFunnel(deduped);
+    const prospectStage = funnel.find((stage) => stage.milestone === "prospect");
+
+    expect(deduped).toHaveLength(1);
+    expect(prospectStage?.count).toBe(1);
+    expect(preClosePipelineValue(computeQueueValues(deduped))).toBe(0);
   });
 });
 
