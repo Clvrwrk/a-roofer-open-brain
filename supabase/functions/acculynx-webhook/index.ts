@@ -9,6 +9,12 @@
 // signature confirmed live). It is generated via `openssl rand -hex 32` and provisioned as the
 // Edge secret ACCULYNX_WEBHOOK_TOKEN — never a literal in this file, never logged (hard rule 2).
 //
+// LIVE-FIX (2026-07-02, wichita canary): the real AccuLynx envelope is FLAT
+// {event, eventId, topicName, eventDateTime, subscriptionId} with NO account field — the
+// account is resolved from subscriptionId via ACCULYNX_WEBHOOK_ACCOUNT_MAP (a JSON object
+// {"<subscriptionId>": "<account_key>"}), parsed once at module load. See handler.ts
+// accountKeyForSubscription() + webhooks.md "Live envelope correction".
+//
 // Behavior contract (07-08-PLAN.md Task 2):
 //   - POST-only; non-POST -> 405.
 //   - Verify authenticity BEFORE trusting the body; unverified -> log signature_verified=false,
@@ -34,6 +40,22 @@ const WEBHOOK_TOKEN = Deno.env.get("ACCULYNX_WEBHOOK_TOKEN") ?? "";
 // subscription is created in the human-gated Task 4 checkpoint and its subscriptionId is
 // provisioned here. verifyAuth() skips the subscriptionId check when this is empty.
 const WEBHOOK_SUBSCRIPTION_ID = Deno.env.get("ACCULYNX_WEBHOOK_SUBSCRIPTION_ID") ?? "";
+// subscriptionId -> account_key map (live-fix, 2026-07-02): JSON object
+// {"<subscriptionId>": "<account_key>", ...}. One entry per AccuLynx subscription (one per
+// production account per the rollout plan in webhooks.md). Parsed once at module load, never
+// per-request. Malformed/unset -> empty map (accountKeyForSubscription then returns null,
+// falling back to the legacy payload.accountKey fixture field, never throwing).
+const WEBHOOK_ACCOUNT_MAP: Record<string, string> = (() => {
+  const raw = Deno.env.get("ACCULYNX_WEBHOOK_ACCOUNT_MAP") ?? "";
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, string> : {};
+  } catch (e) {
+    console.error(`[acculynx-webhook] ACCULYNX_WEBHOOK_ACCOUNT_MAP parse failed: ${(e as Error).message}`);
+    return {};
+  }
+})();
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
 
@@ -73,11 +95,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: "unauthorized" }, 401);
   }
 
-  const route = routeTopic(payload);
+  const route = routeTopic(payload, WEBHOOK_ACCOUNT_MAP);
 
   let logResult;
   try {
-    logResult = await logEvent(sb, payload, true, route.enqueuedAction);
+    logResult = await logEvent(sb, payload, true, route.enqueuedAction, route.accountKey);
   } catch (e) {
     console.error(`[acculynx-webhook] event log failed: ${(e as Error).message}`);
     return json({ error: "log failed" }, 500);

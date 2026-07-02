@@ -10,14 +10,78 @@
 
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import {
+  accountKeyForSubscription,
   constantTimeEqual,
   enqueuePull,
+  extractJobId,
+  extractTopic,
   logEvent,
   routeTopic,
   verifyAuth,
   type SbLike,
   type WebhookPayload,
 } from "./handler.ts";
+
+// ---------------------------------------------------------------------------
+// REAL live envelope fixtures (2026-07-02) — copied from the wichita canary subscription's
+// actual deliveries, acculynx_webhook_events DB rows 5/6/7 (subscriptionId
+// ab5a7544-189b-4892-afe9-b19b5a02f46c). AccuLynx delivers a FLAT envelope
+// {event, eventId, topicName, eventDateTime, subscriptionId} — NOT the {topic, jobId,
+// accountKey} shape the Task 3 sandbox-proof fixtures assumed. These are the SHAPE these
+// tests must exercise; the account map is looked up separately via subscriptionId.
+// ---------------------------------------------------------------------------
+
+const WICHITA_SUBSCRIPTION_ID = "ab5a7544-189b-4892-afe9-b19b5a02f46c";
+const ACCOUNT_MAP: Record<string, string> = { [WICHITA_SUBSCRIPTION_ID]: "wichita" };
+
+const REAL_JOB_CREATED_PAYLOAD: WebhookPayload = {
+  event: {
+    job: {
+      _link: "https://api.acculynx.com/api/v2/jobs/fa5de22f-949b-4405-86ad-3c3fc695ba23",
+      id: "fa5de22f-949b-4405-86ad-3c3fc695ba23",
+      currentMilestone: 32615,
+      jobName: "ComputedJobName9ddc8909-5743-44ce-af89-2e1c44e03f89",
+    },
+  },
+  eventDateTime: "2026-07-02T20:16:07.8046226Z",
+  eventId: "ed054f47-b8bd-47fd-afff-911d7228eab3",
+  subscriptionId: WICHITA_SUBSCRIPTION_ID,
+  topicName: "job_created",
+};
+
+const REAL_FINANCIALS_PAYLOAD: WebhookPayload = {
+  event: {
+    job: {
+      _link: "https://api.acculynx.com/api/v2/jobs/5d6fe007-a28f-4508-bccd-04e88bbedcc4",
+      id: "5d6fe007-a28f-4508-bccd-04e88bbedcc4",
+      financials: {
+        approvedJobValue: 15528,
+        date: "2027-10-16T05:15:10.6019456",
+      },
+    },
+  },
+  eventDateTime: "2026-07-02T20:16:10.3527739Z",
+  eventId: "a051b49e-7f2f-4d44-9287-9ff138aba012",
+  subscriptionId: WICHITA_SUBSCRIPTION_ID,
+  topicName: "job.financials.approved-value_changed",
+};
+
+const REAL_REPRESENTATIVES_PAYLOAD: WebhookPayload = {
+  event: {
+    job: {
+      _link: "https://api.acculynx.com/api/v2/jobs/769609b9-0efb-47c5-a61a-8cc47a8ae788",
+      id: "769609b9-0efb-47c5-a61a-8cc47a8ae788",
+      companyRepresentative: {
+        id: "c0b20088-e9c7-4849-970e-2f45a2997114",
+        user: { id: "af8a103c-22b7-43f4-9c4c-1f592352a155" },
+      },
+    },
+  },
+  eventDateTime: "2026-07-02T20:16:12.9803672Z",
+  eventId: "88f261e9-91c6-435e-8528-3bf12a13e2ce",
+  subscriptionId: WICHITA_SUBSCRIPTION_ID,
+  topicName: "job.representatives.company_assigned",
+};
 
 // ---------------------------------------------------------------------------
 // Mock Supabase client — records insert()/rpc() calls, injectable per-test behavior.
@@ -164,6 +228,92 @@ Deno.test("routeTopic — a payload field crafted to look like code is read as i
 });
 
 // ---------------------------------------------------------------------------
+// REAL live envelope routing (live-fix, 2026-07-02) — the flat
+// {event, eventId, topicName, subscriptionId} shape, topicName as the REAL topic string, and
+// accountKey resolved via subscriptionId -> ACCULYNX_WEBHOOK_ACCOUNT_MAP (the real envelope
+// carries no account field of its own). This is the root-cause fix for the canary's
+// topic="unknown"/enqueued_action=null live result (DB rows 5-7).
+// ---------------------------------------------------------------------------
+
+Deno.test("routeTopic — REAL job_created envelope (topicName, no top-level topic/accountKey) routes via the account map", () => {
+  const r = routeTopic(REAL_JOB_CREATED_PAYLOAD, ACCOUNT_MAP);
+  assertEquals(r.enqueuedAction, "first_sight_full_pull");
+  assertEquals(r.accountKey, "wichita");
+});
+
+Deno.test("routeTopic — REAL job.financials.approved-value_changed envelope routes to targeted_repull:financials", () => {
+  const r = routeTopic(REAL_FINANCIALS_PAYLOAD, ACCOUNT_MAP);
+  assertEquals(r.enqueuedAction, "targeted_repull:financials");
+  assertEquals(r.accountKey, "wichita");
+});
+
+Deno.test("routeTopic — REAL job.representatives.company_assigned envelope routes to targeted_repull:representatives", () => {
+  const r = routeTopic(REAL_REPRESENTATIVES_PAYLOAD, ACCOUNT_MAP);
+  assertEquals(r.enqueuedAction, "targeted_repull:representatives");
+  assertEquals(r.accountKey, "wichita");
+});
+
+Deno.test("routeTopic — REAL envelope with an unmapped subscriptionId resolves accountKey to null (no fan-out to the wrong account)", () => {
+  const r = routeTopic(REAL_JOB_CREATED_PAYLOAD, {}); // empty map — subscriptionId not registered
+  assertEquals(r.enqueuedAction, "first_sight_full_pull");
+  assertEquals(r.accountKey, null);
+});
+
+Deno.test("routeTopic — with no account map argument, defaults to {} (backward-compatible signature)", () => {
+  const r = routeTopic(REAL_JOB_CREATED_PAYLOAD);
+  assertEquals(r.enqueuedAction, "first_sight_full_pull");
+  assertEquals(r.accountKey, null);
+});
+
+// ---------------------------------------------------------------------------
+// accountKeyForSubscription — subscriptionId -> account_key map lookup
+// ---------------------------------------------------------------------------
+
+Deno.test("accountKeyForSubscription — resolves a mapped subscriptionId to its account_key", () => {
+  assertEquals(accountKeyForSubscription(WICHITA_SUBSCRIPTION_ID, ACCOUNT_MAP), "wichita");
+});
+
+Deno.test("accountKeyForSubscription — returns null for an unmapped subscriptionId", () => {
+  assertEquals(accountKeyForSubscription("some-other-sub-id", ACCOUNT_MAP), null);
+});
+
+Deno.test("accountKeyForSubscription — returns null when subscriptionId is undefined", () => {
+  assertEquals(accountKeyForSubscription(undefined, ACCOUNT_MAP), null);
+});
+
+Deno.test("accountKeyForSubscription — returns null against an empty map", () => {
+  assertEquals(accountKeyForSubscription(WICHITA_SUBSCRIPTION_ID, {}), null);
+});
+
+// ---------------------------------------------------------------------------
+// extractTopic / extractJobId — real-envelope-first extraction with legacy fixture fallback
+// ---------------------------------------------------------------------------
+
+Deno.test("extractTopic — prefers topicName (real envelope) over topic (legacy fixture)", () => {
+  assertEquals(extractTopic({ topicName: "job_created", topic: "job-created" }), "job_created");
+});
+
+Deno.test("extractTopic — falls back to topic when topicName is absent (legacy fixture path)", () => {
+  assertEquals(extractTopic({ topic: "job-created" }), "job-created");
+});
+
+Deno.test("extractTopic — returns empty string when neither field is present", () => {
+  assertEquals(extractTopic({}), "");
+});
+
+Deno.test("extractJobId — reads the REAL nested event.job.id", () => {
+  assertEquals(extractJobId(REAL_JOB_CREATED_PAYLOAD), "fa5de22f-949b-4405-86ad-3c3fc695ba23");
+});
+
+Deno.test("extractJobId — falls back to the legacy flat jobId field when event.job.id is absent", () => {
+  assertEquals(extractJobId({ jobId: "job-1" }), "job-1");
+});
+
+Deno.test("extractJobId — returns null when neither field is present", () => {
+  assertEquals(extractJobId({}), null);
+});
+
+// ---------------------------------------------------------------------------
 // logEvent — every request logged (verified or not); replay defense
 // ---------------------------------------------------------------------------
 
@@ -298,6 +448,63 @@ Deno.test("full flow — a replayed verified event_id skips re-enqueue entirely"
   assertEquals(logResult.isReplay, true);
   // index.ts short-circuits on isReplay and never calls enqueuePull.
   assertEquals(rpcCalls.length, 0, "a replay must not re-enqueue the pull");
+});
+
+// ---------------------------------------------------------------------------
+// REAL-envelope full-flow tests (live-fix, 2026-07-02) — mirrors the EXACT index.ts sequencing:
+// routeTopic(payload, WEBHOOK_ACCOUNT_MAP) -> logEvent(sb, payload, true, action, accountKey)
+// -> enqueuePull(sb, route). These are the regression tests for the canary's live bug (topic
+// landed as "unknown", enqueued_action=null, account_key=null on DB rows 5-7).
+// ---------------------------------------------------------------------------
+
+Deno.test("full flow (REAL envelope) — job_created: 200 + event row logged with real topic/job_id/account_key + first-sight enqueue", async () => {
+  const { sb, inserted, rpcCalls } = makeMockSb();
+  const verified = verifyAuth({ expectedToken: TOKEN, presentedToken: TOKEN }, REAL_JOB_CREATED_PAYLOAD);
+  assertEquals(verified, true);
+  const route = routeTopic(REAL_JOB_CREATED_PAYLOAD, ACCOUNT_MAP);
+  const logResult = await logEvent(sb, REAL_JOB_CREATED_PAYLOAD, true, route.enqueuedAction, route.accountKey);
+  assertEquals(logResult.isReplay, false);
+  const enqueued = await enqueuePull(sb, route);
+  assertEquals(enqueued, true);
+  assertEquals(inserted[0].topic, "job_created");
+  assertEquals(inserted[0].job_id, "fa5de22f-949b-4405-86ad-3c3fc695ba23");
+  assertEquals(inserted[0].account_key, "wichita");
+  assertEquals(inserted[0].enqueued_action, "first_sight_full_pull");
+  assertEquals(rpcCalls[0].args.p_resources, { multiAccount: true, accountFilter: ["wichita"] });
+});
+
+Deno.test("full flow (REAL envelope) — job.financials.approved-value_changed: targeted-repull enqueue, correct account_key", async () => {
+  const { sb, inserted, rpcCalls } = makeMockSb();
+  const route = routeTopic(REAL_FINANCIALS_PAYLOAD, ACCOUNT_MAP);
+  await logEvent(sb, REAL_FINANCIALS_PAYLOAD, true, route.enqueuedAction, route.accountKey);
+  await enqueuePull(sb, route);
+  assertEquals(inserted[0].topic, "job.financials.approved-value_changed");
+  assertEquals(inserted[0].job_id, "5d6fe007-a28f-4508-bccd-04e88bbedcc4");
+  assertEquals(inserted[0].account_key, "wichita");
+  assertEquals(inserted[0].enqueued_action, "targeted_repull:financials");
+  assertEquals(rpcCalls[0].args.p_resources, { multiAccount: true, accountFilter: ["wichita"] });
+});
+
+Deno.test("full flow (REAL envelope) — job.representatives.company_assigned: targeted-repull enqueue, correct account_key", async () => {
+  const { sb, inserted, rpcCalls } = makeMockSb();
+  const route = routeTopic(REAL_REPRESENTATIVES_PAYLOAD, ACCOUNT_MAP);
+  await logEvent(sb, REAL_REPRESENTATIVES_PAYLOAD, true, route.enqueuedAction, route.accountKey);
+  await enqueuePull(sb, route);
+  assertEquals(inserted[0].topic, "job.representatives.company_assigned");
+  assertEquals(inserted[0].job_id, "769609b9-0efb-47c5-a61a-8cc47a8ae788");
+  assertEquals(inserted[0].account_key, "wichita");
+  assertEquals(inserted[0].enqueued_action, "targeted_repull:representatives");
+  assertEquals(rpcCalls[0].args.p_resources, { multiAccount: true, accountFilter: ["wichita"] });
+});
+
+Deno.test("full flow (REAL envelope) — an unmapped subscriptionId logs account_key=null and does NOT enqueue (cannot scope the pull)", async () => {
+  const { sb, inserted, rpcCalls } = makeMockSb();
+  const route = routeTopic(REAL_JOB_CREATED_PAYLOAD, {}); // subscriptionId not in the map
+  await logEvent(sb, REAL_JOB_CREATED_PAYLOAD, true, route.enqueuedAction, route.accountKey);
+  const enqueued = await enqueuePull(sb, route);
+  assertEquals(inserted[0].account_key, null);
+  assertEquals(enqueued, false, "no account_key resolvable -> cannot scope the pull -> no enqueue");
+  assertEquals(rpcCalls.length, 0);
 });
 
 // ---------------------------------------------------------------------------

@@ -37,13 +37,35 @@ export interface SbLike {
 
 /** The webhook payload is UNTRUSTED external input (D-10/REQ-09 boundary). Fields below are
  * read positionally by name only — never eval'd, never interpreted as instructions. This
- * interface documents the expected shape; it does not grant the payload any trust. */
+ * interface documents the expected shape; it does not grant the payload any trust.
+ *
+ * REAL live envelope (confirmed 2026-07-02 via the wichita canary subscription, DB rows 5-7 —
+ * see webhooks.md "Live envelope correction"): AccuLynx delivers a FLAT envelope
+ * {event, eventId, topicName, eventDateTime, subscriptionId} — there is no top-level `topic`,
+ * `jobId`, or `accountKey` field. The real topic string lives in `topicName`; the affected
+ * job's GUID lives nested under `event.job.id` (present on every topic observed); there is NO
+ * account identifier anywhere in the payload — the account is derived from `subscriptionId`
+ * via ACCULYNX_WEBHOOK_ACCOUNT_MAP (see accountKeyForSubscription below).
+ *
+ * The `topic`/`jobId`/`accountKey` fields are kept as optional legacy/test-fixture aliases —
+ * harmless if absent — so the sandbox-proof direct-HTTP test scenarios (Task 3, which predate
+ * this real-envelope discovery) keep passing unchanged. */
 export interface WebhookPayload {
+  /** Legacy/test-fixture alias for the topic — the real envelope uses `topicName` instead. */
   topic?: string;
   eventId?: string;
+  /** Legacy/test-fixture alias for the job id — the real envelope nests it at `event.job.id`. */
   jobId?: string;
+  /** Legacy/test-fixture alias for the account — the real envelope carries no account field;
+   * derive it from `subscriptionId` via accountKeyForSubscription(). */
   accountKey?: string;
   subscriptionId?: string;
+  /** REAL field name AccuLynx uses for the topic string (e.g. "job_created",
+   * "job.financials.approved-value_changed"). */
+  topicName?: string;
+  /** REAL nested envelope body — `event.job.id` carries the affected job's GUID on every
+   * topic observed live. Read positionally only (T-07-08-02) — never eval'd/exec'd. */
+  event?: { job?: { id?: string; [key: string]: unknown }; [key: string]: unknown };
   [key: string]: unknown;
 }
 
@@ -56,6 +78,40 @@ export interface AuthConfig {
    * ACCULYNX_WEBHOOK_SUBSCRIPTION_ID). Empty/undefined = pending-subscription log-only mode:
    * the subscriptionId check is skipped (not yet known) but the token check still applies. */
   expectedSubscriptionId?: string;
+}
+
+/**
+ * subscriptionId -> account_key mapping (Task 0/live-fix decision, 2026-07-02): the real
+ * envelope carries NO account identifier, so the only way to scope the enqueued pull to the
+ * correct AccuLynx account is via the subscription that delivered the event. Each AccuLynx
+ * subscription is created against exactly one production account (write-capability.md — the
+ * subscription endpoint is per-account-keyed by Bearer key), so subscriptionId -> account_key
+ * is a stable 1:1 mapping for the lifetime of that subscription.
+ *
+ * Chosen design: a single env var ACCULYNX_WEBHOOK_ACCOUNT_MAP holding a JSON object
+ * {"<subscriptionId>": "<account_key>", ...} — simplest durable option that scales past the
+ * canary's one subscription to the eventual 8-account rollout (one map entry per subscription)
+ * without a schema migration or a DB round-trip on every request. Parsed once at module load
+ * (index.ts) and passed in here — never re-parsed per-request.
+ */
+export function accountKeyForSubscription(
+  subscriptionId: string | undefined,
+  accountMap: Record<string, string>,
+): string | null {
+  if (!subscriptionId) return null;
+  return accountMap[subscriptionId] ?? null;
+}
+
+/** Extracts the affected job's GUID from the REAL nested envelope (event.job.id), falling back
+ * to the legacy/test-fixture flat `jobId` field. Read positionally only (T-07-08-02). */
+export function extractJobId(payload: WebhookPayload): string | null {
+  return payload.event?.job?.id ?? payload.jobId ?? null;
+}
+
+/** Extracts the topic string, preferring the REAL envelope's `topicName` field and falling
+ * back to the legacy/test-fixture `topic` field. Read positionally only (T-07-08-02). */
+export function extractTopic(payload: WebhookPayload): string {
+  return payload.topicName ?? payload.topic ?? "";
 }
 
 export type EnqueuedAction =
@@ -118,21 +174,32 @@ export function verifyAuth(cfg: AuthConfig, payload: WebhookPayload): boolean {
 // Topic → pull routing (D-15/D-16)
 // ---------------------------------------------------------------------------
 
-const JOB_CREATED_TOPICS = new Set(["job-created", "job.created"]);
+// REAL live topic strings (confirmed 2026-07-02 via the wichita canary subscription, DB rows
+// 5-7) are the PRIMARY entries. The original invented dash-form names ("job-created",
+// "financials-approved-value-changed", "representatives-company-assigned") are kept as
+// harmless aliases — they were never observed live, but cost nothing to keep in case an
+// earlier doc/integration assumed them, and the Task 3 sandbox-proof direct-HTTP fixtures use
+// them. The dotted-form names below ARE the real ones, not merely an alternate spelling.
+const JOB_CREATED_TOPICS = new Set(["job_created", "job-created", "job.created"]);
 const FINANCIALS_TOPICS = new Set([
-  "financials-approved-value-changed",
-  "job.financials.approved-value_changed",
+  "job.financials.approved-value_changed", // REAL (live-confirmed)
+  "financials-approved-value-changed", // alias (never observed live)
 ]);
 const REPRESENTATIVES_TOPICS = new Set([
-  "representatives-company-assigned",
-  "job.representatives.company_assigned",
+  "job.representatives.company_assigned", // REAL (live-confirmed)
+  "representatives-company-assigned", // alias (never observed live)
 ]);
 
-/** Maps a verified event's topic to the pull action it should enqueue. Body fields are read
- * positionally (topic, jobId, accountKey) — never interpreted as instructions (T-07-08-02). */
-export function routeTopic(payload: WebhookPayload): RouteResult {
-  const topic = payload.topic ?? "";
-  const accountKey = payload.accountKey ?? null;
+/** Maps a verified event's topic to the pull action it should enqueue, and resolves the
+ * affected account via subscriptionId -> accountMap (the real envelope carries no account
+ * field of its own). Body fields are read positionally (topicName/topic, event.job.id/jobId,
+ * subscriptionId) — never interpreted as instructions (T-07-08-02). */
+export function routeTopic(payload: WebhookPayload, accountMap: Record<string, string> = {}): RouteResult {
+  const topic = extractTopic(payload);
+  // accountKey resolution order: (1) real envelope has none, so subscriptionId->map is
+  // authoritative; (2) legacy/test-fixture `accountKey` field as a fallback so the Task 3
+  // sandbox-proof direct-HTTP fixtures (fired before this map existed) keep routing correctly.
+  const accountKey = accountKeyForSubscription(payload.subscriptionId, accountMap) ?? payload.accountKey ?? null;
   if (JOB_CREATED_TOPICS.has(topic)) {
     return { enqueuedAction: "first_sight_full_pull", accountKey };
   }
@@ -163,18 +230,25 @@ export interface LogResult {
 
 /** Inserts one acculynx_webhook_events row for every request (verified or not), per the
  * behavior contract. A verified request whose event_id collides with a prior VERIFIED row
- * (mig 187's partial unique index) is a replay: treated as 200-ack, no re-enqueue/re-process. */
+ * (mig 187's partial unique index) is a replay: treated as 200-ack, no re-enqueue/re-process.
+ *
+ * `resolvedAccountKey` (optional) is the subscriptionId->account_key mapped value from
+ * routeTopic()'s RouteResult — the real envelope carries no account field of its own, so the
+ * caller resolves it once via routeTopic() and passes it through here so the logged row's
+ * account_key matches the account the pull was actually scoped to. Falls back to the legacy
+ * `payload.accountKey` fixture field when not provided (pre-live-fix callers/tests). */
 export async function logEvent(
   sb: SbLike,
   payload: WebhookPayload,
   verified: boolean,
   enqueuedAction: EnqueuedAction,
+  resolvedAccountKey?: string | null,
 ): Promise<LogResult> {
   const row = {
     event_id: payload.eventId ?? null,
-    topic: payload.topic ?? "unknown",
-    job_id: payload.jobId ?? null,
-    account_key: payload.accountKey ?? null,
+    topic: extractTopic(payload) || "unknown",
+    job_id: extractJobId(payload),
+    account_key: resolvedAccountKey ?? payload.accountKey ?? null,
     signature_verified: verified,
     payload: payload as Record<string, unknown>,
     enqueued_action: verified ? enqueuedAction : null,
