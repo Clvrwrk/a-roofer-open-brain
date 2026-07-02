@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 07
 current_phase_name: executive-sales-pipeline-dashboard
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-07-02T15:31:25.804Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-07-02T15:43:58.728Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 07 execution started
 progress:
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 ## Current Position
 
 Phase: 07 (executive-sales-pipeline-dashboard) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 07 execution started
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 86%
 | Phase 07 P01 | 6min | 2 tasks | 4 files |
 | Phase 07 P03 | 15min | 2 tasks | 6 files |
 | Phase 07 P05 | 35min | 3 tasks | 6 files |
+| Phase 07 P06 | 50min | 4 tasks | 5 files |
 
 ### Decisions
 
@@ -95,6 +96,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent:
 - [Phase 07]: [07-03]: Reworded two doc-comments in executive-pipeline.ts naming the deleted weekly-snapshot.ts, closing the plan's literal zero-hits-in-src/ grep gate rather than treating comment matches as an accepted exception
 - [Phase 07]: [07-05]: Consolidated per-sub-resource job-walk error recording into a shared recordWalkError() helper (DRY) instead of six inline console.warn replacements — verified functionally via a forced-failure test rather than the plan's literal grep count.
 - [Phase 07]: [07-05]: Threaded sync_batch_id through syncJobWalk() and added it as a new required parameter on runAccountSync() in index.ts so acculynx_raw archive rows and acculynx_job_walk_errors rows correlate to a single sync run.
+- [Phase 07]: [07-06]: primary_salesperson merge is null-safe by key omission (not null-send) — when no rep name resolves this run, the field is left out of the upsert row entirely so ON CONFLICT DO UPDATE never blanks a real stored name (T-07-06-01).
+- [Phase 07]: [07-06]: D-18 budget rotation persists its cursor on the existing acculynx_sync_watermark table via account_key='__rotation__', resource_type='fanout_start' rather than a new table — reuses advanceWatermark()'s proven upsert contract.
 
 ### Pending Todos
 
@@ -113,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T15:31:25.799Z
-Stopped at: Completed 07-05-PLAN.md
+Last session: 2026-07-02T15:43:58.722Z
+Stopped at: Completed 07-06-PLAN.md
 Resume file: None

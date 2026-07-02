@@ -224,7 +224,7 @@ Plans:
   3. The dashboard reflects all 8 location accounts (filterable by location/market) and updates within the hourly freshness SLA.
   4. It is deployed and verified live (buildCommit flipped) per the deploy gate.
 
-**Plans**: 5/9 plans executed
+**Plans**: 6/9 plans executed
 
 Plans:
 
@@ -252,7 +252,7 @@ Plans:
 
 **Wave 6** *(blocked on 07-05; 07-06 and 07-07 run in parallel — disjoint files)*
 
-- [ ] 07-06-PLAN.md — crm_pipeline restoration on the multiAccount path + financials→contract_amount/balance_due + full /representatives→primary_salesperson (KS-11: Bob Smolek/$30,368/$17,532) + D-15 first-sight full pull + D-16 change-driven re-pull + D-18 budget rotation (gaps 1, 3, budget-half of 4)
+- [x] 07-06-PLAN.md — crm_pipeline restoration on the multiAccount path + financials→contract_amount/balance_due + full /representatives→primary_salesperson (KS-11: Bob Smolek/$30,368/$17,532) + D-15 first-sight full pull + D-16 change-driven re-pull + D-18 budget rotation (gaps 1, 3, budget-half of 4)
 - [ ] 07-07-PLAN.md — csv/api dedup with api_sync precedence in the dashboard loader (gap 8) + sync-pipeline.md doc-drift correction to the live D-14..D-18 architecture (gaps 6/9)
 
 **Wave 7** *(blocked on 07-05/06)*
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Sandbox Write-Capability Exploration & Red-Team | 4/4 | Complete   | 2026-07-01 |
 | 5. Read/Write Action Layer | 3/4 | In Progress|  |
 | 6. AccuLynx Agent + OKF Knowledge Base | 4/4 (provisioning deferred) | Complete (w/ deferral) | 2026-07-01 |
-| 7. Executive Sales Pipeline Dashboard | 5/9 | In Progress|  |
+| 7. Executive Sales Pipeline Dashboard | 6/9 | In Progress|  |
