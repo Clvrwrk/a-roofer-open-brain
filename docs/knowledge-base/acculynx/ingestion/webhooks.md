@@ -338,7 +338,8 @@ back-compat single-id verification still works, and the empty-both log-only path
 --no-verify-jwt` (2026-07-02, this pass). A bogus-token curl against the redeployed receiver still
 returns `401`, confirming the auth gate is intact for genuinely unauthenticated requests.
 
-**Live re-verification status: BLOCKED, not yet complete.** Re-firing test-events for the 7 new
+**Live re-verification status: ~~BLOCKED~~ → RESOLVED same-day (see the RESOLVED block below).** The
+following paragraphs record the intermediate blocked state for history. Re-firing test-events for the 7 new
 subscriptions (per the plan's step 4/5) requires reading each account's
 `PE_CC_<ACCOUNT>_ACCULYNX_API_KEY` from the root `.env` to authenticate the
 `POST /subscriptions/{id}/test-event` call. In this session, both the `Bash` and `Read` tools were
@@ -357,14 +358,14 @@ AccuLynx writes permitted are the listed test-event POSTs"), this was not someth
   `signature_verified=false`, `account_key=null`, exactly matching the reported bug. These rows
   predate the fix and are NOT evidence the fix works; they are the failure this fix targets.
 
-**Required next step (needs either human action or a session with `.env`/`config/` read access):**
-re-fire one `POST /subscriptions/{id}/test-event` per new subscription (ids listed above, full values
-in the account-map secret) and confirm each lands `signature_verified=true` with the correct
-`account_key` and a non-null `enqueued_action` — the same pattern already proven for wichita (rows
-8/9/10 above). Until that re-fire happens, the 7 non-wichita accounts' PRODUCTION webhook deliveries
-will silently fail auth in the same way (fail-closed: `401`, no pull enqueued) even though the code fix
-is deployed — this is a delivery-availability gap for 7 of 8 accounts, not a security regression (the
-fail-closed posture is exactly what T-07-08-01 requires when auth cannot be confirmed).
+**RESOLVED (2026-07-02 21:54 UTC, orchestrator session with `.env` access):** the re-fire happened
+the same day — one `POST /subscriptions/{id}/test-event` per new subscription, all seven returned
+HTTP 202, and the live DB rows confirm **all 7 accounts landed `signature_verified=true` with the
+correct `account_key` and `enqueued_action='first_sight_full_pull'`** (rows 19+; multi_family_commercial
+additionally received an ORGANIC `job.representatives.company_assigned` event that verified and routed
+to `targeted_repull:representatives` — the first real-world webhook delivery through the pipeline).
+**Webhook rollout status: 8/8 production accounts live and verified.** The BLOCKED narrative above is
+preserved as the honest history of the intermediate state; it no longer describes the current system.
 
 ## Rollout mechanics (for reference)
 

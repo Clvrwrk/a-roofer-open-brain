@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**ACTIVE: AccuLynx commercialization** (`.planning/`, 7 phases, GSD). **Phases 1–6 COMPLETE** (5: first prod payment deferred until a real need; 6: closed-with-deferral 2026-07-01 — `acculynx` subagent live-verified 3/3; `ob-acculynx` roster deployed but INERT — Slack bot + Coolify secrets moved to the separate Slack project, resume recipe in 06-03-SUMMARY.md). **NEXT: Phase 7 — Executive Sales Pipeline Dashboard (REQ-10), start at `/gsd-discuss-phase 7`.** Converged (main=origin).
+**AccuLynx commercialization v1.0: ALL 7 PHASES COMPLETE (2026-07-02).** Phase 7 closed 9/9 after gap closure: capture-first ingestion (D-14..D-18) live (sync v39+), crm_pipeline restored on hourly cron, KS-11 proven (financials 30368.48/17532.48, rep Bob Smolek at source layer), dashboard live at /executive/pipeline (buildCommit 576cc38), **webhooks 8/8 accounts verified** (receiver + acculynx_webhook_events, migs 186/187). Backfill rotation completing unattended via hourly cron — dashboards fill in as crm_pipeline refreshes per account. Deferred elsewhere: Phase 5 first prod payment (real need); ob-acculynx Slack provisioning (Slack project); dead/cancelled excluded per user. NEXT: milestone audit/wrap (`/gsd-complete-milestone`) or new milestone.
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
