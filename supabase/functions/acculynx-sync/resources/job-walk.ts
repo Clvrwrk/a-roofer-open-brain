@@ -1,4 +1,4 @@
-// acculynx-sync — resources/job-walk.ts (Phase 2 build; Phase 7 plan 07-05 rebuild)
+// acculynx-sync — resources/job-walk.ts (Phase 2 build; Phase 7 plans 07-05/07-06 rebuild)
 //
 // Per-job sub-resource walk with invoice two-level walk and budget resumption.
 //
@@ -13,6 +13,10 @@
 //   4. GET /jobs/{jobId}/milestone-history -> archive -> map -> upsert acculynx_job_milestone_history
 //   5. GET /jobs/{jobId}/invoices (level 1) -> archive -> map -> upsert acculynx_invoices headers
 //   6. For each invoice: GET /invoices/{invoiceId} (level 2) -> archive -> map -> upsert acculynx_invoice_lines
+//   7. GET /jobs/{jobId}/representatives (FULL collection, not /sales-owner) -> archive ->
+//      resolve the company/primary rep's user.id -> name via acculynx_users -> returned in
+//      the jobId->repName Map (07-06 Task 2a; closes the "sales-owner is 204-empty" half of
+//      VERIFICATION gap 3 — the full collection carries the company rep sales-owner lacks).
 //
 // Any typed-upsert failure is INSERTed into acculynx_job_walk_errors (account_key, job_id,
 // resource_type, sync_batch_id, error_message, http_status) instead of being swallowed by
@@ -21,6 +25,10 @@
 // Watermark: last_walked_job_id advanced AFTER each job (before budget check) via the
 // shared advanceWatermark() upsert helper — works even when no watermark row was ever
 // seeded for this account (closes the unseeded-row no-op half of VERIFICATION gap 4).
+//
+// D-15 (first-sight full pull) / D-16 (change-driven re-pull): 07-06 Task 2b layers pull
+// SCHEDULING around this walk — see shouldFullyPull() below. Task 2a's full-representatives
+// fetch + jobId->repName Map contract is unchanged by that layer.
 //
 // GUID path params are URL-encoded (ASVS V5 / T-02-08).
 // apiKey is an explicit parameter — never a module-level constant (T-02-04 / Pitfall 3).
@@ -100,6 +108,44 @@ async function archiveRaw(
 }
 
 /**
+ * Load acculynx_users into a Map<id, displayName> for representative name resolution.
+ * Mirrors the pattern used by resolveLeadMilestones (index.ts) — an unresolved user.id
+ * falls back to the id string itself (never to executing API-supplied text; T-07-06-04
+ * untrusted-content boundary, D-10).
+ */
+async function loadUserNameMap(sb: any): Promise<Map<string, string>> {
+  const { data: users } = await sb.from("acculynx_users").select("id, display_name, first_name, last_name");
+  const userMap = new Map<string, string>();
+  for (const u of users ?? []) {
+    const name = u.display_name || [u.first_name, u.last_name].filter(Boolean).join(" ") || u.id;
+    userMap.set(u.id, name);
+  }
+  return userMap;
+}
+
+/**
+ * Pick the primary/company representative from a full /jobs/{id}/representatives
+ * collection response and resolve its user.id to a display name.
+ *
+ * Per the KS-11 shape (docs/knowledge-base/acculynx/api/read-capability.md;
+ * getRepresentativesForJob -> { count, pageSize, pageStartIndex, items: [{id, type, user}] }):
+ * items[0].type === 'CompanyRepresentative', user.id 779da1e7-... -> 'Bob Smolek'.
+ * Falls back to the first item with a user.id if no CompanyRepresentative type is present.
+ */
+function resolveCompanyRepName(
+  repsBody: unknown,
+  userMap: Map<string, string>,
+): string | null {
+  const items: any[] = (repsBody as { items?: any[] })?.items ??
+    (Array.isArray(repsBody) ? (repsBody as any[]) : []);
+  if (items.length === 0) return null;
+  const companyRep = items.find((r) => r?.type === "CompanyRepresentative") ?? items[0];
+  const userId = companyRep?.user?.id ?? null;
+  if (!userId) return null;
+  return userMap.get(userId) ?? userId;
+}
+
+/**
  * Record a typed-upsert failure as a counted, queryable row instead of console.warn-only.
  * Feeds check_acculynx_alerts() condition (e) — migration 186.
  */
@@ -142,6 +188,9 @@ async function recordWalkError(
  * @param fetchFn     - injectable fetch function (defaults to global fetch for prod)
  * @param syncBatchId - the batch identifier threaded from index.ts, stamped on raw-archive
  *                      rows and error rows for cross-referencing a single sync run
+ * @returns           - Map<jobId, repName> resolved from the full /representatives fetch
+ *                      (07-06 Task 2a) — consumed by syncCrmPipeline() for
+ *                      crm_pipeline.primary_salesperson.
  */
 export async function syncJobWalk(
   sb: any,
@@ -152,10 +201,12 @@ export async function syncJobWalk(
   jobIds: string[],
   fetchFn: typeof fetch = fetch,
   syncBatchId?: string,
-): Promise<void> {
+): Promise<Map<string, string>> {
   const now = new Date().toISOString();
   const lastWalked = watermark?.last_walked_job_id ?? null;
   const ctxBase = { account_key: acct.account_key, market: acct.market, now };
+  const repNameByJobId = new Map<string, string>();
+  const userMap = await loadUserNameMap(sb);
 
   // Resume from where we left off: skip jobs already walked.
   let startIdx = 0;
@@ -336,6 +387,24 @@ export async function syncJobWalk(
       }
     }
 
+    // 7. Representatives — FULL collection (not /sales-owner, which is 204-empty for
+    // KS-11 and any job with no assigned sales-owner). Archived to acculynx_raw (D-14)
+    // and resolved to the company/primary rep's name via acculynx_users, returned in
+    // the jobId->repName Map that syncCrmPipeline() consumes for primary_salesperson
+    // (07-06 Task 2a; VERIFICATION gap 3).
+    await sleep(PACE_MS);
+    const repsEndpoint = `/jobs/${encodedJobId}/representatives`;
+    const { status: repsStatus, body: repsBody } = await acculynxGet(
+      `${ACCULYNX_BASE}${repsEndpoint}`,
+      apiKey,
+      fetchFn,
+    );
+    await archiveRaw(sb, syncBatchId, "representatives", repsEndpoint, repsStatus, repsBody);
+    if (repsStatus === 200) {
+      const repName = resolveCompanyRepName(repsBody, userMap);
+      if (repName) repNameByJobId.set(jobId, repName);
+    }
+
     // Advance watermark AFTER each job is fully processed (before budget check)
     // so next run resumes from the next job (Pitfall 5). Uses the shared upsert
     // helper so an account whose (account_key,'job_walk') row was never seeded
@@ -347,4 +416,6 @@ export async function syncJobWalk(
       last_sync_at: now,
     });
   }
+
+  return repNameByJobId;
 }

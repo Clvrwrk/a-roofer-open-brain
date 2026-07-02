@@ -78,6 +78,21 @@ function makeJobWalkFetch(
       );
     }
 
+    // /jobs/{id}/representatives (FULL collection — KS-11 shape)
+    if (urlStr.includes("/representatives")) {
+      const body = JSON.stringify({
+        count: 1,
+        pageSize: 25,
+        pageStartIndex: 0,
+        items: [
+          { id: "rep-1", type: "CompanyRepresentative", user: { id: "779da1e7-ks11-rep" } },
+        ],
+      });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    }
+
     // Default fallback (contacts, insurance, milestone-history — empty items)
     return Promise.resolve(
       new Response(JSON.stringify({ items: [] }), {
@@ -90,7 +105,12 @@ function makeJobWalkFetch(
   return { mockFetch, fetchedUrls };
 }
 
-function makeWalkSb() {
+/** Default mocked acculynx_users rows — KS-11's company rep resolves to 'Bob Smolek'. */
+const DEFAULT_USERS = [
+  { id: "779da1e7-ks11-rep", display_name: "Bob Smolek", first_name: "Bob", last_name: "Smolek" },
+];
+
+function makeWalkSb(users: unknown[] = DEFAULT_USERS) {
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
   const insertCalls: { table: string; row: unknown }[] = [];
   const watermarkUpserts: unknown[] = [];
@@ -119,18 +139,25 @@ function makeWalkSb() {
         insertCalls.push({ table, row });
         return Promise.resolve({ error: null });
       },
-      select: () => ({
-        eq: () => ({
-          order: () => ({
-            limit: () => Promise.resolve({ data: [], error: null }),
-          }),
-          gt: () => ({
+      select: () => {
+        if (table === "acculynx_users") {
+          // loadUserNameMap() awaits sb.from("acculynx_users").select(...) directly
+          // (no further chaining) — resolve immediately with the mocked user rows.
+          return Promise.resolve({ data: users, error: null });
+        }
+        return {
+          eq: () => ({
             order: () => ({
               limit: () => Promise.resolve({ data: [], error: null }),
             }),
+            gt: () => ({
+              order: () => ({
+                limit: () => Promise.resolve({ data: [], error: null }),
+              }),
+            }),
           }),
-        }),
-      }),
+        };
+      },
     }),
   };
 
@@ -302,4 +329,51 @@ Deno.test("syncJobWalk — a forced typed-upsert error produces an acculynx_job_
   assertEquals(row.resource_type, "job_financials");
   assertEquals(row.sync_batch_id, "batch-1");
   assertEquals(row.error_message, "simulated PostgREST rejection");
+});
+
+// ---------------------------------------------------------------------------
+// Task 2a: full /representatives fetch + jobId->repName Map contract
+// ---------------------------------------------------------------------------
+
+Deno.test("syncJobWalk — fetches the FULL /representatives collection, not /sales-owner", async () => {
+  const jobIds = ["job-ks11"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-ks11": [] });
+  const { sb } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const repsUrls = fetchedUrls.filter((u) => u.includes("/representatives"));
+  assertEquals(repsUrls.length >= 1, true, "Must fetch /jobs/{id}/representatives");
+  const hitSalesOwnerSubpath = repsUrls.some((u) => u.includes("/representatives/sales-owner"));
+  assertEquals(hitSalesOwnerSubpath, false, "Must fetch the FULL collection, not /representatives/sales-owner");
+});
+
+Deno.test("syncJobWalk — resolves the company rep user.id to a name and returns it in the jobId->repName map (KS-11)", async () => {
+  const jobIds = ["job-ks11"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-ks11": [] });
+  const { sb } = makeWalkSb(); // DEFAULT_USERS maps 779da1e7-ks11-rep -> 'Bob Smolek'
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  const repMap = await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  assertEquals(repMap instanceof Map, true, "syncJobWalk must return a Map");
+  assertEquals(repMap.get("job-ks11"), "Bob Smolek");
+});
+
+Deno.test("syncJobWalk — the representatives body is raw-archived (D-14)", async () => {
+  const jobIds = ["job-ks11"];
+  const { mockFetch } = makeJobWalkFetch(jobIds, { "job-ks11": [] });
+  const { sb, insertCalls } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: null };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const repsRawInserts = insertCalls.filter(
+    (c) => c.table === "acculynx_raw" && (c.row as Record<string, unknown>).resource_type === "representatives",
+  );
+  assertEquals(repsRawInserts.length >= 1, true, "representatives response must be raw-archived to acculynx_raw");
 });
