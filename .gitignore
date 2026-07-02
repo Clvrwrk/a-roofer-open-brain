@@ -80,3 +80,9 @@ tmp_stormwatch_*
 agents/dev-engine/**/smoke-test*.txt
 agents/dev-engine/**/*.local.*
 agents/dev-engine/**/.runtime/
+
+# Dropped-in CompanyCam Obsidian vault (self-contained: carries its own .env + .obsidian/
+# + .DS_Store). Not part of this repo's knowledge base; excluded so its .env can never be
+# committed (hard rule 2). If it should live here, integrate it deliberately (docs only,
+# excluding .env/.obsidian/.DS_Store).
+docs/knowledge-base/CompanyCam/
