@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  arForRow,
+  collectedByJobId,
   computeAverageTicket,
   computeCloseRate,
   computeFreshnessBadges,
@@ -27,6 +29,7 @@ import {
   isRowInWindow,
   jobRowsForLocation,
   looksLikeRepName,
+  openInvoiceArByJobId,
   paginateRange,
   preClosePipelineValue,
   queueForRow,
@@ -83,6 +86,24 @@ function makeJobRow(overrides: Partial<AcculynxJobRow> = {}): AcculynxJobRow {
     job_category_name: "Residential",
     ...overrides,
   };
+}
+
+/** AR-truth fix (2026-07-03): AR fixtures are open-invoice maps built from
+ * acculynx_invoices rows — crm_pipeline.balance_due is retired as an AR signal. */
+function makeInvoice(overrides: Partial<InvoiceAgingRow> = {}): InvoiceAgingRow {
+  return {
+    job_id: "job-1",
+    invoice_date: "2026-06-01T00:00:00Z",
+    balance_due: 0,
+    total_price: 0,
+    ...overrides,
+  };
+}
+
+function arMap(entries: Record<string, number>): Map<string, number> {
+  return openInvoiceArByJobId(
+    Object.entries(entries).map(([jobId, balance]) => makeInvoice({ job_id: jobId, balance_due: balance })),
+  );
 }
 
 describe("funnel grouping", () => {
@@ -577,7 +598,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("with a window supplied: a closed job WITH outstanding AR stays listed even outside the window", () => {
+  it("with a window supplied: a closed job WITH an open invoice stays listed even outside the window (AR-truth fix: the exception keys on acculynx_invoices, never crm balance_due)", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
     const pipeline = [
       makePipelineRow({
@@ -587,7 +608,7 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
         contract_amount: 9000,
         milestone_date: "2026-01-01T00:00:00Z",
         updated_at: "2026-01-01T00:00:00Z",
-        balance_due: 500,
+        balance_due: 0, // crm balance is IGNORED — the invoice ledger drives AR
       }),
     ];
 
@@ -599,10 +620,40 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
       "all",
       new Date("2026-06-01T00:00:00Z"),
       new Date("2026-06-30T00:00:00Z"),
+      arMap({ "job-1": 500 }),
     );
 
     expect(rows).toHaveLength(1);
     expect(rows[0].outstandingAr).toBe(500);
+  });
+
+  it("with a window supplied: an APPROVED job with an open invoice also stays listed outside the window (fix 2 — the exception covers any queue, not just invoiced/closed)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 9000,
+        approved_date: "2026-01-01T00:00:00Z",
+        milestone_date: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(
+      pipeline,
+      jobs,
+      "wichita",
+      "all",
+      "all",
+      new Date("2026-06-01T00:00:00Z"),
+      new Date("2026-06-30T00:00:00Z"),
+      arMap({ "job-1": 1200 }),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outstandingAr).toBe(1200);
   });
 
   it("without a window supplied (legacy call signature): existing window-independent behavior is unchanged", () => {
@@ -623,13 +674,22 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("emits outstandingAr on every row (item E's new drill-down column)", () => {
+  it("emits outstandingAr on every row from the invoice ledger (item E's drill-down column, AR-truth fix)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 9000, balance_due: 250 })];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita", "all", "all", undefined, undefined, arMap({ "job-1": 250 }));
+
+    expect(rows[0].outstandingAr).toBe(250);
+  });
+
+  it("without an invoice map, outstandingAr is 0 — crm balance_due never leaks into the AR column", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
     const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 9000, balance_due: 250 })];
 
     const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
 
-    expect(rows[0].outstandingAr).toBe(250);
+    expect(rows[0].outstandingAr).toBe(0);
   });
 
   it("an unassigned lead with NO value is excluded from the drill-down entirely (item B)", () => {
@@ -797,7 +857,7 @@ describe("dead/cancelled exclusion (checkpoint round 3, item 2: supersedes round
     expect(wichita?.coverage.totalJobsInSlice).toBe(1);
   });
 
-  it("removes excluded-milestone rows from the per-location rollup pre-close pipeline value and AR $ (checkpoint round 3, item 3)", () => {
+  it("removes excluded-milestone rows from the per-location rollup pre-close pipeline value and AR $ (checkpoint round 3, item 3; AR-truth fix: AR comes from the invoice ledger)", () => {
     const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
     const pipeline = excludeClosedAndPaidInFull([
       makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "dead", contract_amount: 100000, balance_due: 5000 }),
@@ -806,11 +866,20 @@ describe("dead/cancelled exclusion (checkpoint round 3, item 2: supersedes round
         acculynx_job_id: "job-2",
         current_milestone: "prospect",
         primary_estimate_amount: 10000,
-        balance_due: 500,
+        balance_due: 0,
       }),
     ]);
 
-    const rollup = computeLocationRollup(pipeline, jobs, ["wichita"], new Date("2026-06-20"), new Date("2026-07-01"));
+    // job-1 (dead, excluded upstream) has $5,000 of open invoices that must never
+    // count; job-2's $500 open invoice is the only AR in the rollup.
+    const rollup = computeLocationRollup(
+      pipeline,
+      jobs,
+      ["wichita"],
+      new Date("2026-06-20"),
+      new Date("2026-07-01"),
+      arMap({ "job-1": 5000, "job-2": 500 }),
+    );
 
     expect(rollup[0].pipelineValue).toBe(10000);
     expect(rollup[0].arValue).toBe(500);
@@ -1191,13 +1260,13 @@ describe("collected/AR split for stacked charts (checkpoint round 4, item 1)", (
     expect(invoiced?.arOutstanding).toBe(0);
   });
 
-  it("computeFunnelStagesWithSplit: a nonzero-AR fixture splits collected vs AR correctly per stage", () => {
+  it("computeFunnelStagesWithSplit: a nonzero-AR fixture splits collected vs AR correctly per stage (AR-truth fix: AR from the invoice ledger, crm balance_due ignored)", () => {
     const pipeline = [
-      makePipelineRow({ id: 1, current_milestone: "invoiced", contract_amount: 10000, primary_estimate_amount: 0, balance_due: 4000 }),
-      makePipelineRow({ id: 2, current_milestone: "invoiced", contract_amount: 6000, primary_estimate_amount: 0, balance_due: 1000 }),
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "invoiced", contract_amount: 10000, primary_estimate_amount: 0, balance_due: 0 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "invoiced", contract_amount: 6000, primary_estimate_amount: 0, balance_due: 0 }),
     ];
 
-    const stages = computeFunnelStagesWithSplit(pipeline);
+    const stages = computeFunnelStagesWithSplit(pipeline, arMap({ "job-1": 4000, "job-2": 1000 }));
     const invoiced = stages.find((s) => s.milestone === "invoiced");
 
     expect(invoiced?.value).toBe(16000);
@@ -1207,14 +1276,26 @@ describe("collected/AR split for stacked charts (checkpoint round 4, item 1)", (
 
   it("computeFunnelStagesWithSplit: floors the collected segment at 0 when AR exceeds the stage value (never negative)", () => {
     const pipeline = [
-      makePipelineRow({ id: 1, current_milestone: "invoiced", contract_amount: 1000, primary_estimate_amount: 0, balance_due: 5000 }),
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "invoiced", contract_amount: 1000, primary_estimate_amount: 0, balance_due: 0 }),
+    ];
+
+    const stages = computeFunnelStagesWithSplit(pipeline, arMap({ "job-1": 5000 }));
+    const invoiced = stages.find((s) => s.milestone === "invoiced");
+
+    expect(invoiced?.arOutstanding).toBe(5000);
+    expect(invoiced?.collected).toBe(0);
+  });
+
+  it("computeFunnelStagesWithSplit: crm balance_due alone (no invoice map) yields a zero AR segment — retired as an AR signal", () => {
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "invoiced", contract_amount: 10000, primary_estimate_amount: 0, balance_due: 4000 }),
     ];
 
     const stages = computeFunnelStagesWithSplit(pipeline);
     const invoiced = stages.find((s) => s.milestone === "invoiced");
 
-    expect(invoiced?.arOutstanding).toBe(5000);
-    expect(invoiced?.collected).toBe(0);
+    expect(invoiced?.arOutstanding).toBe(0);
+    expect(invoiced?.collected).toBe(10000);
   });
 
   it("computeFunnelStagesWithSplit: preserves the same stage set/order/values as groupPipelineFunnel", () => {
@@ -1247,13 +1328,13 @@ describe("collected/AR split for stacked charts (checkpoint round 4, item 1)", (
     expect(withSplit[0].arOutstanding).toBe(0);
   });
 
-  it("computeLeaderboardWithSplit: a nonzero-AR fixture splits collected vs AR per rep", () => {
+  it("computeLeaderboardWithSplit: a nonzero-AR fixture splits collected vs AR per rep (AR-truth fix: AR from the invoice ledger)", () => {
     const leaderboard: LeaderboardRow[] = [{ salesperson: "Jamie Rep", soldCount: 1, soldValue: 10000, arBalance: 3000 }];
     const soldRowsByRep = new Map<string, PipelineRow[]>([
-      ["Jamie Rep", [makePipelineRow({ id: 1, primary_salesperson: "Jamie Rep", contract_amount: 10000, balance_due: 3000 })]],
+      ["Jamie Rep", [makePipelineRow({ id: 1, acculynx_job_id: "job-1", primary_salesperson: "Jamie Rep", contract_amount: 10000, balance_due: 0 })]],
     ]);
 
-    const withSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
+    const withSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep, arMap({ "job-1": 3000 }));
 
     expect(withSplit[0].collected).toBe(7000);
     expect(withSplit[0].arOutstanding).toBe(3000);
@@ -1443,37 +1524,58 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
     expect(pills.leadToProspect.coverageNote).toContain("0 of 1");
   });
 
-  it("Prospect->Approved: counts jobs entering Approved in-window, value = contract value, secondaryValue = Monies Collected (approvedJobValue - balanceDue)", () => {
+  it("Prospect->Approved: counts jobs entering Approved in-window, value = contract value, secondaryValue = invoice-ledger Monies Collected (AR-truth fix)", () => {
     const pipeline = [
       makePipelineRow({
         id: 1,
         acculynx_job_id: "job-1",
         current_milestone: "approved",
         contract_amount: 30368.48,
-        balance_due: 17532.48,
+        balance_due: 17532.48, // crm balance is IGNORED — collected comes from the invoice ledger
         milestone_date: "2026-06-29T00:00:00Z",
       }),
     ];
     const history: MilestoneHistoryRow[] = [
       { job_id: "job-1", milestone_name: "Approved", milestone_date: "2026-06-29T00:00:00Z" },
     ];
+    // The job has billed $12,836 and been paid in full on those invoices.
+    const invoices: InvoiceAgingRow[] = [
+      makeInvoice({ job_id: "job-1", total_price: 12836, balance_due: 0 }),
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, history, [], NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, history, invoices, NOW);
 
     expect(pills.prospectToApproved.count).toBe(1);
     expect(pills.prospectToApproved.value).toBe(30368.48);
-    expect(pills.prospectToApproved.secondaryValue).toBeCloseTo(30368.48 - 17532.48);
+    expect(pills.prospectToApproved.secondaryValue).toBe(12836);
     expect(pills.prospectToApproved.source).toBe("history");
   });
 
-  it("Approved->Invoiced and Invoiced->Closed: secondaryValue is Outstanding AR (balance_due) for jobs entering each stage in-window", () => {
+  it("Prospect->Approved: a job with nothing billed has collected $0 — never contract - crm balance (AR-truth fix)", () => {
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "approved",
+        contract_amount: 30000,
+        balance_due: 0, // the retired proxy would have claimed $30,000 collected
+        milestone_date: "2026-06-29T00:00:00Z",
+      }),
+    ];
+
+    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+
+    expect(pills.prospectToApproved.secondaryValue).toBe(0);
+  });
+
+  it("Approved->Invoiced and Invoiced->Closed: secondaryValue is open-invoice AR for jobs entering each stage in-window (AR-truth fix)", () => {
     const pipeline = [
       makePipelineRow({
         id: 1,
         acculynx_job_id: "job-invoiced",
         current_milestone: "invoiced",
         contract_amount: 10000,
-        balance_due: 4000,
+        balance_due: 0,
         milestone_date: "2026-06-29T00:00:00Z",
       }),
       makePipelineRow({
@@ -1481,12 +1583,16 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
         acculynx_job_id: "job-closed",
         current_milestone: "closed",
         contract_amount: 8000,
-        balance_due: 500,
+        balance_due: 0,
         milestone_date: "2026-06-30T00:00:00Z",
       }),
     ];
+    const invoices: InvoiceAgingRow[] = [
+      makeInvoice({ job_id: "job-invoiced", total_price: 10000, balance_due: 4000 }),
+      makeInvoice({ job_id: "job-closed", total_price: 8000, balance_due: 500 }),
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
 
     expect(pills.approvedToInvoiced.count).toBe(1);
     expect(pills.approvedToInvoiced.secondaryValue).toBe(4000);
@@ -1513,9 +1619,9 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
 
   it("computeTotalOutstandingArFromInvoices sums balance_due across invoices, floored at 0 per invoice", () => {
     const invoices: InvoiceAgingRow[] = [
-      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 500 },
-      { job_id: "job-2", invoice_date: "2026-06-01T00:00:00Z", balance_due: -50 }, // credit — never subtracts
-      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 1200 },
+      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 500, total_price: 0 },
+      { job_id: "job-2", invoice_date: "2026-06-01T00:00:00Z", balance_due: -50, total_price: 0 }, // credit — never subtracts
+      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 1200, total_price: 0 },
     ];
 
     expect(computeTotalOutstandingArFromInvoices(invoices)).toBe(1700);
@@ -1523,9 +1629,9 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
 
   it("computeHighestArAgingDays returns the oldest OPEN invoice's age in days, ignoring paid invoices", () => {
     const invoices: InvoiceAgingRow[] = [
-      { job_id: "job-1", invoice_date: "2026-06-20T00:00:00Z", balance_due: 100 }, // 11 days old
-      { job_id: "job-2", invoice_date: "2026-05-01T00:00:00Z", balance_due: 0 }, // paid — ignored despite being older
-      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 300 }, // 30 days old — oldest open
+      { job_id: "job-1", invoice_date: "2026-06-20T00:00:00Z", balance_due: 100, total_price: 0 }, // 11 days old
+      { job_id: "job-2", invoice_date: "2026-05-01T00:00:00Z", balance_due: 0, total_price: 0 }, // paid — ignored despite being older
+      { job_id: "job-3", invoice_date: "2026-06-01T00:00:00Z", balance_due: 300, total_price: 0 }, // 30 days old — oldest open
     ];
 
     expect(computeHighestArAgingDays(invoices, NOW)).toBe(30);
@@ -1533,17 +1639,17 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
 
   it("computeHighestArAgingDays returns 0 when there are no open invoices with a usable date", () => {
     expect(computeHighestArAgingDays([], NOW)).toBe(0);
-    expect(computeHighestArAgingDays([{ job_id: "job-1", invoice_date: null, balance_due: 500 }], NOW)).toBe(0);
+    expect(computeHighestArAgingDays([{ job_id: "job-1", invoice_date: null, balance_due: 500, total_price: 0 }], NOW)).toBe(0);
   });
 
-  it("totalMoniesCollectedThisWeek sums collected dollars across every non-lead/prospect row entering its stage in-window", () => {
+  it("totalMoniesCollectedThisWeek sums invoice-ledger collected dollars across every non-lead/prospect row entering its stage in-window (AR-truth fix)", () => {
     const pipeline = [
       makePipelineRow({
         id: 1,
         acculynx_job_id: "job-1",
         current_milestone: "approved",
         contract_amount: 10000,
-        balance_due: 3000,
+        balance_due: 0,
         milestone_date: "2026-06-28T00:00:00Z",
       }),
       makePipelineRow({
@@ -1564,17 +1670,22 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
         milestone_date: "2026-05-01T00:00:00Z", // outside window
       }),
     ];
+    const invoices: InvoiceAgingRow[] = [
+      makeInvoice({ job_id: "job-1", total_price: 10000, balance_due: 3000 }), // $7,000 collected
+      makeInvoice({ job_id: "job-2", total_price: 5000, balance_due: 0 }), // $5,000 collected
+      makeInvoice({ job_id: "job-3", total_price: 2000, balance_due: 0 }), // outside window — excluded
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
 
-    expect(pills.totalMoniesCollectedThisWeek).toBe(10000 - 3000 + 5000);
+    expect(pills.totalMoniesCollectedThisWeek).toBe(7000 + 5000);
   });
 
   it("scopes invoices to the jobIds present in the filtered pipeline (obeys the D-13 filter bar via rows)", () => {
     const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 5000 })];
     const invoices: InvoiceAgingRow[] = [
-      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 200 },
-      { job_id: "job-OTHER-LOCATION", invoice_date: "2026-01-01T00:00:00Z", balance_due: 99999 },
+      { job_id: "job-1", invoice_date: "2026-06-01T00:00:00Z", balance_due: 200, total_price: 0 },
+      { job_id: "job-OTHER-LOCATION", invoice_date: "2026-01-01T00:00:00Z", balance_due: 99999, total_price: 0 },
     ];
 
     const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
@@ -1722,38 +1833,50 @@ describe("isRowInWindow / filterRowsInWindow (Round 3, item A: the AR exception)
     expect(isRowInWindow(row, start, end)).toBe(true);
   });
 
-  it("an approved job OUTSIDE the window (no exception applies to approved) is dropped", () => {
+  it("an APPROVED job with an open invoice stays visible OUTSIDE the window (AR-truth fix 2: the exception covers any queue)", () => {
     const row = makePipelineRow({
+      acculynx_job_id: "job-1",
       current_milestone: "approved",
       approved_date: "2026-05-01T00:00:00Z",
       milestone_date: "2026-05-01T00:00:00Z",
       updated_at: "2026-05-01T00:00:00Z",
-      balance_due: 5000, // even WITH a balance, approved gets no AR exception
     });
-    expect(isRowInWindow(row, start, end)).toBe(false);
+    expect(isRowInWindow(row, start, end, arMap({ "job-1": 5000 }))).toBe(true);
   });
 
-  it("closed WITH balance_due > 0 stays visible even when its stage date is OUTSIDE the window", () => {
+  it("an approved job OUTSIDE the window with no open invoice is dropped — crm balance_due grants NO exception (retired AR signal)", () => {
     const row = makePipelineRow({
+      acculynx_job_id: "job-1",
+      current_milestone: "approved",
+      approved_date: "2026-05-01T00:00:00Z",
+      milestone_date: "2026-05-01T00:00:00Z",
+      updated_at: "2026-05-01T00:00:00Z",
+      balance_due: 5000, // crm balance is ignored — no invoice map entry, no exception
+    });
+    expect(isRowInWindow(row, start, end, arMap({}))).toBe(false);
+  });
+
+  it("closed WITH an open invoice stays visible even when its stage date is OUTSIDE the window", () => {
+    const row = makePipelineRow({
+      acculynx_job_id: "job-1",
       current_milestone: "closed",
       milestone_date: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
-      balance_due: 1500,
     });
-    expect(isRowInWindow(row, start, end)).toBe(true);
+    expect(isRowInWindow(row, start, end, arMap({ "job-1": 1500 }))).toBe(true);
   });
 
-  it("closed with NO balance due and stage date OUTSIDE the window is dropped (the exact user rule)", () => {
+  it("closed with NO open invoice and stage date OUTSIDE the window is dropped (the exact user rule)", () => {
     const row = makePipelineRow({
       current_milestone: "closed",
       milestone_date: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
       balance_due: 0,
     });
-    expect(isRowInWindow(row, start, end)).toBe(false);
+    expect(isRowInWindow(row, start, end, arMap({}))).toBe(false);
   });
 
-  it("closed with stage date INSIDE the window is retained regardless of balance_due", () => {
+  it("closed with stage date INSIDE the window is retained regardless of AR", () => {
     const row = makePipelineRow({
       current_milestone: "closed",
       milestone_date: "2026-06-10T00:00:00Z",
@@ -1763,14 +1886,14 @@ describe("isRowInWindow / filterRowsInWindow (Round 3, item A: the AR exception)
     expect(isRowInWindow(row, start, end)).toBe(true);
   });
 
-  it("invoiced WITH balance_due > 0 stays visible even when OUTSIDE the window", () => {
+  it("invoiced WITH an open invoice stays visible even when OUTSIDE the window", () => {
     const row = makePipelineRow({
+      acculynx_job_id: "job-1",
       current_milestone: "invoiced",
       milestone_date: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
-      balance_due: 800,
     });
-    expect(isRowInWindow(row, start, end)).toBe(true);
+    expect(isRowInWindow(row, start, end, arMap({ "job-1": 800 }))).toBe(true);
   });
 
   it("a row with an unrecognized milestone (queueForRow -> null) is excluded, not fabricated into a bucket", () => {
@@ -1778,14 +1901,44 @@ describe("isRowInWindow / filterRowsInWindow (Round 3, item A: the AR exception)
     expect(isRowInWindow(row, start, end)).toBe(false);
   });
 
-  it("filterRowsInWindow applies isRowInWindow across a row set", () => {
+  it("filterRowsInWindow applies isRowInWindow (with the invoice-AR exception) across a row set", () => {
     const rows = [
-      makePipelineRow({ id: 1, current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z", balance_due: 0 }),
-      makePipelineRow({ id: 2, current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z", balance_due: 200 }),
-      makePipelineRow({ id: 3, current_milestone: "lead", lead_date: "2026-06-15T00:00:00Z", created_at: "2026-06-15T00:00:00Z" }),
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z", balance_due: 0 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z" }),
+      makePipelineRow({ id: 3, acculynx_job_id: "job-3", current_milestone: "lead", lead_date: "2026-06-15T00:00:00Z", created_at: "2026-06-15T00:00:00Z" }),
     ];
-    const filtered = filterRowsInWindow(rows, start, end);
+    const filtered = filterRowsInWindow(rows, start, end, arMap({ "job-2": 200 }));
     expect(filtered.map((r) => r.id)).toEqual([2, 3]);
+  });
+});
+
+describe("invoice-ledger AR helpers (AR-truth fix, 2026-07-03)", () => {
+  it("openInvoiceArByJobId sums per-job open balances, flooring each invoice at 0 (credits never net down)", () => {
+    const map = openInvoiceArByJobId([
+      makeInvoice({ job_id: "job-1", balance_due: 500 }),
+      makeInvoice({ job_id: "job-1", balance_due: 700 }),
+      makeInvoice({ job_id: "job-1", balance_due: -300 }), // credit — ignored
+      makeInvoice({ job_id: "job-2", balance_due: 0 }), // paid — no entry
+    ]);
+    expect(map.get("job-1")).toBe(1200);
+    expect(map.has("job-2")).toBe(false);
+  });
+
+  it("collectedByJobId sums per-invoice (total_price - balance_due), floored at 0 per invoice", () => {
+    const map = collectedByJobId([
+      makeInvoice({ job_id: "job-1", total_price: 10000, balance_due: 4000 }), // 6000 collected
+      makeInvoice({ job_id: "job-1", total_price: 2000, balance_due: 0 }), // 2000 collected
+      makeInvoice({ job_id: "job-2", total_price: 0, balance_due: 0 }), // void — no entry
+    ]);
+    expect(map.get("job-1")).toBe(8000);
+    expect(map.has("job-2")).toBe(false);
+  });
+
+  it("arForRow returns 0 for a row with no job id or no map entry", () => {
+    const map = arMap({ "job-1": 900 });
+    expect(arForRow(makePipelineRow({ acculynx_job_id: "job-1" }), map)).toBe(900);
+    expect(arForRow(makePipelineRow({ acculynx_job_id: "job-9" }), map)).toBe(0);
+    expect(arForRow(makePipelineRow({ acculynx_job_id: null }), map)).toBe(0);
   });
 });
 

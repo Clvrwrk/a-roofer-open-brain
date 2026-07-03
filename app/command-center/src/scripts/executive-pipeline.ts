@@ -148,6 +148,8 @@ interface ExecutivePipelineDashboard {
   jobsSoldSplit: SegmentSplit;
   newLeadsSplit: SegmentSplit;
   closeRateSplit: SegmentSplit;
+  /** AR-truth fix (2026-07-03, fix 4): job-count-weighted overall snapshot close rate. */
+  closeRateSnapshotOverall: number;
   marginPctSplit: SegmentSplit;
   averageTicket: AverageTicketResult;
   knownReps: string[];
@@ -217,6 +219,7 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   jobsSoldSplit: { ...EMPTY_SPLIT },
   newLeadsSplit: { ...EMPTY_SPLIT },
   closeRateSplit: { ...EMPTY_SPLIT },
+  closeRateSnapshotOverall: 0,
   marginPctSplit: { ...EMPTY_SPLIT },
   averageTicket: { residential: { avgTicket: 0, count: 0 }, commercial: { avgTicket: 0, count: 0 } },
   knownReps: [],
@@ -693,7 +696,9 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
   updateKpiCard("jobs-sold", String(dashboard.closeRate.soldCount), `${dashboard.window.label} (period snapshot)`);
   updateKpiSplit("jobs-sold", dashboard.jobsSoldSplit, (value) => String(value));
 
-  const overallCloseRatePct = (((dashboard.closeRateSplit.residential + dashboard.closeRateSplit.commercial) / 2) * 100).toFixed(0);
+  // AR-truth fix (2026-07-03, fix 4): job-count-weighted overall snapshot rate from
+  // the loader — never the unweighted Res/Com mean.
+  const overallCloseRatePct = ((dashboard.closeRateSnapshotOverall ?? 0) * 100).toFixed(0);
   updateKpiCard("close-rate", `${overallCloseRatePct}%`);
   updateKpiSplit("close-rate", dashboard.closeRateSplit, (value) => `${(value * 100).toFixed(0)}%`);
 
