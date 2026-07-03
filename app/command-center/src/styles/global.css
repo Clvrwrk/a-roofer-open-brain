@@ -3310,16 +3310,21 @@ a.vmpop-link:hover {
   white-space: nowrap;
 }
 
-/* Checkpoint round 3, item 3: per-queue value chips on the account bar row. */
+/* Checkpoint round 3, item 3 / Round 3 item D: per-queue value chips on the account
+   bar row — the CENTER, right-aligned KPI group. Every chip uses the SAME format:
+   bold $value with the unique-job count in parentheses (e.g. **$1.5M** (24)), same
+   stage order on every row (leads/prospects/approved/invoiced/closed), so rows align
+   vertically regardless of which queues actually carry a value on a given row. */
 .epl-queues {
   display: flex;
   gap: var(--space-3);
-  margin-left: auto;
+  justify-content: flex-end;
   flex-wrap: nowrap;
 }
 
 .epl-queue {
   text-align: right;
+  min-width: 68px;
 }
 
 .epl-queue strong {
@@ -3446,8 +3451,14 @@ a.vmpop-link:hover {
   overflow: hidden;
 }
 
+/* Round 3, item D: ONE justification for the account bar — label + stale marker
+   LEFT (fixed-width name column so every row's queues start at the same x
+   position), all numeric KPIs (queue chips + mini metrics) RIGHT-aligned in
+   fixed-width columns via CSS grid, so rows align vertically regardless of each
+   location's name length or which queues have values. No mixed alignments. */
 .epl-location > summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(140px, 200px) 1fr auto auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -3472,6 +3483,17 @@ a.vmpop-link:hover {
 .epl-location-name {
   font-weight: 700;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.epl-location-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .epl-stale-marker {
@@ -3482,16 +3504,21 @@ a.vmpop-link:hover {
   border-radius: 999px;
   padding: 1px 7px;
   white-space: nowrap;
+  flex: none;
 }
 
+/* Center KPI chips (queue values) — every chip carries the SAME format:
+   bold $value with the unique-job count in parentheses, e.g. **$1.5M** (24) —
+   same order (leads/prospects/approved/invoiced/closed) on every row. */
 .epl-mini {
   display: flex;
   gap: var(--space-4);
-  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .epl-mini div {
   text-align: right;
+  min-width: 64px;
 }
 
 .epl-mini strong {
@@ -3537,11 +3564,26 @@ a.vmpop-link:hover {
   max-width: 100%;
 }
 
+/* Round 3, item E: fixed table-layout so column headings never drift out of
+   alignment with their data cells regardless of free-text job/rep content length.
+   Column widths: Job (flex/auto share), Stage, Rep, Value, Outstanding AR, AccuLynx. */
 .epl-jobs-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   margin-top: var(--space-2);
   font-size: 12.5px;
+}
+
+.epl-jobs-table col.epl-jobs-col-job {
+  width: 28%;
+}
+
+.epl-jobs-table th,
+.epl-jobs-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .epl-jobs-table th {
@@ -3552,7 +3594,10 @@ a.vmpop-link:hover {
   text-align: left;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+}
+
+.epl-jobs-table th.num {
+  text-align: right;
 }
 
 .epl-jobs-table td {
@@ -3592,6 +3637,20 @@ a.vmpop-link:hover {
 
   .epl-mini {
     gap: var(--space-3);
+  }
+
+  /* Round 3, item D: below 820px the account-bar grid collapses to a wrapping flex
+     row — label+stale stay LEFT (first, unchanged), every numeric group wraps
+     underneath, still right-aligned within itself (no mixed alignments). */
+  .epl-location > summary {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .epl-queues,
+  .epl-mini {
+    flex: 1 1 100%;
+    justify-content: flex-end;
   }
 }
 
