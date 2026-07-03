@@ -132,6 +132,9 @@ function makeCrmPipelineSb(
       if (table === "acculynx_job_financials") {
         return {
           select: () => ({
+            // Real query is account-scoped equality (PostgREST URL-length fix, 2026-07-03) —
+            // keep .in for any legacy path but .eq is what syncCrmPipeline now calls.
+            eq: () => Promise.resolve({ data: financials, error: null }),
             in: () => Promise.resolve({ data: financials, error: null }),
           }),
         };

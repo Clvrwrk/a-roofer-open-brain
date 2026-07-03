@@ -412,10 +412,15 @@ export async function syncCrmPipeline(
   const jobs: JobRow[] = jobRows ?? [];
   if (jobs.length === 0) return { upserted: 0 };
 
+  // Account-scoped equality, NOT .in(jobIds): a 1,286-id .in() list blows past PostgREST's
+  // URL length limit and 400s ("financials load: Bad Request") — which silently starved
+  // crm_pipeline for every large account (live incident, 2026-07-03). account_key is
+  // indexed on acculynx_job_financials (migration 169) and jobs here are already scoped
+  // to this account, so equality returns the identical row set in one cheap query.
   const { data: finRows, error: finErr } = await sb
     .from("acculynx_job_financials")
     .select("job_id,approved_job_value,balance_due")
-    .in("job_id", jobs.map((j) => j.id));
+    .eq("account_key", acct.account_key);
   if (finErr) return { upserted: 0, error: `financials load: ${finErr.message}` };
 
   const financialsByJobId = new Map<string, JobFinancialsRow>();
