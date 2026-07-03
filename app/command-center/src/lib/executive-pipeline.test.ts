@@ -18,21 +18,30 @@ import {
   deriveSegment,
   excludeClosedAndPaidInFull,
   filterByWindow,
+  filterRowsInWindow,
   formatCompactCurrency,
   formatJobDisplayName,
+  freshnessBasisByAccount,
   groupPipelineFunnel,
   isExcludedMilestone,
+  isRowInWindow,
   jobRowsForLocation,
+  looksLikeRepName,
   paginateRange,
   preClosePipelineValue,
   queueForRow,
+  repBucketFor,
+  REP_UNKNOWN_LABEL,
   segmentForAccountKey,
+  stageDateFor,
   trailing7DayRange,
+  windowRange,
   type AcculynxJobRow,
   type InvoiceAgingRow,
   type LeaderboardRow,
   type MilestoneHistoryRow,
   type PipelineRow,
+  type WatermarkRow,
 } from "@lib/executive-pipeline";
 
 function makePipelineRow(overrides: Partial<PipelineRow> = {}): PipelineRow {
@@ -292,6 +301,77 @@ describe("freshness", () => {
   });
 });
 
+describe("freshnessBasisByAccount (Round 3, item F: live-diagnosed freshness fix)", () => {
+  function makeWatermark(overrides: Partial<WatermarkRow> = {}): WatermarkRow {
+    return { account_key: "wichita", resource_type: "jobs", last_sync_at: "2026-07-02T11:45:00Z", ...overrides };
+  }
+
+  it("uses the account's jobs watermark as the freshness basis", () => {
+    const basis = freshnessBasisByAccount([makeWatermark({ last_sync_at: "2026-07-02T11:45:00Z" })]);
+    expect(basis.get("wichita")).toBe("2026-07-02T11:45:00Z");
+  });
+
+  it("ignores legacy non-account-scoped/NULL seed rows (users, invoices, job_financials, job_insurance, job_milestone_history)", () => {
+    const staleLegacyRows: WatermarkRow[] = [
+      makeWatermark({ resource_type: "users", last_sync_at: null }),
+      makeWatermark({ resource_type: "invoices", last_sync_at: null }),
+      makeWatermark({ resource_type: "job_financials", last_sync_at: null }),
+      makeWatermark({ resource_type: "job_insurance", last_sync_at: null }),
+      makeWatermark({ resource_type: "job_milestone_history", last_sync_at: null }),
+      makeWatermark({ resource_type: "jobs", last_sync_at: "2026-07-02T11:45:00Z" }),
+    ];
+
+    const basis = freshnessBasisByAccount(staleLegacyRows);
+
+    expect(basis.get("wichita")).toBe("2026-07-02T11:45:00Z");
+  });
+
+  it("ignores job_walk rows entirely, even when job_walk is stale/never-advanced", () => {
+    const rows: WatermarkRow[] = [
+      makeWatermark({ resource_type: "job_walk", last_sync_at: "2025-01-01T00:00:00Z" }),
+      makeWatermark({ resource_type: "jobs", last_sync_at: "2026-07-02T11:45:00Z" }),
+    ];
+
+    const basis = freshnessBasisByAccount(rows);
+
+    expect(basis.get("wichita")).toBe("2026-07-02T11:45:00Z");
+  });
+
+  it("takes the MAX across jobs/contacts/estimates when multiple qualifying resources exist", () => {
+    const rows: WatermarkRow[] = [
+      makeWatermark({ resource_type: "jobs", last_sync_at: "2026-07-02T10:00:00Z" }),
+      makeWatermark({ resource_type: "contacts", last_sync_at: "2026-07-02T11:45:00Z" }),
+      makeWatermark({ resource_type: "estimates", last_sync_at: "2026-07-02T09:00:00Z" }),
+    ];
+
+    const basis = freshnessBasisByAccount(rows);
+
+    expect(basis.get("wichita")).toBe("2026-07-02T11:45:00Z");
+  });
+
+  it("an account with no qualifying watermark row is absent from the map (never fabricates a date)", () => {
+    const rows: WatermarkRow[] = [makeWatermark({ resource_type: "job_walk", last_sync_at: "2025-01-01T00:00:00Z" })];
+
+    const basis = freshnessBasisByAccount(rows);
+
+    expect(basis.has("wichita")).toBe(false);
+  });
+
+  it("live-diagnosed regression: a fresh jobs sync is NOT dragged stale by other stale/legacy resource rows for the same account", () => {
+    const now = new Date("2026-07-02T12:00:00Z");
+    const rows: WatermarkRow[] = [
+      makeWatermark({ resource_type: "jobs", last_sync_at: "2026-07-02T11:45:00Z" }), // 15 min old
+      makeWatermark({ resource_type: "job_walk", last_sync_at: "2025-01-01T00:00:00Z" }), // ancient
+      makeWatermark({ resource_type: "job_milestone_history", last_sync_at: null }),
+    ];
+
+    const basis = freshnessBasisByAccount(rows);
+    const badges = computeFreshnessBadges([{ accountKey: "wichita", lastSyncAt: basis.get("wichita") ?? null }], now, 60 * 60_000);
+
+    expect(badges[0].tone).toBe("ready");
+  });
+});
+
 describe("window filtering", () => {
   it("filters rows to those whose date falls within [start, end]", () => {
     const rows = [
@@ -463,6 +543,152 @@ describe("job drill-down rows for a location (D-09 checkpoint rework)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].jobName).toBe("Smith Reroof · 48213");
     expect(rows[0].jobName).not.toBe("48213");
+  });
+
+  // -------------------------------------------------------------------------
+  // Round 3, item E: drill-down rows honor the same window + AR-exception rules
+  // as A/B — "all revenue ever" disappears when a window is supplied.
+  // -------------------------------------------------------------------------
+
+  it("with a window supplied: a closed job with no AR outside the window is NOT listed", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "closed",
+        contract_amount: 9000,
+        milestone_date: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        balance_due: 0,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(
+      pipeline,
+      jobs,
+      "wichita",
+      "all",
+      "all",
+      new Date("2026-06-01T00:00:00Z"),
+      new Date("2026-06-30T00:00:00Z"),
+    );
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it("with a window supplied: a closed job WITH outstanding AR stays listed even outside the window", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "closed",
+        contract_amount: 9000,
+        milestone_date: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        balance_due: 500,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(
+      pipeline,
+      jobs,
+      "wichita",
+      "all",
+      "all",
+      new Date("2026-06-01T00:00:00Z"),
+      new Date("2026-06-30T00:00:00Z"),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outstandingAr).toBe(500);
+  });
+
+  it("without a window supplied (legacy call signature): existing window-independent behavior is unchanged", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "closed",
+        contract_amount: 9000,
+        milestone_date: "2026-01-01T00:00:00Z",
+        balance_due: 0,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+  });
+
+  it("emits outstandingAr on every row (item E's new drill-down column)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [makePipelineRow({ id: 1, acculynx_job_id: "job-1", contract_amount: 9000, balance_due: 250 })];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows[0].outstandingAr).toBe(250);
+  });
+
+  it("an unassigned lead with NO value is excluded from the drill-down entirely (item B)", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        current_milestone: "unassigned_lead",
+        primary_salesperson: null,
+        contract_amount: 0,
+        primary_estimate_amount: 0,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it("an unassigned job WITH value is bucketed under the account_key as its rep", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", primary_salesperson: null, contract_amount: 15000 }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].salesperson).toBe("wichita");
+  });
+
+  it("a GUID-shaped rep value renders as [rep-unknown] in the drill-down", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({
+        id: 1,
+        acculynx_job_id: "job-1",
+        primary_salesperson: "3f9a1c2e-44b1-4a2d-9c3e-8b7a6f5d4c3b",
+        contract_amount: 15000,
+      }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita");
+
+    expect(rows[0].salesperson).toBe(REP_UNKNOWN_LABEL);
+  });
+
+  it("the rep filter matches against the same account-bucket/rep-unknown value the row displays", () => {
+    const jobs: AcculynxJobRow[] = [makeJobRow({ id: "job-1", account_key: "wichita" }), makeJobRow({ id: "job-2", account_key: "wichita" })];
+    const pipeline = [
+      makePipelineRow({ id: 1, acculynx_job_id: "job-1", primary_salesperson: null, contract_amount: 15000 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "job-2", primary_salesperson: "Jamie Rep", contract_amount: 8000 }),
+    ];
+
+    const { rows } = jobRowsForLocation(pipeline, jobs, "wichita", "all", "wichita");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].acculynxJobId).toBe("job-1");
   });
 });
 
@@ -1363,5 +1589,247 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
     expect(pills.totalOutstandingAr).toBe(0);
     expect(pills.highestArAgingDays).toBe(0);
     expect(pills.totalMoniesCollectedThisWeek).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Round 3, item C: the trailing-7 pills are the ONLY section NOT affected by the
+  // Window selector, but they MUST still obey Location/Type/Rep filters — the loader
+  // achieves this by always passing the D-13-filtered pipeline (never the whole
+  // unfiltered dataset) into computeTrailing7dPillsV2. This test proves the pure
+  // function's counts change when the caller narrows `rows` to a filtered subset
+  // (the same mechanism the loader relies on for location/type/rep filtering).
+  // ---------------------------------------------------------------------------
+  it("pill counts obey whatever pre-filtered row set the caller passes in (Location/Type/Rep filter obedience)", () => {
+    const wichitaJob = makePipelineRow({
+      id: 1,
+      acculynx_job_id: "wichita-job",
+      current_milestone: "prospect",
+      primary_estimate_amount: 15000,
+      lead_date: "2026-06-16T00:00:00Z",
+      created_at: "2026-06-16T00:00:00Z",
+    });
+    const coloradoJob = makePipelineRow({
+      id: 2,
+      acculynx_job_id: "colorado-job",
+      current_milestone: "prospect",
+      primary_estimate_amount: 22000,
+      lead_date: "2026-06-16T00:00:00Z",
+      created_at: "2026-06-16T00:00:00Z",
+    });
+    const allRows = [wichitaJob, coloradoJob];
+
+    const unfilteredPills = computeTrailing7dPillsV2(allRows, [], [], NOW);
+    // Simulates the loader's D-13 filter bar having already narrowed the pipeline to
+    // one location before this function ever sees it.
+    const wichitaOnlyPills = computeTrailing7dPillsV2([wichitaJob], [], [], NOW);
+
+    expect(unfilteredPills.leadToProspect.count).toBe(2);
+    expect(unfilteredPills.leadToProspect.value).toBe(37000);
+    expect(wichitaOnlyPills.leadToProspect.count).toBe(1);
+    expect(wichitaOnlyPills.leadToProspect.value).toBe(15000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROUND 3, item A: unified window semantics
+// ---------------------------------------------------------------------------
+
+describe("windowRange (Round 3, item A: calendar-anchored window tokens, mtd default)", () => {
+  const NOW = new Date("2026-07-15T12:00:00Z"); // Wednesday, mid-July, Q3
+
+  it("wtd anchors to the start of the current calendar week (Sunday)", () => {
+    const { start, label } = windowRange("wtd", NOW);
+    expect(start.getUTCDay()).toBe(0);
+    expect(label).toBe("Week-to-Date");
+  });
+
+  it("mtd anchors to the 1st of the current month and is the default token", () => {
+    const { start, label } = windowRange("mtd", NOW);
+    expect(start.getMonth()).toBe(NOW.getMonth());
+    expect(start.getDate()).toBe(1);
+    expect(label).toBe("Month-to-Date");
+  });
+
+  it("mtd boundary: the last day of the prior month is NOT in the window", () => {
+    const { start, end } = windowRange("mtd", NOW);
+    const lastDayOfPriorMonth = new Date(NOW.getFullYear(), NOW.getMonth(), 0);
+    expect(lastDayOfPriorMonth < start).toBe(true);
+    expect(end.getMonth()).toBe(NOW.getMonth());
+  });
+
+  it("qtd anchors to the start of the current calendar quarter (Current Quarter)", () => {
+    const { start, label } = windowRange("qtd", NOW);
+    expect(start.getMonth()).toBe(6); // July is in Q3 (Jul-Sep), quarter starts in month index 6
+    expect(label).toBe("Current Quarter");
+  });
+
+  it("ytd anchors to January 1st", () => {
+    const { start, label } = windowRange("ytd", NOW);
+    expect(start.getMonth()).toBe(0);
+    expect(start.getDate()).toBe(1);
+    expect(label).toBe("Year-to-Date");
+  });
+
+  it("falls back to mtd (the documented default) for an unrecognized token", () => {
+    const fallback = windowRange("mtd", NOW);
+    const unknown = windowRange("bogus" as unknown as Parameters<typeof windowRange>[0], NOW);
+    expect(unknown).toEqual(fallback);
+  });
+});
+
+describe("stageDateFor (Round 3, item A: per-stage date mapping documented in code)", () => {
+  it("leads/prospects use lead_date, falling back to created_at", () => {
+    const row = makePipelineRow({ lead_date: "2026-06-01T00:00:00Z", created_at: "2026-05-01T00:00:00Z" });
+    expect(stageDateFor(row, "leads")?.toISOString()).toBe("2026-06-01T00:00:00.000Z");
+    expect(stageDateFor(row, "prospects")?.toISOString()).toBe("2026-06-01T00:00:00.000Z");
+
+    const noLeadDate = makePipelineRow({ lead_date: null, created_at: "2026-05-01T00:00:00Z" });
+    expect(stageDateFor(noLeadDate, "leads")?.toISOString()).toBe("2026-05-01T00:00:00.000Z");
+  });
+
+  it("approved uses approved_date, falling back to milestone_date, falling back to updated_at", () => {
+    const row = makePipelineRow({ approved_date: "2026-06-10T00:00:00Z" });
+    expect(stageDateFor(row, "approved")?.toISOString()).toBe("2026-06-10T00:00:00.000Z");
+
+    const noApprovedDate = makePipelineRow({ approved_date: null, milestone_date: "2026-06-12T00:00:00Z" });
+    expect(stageDateFor(noApprovedDate, "approved")?.toISOString()).toBe("2026-06-12T00:00:00.000Z");
+
+    const onlyUpdatedAt = makePipelineRow({ approved_date: null, milestone_date: null, updated_at: "2026-06-14T00:00:00Z" });
+    expect(stageDateFor(onlyUpdatedAt, "approved")?.toISOString()).toBe("2026-06-14T00:00:00.000Z");
+  });
+
+  it("invoiced and closed use milestone_date, falling back to updated_at", () => {
+    const row = makePipelineRow({ milestone_date: "2026-06-20T00:00:00Z" });
+    expect(stageDateFor(row, "invoiced")?.toISOString()).toBe("2026-06-20T00:00:00.000Z");
+    expect(stageDateFor(row, "closed")?.toISOString()).toBe("2026-06-20T00:00:00.000Z");
+
+    const noMilestoneDate = makePipelineRow({ milestone_date: null, updated_at: "2026-06-22T00:00:00Z" });
+    expect(stageDateFor(noMilestoneDate, "invoiced")?.toISOString()).toBe("2026-06-22T00:00:00.000Z");
+  });
+});
+
+describe("isRowInWindow / filterRowsInWindow (Round 3, item A: the AR exception)", () => {
+  const start = new Date("2026-06-01T00:00:00Z");
+  const end = new Date("2026-06-30T00:00:00Z");
+
+  it("a lead OUTSIDE the window (no exception) is dropped", () => {
+    const row = makePipelineRow({ current_milestone: "unassigned_lead", lead_date: "2026-05-01T00:00:00Z", created_at: "2026-05-01T00:00:00Z" });
+    expect(isRowInWindow(row, start, end)).toBe(false);
+  });
+
+  it("a lead INSIDE the window is retained", () => {
+    const row = makePipelineRow({ current_milestone: "lead", lead_date: "2026-06-15T00:00:00Z", created_at: "2026-06-15T00:00:00Z" });
+    expect(isRowInWindow(row, start, end)).toBe(true);
+  });
+
+  it("an approved job OUTSIDE the window (no exception applies to approved) is dropped", () => {
+    const row = makePipelineRow({
+      current_milestone: "approved",
+      approved_date: "2026-05-01T00:00:00Z",
+      milestone_date: "2026-05-01T00:00:00Z",
+      updated_at: "2026-05-01T00:00:00Z",
+      balance_due: 5000, // even WITH a balance, approved gets no AR exception
+    });
+    expect(isRowInWindow(row, start, end)).toBe(false);
+  });
+
+  it("closed WITH balance_due > 0 stays visible even when its stage date is OUTSIDE the window", () => {
+    const row = makePipelineRow({
+      current_milestone: "closed",
+      milestone_date: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      balance_due: 1500,
+    });
+    expect(isRowInWindow(row, start, end)).toBe(true);
+  });
+
+  it("closed with NO balance due and stage date OUTSIDE the window is dropped (the exact user rule)", () => {
+    const row = makePipelineRow({
+      current_milestone: "closed",
+      milestone_date: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      balance_due: 0,
+    });
+    expect(isRowInWindow(row, start, end)).toBe(false);
+  });
+
+  it("closed with stage date INSIDE the window is retained regardless of balance_due", () => {
+    const row = makePipelineRow({
+      current_milestone: "closed",
+      milestone_date: "2026-06-10T00:00:00Z",
+      updated_at: "2026-06-10T00:00:00Z",
+      balance_due: 0,
+    });
+    expect(isRowInWindow(row, start, end)).toBe(true);
+  });
+
+  it("invoiced WITH balance_due > 0 stays visible even when OUTSIDE the window", () => {
+    const row = makePipelineRow({
+      current_milestone: "invoiced",
+      milestone_date: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      balance_due: 800,
+    });
+    expect(isRowInWindow(row, start, end)).toBe(true);
+  });
+
+  it("a row with an unrecognized milestone (queueForRow -> null) is excluded, not fabricated into a bucket", () => {
+    const row = makePipelineRow({ current_milestone: "some_unknown_value" });
+    expect(isRowInWindow(row, start, end)).toBe(false);
+  });
+
+  it("filterRowsInWindow applies isRowInWindow across a row set", () => {
+    const rows = [
+      makePipelineRow({ id: 1, current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z", balance_due: 0 }),
+      makePipelineRow({ id: 2, current_milestone: "closed", milestone_date: "2026-01-01T00:00:00Z", balance_due: 200 }),
+      makePipelineRow({ id: 3, current_milestone: "lead", lead_date: "2026-06-15T00:00:00Z", created_at: "2026-06-15T00:00:00Z" }),
+    ];
+    const filtered = filterRowsInWindow(rows, start, end);
+    expect(filtered.map((r) => r.id)).toEqual([2, 3]);
+  });
+});
+
+describe("looksLikeRepName / repBucketFor (Round 3, item B: unassigned + name rules)", () => {
+  it("accepts a real 'First Last' name", () => {
+    expect(looksLikeRepName("Jamie Rep")).toBe(true);
+    expect(looksLikeRepName("Mary Jo Smith")).toBe(true);
+  });
+
+  it("rejects a single-token value (no word pair)", () => {
+    expect(looksLikeRepName("Unassigned")).toBe(false);
+  });
+
+  it("rejects a GUID-shaped value", () => {
+    expect(looksLikeRepName("3f9a1c2e-44b1-4a2d-9c3e-8b7a6f5d4c3b")).toBe(false);
+  });
+
+  it("rejects a numeric-sequence value", () => {
+    expect(looksLikeRepName("00047213")).toBe(false);
+    expect(looksLikeRepName("Rep 48213219")).toBe(false);
+  });
+
+  it("rejects an empty/whitespace value", () => {
+    expect(looksLikeRepName("")).toBe(false);
+    expect(looksLikeRepName("   ")).toBe(false);
+  });
+
+  it("repBucketFor: unassigned lead with NO value returns null (filtered out of view entirely)", () => {
+    const row = makePipelineRow({ primary_salesperson: null, contract_amount: 0, primary_estimate_amount: 0 });
+    expect(repBucketFor(row, "colorado")).toBeNull();
+  });
+
+  it("repBucketFor: unassigned WITH value buckets under the account_key (brackets-style rep bucket)", () => {
+    const row = makePipelineRow({ primary_salesperson: "", contract_amount: 25000 });
+    expect(repBucketFor(row, "texas")).toBe("texas");
+  });
+
+  it("repBucketFor: a GUID/numeric rep value becomes [rep-unknown]", () => {
+    const row = makePipelineRow({ primary_salesperson: "3f9a1c2e-44b1-4a2d-9c3e-8b7a6f5d4c3b" });
+    expect(repBucketFor(row, "wichita")).toBe(REP_UNKNOWN_LABEL);
+  });
+
+  it("repBucketFor: a real rep name passes through as-is", () => {
+    const row = makePipelineRow({ primary_salesperson: "Jamie Rep" });
+    expect(repBucketFor(row, "wichita")).toBe("Jamie Rep");
   });
 });
