@@ -44,6 +44,27 @@
 // deno-lint-ignore-file no-explicit-any
 
 const CHUNK_SIZE = 200;
+const PAGE_SIZE = 1000;
+
+/** PostgREST caps EVERY response at the project max-rows (1000) regardless of .limit() —
+ * an unpaginated load silently truncates (playbook pitfall #3; live incident 2026-07-03:
+ * exactly 1000 of wichita's 1286 pipeline rows refreshed, KS-11's early-walked rep payload
+ * fell outside the newest-1000 window). Page with .range() until a short page. Callers
+ * MUST give the query a stable .order() for correct pagination. */
+async function pageAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  maxRows = Number.POSITIVE_INFINITY,
+): Promise<{ rows: T[]; error?: string }> {
+  const rows: T[] = [];
+  for (let from = 0; rows.length < maxRows; from += PAGE_SIZE) {
+    const { data, error } = await makeQuery(from, from + PAGE_SIZE - 1);
+    if (error) return { rows, error: error.message };
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return { rows };
+}
 /** Cap on how many acculynx_raw representative rows we pull per account per run —
  * keeps the durable-rep backfill query cost-bounded even on a large account. Ordered
  * fetched_at DESC so, when truncated, the NEWEST payloads (most likely to reflect the
@@ -358,16 +379,20 @@ export async function loadDurableRepsFromRaw(
     userMap.set(u.id, name);
   }
 
-  const { data: rawRows, error } = await sb
-    .from("acculynx_raw")
-    .select("api_endpoint,payload,fetched_at")
-    .like("api_endpoint", "%/representatives")
-    .order("fetched_at", { ascending: false })
-    .limit(RAW_REPS_QUERY_LIMIT);
-  if (error || !rawRows) return new Map();
+  const rawPaged = await pageAll<RawRepsRow>(
+    (from, to) =>
+      sb
+        .from("acculynx_raw")
+        .select("api_endpoint,payload,fetched_at")
+        .like("api_endpoint", "%/representatives")
+        .order("fetched_at", { ascending: false })
+        .range(from, to),
+    RAW_REPS_QUERY_LIMIT,
+  );
+  if (rawPaged.error && rawPaged.rows.length === 0) return new Map();
 
   const jobIdSet = new Set(jobIds);
-  const relevantRows = (rawRows as RawRepsRow[]).filter((row) => {
+  const relevantRows = rawPaged.rows.filter((row) => {
     const jobId = jobIdFromRepsEndpoint(row.api_endpoint);
     return jobId !== null && jobIdSet.has(jobId);
   });
@@ -398,18 +423,22 @@ export async function syncCrmPipeline(
   repNameByJobId: Map<string, string> = new Map(),
   batchId?: string,
 ): Promise<{ upserted: number; error?: string }> {
-  const { data: jobRows, error: jobsErr } = await sb
-    .from("acculynx_jobs")
-    .select(
-      "id,job_name,job_number,priority,current_milestone,milestone_date,created_date,modified_date," +
-        "lead_dead_reason,job_category_name,trade_types,location_street1,location_city,location_state," +
-        "location_state_abbrev,location_zip,latitude,longitude,lead_source_name,initial_appointment_start," +
-        "initial_appointment_end,initial_appointment_notes,raw",
-    )
-    .eq("account_key", acct.account_key);
-  if (jobsErr) return { upserted: 0, error: `jobs load: ${jobsErr.message}` };
+  const jobsPaged = await pageAll<JobRow>((from, to) =>
+    sb
+      .from("acculynx_jobs")
+      .select(
+        "id,job_name,job_number,priority,current_milestone,milestone_date,created_date,modified_date," +
+          "lead_dead_reason,job_category_name,trade_types,location_street1,location_city,location_state," +
+          "location_state_abbrev,location_zip,latitude,longitude,lead_source_name,initial_appointment_start," +
+          "initial_appointment_end,initial_appointment_notes,raw",
+      )
+      .eq("account_key", acct.account_key)
+      .order("id")
+      .range(from, to)
+  );
+  if (jobsPaged.error) return { upserted: 0, error: `jobs load: ${jobsPaged.error}` };
 
-  const jobs: JobRow[] = jobRows ?? [];
+  const jobs: JobRow[] = jobsPaged.rows;
   if (jobs.length === 0) return { upserted: 0 };
 
   // Account-scoped equality, NOT .in(jobIds): a 1,286-id .in() list blows past PostgREST's
@@ -417,14 +446,18 @@ export async function syncCrmPipeline(
   // crm_pipeline for every large account (live incident, 2026-07-03). account_key is
   // indexed on acculynx_job_financials (migration 169) and jobs here are already scoped
   // to this account, so equality returns the identical row set in one cheap query.
-  const { data: finRows, error: finErr } = await sb
-    .from("acculynx_job_financials")
-    .select("job_id,approved_job_value,balance_due")
-    .eq("account_key", acct.account_key);
-  if (finErr) return { upserted: 0, error: `financials load: ${finErr.message}` };
+  const finPaged = await pageAll<JobFinancialsRow>((from, to) =>
+    sb
+      .from("acculynx_job_financials")
+      .select("job_id,approved_job_value,balance_due")
+      .eq("account_key", acct.account_key)
+      .order("job_id")
+      .range(from, to)
+  );
+  if (finPaged.error) return { upserted: 0, error: `financials load: ${finPaged.error}` };
 
   const financialsByJobId = new Map<string, JobFinancialsRow>();
-  for (const f of (finRows ?? []) as JobFinancialsRow[]) {
+  for (const f of finPaged.rows) {
     financialsByJobId.set(f.job_id, f);
   }
 

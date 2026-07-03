@@ -125,16 +125,26 @@ function makeCrmPipelineSb(
       if (table === "acculynx_jobs") {
         return {
           select: () => ({
-            eq: () => Promise.resolve({ data: jobs, error: null }),
+            eq: () => ({
+              order: () => ({
+                // paged: first page returns everything (fixtures < PAGE_SIZE), later pages empty
+                range: (from: number, _to: number) => Promise.resolve({ data: from === 0 ? jobs : [], error: null }),
+              }),
+            }),
           }),
         };
       }
       if (table === "acculynx_job_financials") {
         return {
           select: () => ({
-            // Real query is account-scoped equality (PostgREST URL-length fix, 2026-07-03) —
-            // keep .in for any legacy path but .eq is what syncCrmPipeline now calls.
-            eq: () => Promise.resolve({ data: financials, error: null }),
+            // Real query: account-scoped equality + .order().range() pagination
+            // (PostgREST URL-length fix + 1000-row-cap fix, 2026-07-03). First page
+            // returns the fixture set (< PAGE_SIZE), later pages empty.
+            eq: () => ({
+              order: () => ({
+                range: (from: number, _to: number) => Promise.resolve({ data: from === 0 ? financials : [], error: null }),
+              }),
+            }),
             in: () => Promise.resolve({ data: financials, error: null }),
           }),
         };
@@ -149,6 +159,7 @@ function makeCrmPipelineSb(
           select: () => ({
             like: () => ({
               order: () => ({
+                range: (from: number, _to: number) => Promise.resolve({ data: from === 0 ? rawRepsRows : [], error: null }),
                 limit: () => Promise.resolve({ data: rawRepsRows, error: null }),
               }),
             }),
