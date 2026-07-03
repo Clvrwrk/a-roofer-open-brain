@@ -8,10 +8,16 @@ import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
 export type DashboardStatus = "live" | "degraded" | "unconfigured";
 
-/** D-03 (planner choice): selectable window tokens; default is last_7_days. */
-export type WindowToken = "this_week" | "last_7_days" | "mtd" | "qtd";
+/** Round 3 (user spec, item A): the unified, calendar-anchored window selector.
+ * Replaces the prior {this_week, last_7_days, mtd, qtd} set — "This Week" was a
+ * rolling/ambiguous label and "Last 7 Days" is superseded by the always-on
+ * trailing-7-day pill row (item C), so neither survives as a selector option.
+ * Default is "mtd" (Month-to-Date). All four options are calendar-anchored
+ * (start of week/month/quarter/year through "now"), never rolling windows. */
+export type WindowToken = "wtd" | "mtd" | "qtd" | "ytd";
 
 export interface DashboardFilters {
+  /** Round 3 (user spec, item A): the unified window selector — default "mtd". */
   window?: WindowToken;
   /** account_key filter; "all" (default) rolls up every location. */
   accountKey?: string | "all";
@@ -241,6 +247,9 @@ export interface JobDrillRow {
   milestone: string;
   contractAmount: number;
   salesperson: string;
+  /** Round 3, item E: Outstanding AR column — balance_due, floored at 0 (same
+   * convention as outstandingArFor elsewhere in this module). */
+  outstandingAr: number;
 }
 
 /** Fix round item 2 (2026-07-02, user feedback: "only jobs with value should show"):
@@ -462,6 +471,10 @@ function startOfMonth(value: Date) {
 function startOfQuarter(value: Date) {
   const quarterMonth = Math.floor(value.getMonth() / 3) * 3;
   return new Date(value.getFullYear(), quarterMonth, 1);
+}
+
+function startOfYear(value: Date) {
+  return new Date(value.getFullYear(), 0, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +711,144 @@ export function preClosePipelineValue(queues: QueueValue[]): number {
   return queues.find((q) => q.queue === "prospects")?.value ?? 0;
 }
 
+// ---------------------------------------------------------------------------
+// Round 3, item A: unified window semantics — one date model shared by every
+// KPI, chart, table, and drop-down (except the trailing-7 pills, item C, which
+// are intentionally NOT windowed by the selector).
+//
+// STAGE-DATE MAPPING (documented per the user's instruction to "document the
+// mapping in code" — this is the SINGLE source of truth every windowed
+// aggregation in this module must call through, so the mapping is never
+// silently reimplemented differently in two places):
+//   leads      -> lead_date, falling back to created_at (no dedicated lead-
+//                 entry column; created_at is the row's own crm_pipeline
+//                 ingestion date, the closest available proxy).
+//   prospects  -> lead_date, falling back to created_at (crm_pipeline carries
+//                 no dedicated "entered prospect" column; same convention
+//                 computeTrailing7dTotals already used for the prospects
+//                 queue's own date signal).
+//   approved   -> approved_date, falling back to milestone_date, falling back
+//                 to updated_at (the milestone_date column is the row's most
+//                 recent milestone-entry timestamp; updated_at is the final,
+//                 always-populated fallback).
+//   invoiced   -> milestone_date, falling back to updated_at (crm_pipeline has
+//                 no dedicated invoiced_date column; milestone_date already
+//                 tracks "date entered current milestone" for whatever the
+//                 row's current_milestone is, which for an invoiced row IS the
+//                 invoiced-entry date).
+//   closed     -> milestone_date, falling back to updated_at (same convention
+//                 as invoiced — milestone_date is the closed-entry date for a
+//                 row whose current_milestone is "closed").
+// ---------------------------------------------------------------------------
+
+/** ORCHESTRATOR INTERPRETATION NOTE (flagged per the user's spec): leads and
+ * prospects are windowed by lead_date/created_at (no better signal exists in
+ * crm_pipeline); approved/invoiced/closed use approved_date/milestone_date/
+ * updated_at per the mapping above. Only closed/invoiced jobs get the AR
+ * exception (item A) — leads/prospects/approved are windowed strictly by their
+ * own stage date with no exception. */
+export function stageDateFor(row: PipelineRow, queue: QueueName): Date | null {
+  switch (queue) {
+    case "leads":
+    case "prospects":
+      return toDate(row.lead_date ?? row.created_at);
+    case "approved":
+      return toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
+    case "invoiced":
+    case "closed":
+      return toDate(row.milestone_date ?? row.updated_at);
+    default:
+      return null;
+  }
+}
+
+/** Round 3, item A — the closed/invoiced AR exception (user's exact rule):
+ * - A closed/invoiced job with NO balance due whose stage date falls OUTSIDE
+ *   the window is filtered OUT of view and every calculation.
+ * - A closed/invoiced job WITH balance_due > 0 stays visible regardless of its
+ *   stage date (money is still owed).
+ * - A closed/invoiced job whose stage date falls INSIDE the window is
+ *   retained normally (counts toward pipeline value by stage + leaderboard).
+ * - Every other stage (leads/prospects/approved) is windowed strictly by its
+ *   own stage date — no exception.
+ * Assumes dead/cancelled rows have already been excluded from `rows` (item 2,
+ * unchanged from round 2/3). Rows with an unrecognized/null queue (queueForRow
+ * returns null) are excluded — same "never fabricate a bucket" discipline as
+ * every other aggregation in this module. */
+export function isRowInWindow(row: PipelineRow, start: Date, end: Date): boolean {
+  const queue = queueForRow(row);
+  if (!queue) return false;
+
+  const inWindow = (date: Date | null) => Boolean(date && date >= start && date < addDays(end, 1));
+
+  if (queue === "closed" || queue === "invoiced") {
+    if (toNumber(row.balance_due) > 0) return true; // AR exception: stays visible regardless of date
+    return inWindow(stageDateFor(row, queue));
+  }
+
+  return inWindow(stageDateFor(row, queue));
+}
+
+/** Applies isRowInWindow to a row set — the single windowing filter point every
+ * windowed aggregation (funnel, queue values, location rollup, leaderboard,
+ * drill-down) calls, so the AR exception and stage-date mapping are never
+ * reimplemented ad hoc at a second call site. */
+export function filterRowsInWindow(rows: PipelineRow[], start: Date, end: Date): PipelineRow[] {
+  return rows.filter((row) => isRowInWindow(row, start, end));
+}
+
+// ---------------------------------------------------------------------------
+// Round 3, item B: unassigned + name rules — applies everywhere a rep/account
+// bucket is displayed or aggregated (KPIs, leaderboard, rep filter, account
+// bars, drill-downs).
+// ---------------------------------------------------------------------------
+
+/** True when a trimmed string LOOKS LIKE a real "First Last" human name, per the
+ * user's regex-sanity instruction: a digit-run or hex/GUID-dash pattern, or the
+ * absence of an alphabetic word pair, disqualifies it. A GUID/numeric-sequence
+ * rep value (e.g. "3f9a1c2e-...", "00047213") is never treated as a name. */
+export function looksLikeRepName(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  // Disqualify: contains a run of 4+ digits anywhere (GUID segments, numeric IDs),
+  // or a hex-dash GUID shape (8-4-4-4-12 or similar dash-separated hex groups).
+  if (/\d{4,}/.test(trimmed)) return false;
+  if (/^[0-9a-f]{4,}(-[0-9a-f]{2,}){2,}$/i.test(trimmed)) return false;
+  // Require at least two alphabetic "words" (a first + last name pair) — a
+  // single token (even a real word) is not a display-safe rep name here.
+  const alphaWords = trimmed.split(/\s+/).filter((word) => /[A-Za-z]/.test(word));
+  return alphaWords.length >= 2;
+}
+
+/** Sentinel display label for a rep value that does not look like a real name
+ * (item B: "kills the GUID entries on the leaderboard"). */
+export const REP_UNKNOWN_LABEL = "[rep-unknown]";
+
+/** Round 3, item B — the unified rep/account bucket for one row, applied
+ * everywhere a rep is displayed or aggregated (KPIs, leaderboard, rep filter,
+ * account bars, drill-downs):
+ *   - unassigned (no primary_salesperson) AND no value (amountFor <= 0) ->
+ *     null (the caller must exclude this row entirely — leads with no rep and
+ *     no value are filtered out of view, not bucketed at all).
+ *   - unassigned WITH value -> the account_key in brackets style the user
+ *     showed (e.g. "colorado", "texas") — the account becomes the rep bucket.
+ *   - assigned but the value doesn't look like "First Last" (GUID/numeric
+ *     sequence) -> REP_UNKNOWN_LABEL ("[rep-unknown]").
+ *   - assigned with a real-looking name -> the name, as-is.
+ * `accountKey` is the row's already-derived deriveRegionOffice(...).accountKey
+ * (callers already compute this for the location/segment filters, so this
+ * function takes it directly rather than re-deriving it from `jobs`). */
+export function repBucketFor(row: PipelineRow, accountKey: string): string | null {
+  const rawRep = String(row.primary_salesperson ?? "").trim();
+  const hasValue = amountFor(row) > 0;
+
+  if (!rawRep) {
+    return hasValue ? accountKey : null;
+  }
+
+  return looksLikeRepName(rawRep) ? rawRep : REP_UNKNOWN_LABEL;
+}
+
 /** Count-based, snapshot (window-independent) close rate — user spec item 7, exact
  * formula: count(Approved + Invoiced + Closed) / count(Leads + Prospects + Approved +
  * Invoiced + Closed). Ignores the time-window filter entirely (a CURRENT SNAPSHOT of
@@ -898,17 +1049,24 @@ export function computeMarginByDimension(
 
 /** Inline per-location metrics for the expandable-row primary breakdown (checkpoint
  * rework directive 6; reworked in checkpoint round 3 item 3/7 to carry the per-queue
- * value breakdown and a snapshot close rate): pipeline $ (pre-close pipeline value —
- * prospects-with-estimate, item 3), sold $/count (within window), lead count (within
- * window), AR $ (point-in-time), the five-queue value/count array, and the
- * window-independent snapshot close rate — one row per known account_key. Assumes
- * dead/cancelled rows have already been excluded from `pipeline` (item 2). */
+ * value breakdown and a snapshot close rate; reworked again in Round 3 item A to trust
+ * the caller's window): pipeline $ (pre-close pipeline value — prospects-with-estimate,
+ * item 3), sold $/count, lead count, AR $, the five-queue value/count array, and the
+ * window-independent snapshot close rate — one row per known account_key.
+ *
+ * Round 3, item A: `pipeline` is expected to ALREADY be the caller's window-filtered
+ * row set (filterRowsInWindow — the AR-exception-aware unified window), so sold/lead
+ * counts here are derived purely from queue membership (queueForRow), never a second,
+ * independently-filtered date check. `start`/`end` are retained in the signature only
+ * for the window-independent closeRateSnapshot's documentation/call-site continuity
+ * and are otherwise unused by this function's own filtering. Assumes dead/cancelled
+ * rows have already been excluded from `pipeline` (item 2). */
 export function computeLocationRollup(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
   accountKeys: readonly string[],
-  start: Date,
-  end: Date,
+  _start: Date,
+  _end: Date,
 ): LocationRollupRow[] {
   return accountKeys.map((accountKey) => {
     const rows = pipeline.filter((row) => deriveRegionOffice(row, jobs).accountKey === accountKey);
@@ -917,18 +1075,10 @@ export function computeLocationRollup(
     const pipelineValue = preClosePipelineValue(queues);
     const arValue = rows.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
 
-    const soldRows = rows.filter((row) => {
-      const milestone = compact(row.current_milestone, "").toLowerCase();
-      const date = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
-      return SOLD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-    });
+    const soldRows = rows.filter((row) => SOLD_MILESTONES.has(compact(row.current_milestone, "").toLowerCase()));
     const soldValue = soldRows.reduce((sum, row) => sum + amountFor(row), 0);
 
-    const leadCount = rows.filter((row) => {
-      const milestone = compact(row.current_milestone, "").toLowerCase();
-      const date = toDate(row.lead_date ?? row.created_at);
-      return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-    }).length;
+    const leadCount = rows.filter((row) => queueForRow(row) === "leads").length;
 
     const closeRateSnapshot = computeSnapshotCloseRate(rows);
 
@@ -956,19 +1106,31 @@ export function computeLocationRollup(
  * hidden" caption rather than silently shrinking the list. Aggregate queue counts
  * (computeQueueValues et al.) are UNCHANGED by this — they are queue-membership counts,
  * not "rows visible in this drill-down table", and the user's spec explicitly says those
- * stay as-is ("values already honest"). */
+ * stay as-is ("values already honest").
+ *
+ * Round 3, item E: rows now ALSO honor the same window rules as A/B — a job with no
+ * outstanding AR whose own stage date falls outside [windowStart, windowEnd] is not
+ * listed ("all revenue ever" disappears). `windowStart`/`windowEnd` are optional so
+ * existing callers (and the pre-round-3 test suite) that don't pass a window keep the
+ * prior window-independent behavior. */
 export function jobRowsForLocation(
   pipeline: PipelineRow[],
   jobs: AcculynxJobRow[],
   accountKey: string,
   commercialResidential: string | "all" = "all",
   rep: string | "all" = "all",
+  windowStart?: Date,
+  windowEnd?: Date,
 ): JobDrillResult {
   const filtered = excludeClosedAndPaidInFull(dedupePipeline(pipeline)).filter((row) => {
     const derived = deriveRegionOffice(row, jobs);
     if (derived.accountKey !== accountKey) return false;
     if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
-    if (rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== rep) return false;
+    if (windowStart && windowEnd && !isRowInWindow(row, windowStart, windowEnd)) return false;
+
+    const repBucket = repBucketFor(row, derived.accountKey);
+    if (repBucket === null) return false; // unassigned + no value: filtered out of view entirely (item B)
+    if (rep !== "all" && repBucket !== rep) return false;
     return true;
   });
 
@@ -988,7 +1150,8 @@ export function jobRowsForLocation(
       accountKey: derived.accountKey,
       milestone: compact(row.current_milestone, "unknown").toLowerCase(),
       contractAmount,
-      salesperson: compact(row.primary_salesperson, "Unassigned"),
+      salesperson: repBucketFor(row, derived.accountKey) ?? compact(row.primary_salesperson, "Unassigned"),
+      outstandingAr: Math.max(0, toNumber(row.balance_due)),
     });
   }
 
@@ -1013,18 +1176,22 @@ export function filterByWindow<T>(
   });
 }
 
+/** Round 3 (user spec, item A): calendar-anchored window ranges. `end` is always
+ * "today" (start-of-day, so the [start, end] convention used everywhere else in this
+ * module — via addDays(end, 1) as the exclusive upper bound — includes all of today).
+ * Default token (see resolveFilters) is "mtd". */
 export function windowRange(token: WindowToken, now: Date): { start: Date; end: Date; label: string } {
   const end = startOfDay(now);
   switch (token) {
-    case "this_week":
-      return { start: startOfWeek(now), end, label: "This Week" };
-    case "mtd":
-      return { start: startOfMonth(now), end, label: "Month-to-Date" };
+    case "wtd":
+      return { start: startOfWeek(now), end, label: "Week-to-Date" };
     case "qtd":
-      return { start: startOfQuarter(now), end, label: "Quarter-to-Date" };
-    case "last_7_days":
+      return { start: startOfQuarter(now), end, label: "Current Quarter" };
+    case "ytd":
+      return { start: startOfYear(now), end, label: "Year-to-Date" };
+    case "mtd":
     default:
-      return { start: addDays(end, -7), end, label: "Last 7 Days" };
+      return { start: startOfMonth(now), end, label: "Month-to-Date" };
   }
 }
 
@@ -1033,11 +1200,12 @@ export function windowRange(token: WindowToken, now: Date): { start: Date; end: 
 // ---------------------------------------------------------------------------
 
 /** ALWAYS a fixed trailing 7-calendar-day window anchored at `now` — deliberately
- * independent of the D-03 window-selector token (that is the entire point of this
- * pill row: an always-current-at-a-glance strip that does not move when the user
+ * independent of the D-03/Round-3-item-A window-selector token (that is the entire
+ * point of this pill row, and the ONE section item C exempts from the Window
+ * selector: an always-current-at-a-glance strip that does not move when the user
  * changes the KPI/chart window). Uses the same [start, end) day-boundary convention
- * as windowRange's last_7_days case so the two stay visually consistent, but this
- * one is NEVER driven by the selector. */
+ * windowRange uses, so the two stay visually consistent, but this one is NEVER
+ * driven by the selector. */
 export function trailing7DayRange(now: Date): { start: Date; end: Date } {
   const end = startOfDay(now);
   return { start: addDays(end, -7), end };
@@ -1526,9 +1694,46 @@ interface AbcInvoiceLineRow {
   extended_price: number | string | null;
 }
 
-interface WatermarkRow {
+/** Round 3, item F (live-diagnosed root cause): the watermark table is keyed on
+ * (account_key, resource_type) — see supabase/functions/acculynx-sync/lib/watermark.ts.
+ * The live column is `resource_type`, NOT `resource`. Every freshness read MUST select
+ * it and scope to the "jobs" resource per account (optionally max(jobs, contacts,
+ * estimates)) — never a bare min() across every resource_type row, which silently
+ * drags every account's badge to "stale" via 5 legacy NULL seed rows (resource_type
+ * IN users/invoices/job_financials/job_insurance/job_milestone_history, not
+ * account-scoped) and job_walk rows that only advance when a job is actually walked. */
+export interface WatermarkRow {
   account_key: string;
+  resource_type: string;
   last_sync_at: string | null;
+}
+
+/** Round 3, item F: the resource(s) that define "freshness" for an account — the
+ * account's own `jobs` resource watermark is authoritative; `contacts`/`estimates`
+ * are included (via max) so a fresher contacts/estimates sync can also count, but
+ * `jobs` alone already reflects the live-diagnosed truth (jobs watermarks fresh
+ * within ~25 min in production at implementation time). NEVER includes job_walk
+ * (only advances when a job is actually walked) or any legacy/non-account-scoped
+ * resource_type (users, invoices, job_financials, job_insurance,
+ * job_milestone_history). */
+const FRESHNESS_RESOURCE_TYPES = new Set(["jobs", "contacts", "estimates"]);
+
+/** Per-account freshness basis: the MOST RECENT last_sync_at among this account's
+ * jobs/contacts/estimates watermark rows (item F's own "optionally max" instruction).
+ * Ignores every other resource_type (legacy NULL seed rows, job_walk, etc.) entirely —
+ * they never enter this map, so they can never drag a badge stale. Returns null when
+ * the account has no qualifying watermark row at all (never a fabricated date). */
+export function freshnessBasisByAccount(watermarks: WatermarkRow[]): Map<string, string | null> {
+  const basis = new Map<string, string | null>();
+  for (const row of watermarks) {
+    if (!FRESHNESS_RESOURCE_TYPES.has(row.resource_type)) continue;
+    if (!row.last_sync_at) continue;
+    const existing = basis.get(row.account_key);
+    if (!existing || new Date(row.last_sync_at) > new Date(existing)) {
+      basis.set(row.account_key, row.last_sync_at);
+    }
+  }
+  return basis;
 }
 
 const EMPTY_SEGMENT_SPLIT: SegmentSplit = { residential: 0, commercial: 0 };
@@ -1573,7 +1778,8 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
 
 function resolveFilters(filters?: DashboardFilters): Required<DashboardFilters> {
   return {
-    window: filters?.window ?? "last_7_days",
+    // Round 3 (user spec, item A): default window is Month-to-Date.
+    window: filters?.window ?? "mtd",
     accountKey: filters?.accountKey ?? "all",
     commercialResidential: filters?.commercialResidential ?? "all",
     rep: filters?.rep ?? "all",
@@ -1617,7 +1823,7 @@ export async function loadExecutivePipelineDashboard(
           (query) => query.eq("matched", true),
         ),
         selectAll<AbcInvoiceLineRow>(client, "abc_invoice_lines", "invoice_number,extended_price"),
-        selectAll<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,last_sync_at"),
+        selectAll<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,resource_type,last_sync_at"),
         selectAll<AcculynxAccountRow>(client, "acculynx_accounts", "account_key,label,program,market,state"),
         // Fix round item 4 (2026-07-02): milestone-history-backed transition pills.
         // acculynx_job_milestone_history is now being ingested post-fix (item 1's
@@ -1679,6 +1885,10 @@ export async function loadExecutivePipelineDashboard(
 
     // Apply the D-13 global filter bar (account_key / commercial-residential / rep)
     // before computing any KPI — every KPI, chart, and drill-down obeys the filter bar.
+    // Round 3, item B: the rep filter matches against the unified rep/account bucket
+    // (repBucketFor) — an unassigned-with-value row filters on its account_key bucket,
+    // a GUID/numeric rep filters on "[rep-unknown]" — never the raw primary_salesperson
+    // string, so the filter dropdown and the displayed bucket never disagree.
     const filteredPipeline = activePipeline.filter((row) => {
       const derived = deriveRegionOffice(row, jobs);
       if (resolvedFilters.accountKey !== "all" && derived.accountKey !== resolvedFilters.accountKey) return false;
@@ -1688,31 +1898,36 @@ export async function loadExecutivePipelineDashboard(
       ) {
         return false;
       }
-      if (resolvedFilters.rep !== "all" && compact(row.primary_salesperson, "Unassigned") !== resolvedFilters.rep) {
-        return false;
-      }
+
+      const repBucket = repBucketFor(row, derived.accountKey);
+      if (repBucket === null) return false; // unassigned + no value: filtered out of view entirely (item B)
+      if (resolvedFilters.rep !== "all" && repBucket !== resolvedFilters.rep) return false;
       return true;
     });
 
-    const funnel = groupPipelineFunnel(filteredPipeline);
-    const closeRate = computeCloseRate(filteredPipeline, start, end);
-    const newLeadsCount = filteredPipeline.filter((row) => {
-      const milestone = compact(row.current_milestone, "").toLowerCase();
-      const date = toDate(row.lead_date ?? row.created_at);
-      return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-    }).length;
+    // Round 3, item A: THE unified window — every windowed KPI/chart/table/drop-down
+    // below is computed from this ONE filtered-and-windowed row set (filterRowsInWindow
+    // applies the per-stage date mapping + the closed/invoiced AR-outstanding exception
+    // documented on stageDateFor/isRowInWindow). Point-in-time KPIs that are explicitly
+    // NOT windowed (the trailing-7 pills, item C) intentionally read from
+    // `filteredPipeline` instead — see the trailing7d computation below.
+    const windowedPipeline = filterRowsInWindow(filteredPipeline, start, end);
+
+    const funnel = groupPipelineFunnel(windowedPipeline);
+    const closeRate = computeCloseRate(windowedPipeline, start, end);
+    const newLeadsCount = windowedPipeline.filter((row) => queueForRow(row) === "leads").length;
 
     // Item 3: the headline "pipeline value" KPI is the pre-close pipeline value
-    // (prospects-with-estimate summed value) — NOT amountFor() over the whole
-    // filtered set. Point-in-time KPIs (pipeline value, AR) ignore the window per D-03.
-    const queuesAll = computeQueueValues(filteredPipeline);
+    // (prospects-with-estimate summed value), now windowed per item A (prospects are
+    // windowed by their own stage date, same as every other stage).
+    const queuesAll = computeQueueValues(windowedPipeline);
     const pipelineValueTotal = preClosePipelineValue(queuesAll);
-    const arTotal = filteredPipeline.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
+    const arTotal = windowedPipeline.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
 
     // Item 4: every headline KPI splits Residential vs Commercial, segmented BY
     // ACCOUNT (multi_family_commercial = commercial; everything else = residential).
-    const residentialRows = filteredPipeline.filter((row) => deriveSegment(row, jobs) === "residential");
-    const commercialRows = filteredPipeline.filter((row) => deriveSegment(row, jobs) === "commercial");
+    const residentialRows = windowedPipeline.filter((row) => deriveSegment(row, jobs) === "residential");
+    const commercialRows = windowedPipeline.filter((row) => deriveSegment(row, jobs) === "commercial");
 
     const pipelineValueSplit: SegmentSplit = {
       residential: preClosePipelineValue(computeQueueValues(residentialRows)),
@@ -1731,29 +1946,23 @@ export async function loadExecutivePipelineDashboard(
     };
 
     const newLeadsSplit: SegmentSplit = {
-      residential: residentialRows.filter((row) => {
-        const milestone = compact(row.current_milestone, "").toLowerCase();
-        const date = toDate(row.lead_date ?? row.created_at);
-        return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-      }).length,
-      commercial: commercialRows.filter((row) => {
-        const milestone = compact(row.current_milestone, "").toLowerCase();
-        const date = toDate(row.lead_date ?? row.created_at);
-        return LEAD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-      }).length,
+      residential: residentialRows.filter((row) => queueForRow(row) === "leads").length,
+      commercial: commercialRows.filter((row) => queueForRow(row) === "leads").length,
     };
 
     // Item 7: close rate splits are the count-based snapshot formula (window-
-    // independent), same as the location/rep close rates.
+    // independent, computed over the FULL filtered — not windowed — set per the
+    // user's explicit "current snapshot" decision), same as the location/rep close
+    // rates below.
     const closeRateSplit: SegmentSplit = {
-      residential: computeSnapshotCloseRate(residentialRows),
-      commercial: computeSnapshotCloseRate(commercialRows),
+      residential: computeSnapshotCloseRate(filteredPipeline.filter((row) => deriveSegment(row, jobs) === "residential")),
+      commercial: computeSnapshotCloseRate(filteredPipeline.filter((row) => deriveSegment(row, jobs) === "commercial")),
     };
 
-    const averageTicket = computeAverageTicket(filteredPipeline, jobs, start, end);
+    const averageTicket = computeAverageTicket(windowedPipeline, jobs, start, end);
 
     const marginByRegion = computeMarginByDimension(
-      filteredPipeline,
+      windowedPipeline,
       jobs,
       financialsByJobId,
       invoiceCostByJobId,
@@ -1761,18 +1970,18 @@ export async function loadExecutivePipelineDashboard(
     );
     const marginByOffice = marginByRegion; // office === account_key for v1 (Open Question 3: peer entries)
     const marginByCommercialResidential = computeMarginByDimension(
-      filteredPipeline,
+      windowedPipeline,
       jobs,
       financialsByJobId,
       invoiceCostByJobId,
       (row, jobRows) => deriveRegionOffice(row, jobRows).commercialResidential,
     );
     const marginByRep = computeMarginByDimension(
-      filteredPipeline,
+      windowedPipeline,
       jobs,
       financialsByJobId,
       invoiceCostByJobId,
-      (row) => compact(row.primary_salesperson, "Unassigned"),
+      (row) => repBucketFor(row, deriveRegionOffice(row, jobs).accountKey) ?? "Unassigned",
     );
 
     // Item 4: margin % split by segment, weighted the same way the overall/location
@@ -1786,19 +1995,18 @@ export async function loadExecutivePipelineDashboard(
       commercial: marginPctFor(commercialRows),
     };
 
-    const soldRows = filteredPipeline.filter((row) => {
-      const milestone = compact(row.current_milestone, "").toLowerCase();
-      const date = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
-      return SOLD_MILESTONES.has(milestone) && Boolean(date && date >= start && date < addDays(end, 1));
-    });
+    const soldRows = windowedPipeline.filter((row) => SOLD_MILESTONES.has(compact(row.current_milestone, "").toLowerCase()));
 
     const leaderboardMap = new Map<string, LeaderboardRow>();
     // Checkpoint round 4, item 1: soldRows grouped by rep, so the leaderboard's
     // stacked-bar collected/AR split can be computed from the SAME row set that
-    // produced each rep's soldValue (never a different window/filter).
+    // produced each rep's soldValue (never a different window/filter). Round 3, item
+    // B: the rep bucket is the unified repBucketFor value (account-key bucket for
+    // unassigned-with-value rows, [rep-unknown] for GUID/numeric values) — this is
+    // what "kills the GUID entries on the leaderboard".
     const soldRowsByRep = new Map<string, PipelineRow[]>();
     for (const row of soldRows) {
-      const salesperson = compact(row.primary_salesperson, "Unassigned");
+      const salesperson = repBucketFor(row, deriveRegionOffice(row, jobs).accountKey) ?? "Unassigned";
       const entry = leaderboardMap.get(salesperson) ?? { salesperson, soldCount: 0, soldValue: 0, arBalance: 0 };
       entry.soldCount += 1;
       entry.soldValue += amountFor(row);
@@ -1808,21 +2016,21 @@ export async function loadExecutivePipelineDashboard(
       soldList.push(row);
       soldRowsByRep.set(salesperson, soldList);
     }
-    for (const row of filteredPipeline) {
+    for (const row of windowedPipeline) {
       const balance = toNumber(row.balance_due);
       if (balance <= 0) continue;
-      const salesperson = compact(row.primary_salesperson, "Unassigned");
+      const salesperson = repBucketFor(row, deriveRegionOffice(row, jobs).accountKey) ?? "Unassigned";
       const entry = leaderboardMap.get(salesperson) ?? { salesperson, soldCount: 0, soldValue: 0, arBalance: 0 };
       entry.arBalance += balance;
       leaderboardMap.set(salesperson, entry);
     }
 
     // Item 6/7: "assigned Close Rate" per rep — count-based snapshot formula, keyed
-    // on the SAME assigned-rep field (primary_salesperson) the leaderboard already
-    // groups by, computed over that rep's full (window-independent) row set.
+    // on the SAME unified rep bucket the leaderboard already groups by, computed over
+    // that rep's full (window-independent) row set from filteredPipeline.
     const rowsByRep = new Map<string, PipelineRow[]>();
     for (const row of filteredPipeline) {
-      const salesperson = compact(row.primary_salesperson, "Unassigned");
+      const salesperson = repBucketFor(row, deriveRegionOffice(row, jobs).accountKey) ?? "Unassigned";
       const list = rowsByRep.get(salesperson) ?? [];
       list.push(row);
       rowsByRep.set(salesperson, list);
@@ -1834,24 +2042,35 @@ export async function loadExecutivePipelineDashboard(
     // Checkpoint round 4, item 1: stacked-chart collected/AR split data, built from
     // the SAME funnel/leaderboard rows above so stage order, rep order, and totals
     // never diverge between the existing charts and the new stacked variants.
-    const funnelWithSplit = computeFunnelStagesWithSplit(filteredPipeline);
+    const funnelWithSplit = computeFunnelStagesWithSplit(windowedPipeline);
     const leaderboardWithSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
 
     // Fix round item 4 (2026-07-02): the 7-pill trailing-7-day row — fixed window
-    // anchored at `now`, computed over filteredPipeline so it obeys the D-13 filter
-    // bar but ignores the D-03 window-selector token entirely (same convention the
-    // superseded 5-pill row used). milestoneHistory/invoiceAging are unfiltered
-    // reads — computeTrailing7dPillsV2 derives the relevant subset by job_id.
+    // anchored at `now`, computed over filteredPipeline (NOT windowedPipeline — item C:
+    // the trailing-7 pills are the ONE section NOT affected by the Window selector) so
+    // it obeys the D-13 filter bar but ignores the D-03 window-selector token entirely.
+    // milestoneHistory/invoiceAging are unfiltered reads — computeTrailing7dPillsV2
+    // derives the relevant subset by job_id.
     const trailing7d = computeTrailing7dPillsV2(filteredPipeline, milestoneHistory, invoiceAging, now);
 
-    const locationRollup = computeLocationRollup(filteredPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
+    const locationRollup = computeLocationRollup(windowedPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
 
     // Freshness badges: use every KNOWN production account so a location with zero jobs
     // still shows an honest (likely critical/no-sync) badge. Excludes any non-production
     // account row (e.g. "sandbox") that may exist in acculynx_accounts but is not one of
     // the 8 real business locations (checkpoint rework directive 3).
+    //
+    // Round 3, item F (live-diagnosed root cause): per-account freshness is now the
+    // account's `jobs` resource watermark (max'd with contacts/estimates via
+    // freshnessBasisByAccount) — NEVER a bare min() across every resource_type row.
+    // The prior implementation read a bare `last_sync_at` per account_key with no
+    // resource_type filter at all, so a stale/NULL legacy seed row (resource_type IN
+    // users/invoices/job_financials/job_insurance/job_milestone_history — none of them
+    // account-scoped) or a job_walk row (only advances when a job is actually walked)
+    // could silently win the "last sync" slot and mark every location stale, even
+    // though the real jobs sync was fresh minutes ago.
     const knownAccountKeySet = new Set<string>(KNOWN_ACCOUNT_KEYS);
-    const watermarkByAccount = new Map(watermarks.map((w) => [w.account_key, w.last_sync_at]));
+    const watermarkByAccount = freshnessBasisByAccount(watermarks);
     const freshnessInputs: FreshnessInput[] = accounts
       .filter((account) => knownAccountKeySet.has(account.account_key))
       .map((account) => ({
@@ -1915,6 +2134,8 @@ export async function loadJobsForLocation(
   commercialResidential: string | "all" = "all",
   env: RuntimeEnv = getRuntimeEnv(),
   rep: string | "all" = "all",
+  window: WindowToken = "mtd",
+  now: Date = new Date(),
 ): Promise<{ status: DashboardStatus; jobs: JobDrillRow[]; hiddenZeroValueCount: number; error: string | null }> {
   const { client, config } = createServerSupabaseClient(env);
 
@@ -1937,7 +2158,11 @@ export async function loadJobsForLocation(
       selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
     ]);
 
-    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep);
+    // Round 3, item E: the drill-down table honors the SAME window rules as the rest
+    // of the dashboard (item A) — a job with no outstanding AR outside the window is
+    // not listed.
+    const { start, end } = windowRange(window, now);
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep, start, end);
     return { status: "live", jobs: rows, hiddenZeroValueCount, error: null };
   } catch (error) {
     return {
