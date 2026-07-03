@@ -24,7 +24,7 @@ import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates } from "./resources/estimates.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
-import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
+import { pageAll, syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -631,12 +631,20 @@ async function runAccountSync(
 
     // Load ordered job IDs + modified_date for this account (sorted by created_date ASC
     // for deterministic resumption). modified_date feeds the D-16 change-driven skip.
-    const { data: jobRows, error: jobErr } = await sb
-      .from("acculynx_jobs")
-      .select("id, modified_date")
-      .eq("account_key", acct.account_key)
-      .order("created_date", { ascending: true });
-    if (jobErr) throw new Error(`job IDs load: ${jobErr.message}`);
+    // Paginated past the PostgREST 1000-row cap (third instance of the same live incident,
+    // 2026-07-03): unpaginated, the walk only ever saw each account's OLDEST 1000 jobs —
+    // colorado (1844) and texas (2301) had their tails silently never walked at all.
+    const jobIdsPaged = await pageAll<{ id: string; modified_date: string | null }>((from, to) =>
+      sb
+        .from("acculynx_jobs")
+        .select("id, modified_date")
+        .eq("account_key", acct.account_key)
+        .order("created_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    );
+    if (jobIdsPaged.error) throw new Error(`job IDs load: ${jobIdsPaged.error}`);
+    const jobRows = jobIdsPaged.rows;
 
     const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
     const modifiedDateByJobId = new Map<string, string>();

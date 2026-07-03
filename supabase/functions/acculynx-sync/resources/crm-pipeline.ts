@@ -51,7 +51,7 @@ const PAGE_SIZE = 1000;
  * exactly 1000 of wichita's 1286 pipeline rows refreshed, KS-11's early-walked rep payload
  * fell outside the newest-1000 window). Page with .range() until a short page. Callers
  * MUST give the query a stable .order() for correct pagination. */
-async function pageAll<T>(
+export async function pageAll<T>(
   makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
   maxRows = Number.POSITIVE_INFINITY,
 ): Promise<{ rows: T[]; error?: string }> {
