@@ -322,3 +322,27 @@ Two distinct close-rate numbers ship, captioned so neither is mistaken for the o
     contract + the 4 dated checkpoint amendment sections (verbatim user directives)
 [6] `.planning/phases/07-executive-sales-pipeline-dashboard/07-01-SUMMARY.md`,
     `07-02-SUMMARY.md` — implementation summaries with live-DB measurements per round
+
+---
+
+## As-built addendum — live-review rounds 1-3 (2026-07-02/03, supersedes conflicting sections above)
+
+The deployed dashboard evolved through three user-directed live-review rounds after this spec
+was written. **The authoritative as-built contract is 07-UI-SPEC.md's dated amendment sections
++ the executive-pipeline.ts pure core.** Headline deltas vs this spec:
+
+- **Window model:** Week-to-Date / **Month-to-Date (default)** / Current Quarter / Year-to-Date,
+  calendar-anchored. Every stage windows by its OWN date (lead/prospect/approved/invoiced/closed).
+  **AR exception:** closed/invoiced jobs with NO balance due outside the window are excluded from
+  view and all calculations; with outstanding balance they remain visible regardless of date.
+- **Rep rules:** valueless unassigned leads dropped; unassigned jobs bucket to their account name
+  as the rep; non-name (GUID/numeric) rep strings render as `[rep-unknown]`.
+- **Layout:** Invoice-Audit layout system (toolbar → one-line freshness strip → fixed-height KPI
+  grid with Res/Com split pills incl. Average Ticket → trailing-7 pills → 2 stacked collected/AR
+  charts with white centered compact labels → per-account bars with **bold $ (count)** chips →
+  lazy job drill-downs with Value + Outstanding AR columns, window-filtered).
+- **Trailing-7 pills:** stage-transition pills + Total Outstanding AR + Highest AR Aging (days) +
+  Monies Collected (= approvedJobValue − balanceDue; AccuLynx exposes no payments total). Fixed
+  trailing window — immune to the Window selector, obeys Location/Type/Rep.
+- **Freshness:** per-account `jobs` watermark basis (not min-over-all-watermarks).
+- **Nav:** Executive = single "Pipeline Review" → /executive/pipeline (weekly snapshot deleted).

@@ -119,3 +119,21 @@ gate, not a hand-off:
 ## Healthz reference
 `GET https://cc.proexteriorsus.net/healthz` → `{ status, buildCommit, supabaseConfigured,
 workOsConfigured, liveSurfaceStatus, … }`. `buildCommit` = the deployed git SHA.
+
+## When `git push` auth fails (gh keyring token expired — 2026-07-03 incident)
+
+Symptoms: `remote: Invalid username or token` on push while **fetch still works** (repo is
+readable); `gh auth status` → "The token in keyring is invalid."
+
+1. **Sanctioned fix:** human runs `gh auth login -h github.com` (interactive; agent cannot).
+2. **Sanctioned agent fallback — GitHub MCP connector** (authenticates independently):
+   `mcp__github__push_files` (owner `Clvrwrk`, repo `a-roofer-open-brain`, branch `main`) pushes
+   file contents as remote commits. For large change-sets, group files into a few commits and use
+   LEAN subagents so file bodies burn their context, not the orchestrator's. THEN reconcile local:
+   `git fetch` → `git diff origin/main main --stat` must be **empty** (byte-identical trees) →
+   `git reset --hard origin/main`. Local commit granularity is traded for shipped work — note the
+   original local hashes in the commit message/log.
+3. **Never** scan `.env`/credential stores for alternate tokens to embed in push URLs — the
+   permission classifier blocks it, correctly. Don't fight it.
+4. Coolify builds fire per remote commit; intermediate partial-push builds may fail — harmless
+   (prior build stays live). Verify the FINAL commit via `/healthz` `buildCommit` as usual.

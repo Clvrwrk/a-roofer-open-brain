@@ -102,3 +102,29 @@ shared resolver for invoices, agreements, and estimates as those surfaces adopt 
 Credit-memo tracking (Item 1) and daily invoice-PDF auto-pull (Item 4). Apply the same
 segmentation grouping to the agreement (branch price list) and estimate surfaces. RLS on 7
 exposed tables → upcoming DB-health pass. Future taxonomy call on Metal/Tile/Siding.
+
+## Playbook 9 — PostgREST `.in()` URL-length cap (silent 400)
+A `.in("col", [big list])` builds the filter into the URL; ~1,000 UUIDs blows the URL limit and
+PostgREST returns **400 Bad Request** — which reads like a data error, not a size error
+(2026-07-03: crm-pipeline financials load failed EVERY pass on accounts >~few hundred jobs;
+"financials load: Bad Request" hourly while small accounts worked). **Fix:** filter by an indexed
+scoping column (`.eq("account_key", …)`) when the list is "everything for X", or chunk the `.in()`
+to ≤40-50 items. **Signature:** works on small accounts, 400s on big ones.
+
+## Playbook 10 — PostgREST bulk-upsert column-UNION null-wipe
+In a bulk insert/upsert, PostgREST normalizes every row to the UNION of keys across the batch —
+a row that OMITS a column gets an explicit NULL, and `ON CONFLICT DO UPDATE` then **overwrites the
+existing value with NULL**. "Omit the key to preserve the old value" only works if the WHOLE batch
+omits it (2026-07-03: crm_pipeline rep coverage dropped 947→800 in one pass — rows without a
+resolved rep nulled reps that were already set). **Fix:** partition the batch by column-presence
+and upsert each partition separately. **Signature:** a previously-populated column loses rows
+after a sync pass that "preserves" via key omission.
+
+## Playbook 11 — "exactly N" is a cap signature, not a coincidence
+Any metric that lands EXACTLY on a round limit (1,000 = PostgREST max-rows default; your page
+size; a query LIMIT) is a truncation fingerprint. 2026-07-03: three separate unpaginated reads
+each stopped at exactly 1,000 (crm rows, walk job-list, rep lookups) — each masked by the layer
+above it. **Rule:** every PostgREST read that can exceed max-rows MUST paginate
+(`.order(stable).range(from,to)` loop until a short page); every `.limit(N>1000)` is a no-op
+above max-rows. Audit greps: `\.in\(` with mapped id arrays; `\.select\(` + `.eq(` chains with
+no `.range(`.

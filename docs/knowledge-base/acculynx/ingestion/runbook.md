@@ -361,3 +361,35 @@ representatives) resolved correctly against the live API (`approved_job_value
 [2] Migrations `173` (`acculynx_cron_dispatch`), `174` (`reconcile_acculynx_cron_outcomes()` + `*/10` cron), `175` (`v_acculynx_cron_outcomes` v2), `176` (`check_acculynx_alerts()` + `*/15` cron).
 [3] Edge Function `acculynx-sync` (v39 as of 07-09's gap-closure deploy), project `rnhmvcpsvtqjlffpsayu`; rollback target v12 (pre-Phase-7; the last known-good version before the crm_pipeline/job-walk rebuild).
 [4] [Sync Pipeline](sync-pipeline.md), [Account Registry](../accounts.md), [Auth & Rate Limits](../api/auth-and-limits.md).
+
+## Troubleshooting: silent-truncation signatures (2026-07-03 incident family)
+
+Five stacked live incidents shared one root class — data silently missing while everything
+"reported ok". Check these signatures FIRST when counts look wrong:
+
+| Signature | Root cause | Fix pattern |
+|---|---|---|
+| Works on small accounts, 400 "Bad Request" on big ones | `.in()` id-list blew the URL length cap | scope by `.eq("account_key",…)` or chunk ≤40 ids (playbook 9, docs/42) |
+| A count lands EXACTLY on 1,000 (or any round limit) | unpaginated read at PostgREST max-rows | `pageAll` — `.order(stable).range()` loop (playbook 11) |
+| A populated column loses rows after a sync pass | bulk-upsert column-UNION null-wipe | partition batch by column-presence (playbook 10) |
+| Walk reports "ok" hourly, target table has 0 rows | warn-only error handling | counted errors → `acculynx_job_walk_errors` + alert condition (e) (mig 186) |
+| Every location shows "stale" while cron is green | freshness computed over legacy NULL / job_walk watermark rows | freshness basis = per-account `jobs` (jobs/contacts/estimates) watermark only |
+
+## Driver-loop recipe (force an account's backfill to completion)
+
+The hourly cron finishes any backfill unattended, but to force one account through NOW
+(e.g. after a fix, before a demo), loop the targeted trigger — each invocation owns the
+account's full ~110s budget:
+
+```bash
+for i in $(seq 1 30); do   # ~30 runs finished a 1,286-job account
+  # via Supabase MCP / psql:
+  #   select public.trigger_acculynx_sync('{"multiAccount":true,"accountFilter":["wichita"]}'::jsonb);
+  # or PostgREST: POST $SUPABASE_URL/rest/v1/rpc/trigger_acculynx_sync  {"p_resources":{...}}
+  sleep 130
+done
+```
+Pacing facts: ~25-35 first-sight walks per run; once the walk completes, EVERY subsequent run
+executes the account's full `syncCrmPipeline` pass (whole-account refresh, not just new jobs).
+Parallel loops on DIFFERENT accounts are safe (per-key rate limits). Session evidence: 2026-07-03
+fleet backfill, 6,451/6,451 rows. The arg name is `p_resources` (`pg_get_function_identity_arguments`).
