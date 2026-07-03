@@ -157,6 +157,15 @@ function makeCrmPipelineSb(
       if (table === "acculynx_raw") {
         return {
           select: () => ({
+            // Real query (2026-07-03 fix #5): endpoint-targeted .in(endpoints).order() —
+            // return the fixture rows whose api_endpoint is in the requested chunk.
+            in: (_col: string, endpoints: string[]) => ({
+              order: () =>
+                Promise.resolve({
+                  data: rawRepsRows.filter((r) => endpoints.includes(r.api_endpoint)),
+                  error: null,
+                }),
+            }),
             like: () => ({
               order: () => ({
                 range: (from: number, _to: number) => Promise.resolve({ data: from === 0 ? rawRepsRows : [], error: null }),

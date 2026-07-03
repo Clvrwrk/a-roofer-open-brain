@@ -69,7 +69,9 @@ export async function pageAll<T>(
  * keeps the durable-rep backfill query cost-bounded even on a large account. Ordered
  * fetched_at DESC so, when truncated, the NEWEST payloads (most likely to reflect the
  * current assignment) are the ones kept. */
-const RAW_REPS_QUERY_LIMIT = 4000;
+const RAW_REPS_QUERY_LIMIT = 4000; // retained for reference; superseded by endpoint-targeted chunks
+/** 40 endpoint strings x ~60 chars stays far under PostgREST URL limits. */
+const REPS_ENDPOINT_CHUNK = 40;
 
 /** Shape of an acculynx_jobs row this module reads (account_key-scoped). */
 export interface JobRow {
@@ -379,20 +381,28 @@ export async function loadDurableRepsFromRaw(
     userMap.set(u.id, name);
   }
 
-  const rawPaged = await pageAll<RawRepsRow>(
-    (from, to) =>
-      sb
-        .from("acculynx_raw")
-        .select("api_endpoint,payload,fetched_at")
-        .like("api_endpoint", "%/representatives")
-        .order("fetched_at", { ascending: false })
-        .range(from, to),
-    RAW_REPS_QUERY_LIMIT,
-  );
-  if (rawPaged.error && rawPaged.rows.length === 0) return new Map();
+  // Account-scoped, endpoint-targeted lookup (2026-07-03 live incident #5): the previous
+  // global newest-N LIKE window diluted as OTHER accounts' walk payloads accumulated —
+  // a per-account pass could no longer see its own older rep payloads, so coverage
+  // CHURNED DOWN over time instead of ratcheting up. The archived endpoint is exactly
+  // `/jobs/{id}/representatives` (job-walk.ts), so we reconstruct the endpoint strings
+  // for the jobs we actually need and query them in URL-length-safe chunks.
+  const allRows: RawRepsRow[] = [];
+  for (let i = 0; i < jobIds.length; i += REPS_ENDPOINT_CHUNK) {
+    const endpoints = jobIds
+      .slice(i, i + REPS_ENDPOINT_CHUNK)
+      .map((id) => `/jobs/${id}/representatives`);
+    const { data, error } = await sb
+      .from("acculynx_raw")
+      .select("api_endpoint,payload,fetched_at")
+      .in("api_endpoint", endpoints)
+      .order("fetched_at", { ascending: false });
+    if (error) break; // keep whatever we resolved so far — merge-under semantics make partial safe
+    allRows.push(...((data ?? []) as RawRepsRow[]));
+  }
 
   const jobIdSet = new Set(jobIds);
-  const relevantRows = rawPaged.rows.filter((row) => {
+  const relevantRows = allRows.filter((row) => {
     const jobId = jobIdFromRepsEndpoint(row.api_endpoint);
     return jobId !== null && jobIdSet.has(jobId);
   });
@@ -481,16 +491,28 @@ export async function syncCrmPipeline(
     )
   );
 
+  // PARTITIONED upserts (2026-07-03 live incident #5, the rep-wipe): PostgREST normalizes
+  // a bulk payload to the UNION of keys across all rows — a single rep-less row in a chunk
+  // turns every other row's omitted primary_salesperson into an explicit NULL in the
+  // ON CONFLICT UPDATE, wiping reps that were already set (observed live: wichita
+  // with_rep 947 -> 800 after one pass). Rows WITH a rep and rows WITHOUT are therefore
+  // upserted in separate chunks so a rep-less chunk simply never carries the column.
+  const rowsWithRep = rows.filter((r) => "primary_salesperson" in r);
+  const rowsWithoutRep = rows.filter((r) => !("primary_salesperson" in r));
+
   let upserted = 0;
-  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+  const partitions = [rowsWithRep, rowsWithoutRep];
+  for (const partition of partitions) {
+  for (let i = 0; i < partition.length; i += CHUNK_SIZE) {
     if (Date.now() >= deadline) break;
-    const chunk = rows.slice(i, i + CHUNK_SIZE);
+    const chunk = partition.slice(i, i + CHUNK_SIZE);
     const { error } = await sb.from("crm_pipeline").upsert(chunk, {
       onConflict: "acculynx_job_id",
       ignoreDuplicates: false,
     });
     if (error) return { upserted, error: `crm_pipeline upsert: ${error.message}` };
     upserted += chunk.length;
+  }
   }
 
   return { upserted };
