@@ -230,6 +230,11 @@ export interface ExecutivePipelineDashboard {
   jobsSoldSplit: SegmentSplit;
   newLeadsSplit: SegmentSplit;
   closeRateSplit: SegmentSplit;
+  /** AR-truth fix (2026-07-03, user-approved fix 4): the headline Close Rate is the
+   * job-count-weighted overall snapshot rate (computeSnapshotCloseRate over the full
+   * filtered — not windowed — pipeline), NOT the unweighted mean of the Res/Com
+   * segment rates (one commercial account must not counterweight seven residential). */
+  closeRateSnapshotOverall: number;
   marginPctSplit: SegmentSplit;
   averageTicket: AverageTicketResult;
   /** Distinct assigned reps present in the (post-exclusion) data, for the Rep filter
@@ -574,14 +579,16 @@ export function groupPipelineFunnel(rows: PipelineRow[]): FunnelStage[] {
 // (checkpoint round 4, item 1)
 // ---------------------------------------------------------------------------
 
-/** Splits a row set's total value into "collected" (value - balance_due, floored at
- * 0) and "arOutstanding" (summed balance_due, floored at 0 per row so a negative/
- * credit balance_due never produces a negative AR segment). `value` is the same
- * amountFor()-derived total the funnel/leaderboard already chart — this function
- * does not recompute it, callers pass their own summed value so the split always
- * agrees with the bar's total height. */
-function splitCollectedAr(rows: PipelineRow[], value: number): CollectedArSplit {
-  const arOutstanding = rows.reduce((sum, row) => sum + Math.max(0, toNumber(row.balance_due)), 0);
+/** Splits a row set's total value into "collected" (value - open-invoice AR, floored
+ * at 0) and "arOutstanding" (summed open-invoice AR per row — the acculynx_invoices
+ * ledger, per the AR-truth fix; crm_pipeline.balance_due is retired as an AR signal).
+ * `value` is the same amountFor()-derived total the funnel/leaderboard already chart —
+ * this function does not recompute it, callers pass their own summed value so the
+ * split always agrees with the bar's total height. `arByJobId` is optional so
+ * chart callers without invoice data render a fully-collected bar (never a
+ * crm-balance-derived AR segment). */
+function splitCollectedAr(rows: PipelineRow[], value: number, arByJobId?: Map<string, number>): CollectedArSplit {
+  const arOutstanding = arByJobId ? rows.reduce((sum, row) => sum + arForRow(row, arByJobId), 0) : 0;
   const collected = Math.max(0, value - arOutstanding);
   return { collected, arOutstanding };
 }
@@ -595,7 +602,7 @@ export interface FunnelStageWithSplit extends FunnelStage {
   arOutstanding: number;
 }
 
-export function computeFunnelStagesWithSplit(rows: PipelineRow[]): FunnelStageWithSplit[] {
+export function computeFunnelStagesWithSplit(rows: PipelineRow[], arByJobId?: Map<string, number>): FunnelStageWithSplit[] {
   const stages = groupPipelineFunnel(rows);
   const rowsByMilestone = new Map<string, PipelineRow[]>();
   for (const row of rows) {
@@ -606,7 +613,7 @@ export function computeFunnelStagesWithSplit(rows: PipelineRow[]): FunnelStageWi
   }
 
   return stages.map((stage) => {
-    const split = splitCollectedAr(rowsByMilestone.get(stage.milestone) ?? [], stage.value);
+    const split = splitCollectedAr(rowsByMilestone.get(stage.milestone) ?? [], stage.value, arByJobId);
     return { ...stage, ...split };
   });
 }
@@ -624,9 +631,10 @@ export interface LeaderboardRowWithSplit extends LeaderboardRow {
 export function computeLeaderboardWithSplit(
   leaderboard: LeaderboardRow[],
   soldRowsByRep: Map<string, PipelineRow[]>,
+  arByJobId?: Map<string, number>,
 ): LeaderboardRowWithSplit[] {
   return leaderboard.map((row) => {
-    const split = splitCollectedAr(soldRowsByRep.get(row.salesperson) ?? [], row.soldValue);
+    const split = splitCollectedAr(soldRowsByRep.get(row.salesperson) ?? [], row.soldValue, arByJobId);
     return { ...row, ...split };
   });
 }
@@ -762,30 +770,30 @@ export function stageDateFor(row: PipelineRow, queue: QueueName): Date | null {
   }
 }
 
-/** Round 3, item A — the closed/invoiced AR exception (user's exact rule):
- * - A closed/invoiced job with NO balance due whose stage date falls OUTSIDE
- *   the window is filtered OUT of view and every calculation.
- * - A closed/invoiced job WITH balance_due > 0 stays visible regardless of its
- *   stage date (money is still owed).
- * - A closed/invoiced job whose stage date falls INSIDE the window is
- *   retained normally (counts toward pipeline value by stage + leaderboard).
- * - Every other stage (leads/prospects/approved) is windowed strictly by its
- *   own stage date — no exception.
+/** Round 3, item A AR exception — REWORKED by the AR-truth fix (2026-07-03,
+ * user-approved fix 2). The exception now covers ANY job with an open invoice:
+ * - A job with open-invoice AR > 0 (per `arByJobId`, the acculynx_invoices-derived
+ *   map) stays visible regardless of its stage date or queue — verified live that
+ *   the entire open-invoice AR book sits on approved/completed-milestone jobs, so
+ *   the prior invoiced/closed-only exception hid every job that actually owed money.
+ * - Every other job is windowed strictly by its own stage date (the round-3
+ *   stage-date mapping above) — crm_pipeline.balance_due no longer grants an
+ *   exception (retired as an AR signal, fix 1).
+ * `arByJobId` is optional so pure date-window callers/tests can omit it (no map =
+ * no AR exception, never a fabricated one from crm balance_due).
  * Assumes dead/cancelled rows have already been excluded from `rows` (item 2,
  * unchanged from round 2/3). Rows with an unrecognized/null queue (queueForRow
  * returns null) are excluded — same "never fabricate a bucket" discipline as
  * every other aggregation in this module. */
-export function isRowInWindow(row: PipelineRow, start: Date, end: Date): boolean {
+export function isRowInWindow(row: PipelineRow, start: Date, end: Date, arByJobId?: Map<string, number>): boolean {
   const queue = queueForRow(row);
   if (!queue) return false;
 
+  // AR exception (fix 2): money is still owed on an open invoice — the job stays
+  // visible in its queue regardless of stage date.
+  if (arByJobId && arForRow(row, arByJobId) > 0) return true;
+
   const inWindow = (date: Date | null) => Boolean(date && date >= start && date < addDays(end, 1));
-
-  if (queue === "closed" || queue === "invoiced") {
-    if (toNumber(row.balance_due) > 0) return true; // AR exception: stays visible regardless of date
-    return inWindow(stageDateFor(row, queue));
-  }
-
   return inWindow(stageDateFor(row, queue));
 }
 
@@ -793,8 +801,8 @@ export function isRowInWindow(row: PipelineRow, start: Date, end: Date): boolean
  * windowed aggregation (funnel, queue values, location rollup, leaderboard,
  * drill-down) calls, so the AR exception and stage-date mapping are never
  * reimplemented ad hoc at a second call site. */
-export function filterRowsInWindow(rows: PipelineRow[], start: Date, end: Date): PipelineRow[] {
-  return rows.filter((row) => isRowInWindow(row, start, end));
+export function filterRowsInWindow(rows: PipelineRow[], start: Date, end: Date, arByJobId?: Map<string, number>): PipelineRow[] {
+  return rows.filter((row) => isRowInWindow(row, start, end, arByJobId));
 }
 
 // ---------------------------------------------------------------------------
@@ -1067,13 +1075,15 @@ export function computeLocationRollup(
   accountKeys: readonly string[],
   _start: Date,
   _end: Date,
+  arByJobId?: Map<string, number>,
 ): LocationRollupRow[] {
   return accountKeys.map((accountKey) => {
     const rows = pipeline.filter((row) => deriveRegionOffice(row, jobs).accountKey === accountKey);
 
     const queues = computeQueueValues(rows);
     const pipelineValue = preClosePipelineValue(queues);
-    const arValue = rows.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
+    // AR-truth fix (2026-07-03): per-location AR is open-invoice AR, never crm balance_due.
+    const arValue = arByJobId ? rows.reduce((sum, row) => sum + arForRow(row, arByJobId), 0) : 0;
 
     const soldRows = rows.filter((row) => SOLD_MILESTONES.has(compact(row.current_milestone, "").toLowerCase()));
     const soldValue = soldRows.reduce((sum, row) => sum + amountFor(row), 0);
@@ -1121,12 +1131,13 @@ export function jobRowsForLocation(
   rep: string | "all" = "all",
   windowStart?: Date,
   windowEnd?: Date,
+  arByJobId?: Map<string, number>,
 ): JobDrillResult {
   const filtered = excludeClosedAndPaidInFull(dedupePipeline(pipeline)).filter((row) => {
     const derived = deriveRegionOffice(row, jobs);
     if (derived.accountKey !== accountKey) return false;
     if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
-    if (windowStart && windowEnd && !isRowInWindow(row, windowStart, windowEnd)) return false;
+    if (windowStart && windowEnd && !isRowInWindow(row, windowStart, windowEnd, arByJobId)) return false;
 
     const repBucket = repBucketFor(row, derived.accountKey);
     if (repBucket === null) return false; // unassigned + no value: filtered out of view entirely (item B)
@@ -1139,7 +1150,10 @@ export function jobRowsForLocation(
 
   for (const row of filtered) {
     const contractAmount = amountFor(row);
-    if (contractAmount <= 0) {
+    const outstandingAr = arByJobId ? arForRow(row, arByJobId) : 0;
+    // Zero-value rows stay hidden — UNLESS the job has open-invoice AR (fix 2's
+    // intent: the drill-down never hides a job that actually owes money).
+    if (contractAmount <= 0 && outstandingAr <= 0) {
       hiddenZeroValueCount += 1;
       continue;
     }
@@ -1151,7 +1165,9 @@ export function jobRowsForLocation(
       milestone: compact(row.current_milestone, "unknown").toLowerCase(),
       contractAmount,
       salesperson: repBucketFor(row, derived.accountKey) ?? compact(row.primary_salesperson, "Unassigned"),
-      outstandingAr: Math.max(0, toNumber(row.balance_due)),
+      // AR-truth fix (2026-07-03): the drill-down's Outstanding AR column is
+      // open-invoice AR, never crm balance_due.
+      outstandingAr,
     });
   }
 
@@ -1318,11 +1334,59 @@ export interface MilestoneHistoryRow {
   milestone_date: string | null;
 }
 
-/** One row shape read from acculynx_invoices for AR aging + point-in-time AR total. */
+/** One row shape read from acculynx_invoices for AR aging + point-in-time AR total.
+ * AR-truth fix (2026-07-03, user-approved fix 1): total_price is loaded alongside
+ * balance_due so "monies collected" can be derived from the invoice ledger
+ * (billed - outstanding) instead of crm_pipeline.balance_due. */
 export interface InvoiceAgingRow {
   job_id: string;
   invoice_date: string | null;
   balance_due: number | string | null;
+  total_price: number | string | null;
+}
+
+// ---------------------------------------------------------------------------
+// AR-truth fix (2026-07-03, user-approved fixes 1+2): acculynx_invoices is the ONE
+// AR source for every AR signal on the dashboard. crm_pipeline.balance_due is
+// RETIRED as an AR signal — verified live 2026-07-03: it disagrees with the invoice
+// ledger job-by-job ($3.19M on active rows incl. $1.94M on approved jobs, plus
+// $2.42M on cancelled jobs), while acculynx_invoices matches AccuLynx AR aging
+// exactly ($817,694.96 across 54 open invoices at audit time). Every open-invoice
+// dollar sat on approved/completed-milestone jobs — none on invoiced/closed — so
+// any AR signal keyed on crm balance_due plus an invoiced/closed-only exception
+// reads near-zero while real money is outstanding.
+// ---------------------------------------------------------------------------
+
+/** Per-job open AR from the invoice ledger: summed balance_due, floored at 0 per
+ * invoice (a credit/negative balance never nets down another invoice's open AR). */
+export function openInvoiceArByJobId(invoices: InvoiceAgingRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const inv of invoices) {
+    const balance = Math.max(0, toNumber(inv.balance_due));
+    if (balance <= 0) continue;
+    map.set(inv.job_id, (map.get(inv.job_id) ?? 0) + balance);
+  }
+  return map;
+}
+
+/** Per-job collected dollars from the invoice ledger: per-invoice
+ * (total_price - balance_due), floored at 0 per invoice. A job with no invoices
+ * has collected $0 — nothing billed means nothing collected (supersedes the prior
+ * contract_amount - crm balance_due proxy, which inflated "collected" for
+ * approved-but-never-invoiced jobs). */
+export function collectedByJobId(invoices: InvoiceAgingRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const inv of invoices) {
+    const collected = Math.max(0, toNumber(inv.total_price) - toNumber(inv.balance_due));
+    if (collected <= 0) continue;
+    map.set(inv.job_id, (map.get(inv.job_id) ?? 0) + collected);
+  }
+  return map;
+}
+
+/** A row's open-invoice AR (0 when the job has no open invoices or no job id). */
+export function arForRow(row: Pick<PipelineRow, "acculynx_job_id">, arByJobId: Map<string, number>): number {
+  return row.acculynx_job_id ? arByJobId.get(row.acculynx_job_id) ?? 0 : 0;
 }
 
 /** A transition pill: count + value of jobs that moved INTO the target stage within
@@ -1361,10 +1425,11 @@ export interface Trailing7dPillsV2 {
   /** Oldest open invoice's age in days (from acculynx_invoices.invoice_date, where
    * balance_due > 0) — 0 when there are no open invoices with a usable date. */
   highestArAgingDays: number;
-  /** Sum of (approved_job_value - balance_due) for the SAME trailing-7-day window,
-   * across every crm_pipeline row with a positive collected amount — "Monies
-   * Collected this week" (item 4's own definition, verified live: financials payload
-   * carries no separate payments total, so collected = approvedJobValue - balanceDue). */
+  /** Sum of per-job invoice-ledger collected dollars (per-invoice total_price -
+   * balance_due, floored — see collectedByJobId) for rows entering their current
+   * stage within the SAME trailing-7-day window — "Monies Collected this week".
+   * AR-truth fix (2026-07-03): supersedes the prior approvedJobValue - crm
+   * balance_due proxy; a job with nothing billed collects $0. */
   totalMoniesCollectedThisWeek: number;
 }
 
@@ -1511,18 +1576,13 @@ function computeContractTransitionPill(
   };
 }
 
-/** Per-job Monies Collected: approved_job_value - balance_due (item 4's own
- * definition, verified live — the financials payload has no separate payments
- * total). Floored at 0 so a data anomaly (balance_due > contract_amount) never
- * produces a negative "collected" figure. */
-function moniesCollectedFor(row: PipelineRow): number {
-  return Math.max(0, contractAmountFor(row) - toNumber(row.balance_due));
-}
-
-/** Per-job Outstanding AR: balance_due, floored at 0 (a negative/credit balance_due
- * never counts as outstanding AR — same floor convention as splitCollectedAr). */
-function outstandingArFor(row: PipelineRow): number {
-  return Math.max(0, toNumber(row.balance_due));
+/** Per-job Monies Collected — AR-truth fix (2026-07-03): read from the invoice
+ * ledger (per-invoice total_price - balance_due, floored, via collectedByJobId)
+ * instead of the prior contract_amount - crm balance_due proxy, which inflated
+ * "collected" for approved-but-never-invoiced jobs (nothing billed = nothing
+ * collected) and read from the retired crm AR signal. */
+function moniesCollectedFor(row: PipelineRow, collectedMap: Map<string, number>): number {
+  return row.acculynx_job_id ? collectedMap.get(row.acculynx_job_id) ?? 0 : 0;
 }
 
 /** Builds the group-by-jobId map computeTrailing7dPillsV2 and its per-transition
@@ -1583,6 +1643,12 @@ export function computeTrailing7dPillsV2(
   const jobIdSet = new Set(rows.map((r) => r.acculynx_job_id).filter((id): id is string => id !== null));
   const relevantInvoices = invoices.filter((inv) => jobIdSet.has(inv.job_id));
 
+  // AR-truth fix (2026-07-03): both per-row AR and per-row collected read from the
+  // invoice ledger (scoped to the filtered pipeline's jobs), never crm balance_due.
+  const arByJobId = openInvoiceArByJobId(relevantInvoices);
+  const collectedMap = collectedByJobId(relevantInvoices);
+  const invoiceArFor = (row: PipelineRow) => arForRow(row, arByJobId);
+
   const leadToProspect = computeLeadToProspectPill(rows, historyByJobId, start, end);
   const prospectToApproved = computeContractTransitionPill(
     rows,
@@ -1591,7 +1657,7 @@ export function computeTrailing7dPillsV2(
     "approved",
     start,
     end,
-    moniesCollectedFor,
+    (row) => moniesCollectedFor(row, collectedMap),
   );
   const approvedToInvoiced = computeContractTransitionPill(
     rows,
@@ -1600,7 +1666,7 @@ export function computeTrailing7dPillsV2(
     "invoiced",
     start,
     end,
-    outstandingArFor,
+    invoiceArFor,
   );
   const invoicedToClosed = computeContractTransitionPill(
     rows,
@@ -1609,7 +1675,7 @@ export function computeTrailing7dPillsV2(
     "closed",
     start,
     end,
-    outstandingArFor,
+    invoiceArFor,
   );
 
   const totalOutstandingAr = computeTotalOutstandingArFromInvoices(relevantInvoices);
@@ -1625,7 +1691,7 @@ export function computeTrailing7dPillsV2(
     if (!queue || queue === "leads" || queue === "prospects") continue;
     const entryDate = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
     if (!entryDate || entryDate < start || entryDate >= end) continue;
-    totalMoniesCollectedThisWeek += moniesCollectedFor(row);
+    totalMoniesCollectedThisWeek += moniesCollectedFor(row, collectedMap);
   }
 
   return {
@@ -1770,6 +1836,7 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     jobsSoldSplit: { ...EMPTY_SEGMENT_SPLIT },
     newLeadsSplit: { ...EMPTY_SEGMENT_SPLIT },
     closeRateSplit: { ...EMPTY_SEGMENT_SPLIT },
+    closeRateSnapshotOverall: 0,
     marginPctSplit: { ...EMPTY_SEGMENT_SPLIT },
     averageTicket: { residential: { ...EMPTY_AVERAGE_TICKET.residential }, commercial: { ...EMPTY_AVERAGE_TICKET.commercial } },
     knownReps: [],
@@ -1830,9 +1897,10 @@ export async function loadExecutivePipelineDashboard(
         // job-walk phase already populates it) — sparse/empty for a while after
         // this ships is expected and handled by the fallback + coverage caption.
         selectAll<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
-        // acculynx_invoices — AR aging + point-in-time Total Outstanding AR (item 4's
-        // own AR definition, independent of crm_pipeline.balance_due).
-        selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due"),
+        // acculynx_invoices — THE AR source for every AR signal on the dashboard
+        // (AR-truth fix 2026-07-03; crm_pipeline.balance_due retired as an AR signal).
+        // total_price feeds the invoice-ledger "monies collected" derivation.
+        selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
       ]);
 
     // Job-financials primary margin source: no true GP field is populated in
@@ -1905,13 +1973,18 @@ export async function loadExecutivePipelineDashboard(
       return true;
     });
 
+    // AR-truth fix (2026-07-03): the invoice-ledger AR map — built from the FULL
+    // invoice read, then applied per-row everywhere AR is displayed or used as a
+    // window exception. crm_pipeline.balance_due is retired as an AR signal.
+    const arByJobId = openInvoiceArByJobId(invoiceAging);
+
     // Round 3, item A: THE unified window — every windowed KPI/chart/table/drop-down
     // below is computed from this ONE filtered-and-windowed row set (filterRowsInWindow
-    // applies the per-stage date mapping + the closed/invoiced AR-outstanding exception
-    // documented on stageDateFor/isRowInWindow). Point-in-time KPIs that are explicitly
-    // NOT windowed (the trailing-7 pills, item C) intentionally read from
-    // `filteredPipeline` instead — see the trailing7d computation below.
-    const windowedPipeline = filterRowsInWindow(filteredPipeline, start, end);
+    // applies the per-stage date mapping + the any-open-invoice AR exception, fix 2).
+    // Point-in-time KPIs that are explicitly NOT windowed (the trailing-7 pills,
+    // item C) intentionally read from `filteredPipeline` instead — see the trailing7d
+    // computation below.
+    const windowedPipeline = filterRowsInWindow(filteredPipeline, start, end, arByJobId);
 
     const funnel = groupPipelineFunnel(windowedPipeline);
     const closeRate = computeCloseRate(windowedPipeline, start, end);
@@ -1922,7 +1995,6 @@ export async function loadExecutivePipelineDashboard(
     // windowed by their own stage date, same as every other stage).
     const queuesAll = computeQueueValues(windowedPipeline);
     const pipelineValueTotal = preClosePipelineValue(queuesAll);
-    const arTotal = windowedPipeline.reduce((sum, row) => sum + toNumber(row.balance_due), 0);
 
     // Item 4: every headline KPI splits Residential vs Commercial, segmented BY
     // ACCOUNT (multi_family_commercial = commercial; everything else = residential).
@@ -2017,7 +2089,8 @@ export async function loadExecutivePipelineDashboard(
       soldRowsByRep.set(salesperson, soldList);
     }
     for (const row of windowedPipeline) {
-      const balance = toNumber(row.balance_due);
+      // AR-truth fix (2026-07-03): rep AR is open-invoice AR, never crm balance_due.
+      const balance = arForRow(row, arByJobId);
       if (balance <= 0) continue;
       const salesperson = repBucketFor(row, deriveRegionOffice(row, jobs).accountKey) ?? "Unassigned";
       const entry = leaderboardMap.get(salesperson) ?? { salesperson, soldCount: 0, soldValue: 0, arBalance: 0 };
@@ -2042,8 +2115,8 @@ export async function loadExecutivePipelineDashboard(
     // Checkpoint round 4, item 1: stacked-chart collected/AR split data, built from
     // the SAME funnel/leaderboard rows above so stage order, rep order, and totals
     // never diverge between the existing charts and the new stacked variants.
-    const funnelWithSplit = computeFunnelStagesWithSplit(windowedPipeline);
-    const leaderboardWithSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep);
+    const funnelWithSplit = computeFunnelStagesWithSplit(windowedPipeline, arByJobId);
+    const leaderboardWithSplit = computeLeaderboardWithSplit(leaderboard, soldRowsByRep, arByJobId);
 
     // Fix round item 4 (2026-07-02): the 7-pill trailing-7-day row — fixed window
     // anchored at `now`, computed over filteredPipeline (NOT windowedPipeline — item C:
@@ -2053,7 +2126,18 @@ export async function loadExecutivePipelineDashboard(
     // derives the relevant subset by job_id.
     const trailing7d = computeTrailing7dPillsV2(filteredPipeline, milestoneHistory, invoiceAging, now);
 
-    const locationRollup = computeLocationRollup(windowedPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end);
+    // AR-truth fix (2026-07-03, user-approved fix 1): the headline AR Outstanding KPI
+    // is the SAME point-in-time open-invoice number as the trailing-7 "Total
+    // Outstanding AR" pill (both: acculynx_invoices scoped to the filter-bar-filtered
+    // pipeline's jobs). One AR truth on the page — they can never disagree again.
+    const arTotal = trailing7d.totalOutstandingAr;
+
+    // AR-truth fix (2026-07-03, user-approved fix 4): the headline Close Rate is the
+    // job-count-weighted overall snapshot rate over the full filtered (window-
+    // independent) pipeline — never an unweighted mean of the Res/Com segment rates.
+    const closeRateSnapshotOverall = computeSnapshotCloseRate(filteredPipeline);
+
+    const locationRollup = computeLocationRollup(windowedPipeline, jobs, KNOWN_ACCOUNT_KEYS, start, end, arByJobId);
 
     // Freshness badges: use every KNOWN production account so a location with zero jobs
     // still shows an honest (likely critical/no-sync) badge. Excludes any non-production
@@ -2105,6 +2189,7 @@ export async function loadExecutivePipelineDashboard(
       jobsSoldSplit,
       newLeadsSplit,
       closeRateSplit,
+      closeRateSnapshotOverall,
       marginPctSplit,
       averageTicket,
       knownReps,
@@ -2149,20 +2234,24 @@ export async function loadJobsForLocation(
   }
 
   try {
-    const [pipeline, jobs] = await Promise.all([
+    const [pipeline, jobs, invoiceAging] = await Promise.all([
       selectAll<PipelineRow>(
         client,
         "crm_pipeline",
         "id,acculynx_job_id,job_name,client_name,client_job_number,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
       ),
       selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
+      // AR-truth fix (2026-07-03): the drill-down's Outstanding AR column + the
+      // any-open-invoice window exception both read the invoice ledger.
+      selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
     ]);
 
     // Round 3, item E: the drill-down table honors the SAME window rules as the rest
     // of the dashboard (item A) — a job with no outstanding AR outside the window is
     // not listed.
     const { start, end } = windowRange(window, now);
-    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep, start, end);
+    const arByJobId = openInvoiceArByJobId(invoiceAging);
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep, start, end, arByJobId);
     return { status: "live", jobs: rows, hiddenZeroValueCount, error: null };
   } catch (error) {
     return {

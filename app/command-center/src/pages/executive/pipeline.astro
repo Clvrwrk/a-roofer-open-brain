@@ -96,13 +96,11 @@ const statusStripText =
 
 const freshnessByAccount = new Map(dashboard.freshness.map((badge) => [badge.accountKey, badge]));
 
-// Item 7: overall close rate KPI uses the count-based snapshot formula (window-
-// independent) — same numbers the location rows and rep leaderboard now show,
-// derived here from the residential/commercial split so the headline stays
-// consistent with item 4's Res/Com pills without a second loader round-trip.
-const overallCloseRatePct = (
-  ((dashboard.closeRateSplit.residential + dashboard.closeRateSplit.commercial) / 2) * 100
-).toFixed(0);
+// AR-truth fix (2026-07-03, user-approved fix 4): the headline close rate is the
+// loader's job-count-weighted overall snapshot rate (computeSnapshotCloseRate over
+// the full filtered pipeline) — never an unweighted mean of the Res/Com segment
+// rates, which let one commercial account counterweight seven residential ones.
+const overallCloseRatePct = (dashboard.closeRateSnapshotOverall * 100).toFixed(0);
 
 const overallMargin = dashboard.marginByRegion.reduce(
   (acc, row) => {
@@ -337,7 +335,7 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
       <div class="epl-kpi epl-kpi--split" data-kpi="new-leads">
         <span class="epl-kpi-lab">New Leads</span>
         <strong class="epl-kpi-val" data-kpi-val="new-leads">{dashboard.newLeadsCount}</strong>
-        <small class="epl-kpi-sub">{dashboard.window.label}</small>
+        <small class="epl-kpi-sub">{dashboard.window.label} · jobs in Lead milestone</small>
         <span class="epl-kpi-split">
           <span class="epl-kpi-split-item">
             <span class="epl-kpi-split-lab">Res</span>
@@ -391,7 +389,7 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
       <div class="epl-kpi" data-kpi="ar-outstanding">
         <span class="epl-kpi-lab">AR Outstanding</span>
         <strong class="epl-kpi-val" data-kpi-val="ar-outstanding">{formatCurrency(dashboard.arTotal)}</strong>
-        <small class="epl-kpi-sub">Across all reps</small>
+        <small class="epl-kpi-sub">Open invoices · point-in-time</small>
       </div>
     </section>
 

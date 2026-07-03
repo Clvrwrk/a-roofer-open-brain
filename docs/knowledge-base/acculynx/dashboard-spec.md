@@ -346,3 +346,34 @@ was written. **The authoritative as-built contract is 07-UI-SPEC.md's dated amen
   trailing window — immune to the Window selector, obeys Location/Type/Rep.
 - **Freshness:** per-account `jobs` watermark basis (not min-over-all-watermarks).
 - **Nav:** Executive = single "Pipeline Review" → /executive/pipeline (weekly snapshot deleted).
+
+## As-built addendum — AR-truth fix round (2026-07-03, user-approved fixes 1-4; supersedes conflicting AR/close-rate rules above)
+
+Root cause of the audit-day discrepancy ($5.2K KPI card vs $817.7K pill): the KPI card summed
+windowed `crm_pipeline.balance_due` while the pill summed `acculynx_invoices.balance_due`, and
+the old AR exception only covered invoiced/closed jobs — yet 100% of open-invoice AR sat on
+approved/completed-milestone jobs. `crm_pipeline.balance_due` also disagrees with the invoice
+ledger job-by-job (incl. $2.4M on cancelled jobs). Decisions:
+
+1. **One AR truth (fix 1):** every AR signal — the AR Outstanding KPI card, per-location AR,
+   rep-leaderboard AR, both charts' collected/AR splits, drill-down Outstanding AR column, and
+   the trailing-7 AR pills — reads per-job open-invoice AR from `acculynx_invoices`
+   (`openInvoiceArByJobId`, per-invoice floor at 0). The KPI card is set equal to the trailing-7
+   "Total Outstanding AR" pill (same computation: point-in-time, filter-bar-scoped,
+   window-immune) so the two can never disagree. `crm_pipeline.balance_due` is **retired as an
+   AR signal** everywhere.
+2. **AR exception covers any queue (fix 2):** a job with open-invoice AR > 0 stays visible in
+   its queue regardless of stage date — not just invoiced/closed. Zero-value drill-down rows
+   with open AR are no longer hidden. (~50 jobs, $817.7K at ship time.)
+3. **Monies Collected redefined:** invoice-ledger collected = per-invoice
+   `total_price − balance_due`, floored (`collectedByJobId`). A job with nothing billed has
+   collected $0 (the old `approvedJobValue − balanceDue` proxy inflated collected for
+   approved-but-never-invoiced jobs).
+4. **Close Rate headline (fix 4):** job-count-weighted overall snapshot rate
+   (`computeSnapshotCloseRate` over the full filtered pipeline; `closeRateSnapshotOverall`),
+   never the unweighted Res/Com mean (which let one commercial account counterweight seven
+   residential ones — 50% shown vs 67.5% true at audit time). Res/Com split pills unchanged.
+5. **Leads caption (fix 3):** the New Leads KPI is captioned "jobs in Lead milestone". The
+   AccuLynx public API v2 exposes NO leads-list endpoint (only `/leads/{leadId}/history` +
+   lead-source settings), so unconverted Leads-module records (the AccuLynx "L" bubble's extra
+   ~6-7 per active office) cannot be synced; the honest caption is the fix.
