@@ -13,7 +13,8 @@ export const prerender = false;
 // Security V5 / Threat T-07-04 (Tampering): allowlist-validate every incoming filter
 // query param against a fixed known set BEFORE building any Supabase filter. Unknown
 // values are ignored (fall back to the loader's "all"/default), never passed through.
-const KNOWN_WINDOW_TOKENS = new Set<WindowToken>(["this_week", "last_7_days", "mtd", "qtd"]);
+// Round 3, item A: the unified window selector — {wtd, mtd, qtd, ytd}, mtd default.
+const KNOWN_WINDOW_TOKENS = new Set<WindowToken>(["wtd", "mtd", "qtd", "ytd"]);
 const KNOWN_ACCOUNT_KEY_SET = new Set<string>(KNOWN_ACCOUNT_KEYS);
 // job_category_name values observed live, plus the loader's "uncategorized" derivation
 // for null/unset rows (RESEARCH.md: ~33% of acculynx_jobs.job_category_name is null).
@@ -70,7 +71,10 @@ export const GET: APIRoute = async ({ url }) => {
     if (!jobsAccountKey) {
       return jsonResponse({ status: "live", jobs: [], hiddenZeroValueCount: 0, error: null });
     }
-    const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all", undefined, rep ?? "all");
+    // Round 3, item E: the drill-down obeys the SAME unified window as the rest of
+    // the dashboard (item A) — default to "mtd" (resolveFilters' own default) when
+    // the caller didn't pass a recognized window token.
+    const result = await loadJobsForLocation(jobsAccountKey, commercialResidential ?? "all", undefined, rep ?? "all", window ?? "mtd");
     return jsonResponse(result);
   }
 

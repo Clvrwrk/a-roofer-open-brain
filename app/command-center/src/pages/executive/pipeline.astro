@@ -11,12 +11,15 @@ import {
 
 const params = Astro.url.searchParams;
 
-const WINDOW_TOKENS: WindowToken[] = ["this_week", "last_7_days", "mtd", "qtd"];
+// Round 3, item A: the unified, calendar-anchored window selector — replaces the
+// prior {this_week, last_7_days, mtd, qtd} set. Default is "mtd" (see
+// resolveFilters in executive-pipeline.ts).
+const WINDOW_TOKENS: WindowToken[] = ["wtd", "mtd", "qtd", "ytd"];
 const WINDOW_LABELS: Record<WindowToken, string> = {
-  this_week: "This Week",
-  last_7_days: "Last 7 Days",
+  wtd: "Week-to-Date",
   mtd: "Month-to-Date",
-  qtd: "Quarter-to-Date",
+  qtd: "Current Quarter",
+  ytd: "Year-to-Date",
 };
 
 const COMMERCIAL_RESIDENTIAL_OPTIONS = ["Residential", "Commercial", "Property Management", "uncategorized"];
@@ -455,8 +458,10 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
                 <span class="epl-chev" aria-hidden="true">
                   {"›"}
                 </span>
-                <span class="epl-location-name">{row.accountKey}</span>
-                {row.stale && <span class="epl-stale-marker">stale</span>}
+                <span class="epl-location-name">
+                  <span class="epl-location-name-text">{row.accountKey}</span>
+                  {row.stale && <span class="epl-stale-marker">stale</span>}
+                </span>
                 <span class="epl-queues">
                   {row.queues.map((q) => (
                     <span class="epl-queue" data-queue={q.queue}>

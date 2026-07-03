@@ -87,13 +87,14 @@ export const navDepartments: NavDepartment[] = [
     ],
   },
   {
+    // Round 3, item G: Executive contains ONLY the Pipeline Review dashboard.
+    // The old "Overview" and "Sales Pipeline" entries are removed; /executive
+    // (index) now redirects to /executive/pipeline so the tab lands directly
+    // on the dashboard (see src/pages/executive/index.astro).
     id: "executive",
     label: "Executive",
     icon: "executive",
-    items: [
-      { label: "Overview", href: "/executive", status: "built" },
-      { label: "Sales Pipeline", href: "/executive/pipeline", status: "built" },
-    ],
+    items: [{ label: "Pipeline Review", href: "/executive/pipeline", status: "built" }],
   },
   {
     id: "ai-agents",

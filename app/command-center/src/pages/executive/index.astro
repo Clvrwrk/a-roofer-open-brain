@@ -1,8 +1,6 @@
 ---
-import DepartmentHome from "../../components/live/DepartmentHome.astro";
-import { loadDepartmentSurface } from "@lib/live-work";
-
-const surface = await loadDepartmentSurface("executive");
+// Round 3, item G: Executive's nav contains ONLY "Pipeline Review" now, so the
+// department index redirects straight to the dashboard rather than rendering
+// DepartmentHome (which stays intact for every other department).
+return Astro.redirect("/executive/pipeline");
 ---
-
-<DepartmentHome surface={surface} />

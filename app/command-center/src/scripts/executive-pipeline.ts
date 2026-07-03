@@ -160,6 +160,7 @@ interface JobDrillRow {
   milestone: string;
   contractAmount: number;
   salesperson: string;
+  outstandingAr: number;
 }
 
 interface DashboardConfig {
@@ -186,7 +187,7 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   status: "unconfigured",
   generatedAt: new Date().toISOString(),
   errors: [],
-  filters: { window: "last_7_days", accountKey: "all", commercialResidential: "all", rep: "all" },
+  filters: { window: "mtd", accountKey: "all", commercialResidential: "all", rep: "all" },
   window: { start: "", end: "", label: "" },
   funnel: [],
   funnelWithSplit: [],
@@ -491,15 +492,27 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[], hiddenZeroValue
     return;
   }
 
+  // Round 3, item E: fixed table-layout so headings always align with their data
+  // columns, regardless of free-text job/rep content length.
   const table = document.createElement("table");
   table.className = "epl-jobs-table";
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const label of ["Job", "Stage", "Rep", "Value", "AccuLynx"]) {
+  // Job, Stage, Rep, Value, Outstanding AR, AccuLynx link (item E's exact column set).
+  const COLUMN_HEADERS: Array<{ label: string; numeric?: boolean }> = [
+    { label: "Job" },
+    { label: "Stage" },
+    { label: "Rep" },
+    { label: "Value", numeric: true },
+    { label: "Outstanding AR", numeric: true },
+    { label: "AccuLynx" },
+  ];
+  for (const column of COLUMN_HEADERS) {
     const th = document.createElement("th");
     th.scope = "col";
-    th.textContent = label;
+    th.textContent = column.label;
+    if (column.numeric) th.className = "num";
     headRow.append(th);
   }
   thead.append(headRow);
@@ -522,6 +535,10 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[], hiddenZeroValue
     valueCell.className = "num";
     valueCell.textContent = formatCurrency(job.contractAmount);
 
+    const arCell = document.createElement("td");
+    arCell.className = "num";
+    arCell.textContent = job.outstandingAr > 0 ? formatCurrency(job.outstandingAr) : "—";
+
     const linkCell = document.createElement("td");
     if (job.acculynxJobId) {
       const link = document.createElement("a");
@@ -534,7 +551,7 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[], hiddenZeroValue
       linkCell.textContent = "—";
     }
 
-    tr.append(jobCell, stageCell, repCell, valueCell, linkCell);
+    tr.append(jobCell, stageCell, repCell, valueCell, arCell, linkCell);
     tbody.append(tr);
   }
   table.append(tbody);
@@ -568,6 +585,11 @@ async function loadLocationJobs(details: HTMLDetailsElement) {
     }
     if (currentDashboard.filters.rep && currentDashboard.filters.rep !== "all") {
       params.set("rep", currentDashboard.filters.rep);
+    }
+    // Round 3, item E: the drill-down obeys the SAME unified window as the rest of
+    // the dashboard (item A) — always pass the current window token through.
+    if (currentDashboard.filters.window) {
+      params.set("window", currentDashboard.filters.window);
     }
     const response = await fetch(`/api/executive/pipeline.json?${params.toString()}`, {
       headers: { accept: "application/json" },
@@ -781,12 +803,16 @@ function renderLocationRows(dashboard: ExecutivePipelineDashboard) {
     const freshness = freshnessByAccount.get(accountKey);
     const stale = freshness ? freshness.tone !== "ready" : false;
 
+    // Round 3, item D: the stale marker lives INSIDE .epl-location-name (after the
+    // account-name text span), not as a sibling grid cell — the account-bar grid has
+    // exactly 5 fixed columns (chev, name, queues, mini, bar) and an extra sibling
+    // would silently misalign every other row's columns.
     const staleMarker = details.querySelector<HTMLElement>(".epl-stale-marker");
     if (stale && !staleMarker) {
       const marker = document.createElement("span");
       marker.className = "epl-stale-marker";
       marker.textContent = "stale";
-      details.querySelector(".epl-location-name")?.after(marker);
+      details.querySelector(".epl-location-name-text")?.after(marker);
     } else if (!stale && staleMarker) {
       staleMarker.remove();
     }
