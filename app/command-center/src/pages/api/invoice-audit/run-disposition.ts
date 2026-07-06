@@ -145,7 +145,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         decision: decision.disposition,
         invoice_line_id: entry.line.lineId,
         invoice_number: inv.invoiceNumber,
-        source: "sop-run",
+        // 'backfill' is the established source for engine/SOP passes (CHECK constraint
+        // allows auto_match|manual|backfill; approved_by='Alex' drives agent attribution).
+        source: "backfill",
       });
     }
   }
