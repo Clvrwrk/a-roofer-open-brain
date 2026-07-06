@@ -1,112 +1,112 @@
 # Project Handoff — a-roofers-open-brain (Command Center)
-**Project:** Roofer Open Brain — Command Center (Invoice Audit + Alex accounting agent)
+**Project:** Roofer Open Brain — Command Center (Invoice Audit pipeline + agent fleet restoration)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
-**Production URL:** https://cc.proexteriorsus.net (Coolify auto-builds `origin/main`)
-**Date:** 2026-06-28 17:29 PDT
+**Production URL:** https://cc.proexteriorsus.net (Coolify auto-builds `origin/main`; verify via `/healthz` → `buildCommit`)
+**Date:** 2026-07-06 08:36
 **Agent:** Lead Orchestrator
 **Reason:** End of session (user-requested /project-handoff)
 
----
-
-## Active Mid-Flight Note — 2026-06-29 OKF + Roofing-Ops runtime work
-
-A newer workstream is in progress after the 2026-06-28 invoice-audit handoff below. Any agent resuming this repo should read this note before following older "Next Task" instructions.
-
-Current active direction from Chris:
-
-1. **Single-folder rule:** Do not create sibling worktree folders unless Chris explicitly asks. All current work has been consolidated back into `/Users/chussey/Documents/a-roofers-open-brain`.
-2. **OKF restructure:** The canonical OKF working bundle is being created under `docs/knowledge-base/the-roofers-open-brain/`. The vendored OKF spec stays under `docs/knowledge-base/OKF/`.
-3. **OKF top-level/sub-bundles:** The skeleton now includes top-level `The Roofers Open Brain`, plus sub-bundles for `proexteriorsus-website`, `cc-proexteriorsus-command-center` (with `feature-set/`), `roofing-agents`, `dev-agents`, `supabase`, `integrations/vendors/abc-supply`, `company-operations`, `security-governance`, `infrastructure`, and `skills-and-sops`.
-4. **Graphify decision:** Do **not** clone/deploy Graphify now. Prior decision in `docs/35-decision-graphify-skipped.md` still stands; use OKF-native navigation first.
-5. **Roofing-Ops Slack/Hermes runtime:** Named app shells, scopes, channel validation, Socket Mode tokens, Hermes install, per-agent Hermes homes, and listeners have been wired on the agent host. Runtime still needs final live human DM/channel validation and hardening.
-6. **Alex scope correction:** Alex owns open vendor invoice audit/pricing questions. Customer AR collections remain Jordan/Accounting. This is now patched in classifier/SOUL and should be captured in the Alex OKF bundle.
-7. **Paused agents:** If any agent was mid-flight on Open Engine, SEO, daily invoice processing, or Roofing-Ops Slack routing, do not create another worktree. Resume in the single canonical repo and check `git status --short` first.
-
-Recent validation:
-
-- `node scripts/validate-okf.mjs` → passed after skeleton creation.
-- `npm test -- roofing-agent-scope.test.ts roofing-agent-runtime-parity.test.ts` → passed after Alex scope patch.
-- `node scripts/verify-roofing-agent-slack-routing.mjs` → passed full channel validation earlier after Ops was removed from Dev channels.
+> Prior handoff (2026-06-28 invoice-audit + 06-29 OKF mid-flight note) archived at
+> `docs/handoffs/archive/2026-07-06-0836-prior-current.md`.
 
 ---
 
 ## Accomplished This Session
 
-### docs/59 Invoice Audit rebuild — COMPLETE & DEPLOYED (Tasks 5–6 + Gate 7 + 2 polish rounds)
-- `app/command-center/src/lib/invoice-audit.ts`: `attributeAuditActor()` (Alex/Maya/human/system) + per-line `actorLabel/actorKind/actorPersona`; `hasWork` flag; date-window defaults = oldest-open→today (`todayDateStr()`); `thirdPriceDate`; `loadDecisionDetailCsv()` (Deliverable 2).
-- `app/command-center/src/scripts/invoice-audit-tree.ts`: agent/human badges; "↩ Go back" reset button (all open+unpaid worked invoices, incl. credit memos); category-collapse deselect; "Most Recent/Org Inv Date" column; `.iv-tablewrap` scroll; Manage "Decision detail (CSV)" link.
-- `app/command-center/src/pages/api/invoice-audit/reset.ts`: WorkOS-gated per-invoice reset (calls `invoice_audit_reset` RPC).
-- `app/command-center/src/pages/api/invoice-audit/batch/[batchId].csv.ts`: `?kind=detail` → decision-detail CSV; `batches.ts`: `detailUrl` per batch.
-- `app/command-center/src/pages/api/invoice-audit/invoice.ts`: try/catch + `Sentry.captureException` + JSON 500 (was unhandled HTML 500).
-- `app/command-center/src/layouts/AppShell.astro` + `styles/global.css` + `src/lib/version.ts`: app version line under runtime pill (`v0.6.0 · 2026-06-28`); sidebar-overlap fix.
-- Migrations applied to prod: **154–161** (158 reset fn, 159 benchmark date + CM reset, 160 reset-all-lines + $0→100% variance + CM org price from `v_invoice_lines_complete`, **161 cascade perf-fix** revert `recent`→`abc_invoice_lines`).
+### Incident diagnosis (invoice pipeline outage, Jun 29 – Jul 6 — full record: `docs/67-invoice-pipeline-outage-and-restoration-2026-07-06.md`)
 
-### Alex first full trial run — DONE (docs/57 §7–8)
-- 17 actionable invoices dispositioned per `morning_abc_sync` v3 (simulated Mon–Fri 2026-06-22→26): 6 HELD→Casey credit memos ($563.37), 11 approved→to-be-paid, 38 coverage gaps→Jordan, 9 service-fee lines auto-approved (new rule), 12 in 3–6% weekly tier.
-- **Process run** (Chris clicked): batch `8cd6f354-6b26-4760-8a91-c1a9ed6f7bad`, 11 invoices, **$15,580.12**; pay CSV + decision-detail CSV both in Manage.
-- **Slack delivery LIVE**: dedicated app **"Open Brain Command Center"** (`A0BDVCB4ZGC`, bot **@openbrain**) created via Manifest API in workspace **pe-command-center T0B8QEGPVQW**; **all 13 trial messages posted to #accounting-invoice-processing** (`C0BDRFACQ4S`). `src/lib/slack.server.ts` `postSlackMessage()` = canonical agent→Slack path.
-- SOP amendments locked (docs/57 §7): service-fee auto-approve+weekly; weekly review Fri 11am CST (Lucinda/Roberto/Chris); inter-agent comms routed Chris↔Conductor (queued, no Slack).
+- Diagnosed four independent failures presenting as one "disjointed screen": (1) nightly ABC sync scheduled in a Cowork sandbox that kills processes >45s; (2) agent-fleet scheduler designed (docs/56) but never installed — no systemd units, all Hermes cron jobs `enabled: false` since ~Jun 30 07:10; (3) `agent-tick.sh` never reached hermes (Kasm image entrypoint swallows command args); (4) three different "ready to pay" predicates + missing cache invalidation in the app.
+
+### App fixes (merged to `main`, deployed, verified live)
+
+- `app/command-center/src/lib/invoice-audit.ts`: totals gain `payable` (what process-batch will export) + `held` (fully reviewed, credit-memo do-not-pay); ScopeTotalsInvoice picks `approvedToPay`.
+- `app/command-center/src/pages/accounting/invoice-audit.astro`: Process button counts/disables on `payable`; KPI sub-line shows held count.
+- `app/command-center/src/scripts/invoice-audit-tree.ts`: client predicate now mirrors the server (`transferred` short-circuit + `approvedToPay`); "Held — credit memo" pill; roll-ups count payable; credit-flag disposition sets hold state client-side.
+- `app/command-center/src/pages/api/invoice-audit/process-batch.ts`: 409 explains held invoices (`heldCount` in payload).
+- `app/command-center/src/pages/api/invoice-audit/{mark,reset}.ts`: invalidate the 5-min summary cache on every decision.
+- `app/command-center/src/pages/api/invoice-audit/run-disposition.ts` (NEW): Alex's docs/57 §1 daily pass wired to the tested engine (`invoice-audit-disposition.ts` `disposeInvoice` — previously had ZERO production callers). Human-gated (`approval.decide`), `dryRun`/`office`/`maxInvoices` staged-rollout params, writes `source='backfill'` + `approved_by='Alex'` (CHECK constraint allows only auto_match|manual|backfill), paginated per docs/42 playbooks 3/9/11, mark-endpoint parity (credit-memo tracking, action log, cache invalidation).
+- `app/command-center/src/lib/invoice-audit.unit.test.ts`: regression test — transferred+credit-flag invoice counts `held`, never `payable`. 250 tests green.
+
+### Ops / host (Hetzner agent host `5.78.146.161`, SSH key `~/.ssh/a_roofers_open_brain_ed25519`, user root)
+
+- `scripts/abc-nightly-sync.sh`: host-portable (`REPO_ROOT` derived from script path; was hardcoded to the Mac) + appended nightly invoice ingest (`mirror-backfill --only=invoices`, rolling 10-day idempotent window per docs/63).
+- `scripts/agent-tick.sh`: `--entrypoint hermes --network host` + 1h hang-stop (bare `docker run IMAGE hermes cron tick` boots the Kasm desktop and hangs forever).
+- `deployment/remote/systemd/openbrain-abc-sync.{service,timer}` (NEW): nightly 03:30 America/New_York.
+- Host provisioning: real git clone at `/opt/openbrain/a-roofers-open-brain` (replaced a broken rsync'd worktree snapshot, preserved as `*.broken-worktree-20260706`); scoped `.env` composed on-host from Alex's Kasm profile env (never displayed locally); timers `openbrain-abc-sync.timer` + `openbrain-dev-tick@alex.rivers.timer` enabled and proven; stray debug container removed; Alex's `nepq-agent-communication` skill collision resolved (duplicate disabled); `alex-morning-abc-sync` re-enabled (backup: `jobs.json.bak-20260706`).
+
+### Backlog cleared + Slack proven
+
+- Invoice catch-up: 20 invoices / 136 lines ingested (current through Jul 2 — ABC has nothing newer, holiday weekend).
+- Disposition pass (dry-run → 5-invoice gate → full): **62 invoices, 191 line decisions** — 148 accept-neg, 23 accept-nochallenge (coverage gaps → Jordan), 7 accept-30d, 3 accept-svc, 5 credit-flag (credit-memo requests drafted), **16 gate-negotiated lines left pending for human ruling** (40 invoices held out of the payment export by design).
+- Alex posted the run summary to `#accounting-invoice-processing` (`C0BDRFACQ4S`, ts `1783351625.222829`) via his own bot token from the host.
 
 ## Git State
 - **Branch:** `main` (== `origin/main`, deployed)
-- **Last commit:** `d88e551` — "docs(memory): Slack app delivery + cascade perf fix (daily log)"
-- **Uncommitted changes:** none (tree clean). `config/.env` holds Slack secrets — **gitignored, never committed** (verified).
+- **Last commit:** `9e84409` — "docs(memory): invoice pipeline outage + restoration record (docs/67); daily logs 07-04..06; memory refresh"
+- **Uncommitted changes:** only this handoff file + its archive copy (committed immediately after writing)
 
 ## Task Cut Off
-None — session ended at a clean boundary. All code committed/pushed; trial complete except the follow-ups below (none mid-block).
+None — session ended at a clean boundary. All five planned tasks completed.
 
 ## Next Task — Start Here
 
-**Task:** Fix the weekly-package Slack download links (they 401).
+**Task:** Decide + implement daily automation of the disposition pass (docs/67 §6 item 1)
 **What to check / do:**
-1. The Slack weekly-package message links point at `cc.proexteriorsus.net/api/invoice-audit/batch/<id>.csv?...` — these are **WorkOS-gated**, so clicking them while not logged in returns `{"error":"unauthorized"}` (Chris hit this).
-2. Options: (a) link to the dashboard **Manage** page (where a logged-in session downloads them) instead of the raw API; (b) generate short-lived signed download URLs; (c) document "log into the Command Center first."
-3. Recommended: change `postSlackMessage` weekly-package text to link the Manage panel deep-link, not the raw CSV API.
+1. Read `docs/67-invoice-pipeline-outage-and-restoration-2026-07-06.md` §6 — the open-items list.
+2. Ask Chris to pick the automation path: (a) provision Alex a fresh Command Center bearer (`AGENT_SERVICE_TOKEN_SHA256_ALEX-RIVERS`, generate new — never reuse existing secrets) + decide whether named agents may hold a disposition-run permission (they deliberately lack `approval.decide`); (b) in-app scheduled cadence under a system actor; or (c) keep it a daily human click / curl.
+3. Meanwhile verify this morning's automation ran: on the host, `systemctl list-timers | grep openbrain` and `tail -30 ~/.abc-sync/logs/abc-sync.log`; Alex's tick journal `journalctl -u "openbrain-dev-tick@alex.rivers.service" -n 20`.
 
-**If the link still 401s after login:** confirm the WorkOS session cookie is sent (same-site) and the batch endpoint accepts it.
+**If the nightly sync failed:** check `/opt/openbrain/a-roofers-open-brain/.env` still has 10 keys, then run `bash /opt/openbrain/a-roofers-open-brain/scripts/abc-nightly-sync.sh` manually and read the log.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Fix the weekly-package Slack links that 401 — point them at the Manage panel or signed URLs instead of the gated CSV API."
+**Prompt to use:** "Read docs/handoffs/current.md and docs/67 §6. Verify last night's ABC sync + Alex tick ran on the agent host, then walk me through the disposition-pass automation decision (67 §6 item 1) and implement my choice."
 
 ## Decisions Made This Session
-- **Slack via a dedicated app, not the MCP connector** — the MCP is bound to `mycleverwork` (wrong workspace → silent self-DM); the agents live in `pe-command-center`. Bot token (`xoxb`) obtained via OAuth install (the one unavoidable human step).
-- **Cascade `recent` reverted to `abc_invoice_lines`** (mig 161) — sourcing from `v_invoice_lines_complete` (mig 160) ran 2 subqueries × every line and blew the 8s API statement timeout (detail 500s). CM `org_inv` stays on the complete view (CM-only, low volume).
-- **$0 benchmark → 100% variance** (mig 160) — an unpriceable original flags at 100% and routes into the ≥6% hold/escalation.
-- **Service fees auto-approved** (validated: a $650 DELIVERYBR would've been a false hold).
-- **Backdated decided_at NOT used** — dispositions use `now()` so they win the current-audit `DISTINCT ON`; the Mon–Fri cadence lives in the Slack text + action-log payload.
+
+- **Daily-all processing per docs/63 stands** (Chris confirmed): Alex processes every open invoice daily; the 60-day window is only the "Due now" lens + payment timing. The "weekly compile" framing = the weekly payment package, not the processing cadence.
+- **Scheduler lives on the Hetzner agent host via systemd** (Chris chose; docs/56 design finally installed). The Cowork scheduled task is dead — must be cancelled by a human.
+- **Slack scope = outbound posts only** for now; two-way chat stays parked behind docs/60 confinement layers.
+- **The disposition pass stays human-gated**: named agents deliberately lack `approval.decide`; the deterministic engine + negotiated human gate protect the money boundary. Do not re-litigate by silently granting agents decide rights.
+- **`source='backfill'` is the SOP-pass value** — `invoice_line_audit.source` CHECK allows only `auto_match|manual|backfill`; `approved_by='Alex'` drives agent attribution. (Optional future: additive migration adding `sop-run`.)
+- **Process button counts `payable`, not `toBePaid`** — held (credit-memo do-not-pay) invoices are surfaced as their own count, never silently inflating the export queue.
 
 ## Blockers Requiring Human Action
-1. **ROTATE the Slack app config token** — it was pasted in plaintext in chat. (api.slack.com → Your App Configuration Tokens.) It's in gitignored `config/.env`, never committed, but treat the pasted one as burned.
-2. **Host scheduler (#9)** — Alex runs only as a manual hand-run; autonomous dailies/weekly need a host timer (AI is classifier-blocked from launching autonomous agents / running the prod payment export).
-3. **Slack auto-posting** — to have Alex post from the running app, add `SLACK_BOT_TOKEN` + channel IDs to Coolify env and call `postSlackMessage()` from Alex's comms (inert until #9).
+
+1. **Cancel the Cowork nightly-sync scheduled task** — it fails every night by construction (45s cap) and systemd now owns the job. Only Chris can reach the Cowork UI.
+2. **Review the 16 negotiated-gated lines + 5 credit-flag holds** on `/accounting/invoice-audit` — the human half of the SOP; the gated invoices stay out of the payment export until ruled on.
+3. **Pick the disposition-pass automation path** (see Next Task).
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['status'],d['buildCommit'][:7])"` — should return `ok d88e551` (or later).
-2. `git rev-parse --short main origin/main` — both equal (converged).
-3. In Slack (pe-command-center) → **#accounting-invoice-processing** — 13 OpenBrain messages present.
-4. Dashboard → Invoice Audit → expand a held invoice (e.g. 2008479396-001) — detail loads in <1s (no "network error"); Awaiting Payment → Manage shows batch `8cd6f354` with pay-file + decision-detail downloads.
+1. `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit` — should show a SHA ≥ `e74705d` (KPI fix + endpoint live).
+2. `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@5.78.146.161 'systemctl list-timers | grep openbrain'` — should list `openbrain-abc-sync.timer` (next 07:30 UTC) and `openbrain-dev-tick@alex.rivers.timer` (next ≤1 min).
+3. `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@5.78.146.161 'journalctl -u "openbrain-dev-tick@alex.rivers.service" -n 3 --no-pager'` — recent ticks should show "Deactivated successfully" (≈2s cycles).
+4. Invoice Audit page: "Invoices To Be Paid" KPI count must equal what Process exports; held count appears in the sub-line when nonzero.
 
 ## Full Context
 
-### What was built across ALL sessions (invoice-audit arc)
-- Invoice Audit dashboard: PE Office→Vendor/Branch→Invoice→Line drilldown over live ABC invoices; negotiated/agreement variance; UOM-normalized pricing (migs 119–122, docs/46).
-- docs/59 rebuild: benchmark cascade view `v_invoice_audit_line_cascade` (negotiated→API→recent/org-inv→none) w/ dates + $0→100%; open+60d actionable scope; date filter + "Show all"; Alex/Maya/human attribution badges; per-invoice append-only "Go back" reset RPC; QuickBooks pay-CSV export (Process→Manage→Confirm/Return) + decision-detail CSV.
-- docs/57 Alex SOPs: `morning_abc_sync` v3 (gross $25 floor; ≥6%→hold+Casey credit memo; 3–6%→weekly digest; no-agreement→Jordan; service-fees auto-approve); daily summary; weekly package (2 CSVs); Fri 11am review.
-- Slack: Open Brain Command Center app + `postSlackMessage()`.
-- Concurrent (not mine): DevTeam/Open-Engine + SEO workstream (agents/dev-engine, /api/dev/*, migs 155/156) — landed earlier this milestone.
+### What was built across ALL sessions (complete feature list)
+- Everything in the 2026-06-28 handoff (see `docs/handoffs/archive/2026-07-06-0836-prior-current.md`): invoice-audit dashboard + disposition workflow, two-phase payment flow (process/confirm-paid/return), Register vs Payment CSV split (docs/63), Service/Warranty transfer (docs/61, mig 162), price-agreement builder suite, vendor territory map home, executive pipeline dashboard, AccuLynx multi-account sync + webhooks (migs 165–187), WorkOS auth + agent bearer path, Slack per-agent bots, OKF/roofing-ops runtime workstream (06-29 note).
+- THIS session: invoice-pipeline restoration (docs/67) — systemd scheduler actually installed on the agent host, agent-tick entrypoint fix, nightly sync moved + extended with invoice ingest, payable/held KPI truth, run-disposition endpoint, backlog cleared (62 invoices / 191 decisions), Alex Slack posting proven.
+
+### Architecture decisions
+- **The "24/7 agent" is a scheduler + deterministic engine + human gates, not a free-running LLM.** Alex's historical decisions were bulk `backfill` passes + dashboard actions; the Hermes cron job is a thin scaffold (web+file toolsets, empty sandbox, no repo mount) that cannot execute the SOP — do not expect it to. The engine of record is `invoice-audit-disposition.ts`.
+- App runs service-role-only against Supabase — authorization is 100% `access-control.ts`; there is no RLS backstop for the app path.
+- Dev reads prod: local dev server + prod DB is a sanctioned mode; `COMMAND_CENTER_AUTH_MODE=local` yields the full-permission local operator (this is how the backlog pass was triggered).
+- Doc numbers ≥47 collide across two tracks (Roofing-Ops vs Stormwatch) — always reference docs by full filename.
 
 ### Key invariants (never violate)
-- Additive/idempotent migrations only; never delete atoms (append-only audit ledger). Reset = append `pending` rows, never delete.
-- Compare prices in ABC pricing UOM = `price_per_uom`; align via `v_item_uom_map`. Never raw quantity/unit_price.
-- Credit-memo lines live in `v_invoice_lines_complete`, not `abc_invoice_lines`.
-- No secrets committed — `config/.env` is gitignored; placeholders in `config/.env.example`.
-- LIVE = `origin/main` (Coolify). Branch from `origin/main`, converge back, push. Confirm HEAD via `/healthz` buildCommit.
-- AI cannot run the prod payment export or launch autonomous agents (classifier-blocked) — a human clicks.
+- **Additive migrations only; never destructive SQL** (CLAUDE.md hard rule 1).
+- **Pricing comparisons only via `price_per_uom` / `v_item_uom_map`** (docs/46).
+- **PostgREST reads paginate; `.in()` chunks ≤40–50; bulk upserts partition by column-presence** (docs/42 playbooks 3/9/11).
+- **`gate-negotiated` lines are never auto-dispositioned** — leaving them pending IS the hold (docs/57, LOCKED 2026-06-30).
+- **Never hand-edit `version.ts`** — the pre-commit hook bumps it.
+- **Deploy = explain-then-ship**: state change/impact/rollback, push `origin main`, watch `/healthz` `buildCommit`.
+- **`docker run` against the Kasm Hermes image needs `--entrypoint hermes`** — the default entrypoint boots a desktop and hangs oneshots.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod app | cc.proexteriorsus.net (Coolify app `og0rmt02rff8qti9nlfk3nr7`, builds `origin/main`) |
-| Supabase | `rnhmvcpsvtqjlffpsayu`; schemas mirrored through **161** |
-| Slack app | "Open Brain Command Center" `A0BDVCB4ZGC`, bot @openbrain, ws `T0B8QEGPVQW` (pe-command-center) |
-| Slack channel | #accounting-invoice-processing `C0BDRFACQ4S` (+ credit-memos C0BD4EW4RU4, vendor-intake C0BCUF29G1H, product-catalog-review C0BCYNW98RL) |
-| Secrets | gitignored `config/.env` (Slack bot/config tokens, app creds) |
+| Command Center | Coolify on `5.78.124.10`, builds `origin/main`, https://cc.proexteriorsus.net, health `/healthz` |
+| Agent host | `5.78.146.161` (root, key `~/.ssh/a_roofers_open_brain_ed25519`); repo `/opt/openbrain/a-roofers-open-brain`; timers `openbrain-abc-sync`, `openbrain-dev-tick@alex.rivers` |
+| Supabase | `rnhmvcpsvtqjlffpsayu` (shared dev+live); schemas through 187 |
+| Slack | Alex bot `A0BD4C9SUPP`, posts to `#accounting-invoice-processing` `C0BDRFACQ4S`; registry in `.claude/skills/slack-agents/` |
+| ABC sync logs | host: `~/.abc-sync/logs/abc-sync.log`; catch-up run summaries in `integrations/bridges/abc-supply/.mirror-runs/` |
