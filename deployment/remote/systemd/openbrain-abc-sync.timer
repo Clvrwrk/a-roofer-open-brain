@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly ABC Supply sync at 03:30 America/New_York (DST-aware)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/New_York
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

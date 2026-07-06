@@ -20,8 +20,17 @@ if [ ! -d "$PROFILE" ]; then
   exit 1
 fi
 
-docker run --rm \
+# --entrypoint is REQUIRED: the Kasm image's default entrypoint
+# (/dockerstartup/vnc_startup.sh) ignores the command args and boots the full
+# desktop, so a bare `docker run IMAGE hermes cron tick` never reaches hermes —
+# the oneshot hangs forever in "activating" (found 2026-07-06 installing docs/56).
+# --network host so hermes reaches Slack/Supabase like the desktop sessions do.
+# timeout 3600 = hang-stop only: a tick that fires a real agent run (e.g. Alex's
+# morning invoice pass) may run long; systemd won't overlap oneshots meanwhile.
+timeout --signal=TERM 3600 docker run --rm \
+  --entrypoint hermes \
+  --network host \
   -v "${PROFILE}:/home/kasm-user/.hermes" \
   -e HOME=/home/kasm-user \
   "${IMAGE_TAG}" \
-  hermes cron tick
+  cron tick
