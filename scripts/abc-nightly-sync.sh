@@ -22,8 +22,10 @@
 set -euo pipefail
 
 MODE="${1:-nightly}"
-REPO_ROOT="/Users/chussey/Documents/a-roofers-open-brain"
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
+# Repo root = parent of this script's directory, so the runner works on any host
+# (Mac dev checkout or /opt/openbrain/a-roofers-open-brain on the agent host).
+REPO_ROOT="${ABC_SYNC_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export PATH="/opt/homebrew/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
 
 LOG_DIR="$HOME/.abc-sync/logs"
 mkdir -p "$LOG_DIR"
@@ -59,6 +61,18 @@ fi
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: done OK ==="
   else
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: FAILED (exit $?) ==="
+  fi
+
+  # Daily invoice ingest (docs/63 "overnight ABC API sync"): pull the last
+  # INVOICE_WINDOW_DAYS of invoices + lines so Alex's morning run sees tonight's
+  # new invoices. Rolling window is idempotent — upserts keyed on invoice_number.
+  INVOICE_WINDOW_DAYS="${ABC_SYNC_INVOICE_WINDOW_DAYS:-10}"
+  INVOICE_START="$(date -u -d "-${INVOICE_WINDOW_DAYS} days" '+%Y-%m-%d' 2>/dev/null || date -u -v-"${INVOICE_WINDOW_DAYS}"d '+%Y-%m-%d')"
+  echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: invoice ingest start [since $INVOICE_START] ==="
+  if node $SENTRY_IMPORT integrations/bridges/abc-supply/mirror-backfill.mjs --only=invoices --history-start="$INVOICE_START" --compact; then
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: invoice ingest done OK ==="
+  else
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: invoice ingest FAILED (exit $?) ==="
   fi
   echo
 } >>"$LOG_FILE" 2>&1

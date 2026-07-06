@@ -1,0 +1,17 @@
+[Unit]
+Description=Open Brain nightly ABC Supply sync (cycle-count + daily invoice ingest)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Repo clone + root .env live on the agent host (docs/27 host B).
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/abc-nightly-sync.sh
+User=root
+# The sync + invoice ingest can take a while on slow nights; hard stop at 2h.
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
