@@ -31,9 +31,16 @@ export const POST: APIRoute = async ({ locals }) => {
   const data = await loadInvoiceAuditSummary(undefined, { force: true });
   // Payment CSV = approved-to-pay only (docs/63 Change 1b): held (credit-flag / do-not-pay)
   // invoices are excluded here; they still load to the QuickBooks register via the Register CSV.
-  const invoices = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).filter((inv) => isInvoicePayable(inv));
+  const allInvoices = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices));
+  const invoices = allInvoices.filter((inv) => isInvoicePayable(inv));
   if (!invoices.length) {
-    return jsonApiResponse({ error: "nothing_to_process", error_description: "No fully reviewed invoices are ready to be paid." }, { status: 409 });
+    // Say WHY the queue is empty: "N reviewed but held" reads very differently from
+    // "nothing reviewed" — the ambiguity here is what made the KPI look broken (2026-07-06).
+    const heldCount = allInvoices.filter((inv) => inv.toBePaid && !inv.approvedToPay).length;
+    const detail = heldCount > 0
+      ? `No invoices are approved to pay. ${heldCount} fully-reviewed invoice(s) are on a credit-memo hold — release the hold (Payments panel) or load them via the Register CSV.`
+      : "No fully reviewed invoices are ready to be paid.";
+    return jsonApiResponse({ error: "nothing_to_process", error_description: detail, heldCount }, { status: 409 });
   }
 
   const invoiceNumbers = invoices.map((inv) => inv.invoiceNumber);

@@ -87,9 +87,9 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">open · unapplied</span></div>
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Invoices To Be Paid</span>
-        <span class="iv-kpi-val">{data.totals.toBePaid.toLocaleString()}</span>
-        <span class="iv-kpi-sub">fully reviewed · ready to export</span>
-        <button type="button" class:list={["iv-process-btn", data.totals.toBePaid === 0 && "is-disabled"]} id="iv-process" data-count={data.totals.toBePaid} disabled={data.totals.toBePaid === 0}>Process</button>
+        <span class="iv-kpi-val">{data.totals.payable.toLocaleString()}</span>
+        <span class="iv-kpi-sub">{data.totals.held > 0 ? `ready to export · ${data.totals.held} on credit-memo hold` : "fully reviewed · ready to export"}</span>
+        <button type="button" class:list={["iv-process-btn", data.totals.payable === 0 && "is-disabled"]} id="iv-process" data-count={data.totals.payable} disabled={data.totals.payable === 0}>Process</button>
       </div>
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Awaiting Payment</span>

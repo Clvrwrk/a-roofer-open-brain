@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
+import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -48,6 +49,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: result.error ?? "reset_failed", error_description: mapped.message }, { status: mapped.status });
   }
 
+  // A decision changes toBePaid/payable/held — drop the 5-min summary cache so the
+  // KPI cards agree with the tree and the Process button on the next page load.
+  invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({
     ok: true,
     linesReset: result.lines_reset ?? 0,
