@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**AccuLynx v1.0: 7/7 COMPLETE; dashboard iterated 3 live rounds (MTD-default windows + AR exception, rep rules, aligned bars, "Pipeline Review" nav) — live 310b984+; fleet 6,451/6,451 rows, 99.1% reps; webhooks 8/8; sync v45.** **OPEN: (a) gh token EXPIRED — human: `gh auth login -h github.com` (GitHub MCP push_files fallback works meanwhile); (b) confirm interpretation: open stages window by OWN stage dates; (c) `/gsd-complete-milestone` when ready.** Deferred: Phase 5 prod payment; ob-acculynx Slack provisioning (Slack project).
+**7/6: invoice pipeline FIXED (docs/67): systemd scheduler on agent host (abc-sync 3:30ET + alex tick; agent-tick needs `--entrypoint hermes`); backlog cleared via human-gated `/api/invoice-audit/run-disposition` (62 inv, 191 decisions); KPI payable/held fix live `e74705d`.** **OPEN: (a) HUMAN: cancel Cowork nightly-sync task; (b) automate daily pass (Alex bearer + permission fork, docs/67 §6); (c) widen ticks to 7 agents, staged; (d) `/gsd-complete-milestone`.** Deferred: Phase 5 prod payment; ob-acculynx Slack. `git push origin main` works.
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
