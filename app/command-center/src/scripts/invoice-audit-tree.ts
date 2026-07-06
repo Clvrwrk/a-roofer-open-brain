@@ -4,7 +4,7 @@
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 interface Action { id: string; group: string; label: string; hint: string; }
@@ -47,7 +47,11 @@ if (root && dataEl && mount) {
   const worstCls = (w: number) => (w > 6 ? "pill-red" : w > 3 ? "pill-orange" : w > 0.01 ? "pill-yellow" : "pill-green");
   const tolCls = (p: number | null) => { if (p == null) return "pill-grey"; const a = Math.abs(p); return a < 0.01 ? "pill-green" : a <= 3 ? "pill-yellow" : a <= 6 ? "pill-orange" : "pill-red"; };
   const tolLab = (p: number | null) => { if (p == null) return "No Price"; const a = Math.abs(p); return a < 0.01 ? "In Tolerance" : a <= 3 ? "Minor" : a <= 6 ? "Moderate" : "Major"; };
-  const isToBePaid = (inv: Invoice) => !inv.paid && !inv.isCreditMemo && !inv.processedAt && inv.pendingLines === 0 && inv.auditedLines > 0;
+  // MUST mirror lib/invoice-audit.ts isInvoiceToBePaid / isInvoicePayable. This client
+  // predicate drifting from the server (missing `transferred`, ignoring credit-memo
+  // holds) is what made the KPI card, tree pills, and Process button disagree (2026-07-06).
+  const isToBePaid = (inv: Invoice) => !inv.paid && !inv.isCreditMemo && !inv.processedAt && (!!inv.transferred || (inv.pendingLines === 0 && inv.auditedLines > 0));
+  const isPayable = (inv: Invoice) => isToBePaid(inv) && inv.approvedToPay !== false;
   const refreshToBePaid = (inv: Invoice) => { inv.toBePaid = isToBePaid(inv); return inv.toBePaid; };
 
   function syncPayloadSnapshot() {
@@ -175,6 +179,10 @@ if (root && dataEl && mount) {
       l.actorPersona = null;
       inv.auditedLines = inv.lines.filter((x) => x.audited).length;
       inv.pendingLines = inv.lines.length - inv.auditedLines;
+      // A credit-flag disposition puts the WHOLE invoice on a do-not-pay hold
+      // (docs/63 Change 1b) — reflect it immediately so the pills/roll-ups
+      // match what the server will report on the next load.
+      if (body.decision === "credit-flag") { inv.held = true; inv.approvedToPay = false; }
       refreshToBePaid(inv);
       syncPayloadSnapshot();
       reRenderInvoice(inv);
@@ -380,7 +388,9 @@ if (root && dataEl && mount) {
     det.dataset.pending = String(inv.pendingLines);
     det.dataset.audited = String(inv.auditedLines);
     det.dataset.auditable = String(inv.auditedLines + inv.pendingLines);
-    det.dataset.topay = inv.toBePaid ? "1" : "0";
+    // topay drives the branch/office "to be paid" roll-ups — count what Process
+    // will actually export (payable), matching the KPI card.
+    det.dataset.topay = isPayable(inv) ? "1" : "0";
   }
 
   let filtersReady = false;
@@ -604,7 +614,8 @@ if (root && dataEl && mount) {
       inv.pendingLines > 0 ? `<span class="pill pill-brand">${inv.pendingLines}/${inv.lineCount} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
       inv.isCreditMemo ? '<span class="pill pill-grey">Credit Memo</span>' : "",
       inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
-      inv.toBePaid ? '<span class="pill pill-pay"><input type="checkbox" checked disabled aria-label="To Be Paid" /> To Be Paid</span>' : "",
+      inv.toBePaid && isPayable(inv) ? '<span class="pill pill-pay"><input type="checkbox" checked disabled aria-label="To Be Paid" /> To Be Paid</span>' : "",
+      inv.toBePaid && !isPayable(inv) ? '<span class="pill pill-yellow" title="Fully reviewed but on a do-not-pay hold until its credit memo arrives — excluded from Process; still loads via Register CSV">Held — credit memo</span>' : "",
       inv.awaitingPayment ? '<span class="pill pill-brand" title="Exported for payment; not yet confirmed paid">Awaiting Payment</span>' : "",
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
@@ -643,7 +654,7 @@ if (root && dataEl && mount) {
       ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset all lines to pending, reverse not-to-be-paid holds, and cancel any draft credit memo (sent communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `
-      <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-duenow="${inv.dueNow ? "1" : "0"}" data-topay="${refreshToBePaid(inv) ? "1" : "0"}">
+      <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-duenow="${inv.dueNow ? "1" : "0"}" data-topay="${(refreshToBePaid(inv) && isPayable(inv)) ? "1" : "0"}">
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span class="iv-inv-id"><span class="iv-inv-no">${esc(inv.invoiceNumber)}</span> <span class="iv-inv-sub">${inv.invoiceDate}${job}</span></span>

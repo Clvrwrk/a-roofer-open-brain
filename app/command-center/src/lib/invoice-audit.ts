@@ -197,7 +197,7 @@ export interface InvoiceAuditData {
   scope: InvoiceAuditScope;
   offices: InvOffice[];
   categories: { key: string; label: string; sortOrder: number }[];
-  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; dueNow: number; toBePaid: number; awaitingPayment: number; transferred: number };
+  totals: { invoices: number; creditMemos: number; atRisk: number; creditMemoRequested: number; noPrice: number; flagged: number; audited: number; pending: number; openInvoices: number; paidInvoices: number; actionableInvoices: number; dueNow: number; toBePaid: number; payable: number; held: number; awaitingPayment: number; transferred: number };
 }
 
 const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -291,7 +291,7 @@ function emptyScope(today: Date = new Date()): InvoiceAuditScope {
 // loop is independent of the 60-day audit age bound. (docs/59 Task 2)
 type ScopeTotalsInvoice = Pick<
   Invoice,
-  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "dueNow" | "toBePaid" | "awaitingPayment" | "transferred"
+  "paid" | "isCreditMemo" | "invoiceDate" | "atRisk" | "creditMemoRequested" | "noPriceLines" | "flaggedLines" | "auditedLines" | "pendingLines" | "actionable" | "dueNow" | "toBePaid" | "approvedToPay" | "awaitingPayment" | "transferred"
 >;
 export function buildScopeAndTotals(
   invoices: ScopeTotalsInvoice[],
@@ -327,6 +327,12 @@ export function buildScopeAndTotals(
       actionableInvoices: actionable.length,
       dueNow: live.filter((i) => i.dueNow).length,
       toBePaid: openInv.filter((i) => i.toBePaid).length,
+      // The Process button's truth: what process-batch will actually export
+      // (isInvoicePayable = toBePaid && approvedToPay). `held` = fully reviewed
+      // but on a credit-memo do-not-pay hold — in the KPI but NOT processable,
+      // which is exactly the "shows N, exports fewer" disjoint (2026-07-06).
+      payable: openInv.filter((i) => i.toBePaid && i.approvedToPay).length,
+      held: openInv.filter((i) => i.toBePaid && !i.approvedToPay).length,
       awaitingPayment: openInv.filter((i) => i.awaitingPayment).length,
       transferred: transferredCount,
     },
@@ -349,7 +355,7 @@ export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymen
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, awaitingPayment: 0, transferred: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, payable: 0, held: 0, awaitingPayment: 0, transferred: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
@@ -730,6 +736,8 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
       paidInvoices: 0,
       actionableInvoices: 0,
       toBePaid: 0,
+      payable: 0,
+      held: 0,
       awaitingPayment: 0,
     },
   };

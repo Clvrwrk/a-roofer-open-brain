@@ -307,6 +307,45 @@ describe("loadInvoiceAuditSummary", () => {
     expect(inv?.workedLines).toBe(2);
     expect(isInvoiceRegisterExportable(inv!)).toBe(true);
   });
+
+  it("totals.payable/held: a transferred invoice with a credit-flag hold counts as held, NOT payable (live bug 2026-07-06: KPI said N, Process exported none)", async () => {
+    const lineRows = [
+      { invoice_number: "SWHOLD-1", line_id: "sw-1", is_auditable: true },
+      { invoice_number: "SWHOLD-1", line_id: "sw-2", is_auditable: true },
+    ];
+    mockCreateServerSupabaseClient.mockReturnValue({
+      client: makeClient({
+        v_invoice_audit_invoice: [
+          { invoice_number: "SWHOLD-1", invoice_date: "2026-01-15", total_amount: 1200, branch_number: "49", branch_name: "Denver, CO", office: "Denver", line_count: 2, no_price_lines: 0, flagged_lines: 1, at_risk: 0, credit_memo_amount: 0, worst_pct: 0 },
+          { invoice_number: "PAY-OK-1", invoice_date: "2026-01-20", total_amount: 400, branch_number: "49", branch_name: "Denver, CO", office: "Denver", line_count: 1, no_price_lines: 0, flagged_lines: 0, at_risk: 0, credit_memo_amount: 0, worst_pct: 0 },
+        ],
+        roof_system_category: [],
+        abc_invoices: [
+          { invoice_number: "SWHOLD-1", ar_status: "open", date_paid: null },
+          { invoice_number: "PAY-OK-1", ar_status: "open", date_paid: null },
+        ],
+        service_warranty_audit_queue: [{ invoice_number: "SWHOLD-1", status: "transferred" }],
+        v_invoice_audit_line: [...lineRows, { invoice_number: "PAY-OK-1", line_id: "ok-1", is_auditable: true }],
+        v_invoice_line_audit_current: [
+          { invoice_line_id: "sw-1", audit_status: "disputed", decision: "credit-flag" },
+          { invoice_line_id: "ok-1", audit_status: "passed" },
+        ],
+      }),
+    });
+    const { loadInvoiceAuditSummary, isInvoicePayable } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const swHold = data.offices.flatMap((o) => o.branches.flatMap((b) => b.invoices)).find((i) => i.invoiceNumber === "SWHOLD-1");
+
+    // Transferred → toBePaid via the auto-approve short-circuit, but the credit-flag
+    // line holds payment: it must be counted in `held`, never in `payable`.
+    expect(swHold?.transferred).toBe(true);
+    expect(swHold?.toBePaid).toBe(true);
+    expect(swHold?.held).toBe(true);
+    expect(isInvoicePayable(swHold!)).toBe(false);
+    expect(data.totals.toBePaid).toBe(2);  // the old Process-button count (inflated)
+    expect(data.totals.payable).toBe(1);   // what process-batch will actually export
+    expect(data.totals.held).toBe(1);      // surfaced on the KPI card instead of hidden
+  });
 });
 
 describe("invoice-payment CSV", () => {
