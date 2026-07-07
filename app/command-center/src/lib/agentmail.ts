@@ -175,7 +175,9 @@ export const AGENTMAIL_OMITTED_AGENT_ROSTER: AgentMailOmittedAgent[] = [
   {
     id: "auditor",
     agentName: "Auditor",
-    reason: "Gates work products through dashboard and Slack review queues; no direct inbox needed yet.",
+    reason:
+      "Gates work products through dashboard and Slack review queues; no direct inbox needed yet. " +
+      "The Sam Torres (QA) persona therefore routes email via ob-conductor (docs/70 §3.1 / 11.1).",
   },
   {
     id: "quality-control",

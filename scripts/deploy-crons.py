@@ -25,6 +25,16 @@ def get_container(email_prefix):
 # ── Cron job definitions from roofing-agent-master-cadence.yaml ───────────────
 # Format: (name, schedule, agent_email, prompt, toolsets, deliver_channel)
 # deliver_channel = Slack channel ID for output
+#
+# docs/70 §3.2 (Phase 1): ALL raw cron/agent reports deliver to the private
+# #ob-agents-internal (C0BD8U44HL3) reporting channel — NOT the human-operational
+# channels. Ops Conductor's Phase 3 digest fans out to humans what needs attention.
+# Former human-channel targets (for the Phase 3 surfacing map):
+#   #ob-agents-internal C0BD8U44HL3 · #ob-agents-internal C0BD8U44HL3 ·
+#   #ob-agents-internal C0BD8U44HL3.
+# NOTE: time-critical posts (rowan-storm-monitor, alex-price-agreement-expiry "urgent")
+# now land internal too — Phase 3 must give Conductor an escalation path so they still
+# reach a human promptly.
 
 CRON_JOBS = [
 
@@ -42,13 +52,13 @@ Poll Gmail for all 7 aliases using in:anywhere search. For each unread message:
 2. Extract: vendor name, invoice number, date, total amount, due date
 3. Note if SPAM label present — flag but still log
 4. HR/Payroll: escalate immediately without extracting content
-5. Post brief notification to #accounting-vendor-intake (C0BCUF29G1H)
+5. Post brief notification to #ob-agents-internal (C0BD8U44HL3)
 6. Call POST https://cc.proexteriorsus.net/api/agent/intake with structured data
 
 If nothing new: stay silent. Do not post "nothing to report."
 
 NEPQ principle: Only surface what needs human attention. Silent when all clear.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "always_on",
     },
     {
@@ -64,7 +74,7 @@ Check Command Center work queue (GET https://cc.proexteriorsus.net/api/agent/wor
 - Any invoice work items older than 30 days (early-pay discount risk)
 - Any HR/Payroll items from prior day
 
-Post NEPQ-structured summary to #accounting-vendor-intake (C0BCUF29G1H):
+Post NEPQ-structured summary to #ob-agents-internal (C0BD8U44HL3):
 📥 Maya's Morning Audit | {today's date}
 WHAT I SEE:
 • Invoices pending: {n}
@@ -73,7 +83,7 @@ WHAT I SEE:
 NEEDS YOUR ATTENTION: {list or "All clear ✅"}
 
 Keep it under 5 bullets. 90-second read.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "daily",
     },
     {
@@ -84,7 +94,7 @@ Keep it under 5 bullets. 90-second read.""",
         "skills": ["nepq-agent-communication"],
         "prompt": """You are Maya Chen. Post the end-of-day NEPQ summary.
 
-Pull today's work items from Command Center. Post to #accounting-vendor-intake (C0BCUF29G1H):
+Pull today's work items from Command Center. Post to #ob-agents-internal (C0BD8U44HL3):
 
 📊 Maya's End-of-Day | {today's date}
 WHAT HAPPENED TODAY:
@@ -96,7 +106,7 @@ NEEDS YOUR ATTENTION:
 • {specific items needing human action, or "Nothing today ✅"}
 
 NEPQ rule: Do not list everything you did. Only surface what matters to Chris.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "daily",
     },
     {
@@ -115,9 +125,9 @@ Pull all open invoice work items from Command Center. Group by vendor. Age:
 
 CFMA standard: AP aging reviewed weekly. DSO target <45 days.
 
-Post aging summary to #accounting-vendor-intake (C0BCUF29G1H).
+Post aging summary to #ob-agents-internal (C0BD8U44HL3).
 Flag any vendor with invoices >60 days unresolved.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -133,10 +143,10 @@ Review this week's work items for extraction quality patterns:
 - Which document types caused failures?
 - Any recurring format issues?
 
-Post findings to #accounting-vendor-intake (C0BCUF29G1H) and tag Sam Torres (QA) if >2 failure patterns found.
+Post findings to #ob-agents-internal (C0BD8U44HL3) and tag Sam Torres (QA) if >2 failure patterns found.
 
 Include: WHAT I FOUND → WHAT IT MEANS → RECOMMENDATION""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -152,9 +162,9 @@ Check work items from this month for first-time vendors:
 - Check if they have price agreements on file (flag to Alex Rivers if not)
 - Note document volume trends vs prior month
 
-Post summary to #accounting-vendor-intake (C0BCUF29G1H).
-Flag new vendors without agreements to #accounting-product-catalog-review (C0BCYNW98RL).""",
-        "channel": "C0BCUF29G1H",
+Post summary to #ob-agents-internal (C0BD8U44HL3).
+Flag new vendors without agreements to #ob-agents-internal (C0BD8U44HL3).""",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
 
@@ -174,14 +184,14 @@ Review invoice work items created by Maya since yesterday 5pm. For each:
 4. Calculate variance: (invoiced_price - agreement_price) × qty
 5. Flag variances >$50/line or >$200/invoice as credit_memo_candidate
 
-Post daily pricing report to #accounting-product-catalog-review (C0BCYNW98RL):
+Post daily pricing report to #ob-agents-internal (C0BD8U44HL3):
 🔍 Alex's Pricing Report | {date}
 WHAT I FOUND: {invoices reviewed, total variance $}
 WHAT IT MEANS: {top overcharge patterns}
 NEEDS YOUR ATTENTION: {variances >$500/line or expired agreements}
 
 Silent if nothing flagged.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "daily",
     },
     {
@@ -199,9 +209,9 @@ Flag:
 - Price changes on existing SKUs (>5% change = alert)
 - SKUs on invoices with no catalog match
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL).
+Post to #ob-agents-internal (C0BD8U44HL3).
 Alert Rowan Vale if >5 SKUs show major price changes.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -217,9 +227,9 @@ Review all price agreements on file:
 - Flag any already expired that may still be applied to invoices
 - Calculate dispute exposure if expired agreement was used
 
-Post alert to #accounting-product-catalog-review (C0BCYNW98RL).
-If any expired: also notify #accounting-vendor-intake (C0BCUF29G1H) — urgent.""",
-        "channel": "C0BCYNW98RL",
+Post alert to #ob-agents-internal (C0BD8U44HL3).
+If any expired: also notify #ob-agents-internal (C0BD8U44HL3) — urgent.""",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -236,9 +246,9 @@ Score each vendor on pricing accuracy this month:
 - C: 85-90% — flag for Casey to increase dispute scrutiny
 - D: <85% — escalate; Casey should send formal variance letter
 
-Post scorecard to #accounting-product-catalog-review (C0BCYNW98RL).
+Post scorecard to #ob-agents-internal (C0BD8U44HL3).
 Submit D-grade vendors to Sam Torres for QA tracking.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
 
@@ -255,14 +265,14 @@ Check Gmail drafts folder for unsent dispute letters.
 Check for vendor replies to prior disputes.
 Check work queue for new credit_memo_candidate items from Alex.
 
-Post to #accounting-credit-memos (C0BD4EW4RU4):
+Post to #ob-agents-internal (C0BD8U44HL3):
 📋 Casey's Daily | {date}
 Drafts awaiting send: {n} | Oldest: {n} days
 Vendor replies received: {n} | Accepted: {n} | Rejected: {n}
 NEEDS YOUR ATTENTION: {list — or "All clear ✅"}
 
 NEPQ: Do not describe what you did. Surface what Chris needs to act on.""",
-        "channel": "C0BD4EW4RU4",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "daily",
     },
     {
@@ -279,9 +289,9 @@ From work queue and Gmail, compile:
 - Average dispute resolution time (days)
 - Disputes >30 days unresolved (flag for escalation)
 
-Post to #accounting-credit-memos (C0BD4EW4RU4).
+Post to #ob-agents-internal (C0BD8U44HL3).
 Escalate any dispute >30 days to Chris with NEPQ consequence framing.""",
-        "channel": "C0BD4EW4RU4",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
 
@@ -301,7 +311,7 @@ Pull from Command Center work queue:
 
 Calculate net: AP activity - credit memo recovery = net vendor spend.
 
-Post NEPQ finance packet to #accounting-vendor-intake (C0BCUF29G1H):
+Post NEPQ finance packet to #ob-agents-internal (C0BD8U44HL3):
 💰 Jordan's Weekly Finance | {date}
 AP this week: ${amount} across {n} vendors
 Credit recovery: ${amount}
@@ -309,7 +319,7 @@ Net spend: ${amount}
 NEEDS YOUR ATTENTION: {any negative margin job, any DSO >45 days}
 
 CFMA standard: Weekly job cost review differentiates profitable from unprofitable companies.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -325,9 +335,9 @@ Age: current / 31-60 / 61-90 / 90+ days.
 Calculate DSO (days sales outstanding) — target <45 days.
 Flag any 90+ day receivable.
 
-Post to #accounting-vendor-intake (C0BCUF29G1H).
+Post to #ob-agents-internal (C0BD8U44HL3).
 NEPQ consequence frame for 90+ items: "If not collected by {date}, write-off risk increases significantly." """,
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -344,11 +354,11 @@ Compile prior month summary from work queue data:
 3. Job margin summary if AccuLynx data available
 4. DSO trend vs prior month
 
-Post to #accounting-vendor-intake (C0BCUF29G1H) and save to Drive.
+Post to #ob-agents-internal (C0BD8U44HL3) and save to Drive.
 
 KatzAbosch CPA standard: WIP schedules by 5th business day after month-end.
 Flag any job with negative margin to Chris immediately.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
 
@@ -365,7 +375,7 @@ Sample 10% of this week's work items from Command Center.
 Spot-check: Do vendor names match invoices? Are amounts correctly extracted?
 Are variance calculations logical?
 
-Post mid-week QA to #accounting-vendor-intake (C0BCUF29G1H):
+Post mid-week QA to #ob-agents-internal (C0BD8U44HL3):
 🔬 Sam's Mid-Week QA | {date}
 Sample size: {n} items
 Issues found: {n}
@@ -374,7 +384,7 @@ NEEDS YOUR ATTENTION: {specific errors or "All clear ✅"}
 
 Taskade 2026: 10-15% sampling provides statistical confidence with manageable overhead.
 Accuracy <85% triggers process review, not just correction.""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -392,12 +402,12 @@ Compile the week's quality metrics from work queue:
 - Items >7 days old (flag if >5)
 - Any patterns worth noting
 
-Post NEPQ digest to #accounting-vendor-intake (C0BCUF29G1H):
+Post NEPQ digest to #ob-agents-internal (C0BD8U44HL3):
 📊 Sam's Weekly Compliance | Week of {date}
 SYSTEM HEALTH: [metrics]
 EMERGING PATTERNS: [trends]
 NEEDS YOUR DECISION: [items only Chris can resolve]""",
-        "channel": "C0BCUF29G1H",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
 
@@ -416,7 +426,7 @@ Check these external sources for storm activity in Pro Exteriors service area (T
 - Check for any carrier CAT (catastrophe) designations for Texas
 
 If storm event detected affecting service area:
-POST IMMEDIATELY to #accounting-product-catalog-review (C0BCYNW98RL):
+POST IMMEDIATELY to #ob-agents-internal (C0BD8U44HL3):
 🚨 STORM ALERT — {storm type} | {affected area}
 SITUATION: {what happened}
 WHAT IT MEANS: Storm canvassing window opens NOW — 48-hour advantage window
@@ -425,7 +435,7 @@ RECOMMENDATION: Begin canvassing {top zip codes} immediately
 If nothing: stay silent. Do not post "no storms today."
 
 IBHS research: First-mover advantage in CAT events = 3x higher conversion within 48 hours.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "daily",
     },
     {
@@ -440,11 +450,11 @@ Check public ABC Supply pricing indicators and any material price bulletins.
 Flag any material category with >5% price movement (shingles, underlayment, metal, fasteners).
 Cross-reference with active price agreements — alert Alex Rivers if agreement prices are now below market.
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL) only if changes detected.
+Post to #ob-agents-internal (C0BD8U44HL3) only if changes detected.
 Silent if prices stable.
 
 Context: Asphalt shingles experienced 8-15% quarterly price swings 2024-2026.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -464,13 +474,13 @@ Check:
 - Renewal dates — flag if within 90 days
 - Required continuing education hours remaining (GAF)
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL) only if:
+Post to #ob-agents-internal (C0BD8U44HL3) only if:
 - Status changed
 - Renewal within 90 days
 - Any action required
 
 GAF Master Elite is held by only 3% of roofing contractors — protect it proactively.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -488,9 +498,9 @@ Search for updates from major carriers (State Farm, Allstate, USAA, Farmers) on:
 
 IAS Solutions 2026: Xactimate price lists update monthly. Always use current regional list.
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL) only if significant changes found.
+Post to #ob-agents-internal (C0BD8U44HL3) only if significant changes found.
 Include source URL and retrieved_at timestamp on every finding.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -512,9 +522,9 @@ Flag any changes to:
 - Ice-and-water shield requirements
 - Synthetic underlayment approvals
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL) only if changes found.
+Post to #ob-agents-internal (C0BD8U44HL3) only if changes found.
 Include: jurisdiction, code section, effective date, impact on current jobs.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
 
@@ -536,10 +546,10 @@ Draft 1-2 project stories (300-500 words each):
 
 Include schema.org markup structure: LocalBusiness, Service, Review.
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL) for Conductor routing to client approval.
+Post to #ob-agents-internal (C0BD8U44HL3) for Conductor routing to client approval.
 
 Google EEAT 2024: Job-specific details (neighborhood, specific product, before/after) are required for EEAT signals. Generic content ranks poorly.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -560,11 +570,11 @@ For any new reviews found:
 - Positive: draft a response (NEPQ: acknowledge → specific detail → forward-looking)
 - Negative: draft de-escalating response (acknowledge → validate → take offline)
 
-Post review summary to #accounting-product-catalog-review (C0BCYNW98RL).
+Post review summary to #ob-agents-internal (C0BD8U44HL3).
 Route any draft responses to Conductor for human approval before posting.
 
 amraandelma 2026: Review requests within 3-7 days of completion = 47% response rate.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "weekly",
     },
     {
@@ -581,11 +591,11 @@ Compile:
 - Response rate (% of reviews responded to within 24h)
 - Platform breakdown (Google/Yelp/BBB/Angi)
 
-Post to #accounting-product-catalog-review (C0BCYNW98RL):
+Post to #ob-agents-internal (C0BD8U44HL3):
 WHAT HAPPENED: {review counts}
 WHAT IT MEANS: {trend — improving/declining}
 NEEDS YOUR ATTENTION: {any negative review unanswered, or "All clear ✅"}""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
     {
@@ -604,9 +614,9 @@ Based on:
 Plan: 4 project stories, 1 neighborhood page, 1 FAQ article.
 Map each piece to a specific neighborhood where work was done.
 
-Post content calendar to #accounting-product-catalog-review (C0BCYNW98RL) for Conductor routing.
+Post content calendar to #ob-agents-internal (C0BD8U44HL3) for Conductor routing.
 OneClickCode 2024: Neighborhood-specific landing pages are top local SEO driver for roofing contractors.""",
-        "channel": "C0BCYNW98RL",
+        "channel": "C0BD8U44HL3",
         "cadence_type": "monthly",
     },
 ]

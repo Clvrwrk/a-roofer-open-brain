@@ -74,7 +74,11 @@ slack:
       purpose: "Human-facing operational channel; all named Roofing-Ops agents listen for in-scope requests."
 
 command_center:
-  service_agent_id: "ob-auditor"
+  # Routes email through Conductor's inbox: the Auditor/QA role has no AgentMail
+  # inbox (internal-only boundary, rule 5) and AgentMail is capped at 10/10.
+  # Revisit a dedicated Auditor/QA inbox only if recurring QA email traffic
+  # appears that Conductor routing can't cleanly absorb. See docs/70 §3.1 / 11.1.
+  service_agent_id: "ob-conductor"
   departments:
     - "system"
     - "executive"
