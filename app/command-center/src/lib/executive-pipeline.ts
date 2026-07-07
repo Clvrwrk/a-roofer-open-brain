@@ -236,7 +236,14 @@ export interface ExecutivePipelineDashboard {
    * segment rates (one commercial account must not counterweight seven residential). */
   closeRateSnapshotOverall: number;
   marginPctSplit: SegmentSplit;
+  /** Per-segment cost-data coverage (jobsWithCostData) for the Margin % split, so the
+   * UI can render "—" (not a misleading "0%") for a segment with no cost data at all
+   * (2026-07-07). */
+  marginCoverageSplit: SegmentSplit;
   averageTicket: AverageTicketResult;
+  /** "Signed (7d)": jobs signed (entered Approved) in the trailing 7 days, obeying the
+   * filter bar but NOT the window selector (2026-07-07 user request). */
+  signed7d: Signed7dResult;
   /** Distinct assigned reps present in the (post-exclusion) data, for the Rep filter
    * dropdown (item 1) — sourced from crm_pipeline.primary_salesperson (item 6). */
   knownReps: string[];
@@ -1037,6 +1044,47 @@ export function computeClosedInWindow(
   return { soldValue, soldCount };
 }
 
+/** Result of computeSigned7d — jobs SIGNED (entered Approved) in the trailing 7 days. */
+export interface Signed7dResult {
+  count: number;
+  value: number;
+  countSplit: SegmentSplit;
+}
+
+/** "Signed (7d)" KPI (2026-07-07, user request): jobs whose contract was SIGNED — i.e.
+ * entered the Approved milestone — within the trailing 7 calendar days, regardless of
+ * their CURRENT milestone (a job signed 3 days ago that is already invoiced still
+ * counts as signed this week). The signed date is the REAL Approved milestone-history
+ * date (stageDates, which for the approved queue is the earliest Approved/Completed
+ * transition), falling back to crm `approved_date`. milestone_date is deliberately NOT
+ * a fallback here — for a job that has moved past Approved, milestone_date is the
+ * current-stage date, not the signed date. Obeys the caller's filter set (`rows` =
+ * the filter-bar-filtered pipeline) but is a FIXED trailing-7 window, independent of
+ * the window selector — same convention as the trailing-7 transition pills. */
+export function computeSigned7d(
+  rows: PipelineRow[],
+  jobs: AcculynxJobRow[],
+  stageDates: StageEntryDates,
+  now: Date,
+): Signed7dResult {
+  const { start, end } = trailing7DayRange(now);
+  let count = 0;
+  let value = 0;
+  const countSplit: SegmentSplit = { residential: 0, commercial: 0 };
+
+  for (const row of rows) {
+    const jobId = row.acculynx_job_id;
+    const signedDate = (jobId ? stageDates.get(jobId)?.approved : undefined) ?? toDate(row.approved_date);
+    if (!signedDate || signedDate < start || signedDate >= end) continue;
+    count += 1;
+    value += contractAmountFor(row);
+    if (deriveSegment(row, jobs) === "commercial") countSplit.commercial += 1;
+    else countSplit.residential += 1;
+  }
+
+  return { count, value, countSplit };
+}
+
 // ---------------------------------------------------------------------------
 // Pure core: region/office + commercial-residential derivation (Pitfall 2)
 // ---------------------------------------------------------------------------
@@ -1208,7 +1256,11 @@ export function computeLocationRollup(
     // AR-truth fix (2026-07-03): per-location AR is open-invoice AR, never crm balance_due.
     const arValue = arByJobId ? rows.reduce((sum, row) => sum + arForRow(row, arByJobId), 0) : 0;
 
-    const soldRows = rows.filter((row) => SOLD_MILESTONES.has(compact(row.current_milestone, "").toLowerCase()));
+    // 2026-07-07: per-location sold value = closed-in-window only (close-date
+    // definition), consistent with the headline Sold Value KPI / computeClosedInWindow
+    // — NOT all sold stages. `rows` is already the caller's window-filtered set, so a
+    // "closed" row here is a job whose close date fell in the window.
+    const soldRows = rows.filter((row) => queueForRow(row) === "closed");
     const soldValue = soldRows.reduce((sum, row) => sum + amountFor(row), 0);
 
     const leadCount = rows.filter((row) => queueForRow(row) === "leads").length;
@@ -1962,7 +2014,9 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     closeRateSplit: { ...EMPTY_SEGMENT_SPLIT },
     closeRateSnapshotOverall: 0,
     marginPctSplit: { ...EMPTY_SEGMENT_SPLIT },
+    marginCoverageSplit: { ...EMPTY_SEGMENT_SPLIT },
     averageTicket: { residential: { ...EMPTY_AVERAGE_TICKET.residential }, commercial: { ...EMPTY_AVERAGE_TICKET.commercial } },
+    signed7d: { count: 0, value: 0, countSplit: { ...EMPTY_SEGMENT_SPLIT } },
     knownReps: [],
   };
 }
@@ -2192,17 +2246,28 @@ export async function loadExecutivePipelineDashboard(
     );
 
     // Item 4: margin % split by segment, weighted the same way the overall/location
-    // margin caption is (dollar-weighted average of jobs-with-cost-data).
-    const marginPctFor = (rows: PipelineRow[]): number => {
+    // margin caption is (dollar-weighted average of jobs-with-cost-data). Also returns
+    // per-segment coverage (jobsWithCostData) so the UI can render "—" (not a
+    // misleading "0%") for a segment with no cost data at all (2026-07-07 fix).
+    const marginFor = (rows: PipelineRow[]): { pct: number; coverage: number } => {
       const byAll = computeMarginByDimension(rows, jobs, financialsByJobId, invoiceCostByJobId, () => "all");
-      return byAll[0]?.marginPct ?? 0;
+      return { pct: byAll[0]?.marginPct ?? 0, coverage: byAll[0]?.coverage.jobsWithCostData ?? 0 };
     };
+    const marginResidential = marginFor(residentialRows);
+    const marginCommercial = marginFor(commercialRows);
     const marginPctSplit: SegmentSplit = {
-      residential: marginPctFor(residentialRows),
-      commercial: marginPctFor(commercialRows),
+      residential: marginResidential.pct,
+      commercial: marginCommercial.pct,
+    };
+    const marginCoverageSplit: SegmentSplit = {
+      residential: marginResidential.coverage,
+      commercial: marginCommercial.coverage,
     };
 
-    const soldRows = windowedPipeline.filter((row) => SOLD_MILESTONES.has(compact(row.current_milestone, "").toLowerCase()));
+    // 2026-07-07: the Rep Leaderboard "sold value" uses the close-date definition
+    // (closed-in-window only), consistent with the Sold Value headline / funnel closed
+    // bar — NOT all sold stages. A rep is credited when their job CLOSES in the window.
+    const soldRows = windowedPipeline.filter((row) => queueForRow(row) === "closed");
 
     const leaderboardMap = new Map<string, LeaderboardRow>();
     // Checkpoint round 4, item 1: soldRows grouped by rep, so the leaderboard's
@@ -2260,6 +2325,13 @@ export async function loadExecutivePipelineDashboard(
     // milestoneHistory/invoiceAging are unfiltered reads — computeTrailing7dPillsV2
     // derives the relevant subset by job_id.
     const trailing7d = computeTrailing7dPillsV2(filteredPipeline, milestoneHistory, invoiceAging, now);
+
+    // "Signed (7d)" KPI (2026-07-07 user request): jobs signed (entered Approved) in
+    // the trailing 7 days. Like the trailing-7 pills it obeys the filter bar
+    // (filteredPipeline) but ignores the window selector; unlike them it keys on the
+    // real Approved date (history first, crm approved_date fallback — never
+    // milestone_date, which is the current-stage date for a job past approval).
+    const signed7d = computeSigned7d(filteredPipeline, jobs, stageDates, now);
 
     // AR-truth fix (2026-07-03, user-approved fix 1): the headline AR Outstanding KPI
     // is the SAME point-in-time open-invoice number as the trailing-7 "Total
@@ -2326,7 +2398,9 @@ export async function loadExecutivePipelineDashboard(
       closeRateSplit,
       closeRateSnapshotOverall,
       marginPctSplit,
+      marginCoverageSplit,
       averageTicket,
+      signed7d,
       knownReps,
     };
   } catch (error) {

@@ -6,6 +6,7 @@ import {
   computeAverageTicket,
   computeCloseRate,
   computeClosedInWindow,
+  computeSigned7d,
   computeFreshnessBadges,
   computeFunnelStagesWithSplit,
   computeHighestArAgingDays,
@@ -463,6 +464,26 @@ describe("milestone-history stage dates (2026-07-06 rebuild)", () => {
     // History-aware path: in February (real close), NOT in July:
     expect(isRowInWindow(row, feb.start, feb.end, undefined, map)).toBe(true);
     expect(isRowInWindow(row, july.start, july.end, undefined, map)).toBe(false);
+  });
+
+  it("computeSigned7d counts jobs that entered Approved in the trailing 7 days (history or approved_date), any current milestone", () => {
+    const now = new Date("2026-07-07T12:00:00Z"); // trailing window = [2026-06-30, 2026-07-07)
+    const stageDates = buildStageEntryDates([
+      // signed 3 days ago, now already invoiced → still counts as signed this week
+      { job_id: "j-signed-recent", milestone_name: "Approved", milestone_date: "2026-07-03T00:00:00Z" },
+      // signed months ago → out of window
+      { job_id: "j-signed-old", milestone_name: "Approved", milestone_date: "2026-02-01T00:00:00Z" },
+    ]);
+    const jobs = [makeJobRow({ id: "j-signed-recent", account_key: "colorado" }), makeJobRow({ id: "j-signed-old", account_key: "colorado" })];
+    const rows = [
+      makePipelineRow({ id: 1, acculynx_job_id: "j-signed-recent", current_milestone: "invoiced", contract_amount: 40000, approved_date: null }),
+      makePipelineRow({ id: 2, acculynx_job_id: "j-signed-old", current_milestone: "closed", contract_amount: 99000, approved_date: null }),
+      // no history, but crm approved_date is in-window → counts via fallback
+      makePipelineRow({ id: 3, acculynx_job_id: "j-fallback", current_milestone: "approved", contract_amount: 15000, approved_date: "2026-07-02T00:00:00Z" }),
+    ];
+    const result = computeSigned7d(rows, jobs, stageDates, now);
+    expect(result.count).toBe(2); // recent + fallback; old is excluded
+    expect(result.value).toBe(55000);
   });
 
   it("computeClosedInWindow counts closed jobs once, by close date, and excludes approved-not-closed", () => {

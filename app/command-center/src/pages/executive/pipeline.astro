@@ -371,11 +371,11 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
         <span class="epl-kpi-split">
           <span class="epl-kpi-split-item">
             <span class="epl-kpi-split-lab">Res</span>
-            <span class="epl-kpi-split-val" data-kpi-split="margin-residential">{dashboard.marginPctSplit.residential.toFixed(0)}%</span>
+            <span class="epl-kpi-split-val" data-kpi-split="margin-residential">{dashboard.marginCoverageSplit.residential > 0 ? `${dashboard.marginPctSplit.residential.toFixed(0)}%` : "—"}</span>
           </span>
           <span class="epl-kpi-split-item">
             <span class="epl-kpi-split-lab">Com</span>
-            <span class="epl-kpi-split-val" data-kpi-split="margin-commercial">{dashboard.marginPctSplit.commercial.toFixed(0)}%</span>
+            <span class="epl-kpi-split-val" data-kpi-split="margin-commercial">{dashboard.marginCoverageSplit.commercial > 0 ? `${dashboard.marginPctSplit.commercial.toFixed(0)}%` : "—"}</span>
           </span>
         </span>
       </div>
@@ -406,6 +406,22 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
         <span class="epl-kpi-lab">AR Outstanding</span>
         <strong class="epl-kpi-val" data-kpi-val="ar-outstanding">{formatCurrency(dashboard.arTotal)}</strong>
         <small class="epl-kpi-sub">Open invoices · point-in-time</small>
+      </div>
+
+      <div class="epl-kpi epl-kpi--split" data-kpi="signed-7d">
+        <span class="epl-kpi-lab">Signed (7d)</span>
+        <strong class="epl-kpi-val" data-kpi-val="signed-7d">{dashboard.signed7d.count}</strong>
+        <small class="epl-kpi-sub" data-kpi-sub="signed-7d">{formatCurrency(dashboard.signed7d.value)} signed · last 7 days</small>
+        <span class="epl-kpi-split">
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Res</span>
+            <span class="epl-kpi-split-val" data-kpi-split="signed-7d-residential">{dashboard.signed7d.countSplit.residential}</span>
+          </span>
+          <span class="epl-kpi-split-item">
+            <span class="epl-kpi-split-lab">Com</span>
+            <span class="epl-kpi-split-val" data-kpi-split="signed-7d-commercial">{dashboard.signed7d.countSplit.commercial}</span>
+          </span>
+        </span>
       </div>
     </section>
 

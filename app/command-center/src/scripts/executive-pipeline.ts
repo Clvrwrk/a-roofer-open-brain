@@ -151,7 +151,9 @@ interface ExecutivePipelineDashboard {
   /** AR-truth fix (2026-07-03, fix 4): job-count-weighted overall snapshot close rate. */
   closeRateSnapshotOverall: number;
   marginPctSplit: SegmentSplit;
+  marginCoverageSplit: SegmentSplit;
   averageTicket: AverageTicketResult;
+  signed7d: { count: number; value: number; countSplit: SegmentSplit };
   knownReps: string[];
 }
 
@@ -221,7 +223,9 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
   closeRateSplit: { ...EMPTY_SPLIT },
   closeRateSnapshotOverall: 0,
   marginPctSplit: { ...EMPTY_SPLIT },
+  marginCoverageSplit: { ...EMPTY_SPLIT },
   averageTicket: { residential: { avgTicket: 0, count: 0 }, commercial: { avgTicket: 0, count: 0 } },
+  signed7d: { count: 0, value: 0, countSplit: { ...EMPTY_SPLIT } },
   knownReps: [],
 });
 
@@ -717,7 +721,11 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
   const avgMargin =
     covered > 0 ? dashboard.marginByRegion.reduce((sum, row) => sum + row.marginPct * row.coverage.jobsWithCostData, 0) / covered : 0;
   updateKpiCard("margin", covered > 0 ? `${avgMargin.toFixed(0)}%` : "—", covered === 0 ? "No cost data available yet" : `${covered} of ${total} jobs have cost data`);
-  updateKpiSplit("margin", dashboard.marginPctSplit, (value) => `${value.toFixed(0)}%`);
+  // 2026-07-07: a segment with 0 cost-data coverage shows "—", not a misleading "0%".
+  const marginResEl = document.querySelector<HTMLElement>(`[data-kpi-split="margin-residential"]`);
+  if (marginResEl) marginResEl.textContent = dashboard.marginCoverageSplit.residential > 0 ? `${dashboard.marginPctSplit.residential.toFixed(0)}%` : "—";
+  const marginComEl = document.querySelector<HTMLElement>(`[data-kpi-split="margin-commercial"]`);
+  if (marginComEl) marginComEl.textContent = dashboard.marginCoverageSplit.commercial > 0 ? `${dashboard.marginPctSplit.commercial.toFixed(0)}%` : "—";
 
   // 2026-07-07 forensic-audit fix: blended overall (approved-count-weighted), not
   // residential-only — the prior `res || com` understated the overall average ticket.
@@ -733,6 +741,10 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
     { residential: dashboard.averageTicket.residential.avgTicket, commercial: dashboard.averageTicket.commercial.avgTicket },
     formatCompactCurrency,
   );
+
+  // 2026-07-07: Signed (7d) — jobs signed (entered Approved) in the trailing 7 days.
+  updateKpiCard("signed-7d", String(dashboard.signed7d.count), `${formatCurrency(dashboard.signed7d.value)} signed · last 7 days`);
+  updateKpiSplit("signed-7d", dashboard.signed7d.countSplit, (value) => String(value));
 }
 
 // ---------------------------------------------------------------------------
