@@ -2,7 +2,8 @@
 # Working Memory
 
 ## ▶ Pick up here
-**7/6: invoice pipeline FIXED (docs/67): systemd scheduler on agent host (abc-sync 3:30ET + alex tick; agent-tick needs `--entrypoint hermes`); backlog cleared via human-gated `/api/invoice-audit/run-disposition` (62 inv, 191 decisions); KPI payable/held fix live `e74705d`.** **OPEN: (a) HUMAN: cancel Cowork nightly-sync task; (b) automate daily pass (Alex bearer + permission fork, docs/67 §6); (c) widen ticks to 7 agents, staged; (d) `/gsd-complete-milestone`.** Deferred: Phase 5 prod payment; ob-acculynx Slack. `git push origin main` works.
+**7/7: Exec pipeline `/executive/pipeline` overhauled LIVE `3c58de4`** (log 7/7): 969 dup csv_initial rows removed (quarantine `crm_pipeline_orphan_quarantine`); windowing on `acculynx_job_milestone_history` (updated_at retired); **"Sold"=CLOSE DATE**; users sync per-account (42→400); AccuLynx links→`my.acculynx.com/jobs/{id}`; trailing-7 history-only. **OPEN: monies-collected still updated_at fallback; 4,609 blank-jobnum csv rows; git lock-jammed→commit-tree push.**
+**7/6 invoice (docs/67) scheduler live. OPEN: cancel Cowork nightly-sync (HUMAN); daily pass §6; ticks→7 agents.**
 
 ## Standing instructions (Chris)
 - Vendor data = official API docs FIRST, then `<vendor>-api` data-map skill.
