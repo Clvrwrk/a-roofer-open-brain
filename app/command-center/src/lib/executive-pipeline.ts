@@ -1881,16 +1881,21 @@ export function computeTrailing7dPillsV2(
   const arAging = computeHighestArAgingInvoice(relevantInvoices, now);
   const highestArAgingDays = arAging.days;
 
-  // Monies Collected this week: summed across every row (any queue) whose entry into
-  // its CURRENT stage falls in the trailing 7 days and has collected dollars — a
-  // superset view across the whole funnel, not just the Prospect->Approved pill's own
-  // secondaryValue (which is scoped to jobs transitioning specifically into Approved).
+  // Monies Collected this week: summed across every row (approved/invoiced/closed
+  // queue) whose entry into its CURRENT stage falls in the trailing 7 days and has
+  // collected dollars — a superset view across the funnel, not just the
+  // Prospect->Approved pill's secondaryValue.
+  // 2026-07-07 (user): HISTORY-ONLY, same as the transition pills — the stage-entry
+  // date comes from real milestone history (resolveTransitionDate), NOT the
+  // approved_date/milestone_date/updated_at fallback that let bulk/artifact dates
+  // (e.g. the 2026-07-04 milestone_date cluster) fake a week's collections.
   let totalMoniesCollectedThisWeek = 0;
   for (const row of rows) {
     const queue = queueForRow(row);
     if (!queue || queue === "leads" || queue === "prospects") continue;
-    const entryDate = toDate(row.approved_date ?? row.milestone_date ?? row.updated_at);
-    if (!entryDate || entryDate < start || entryDate >= end) continue;
+    const target = queue === "approved" ? "approved" : queue === "invoiced" ? "invoiced" : "closed";
+    const { date } = resolveTransitionDate(row, target, historyByJobId);
+    if (!date || date < start || date >= end) continue;
     totalMoniesCollectedThisWeek += moniesCollectedFor(row, collectedMap);
   }
 

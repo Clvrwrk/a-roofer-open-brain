@@ -1793,8 +1793,14 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
       makeInvoice({ job_id: "job-2", total_price: 5000, balance_due: 0 }), // $5,000 collected
       makeInvoice({ job_id: "job-3", total_price: 2000, balance_due: 0 }), // outside window — excluded
     ];
+    // History-only (2026-07-07): entry into the current stage comes from milestone
+    // history. job-1/job-2 entered in-window; job-3 has no history → excluded.
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-1", milestone_name: "Approved", milestone_date: "2026-06-28T00:00:00Z" },
+      { job_id: "job-2", milestone_name: "Closed", milestone_date: "2026-06-29T00:00:00Z" },
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, history, invoices, NOW);
 
     expect(pills.totalMoniesCollectedThisWeek).toBe(7000 + 5000);
   });
