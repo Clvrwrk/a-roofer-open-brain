@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   arForRow,
+  buildStageEntryDates,
   collectedByJobId,
   computeAverageTicket,
   computeCloseRate,
+  computeClosedInWindow,
   computeFreshnessBadges,
   computeFunnelStagesWithSplit,
   computeHighestArAgingDays,
@@ -37,6 +39,7 @@ import {
   REP_UNKNOWN_LABEL,
   segmentForAccountKey,
   stageDateFor,
+  stageEntryDateFor,
   trailing7DayRange,
   windowRange,
   type AcculynxJobRow,
@@ -406,6 +409,76 @@ describe("window filtering", () => {
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe(2);
+  });
+});
+
+describe("milestone-history stage dates (2026-07-06 rebuild)", () => {
+  const history: MilestoneHistoryRow[] = [
+    { job_id: "job-1", milestone_name: "Lead", milestone_date: "2024-03-01T00:00:00Z" },
+    { job_id: "job-1", milestone_name: "Approved", milestone_date: "2024-05-01T00:00:00Z" },
+    { job_id: "job-1", milestone_name: "Closed", milestone_date: "2026-02-15T00:00:00Z" },
+    // earliest of two Closed entries wins (job first entered the stage):
+    { job_id: "job-1", milestone_name: "Closed", milestone_date: "2026-03-20T00:00:00Z" },
+    { job_id: "job-2", milestone_name: "Cancelled", milestone_date: "2026-01-10T00:00:00Z" },
+  ];
+
+  it("builds earliest per-stage entry dates and ignores Cancelled (not a windowable stage)", () => {
+    const map = buildStageEntryDates(history);
+    expect(map.get("job-1")?.closed?.toISOString()).toBe("2026-02-15T00:00:00.000Z");
+    expect(map.get("job-1")?.approved?.toISOString()).toBe("2024-05-01T00:00:00.000Z");
+    // job-2 only has a Cancelled row -> no windowable stage recorded
+    expect(map.get("job-2")).toBeUndefined();
+  });
+
+  it("stageEntryDateFor prefers the real history date over crm columns", () => {
+    const map = buildStageEntryDates(history);
+    const row = makePipelineRow({ acculynx_job_id: "job-1", current_milestone: "closed", milestone_date: "2026-06-28T00:00:00Z" });
+    // history Closed date (2026-02-15) wins over the crm milestone_date (2026-06-28)
+    expect(stageEntryDateFor(row, "closed", map)?.toISOString()).toBe("2026-02-15T00:00:00.000Z");
+  });
+
+  it("NEVER falls back to updated_at/created_at — an undated job resolves to null", () => {
+    const row = makePipelineRow({
+      acculynx_job_id: "no-history",
+      current_milestone: "closed",
+      milestone_date: null,
+      approved_date: null,
+      lead_date: null,
+      updated_at: "2026-07-06T00:00:00Z",
+      created_at: "2026-07-06T00:00:00Z",
+    });
+    // legacy stageDateFor would return the updated_at fallback; the new resolver must not
+    expect(stageDateFor(row, "closed")?.toISOString()).toBe("2026-07-06T00:00:00.000Z");
+    expect(stageEntryDateFor(row, "closed", new Map())).toBeNull();
+  });
+
+  it("isRowInWindow with a stage-date map windows a closed job on its real close date, not the sync clock", () => {
+    const map = buildStageEntryDates(history);
+    // Job closed 2026-02-15 but last synced (updated_at) 2026-07-06.
+    const row = makePipelineRow({ acculynx_job_id: "job-1", current_milestone: "closed", milestone_date: null, approved_date: null, updated_at: "2026-07-06T00:00:00Z" });
+    const july = { start: new Date("2026-07-01T00:00:00Z"), end: new Date("2026-07-31T00:00:00Z") };
+    const feb = { start: new Date("2026-02-01T00:00:00Z"), end: new Date("2026-02-28T00:00:00Z") };
+    // Legacy path (no map) would drag it into July via updated_at:
+    expect(isRowInWindow(row, july.start, july.end)).toBe(true);
+    // History-aware path: in February (real close), NOT in July:
+    expect(isRowInWindow(row, feb.start, feb.end, undefined, map)).toBe(true);
+    expect(isRowInWindow(row, july.start, july.end, undefined, map)).toBe(false);
+  });
+
+  it("computeClosedInWindow counts closed jobs once, by close date, and excludes approved-not-closed", () => {
+    const map = buildStageEntryDates([
+      { job_id: "closed-2026", milestone_name: "Closed", milestone_date: "2026-04-10T00:00:00Z" },
+      { job_id: "closed-2025", milestone_name: "Closed", milestone_date: "2025-04-10T00:00:00Z" },
+    ]);
+    const rows = [
+      makePipelineRow({ id: 1, acculynx_job_id: "closed-2026", current_milestone: "closed", contract_amount: 50000 }),
+      makePipelineRow({ id: 2, acculynx_job_id: "closed-2025", current_milestone: "closed", contract_amount: 99000 }),
+      makePipelineRow({ id: 3, acculynx_job_id: "appr", current_milestone: "approved", contract_amount: 77000 }),
+    ];
+    const ytd = computeClosedInWindow(rows, new Date("2026-01-01T00:00:00Z"), new Date("2026-12-31T00:00:00Z"), map);
+    // only the 2026-closed job counts; 2025-closed is out of window; approved is not "sold" yet
+    expect(ytd.soldCount).toBe(1);
+    expect(ytd.soldValue).toBe(50000);
   });
 });
 

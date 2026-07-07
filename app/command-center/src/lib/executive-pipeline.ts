@@ -770,6 +770,88 @@ export function stageDateFor(row: PipelineRow, queue: QueueName): Date | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Milestone-history-backed stage dates (2026-07-06 rebuild — user-approved).
+//
+// ROOT CAUSE THIS REPLACES: stageDateFor above falls back to updated_at/created_at
+// (the last-sync timestamp, always "now") whenever a job has no real stage date, so
+// every undated job lands inside any calendar window — the exact defect that made
+// YTD "sold value" read like all-time. acculynx_job_milestone_history carries the
+// REAL, dated stage transitions (Lead/Prospect/Approved/Completed/Invoiced/Closed)
+// for ~98% of jobs, so it is the single source of truth for "when did this job enter
+// this stage". These helpers window every KPI on that real date and NEVER fall back
+// to updated_at/created_at — an undated job is simply excluded from windowed KPIs
+// (surfaced via coverage), never dated to the sync clock.
+// ---------------------------------------------------------------------------
+
+/** Per job: the earliest real date it entered each queue-stage, from milestone
+ * history. `Partial` because a job only has dates for the stages it has reached. */
+export type StageEntryDates = Map<string, Partial<Record<QueueName, Date>>>;
+
+/** History milestone_name (case-insensitive) -> the dashboard queue it belongs to.
+ * "completed" folds into the approved queue, matching queueForRow's convention. */
+const HISTORY_STAGE_TO_QUEUE: Record<QueueName, Set<string>> = {
+  leads: new Set(["lead", "unassigned_lead", "assigned_lead"]),
+  prospects: new Set(["prospect"]),
+  approved: new Set(["approved", "completed"]),
+  invoiced: new Set(["invoiced"]),
+  closed: new Set(["closed"]),
+};
+
+/** Builds the per-job stage-entry-date map from raw milestone-history rows. For each
+ * (job, queue) it keeps the EARLIEST dated transition (the date the job first entered
+ * that stage). Rows with no job_id, no parseable date, or a milestone_name that maps
+ * to no queue (e.g. "Cancelled") are ignored — cancellation is an exclusion, not a
+ * windowable stage. */
+export function buildStageEntryDates(history: MilestoneHistoryRow[]): StageEntryDates {
+  const map: StageEntryDates = new Map();
+  for (const h of history) {
+    if (!h.job_id) continue;
+    const date = toDate(h.milestone_date);
+    if (!date) continue;
+    const name = compact(h.milestone_name, "").toLowerCase();
+
+    let queue: QueueName | null = null;
+    for (const q of Object.keys(HISTORY_STAGE_TO_QUEUE) as QueueName[]) {
+      if (HISTORY_STAGE_TO_QUEUE[q].has(name)) {
+        queue = q;
+        break;
+      }
+    }
+    if (!queue) continue;
+
+    const entry = map.get(h.job_id) ?? {};
+    const existing = entry[queue];
+    if (!existing || date < existing) entry[queue] = date;
+    map.set(h.job_id, entry);
+  }
+  return map;
+}
+
+/** History-aware replacement for stageDateFor: the date a row entered its queue-stage,
+ * preferring the real milestone-history date, then a REAL crm column (lead_date /
+ * approved_date / milestone_date) — and DELIBERATELY never updated_at or created_at.
+ * Returns null when no real date exists (job is "undated" and drops out of windowed
+ * KPIs), rather than silently dating it to the last sync. */
+export function stageEntryDateFor(row: PipelineRow, queue: QueueName, stageDates?: StageEntryDates): Date | null {
+  const jobId = row.acculynx_job_id;
+  const fromHistory = jobId ? stageDates?.get(jobId)?.[queue] : undefined;
+  if (fromHistory) return fromHistory;
+
+  switch (queue) {
+    case "leads":
+    case "prospects":
+      return toDate(row.lead_date);
+    case "approved":
+      return toDate(row.approved_date ?? row.milestone_date);
+    case "invoiced":
+    case "closed":
+      return toDate(row.milestone_date);
+    default:
+      return null;
+  }
+}
+
 /** Round 3, item A AR exception — REWORKED by the AR-truth fix (2026-07-03,
  * user-approved fix 2). The exception now covers ANY job with an open invoice:
  * - A job with open-invoice AR > 0 (per `arByJobId`, the acculynx_invoices-derived
@@ -785,7 +867,13 @@ export function stageDateFor(row: PipelineRow, queue: QueueName): Date | null {
  * unchanged from round 2/3). Rows with an unrecognized/null queue (queueForRow
  * returns null) are excluded — same "never fabricate a bucket" discipline as
  * every other aggregation in this module. */
-export function isRowInWindow(row: PipelineRow, start: Date, end: Date, arByJobId?: Map<string, number>): boolean {
+export function isRowInWindow(
+  row: PipelineRow,
+  start: Date,
+  end: Date,
+  arByJobId?: Map<string, number>,
+  stageDates?: StageEntryDates,
+): boolean {
   const queue = queueForRow(row);
   if (!queue) return false;
 
@@ -794,15 +882,25 @@ export function isRowInWindow(row: PipelineRow, start: Date, end: Date, arByJobI
   if (arByJobId && arForRow(row, arByJobId) > 0) return true;
 
   const inWindow = (date: Date | null) => Boolean(date && date >= start && date < addDays(end, 1));
-  return inWindow(stageDateFor(row, queue));
+  // 2026-07-06 rebuild: when a stage-entry-date map is supplied (production always
+  // supplies it), window on the REAL milestone-history date with no updated_at
+  // fallback. Legacy callers/tests that omit it keep the prior stageDateFor behavior.
+  const date = stageDates ? stageEntryDateFor(row, queue, stageDates) : stageDateFor(row, queue);
+  return inWindow(date);
 }
 
 /** Applies isRowInWindow to a row set — the single windowing filter point every
  * windowed aggregation (funnel, queue values, location rollup, leaderboard,
  * drill-down) calls, so the AR exception and stage-date mapping are never
  * reimplemented ad hoc at a second call site. */
-export function filterRowsInWindow(rows: PipelineRow[], start: Date, end: Date, arByJobId?: Map<string, number>): PipelineRow[] {
-  return rows.filter((row) => isRowInWindow(row, start, end, arByJobId));
+export function filterRowsInWindow(
+  rows: PipelineRow[],
+  start: Date,
+  end: Date,
+  arByJobId?: Map<string, number>,
+  stageDates?: StageEntryDates,
+): PipelineRow[] {
+  return rows.filter((row) => isRowInWindow(row, start, end, arByJobId, stageDates));
 }
 
 // ---------------------------------------------------------------------------
@@ -912,6 +1010,31 @@ export function computeCloseRate(rows: PipelineRow[], start: Date, end: Date): C
     // conversion rate — acculynx_job_milestone_history is not yet ingested.
     qualifier: "period-snapshot ratio, not a cohort conversion rate",
   };
+}
+
+/** Headline "Sold Value" (2026-07-06 rebuild — user decision: measure sales by CLOSE
+ * DATE). A job counts as sold-in-window when its current status is Closed AND its real
+ * Closed-milestone date (stageEntryDateFor, history-backed, no updated_at fallback)
+ * falls in [start, end]. Value is counted ONCE via amountFor, in the Closed bucket
+ * only — never cumulatively across approved/invoiced/closed. Approved/invoiced-but-not-
+ * yet-closed jobs are in-progress pipeline (shown in the funnel) and are NOT counted as
+ * sold until they close. Returns 0/0 when no closed job falls in the window. */
+export function computeClosedInWindow(
+  rows: PipelineRow[],
+  start: Date,
+  end: Date,
+  stageDates?: StageEntryDates,
+): { soldValue: number; soldCount: number } {
+  let soldValue = 0;
+  let soldCount = 0;
+  for (const row of rows) {
+    if (queueForRow(row) !== "closed") continue;
+    const date = stageEntryDateFor(row, "closed", stageDates);
+    if (!date || date < start || date >= addDays(end, 1)) continue;
+    soldValue += amountFor(row);
+    soldCount += 1;
+  }
+  return { soldValue, soldCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -1132,12 +1255,13 @@ export function jobRowsForLocation(
   windowStart?: Date,
   windowEnd?: Date,
   arByJobId?: Map<string, number>,
+  stageDates?: StageEntryDates,
 ): JobDrillResult {
   const filtered = excludeClosedAndPaidInFull(dedupePipeline(pipeline)).filter((row) => {
     const derived = deriveRegionOffice(row, jobs);
     if (derived.accountKey !== accountKey) return false;
     if (commercialResidential !== "all" && derived.commercialResidential !== commercialResidential) return false;
-    if (windowStart && windowEnd && !isRowInWindow(row, windowStart, windowEnd, arByJobId)) return false;
+    if (windowStart && windowEnd && !isRowInWindow(row, windowStart, windowEnd, arByJobId, stageDates)) return false;
 
     const repBucket = repBucketFor(row, derived.accountKey);
     if (repBucket === null) return false; // unassigned + no value: filtered out of view entirely (item B)
@@ -1978,13 +2102,19 @@ export async function loadExecutivePipelineDashboard(
     // window exception. crm_pipeline.balance_due is retired as an AR signal.
     const arByJobId = openInvoiceArByJobId(invoiceAging);
 
+    // 2026-07-06 rebuild: the REAL per-stage entry dates from milestone history, used
+    // for every windowed KPI below. This retires the updated_at/created_at fallback
+    // (the defect that made undated jobs land in every calendar window and inflated
+    // YTD sold value ~6-9x).
+    const stageDates = buildStageEntryDates(milestoneHistory);
+
     // Round 3, item A: THE unified window — every windowed KPI/chart/table/drop-down
     // below is computed from this ONE filtered-and-windowed row set (filterRowsInWindow
-    // applies the per-stage date mapping + the any-open-invoice AR exception, fix 2).
+    // applies the real milestone-history stage date + the any-open-invoice AR exception).
     // Point-in-time KPIs that are explicitly NOT windowed (the trailing-7 pills,
     // item C) intentionally read from `filteredPipeline` instead — see the trailing7d
     // computation below.
-    const windowedPipeline = filterRowsInWindow(filteredPipeline, start, end, arByJobId);
+    const windowedPipeline = filterRowsInWindow(filteredPipeline, start, end, arByJobId, stageDates);
 
     const funnel = groupPipelineFunnel(windowedPipeline);
     const closeRate = computeCloseRate(windowedPipeline, start, end);
@@ -2006,15 +2136,20 @@ export async function loadExecutivePipelineDashboard(
       commercial: preClosePipelineValue(computeQueueValues(commercialRows)),
     };
 
-    const closeRateResidential = computeCloseRate(residentialRows, start, end);
-    const closeRateCommercial = computeCloseRate(commercialRows, start, end);
+    // 2026-07-06 rebuild (user decision: measure sales by CLOSE DATE). The headline
+    // Sold Value / Jobs Sold split counts each job ONCE, in the Closed bucket, windowed
+    // on its real Closed-milestone date — never the approved-date or the updated_at
+    // fallback. Approved/invoiced-but-not-closed jobs are in-progress pipeline (funnel),
+    // not counted as sold until they close.
+    const soldClosedResidential = computeClosedInWindow(residentialRows, start, end, stageDates);
+    const soldClosedCommercial = computeClosedInWindow(commercialRows, start, end, stageDates);
     const soldValueSplit: SegmentSplit = {
-      residential: closeRateResidential.soldValue,
-      commercial: closeRateCommercial.soldValue,
+      residential: soldClosedResidential.soldValue,
+      commercial: soldClosedCommercial.soldValue,
     };
     const jobsSoldSplit: SegmentSplit = {
-      residential: closeRateResidential.soldCount,
-      commercial: closeRateCommercial.soldCount,
+      residential: soldClosedResidential.soldCount,
+      commercial: soldClosedCommercial.soldCount,
     };
 
     const newLeadsSplit: SegmentSplit = {
@@ -2234,7 +2369,7 @@ export async function loadJobsForLocation(
   }
 
   try {
-    const [pipeline, jobs, invoiceAging] = await Promise.all([
+    const [pipeline, jobs, invoiceAging, milestoneHistory] = await Promise.all([
       selectAll<PipelineRow>(
         client,
         "crm_pipeline",
@@ -2244,6 +2379,9 @@ export async function loadJobsForLocation(
       // AR-truth fix (2026-07-03): the drill-down's Outstanding AR column + the
       // any-open-invoice window exception both read the invoice ledger.
       selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
+      // 2026-07-06 rebuild: real per-stage dates so the drill-down windows on the same
+      // milestone-history basis as the aggregate dashboard (no updated_at fallback).
+      selectAll<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
     ]);
 
     // Round 3, item E: the drill-down table honors the SAME window rules as the rest
@@ -2251,7 +2389,8 @@ export async function loadJobsForLocation(
     // not listed.
     const { start, end } = windowRange(window, now);
     const arByJobId = openInvoiceArByJobId(invoiceAging);
-    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep, start, end, arByJobId);
+    const stageDates = buildStageEntryDates(milestoneHistory);
+    const { rows, hiddenZeroValueCount } = jobRowsForLocation(pipeline, jobs, accountKey, commercialResidential, rep, start, end, arByJobId, stageDates);
     return { status: "live", jobs: rows, hiddenZeroValueCount, error: null };
   } catch (error) {
     return {
