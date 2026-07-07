@@ -690,10 +690,15 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
   updateKpiCard("pipeline-value", formatCurrency(dashboard.pipelineValueTotal));
   updateKpiSplit("pipeline-value", dashboard.pipelineValueSplit, formatCompactCurrency);
 
-  updateKpiCard("sold-value", formatCurrency(dashboard.closeRate.soldValue));
+  // 2026-07-07 forensic-audit fix: headline = sum of the close-date Res/Com split
+  // (was closeRate.soldValue/soldCount — the old all-sold-stages number, which
+  // contradicted the split and the Close Date definition).
+  const soldValueHeadline = dashboard.soldValueSplit.residential + dashboard.soldValueSplit.commercial;
+  updateKpiCard("sold-value", formatCurrency(soldValueHeadline), `${dashboard.window.label} · closed by close date`);
   updateKpiSplit("sold-value", dashboard.soldValueSplit, formatCompactCurrency);
 
-  updateKpiCard("jobs-sold", String(dashboard.closeRate.soldCount), `${dashboard.window.label} (period snapshot)`);
+  const jobsSoldHeadline = dashboard.jobsSoldSplit.residential + dashboard.jobsSoldSplit.commercial;
+  updateKpiCard("jobs-sold", String(jobsSoldHeadline), `${dashboard.window.label} · jobs closed in period`);
   updateKpiSplit("jobs-sold", dashboard.jobsSoldSplit, (value) => String(value));
 
   // AR-truth fix (2026-07-03, fix 4): job-count-weighted overall snapshot rate from
@@ -714,7 +719,14 @@ function renderKpis(dashboard: ExecutivePipelineDashboard) {
   updateKpiCard("margin", covered > 0 ? `${avgMargin.toFixed(0)}%` : "—", covered === 0 ? "No cost data available yet" : `${covered} of ${total} jobs have cost data`);
   updateKpiSplit("margin", dashboard.marginPctSplit, (value) => `${value.toFixed(0)}%`);
 
-  const averageTicketHeadline = dashboard.averageTicket.residential.avgTicket || dashboard.averageTicket.commercial.avgTicket;
+  // 2026-07-07 forensic-audit fix: blended overall (approved-count-weighted), not
+  // residential-only — the prior `res || com` understated the overall average ticket.
+  const avgTicketCount = dashboard.averageTicket.residential.count + dashboard.averageTicket.commercial.count;
+  const averageTicketHeadline =
+    avgTicketCount > 0
+      ? (dashboard.averageTicket.residential.avgTicket * dashboard.averageTicket.residential.count +
+          dashboard.averageTicket.commercial.avgTicket * dashboard.averageTicket.commercial.count) / avgTicketCount
+      : 0;
   updateKpiCard("average-ticket", formatCurrency(averageTicketHeadline));
   updateKpiSplit(
     "average-ticket",

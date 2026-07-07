@@ -119,6 +119,22 @@ const avgMarginPct =
     ? dashboard.marginByRegion.reduce((sum, row) => sum + row.marginPct * row.coverage.jobsWithCostData, 0) / overallMargin.covered
     : 0;
 
+// 2026-07-07 forensic-audit fix: headline consistency with the Res/Com split.
+// Sold Value / Jobs Sold headlines must equal the sum of their close-date split
+// (they previously rendered closeRate.soldValue/soldCount — the old "all sold
+// stages, period-snapshot" number — which contradicted the closed-in-window split).
+const soldValueHeadline = dashboard.soldValueSplit.residential + dashboard.soldValueSplit.commercial;
+const jobsSoldHeadline = dashboard.jobsSoldSplit.residential + dashboard.jobsSoldSplit.commercial;
+// Average Ticket headline must be the blended overall (approved-job-count-weighted),
+// not residential-only (the prior `res || com` showed just the residential average
+// and understated the overall whenever commercial tickets differ).
+const avgTicketCount = dashboard.averageTicket.residential.count + dashboard.averageTicket.commercial.count;
+const overallAvgTicket =
+  avgTicketCount > 0
+    ? (dashboard.averageTicket.residential.avgTicket * dashboard.averageTicket.residential.count +
+        dashboard.averageTicket.commercial.avgTicket * dashboard.averageTicket.commercial.count) / avgTicketCount
+    : 0;
+
 function asData(value: unknown) {
   return JSON.stringify(value);
 }
@@ -278,8 +294,8 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
 
       <div class="epl-kpi epl-kpi--split" data-kpi="sold-value">
         <span class="epl-kpi-lab">Sold Value</span>
-        <strong class="epl-kpi-val" data-kpi-val="sold-value">{formatCurrency(dashboard.closeRate.soldValue)}</strong>
-        <small class="epl-kpi-sub">{dashboard.window.label}</small>
+        <strong class="epl-kpi-val" data-kpi-val="sold-value">{formatCurrency(soldValueHeadline)}</strong>
+        <small class="epl-kpi-sub" data-kpi-sub="sold-value">{dashboard.window.label} · closed by close date</small>
         <span class="epl-kpi-split">
           <span class="epl-kpi-split-item">
             <span class="epl-kpi-split-lab">Res</span>
@@ -298,8 +314,8 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
 
       <div class="epl-kpi epl-kpi--split" data-kpi="jobs-sold">
         <span class="epl-kpi-lab">Jobs Sold</span>
-        <strong class="epl-kpi-val" data-kpi-val="jobs-sold">{dashboard.closeRate.soldCount}</strong>
-        <small class="epl-kpi-sub" data-kpi-sub="jobs-sold">{dashboard.window.label} (period snapshot)</small>
+        <strong class="epl-kpi-val" data-kpi-val="jobs-sold">{jobsSoldHeadline}</strong>
+        <small class="epl-kpi-sub" data-kpi-sub="jobs-sold">{dashboard.window.label} · jobs closed in period</small>
         <span class="epl-kpi-split">
           <span class="epl-kpi-split-item">
             <span class="epl-kpi-split-lab">Res</span>
@@ -367,7 +383,7 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
       <div class="epl-kpi epl-kpi--split" data-kpi="average-ticket">
         <span class="epl-kpi-lab">Average Ticket</span>
         <strong class="epl-kpi-val" data-kpi-val="average-ticket">
-          {formatCurrency(dashboard.averageTicket.residential.avgTicket || dashboard.averageTicket.commercial.avgTicket)}
+          {formatCurrency(overallAvgTicket)}
         </strong>
         <small class="epl-kpi-sub">Approved in {dashboard.window.label}</small>
         <span class="epl-kpi-split">
