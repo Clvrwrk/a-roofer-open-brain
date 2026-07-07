@@ -23,6 +23,7 @@ import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates } from "./resources/estimates.ts";
+import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
 import { pageAll, syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
@@ -540,8 +541,22 @@ async function runAccountSync(
   apiKey: string,
   deadline: number,
   batchId: string,
-): Promise<{ jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
-  const result = { jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
+): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
+  const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
+
+  // --- Users (per-tenant; 2026-07-06 cross-location rep fix) ---
+  // Sync this account's own users FIRST so the job-walk's rep resolver (loadUserNameMap
+  // → resolveCompanyRepName) can map this tenant's representative user.ids to names in
+  // the SAME run, instead of leaking raw GUIDs into crm_pipeline.primary_salesperson.
+  try {
+    const userCount = await syncUsersForAccount(sb, acct, apiKey, deadline, fetch);
+    result.users = `ok (${userCount})`;
+  } catch (e) {
+    result.users = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/users: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
 
   // --- Jobs (date-windowed; null watermark → 2000-01-01 full-history floor) ---
   try {

@@ -151,6 +151,69 @@ function resolveCompanyRepName(
   return userMap.get(userId) ?? userId;
 }
 
+/** Extract the company/primary representative's user.id from a /representatives body
+ * (same selection rule as resolveCompanyRepName), or null when none is present. */
+function pickCompanyRepUserId(repsBody: unknown): string | null {
+  const items: any[] = (repsBody as { items?: any[] })?.items ??
+    (Array.isArray(repsBody) ? (repsBody as any[]) : []);
+  if (items.length === 0) return null;
+  const companyRep = items.find((r) => r?.type === "CompanyRepresentative") ?? items[0];
+  return companyRep?.user?.id ?? null;
+}
+
+/**
+ * Part 3 hardening (2026-07-06): resolve a job's company-rep name, and when the
+ * user.id is NOT already in acculynx_users (the cross-tenant gap that leaked raw
+ * GUIDs into primary_salesperson), fetch GET /users/{id} on-demand with THIS
+ * account's key, cache the name in userMap, and upsert the user into acculynx_users
+ * so it never has to be fetched again. Only ever falls back to the bare user.id when
+ * the on-demand fetch also fails to yield a name (unchanged worst-case behavior).
+ * The upsert is best-effort — a failure logs and still returns the resolved name.
+ */
+async function resolveRepNameWithFetch(
+  repsBody: unknown,
+  userMap: Map<string, string>,
+  sb: any,
+  apiKey: string,
+  fetchFn: typeof fetch,
+): Promise<string | null> {
+  const userId = pickCompanyRepUserId(repsBody);
+  if (!userId) return null;
+
+  const cached = userMap.get(userId);
+  if (cached && cached !== userId) return cached; // already resolved to a real name
+
+  // On-demand user lookup for a rep we haven't synced yet (e.g. a rep from a tenant
+  // whose per-account users sweep hasn't run this cycle).
+  await sleep(PACE_MS);
+  const { status, body } = await acculynxGet(`${ACCULYNX_BASE}/users/${encodeURIComponent(userId)}`, apiKey, fetchFn);
+  if (status !== 200) return userId; // fetch failed — keep prior GUID-fallback behavior
+
+  const u = body as any;
+  const name: string | null = u?.displayName || [u?.firstName, u?.lastName].filter(Boolean).join(" ") || null;
+  if (!name) return userId;
+
+  userMap.set(userId, name);
+  const { error } = await sb.from("acculynx_users").upsert({
+    id: userId,
+    display_name: u.displayName ?? null,
+    first_name: u.firstName ?? null,
+    last_name: u.lastName ?? null,
+    initials: u.initials ?? null,
+    role_id: u.role?.id ?? null,
+    role_name: u.role?.name ?? null,
+    status: u.status ?? null,
+    phone: u.phone ?? null,
+    mobile_phone: u.mobilePhone ?? null,
+    email: u.email ?? null,
+    raw: u,
+    synced_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) console.warn(`[job-walk] on-demand user upsert ${userId}: ${error.message}`);
+
+  return name;
+}
+
 /**
  * Record a typed-upsert failure as a counted, queryable row instead of console.warn-only.
  * Feeds check_acculynx_alerts() condition (e) — migration 186.
@@ -522,7 +585,10 @@ export async function syncJobWalk(
     );
     await archiveRaw(sb, syncBatchId, "representatives", repsEndpoint, repsStatus, repsBody);
     if (repsStatus === 200) {
-      const repName = resolveCompanyRepName(repsBody, userMap);
+      // Part 3 hardening (2026-07-06): resolve via acculynx_users, and on a cache miss
+      // fetch GET /users/{id} with this account's key so a cross-tenant rep never leaks
+      // as a bare GUID into primary_salesperson.
+      const repName = await resolveRepNameWithFetch(repsBody, userMap, sb, apiKey, fetchFn);
       if (repName) repNameByJobId.set(jobId, repName);
     }
 
