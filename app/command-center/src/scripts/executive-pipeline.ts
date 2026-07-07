@@ -77,6 +77,7 @@ interface Trailing7dTotals {
   invoicedToClosed: TransitionPill;
   totalOutstandingAr: number;
   highestArAgingDays: number;
+  highestArAgingJobId: string | null;
   totalMoniesCollectedThisWeek: number;
 }
 
@@ -141,6 +142,7 @@ interface ExecutivePipelineDashboard {
   trailing7d: Trailing7dTotals;
   locationRollup: LocationRollupRow[];
   arTotal: number;
+  highestArAgingJob: { jobId: string; jobNumber: string | null; accountKey: string } | null;
   freshness: FreshnessBadge[];
   pipelineValueTotal: number;
   pipelineValueSplit: SegmentSplit;
@@ -210,10 +212,12 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
     invoicedToClosed: { count: 0, value: 0, secondaryValue: 0, source: "none", coverageNote: "No jobs in this window" },
     totalOutstandingAr: 0,
     highestArAgingDays: 0,
+    highestArAgingJobId: null,
     totalMoniesCollectedThisWeek: 0,
   },
   locationRollup: [],
   arTotal: 0,
+  highestArAgingJob: null,
   freshness: [],
   pipelineValueTotal: 0,
   pipelineValueSplit: { ...EMPTY_SPLIT },
@@ -230,7 +234,10 @@ let currentDashboard = readEmbeddedJson<ExecutivePipelineDashboard>("dashboard-d
 });
 
 const config = readEmbeddedJson<DashboardConfig>("dashboard-config", {
-  acculynxJobBaseUrl: "https://proexteriors.acculynx.com/jobs",
+  // Real AccuLynx deep-link host (my.acculynx.com/jobs/{jobId}); the old
+  // proexteriors.acculynx.com subdomain does not resolve. This default is only used if
+  // the embedded config is missing — the SSR value from pipeline.astro is authoritative.
+  acculynxJobBaseUrl: "https://my.acculynx.com/jobs",
 });
 
 // ---------------------------------------------------------------------------
@@ -528,6 +535,7 @@ function renderJobsTable(wrap: HTMLElement, jobs: JobDrillRow[], hiddenZeroValue
   const tbody = document.createElement("tbody");
   for (const job of jobs) {
     const tr = document.createElement("tr");
+    if (job.acculynxJobId) tr.dataset.acculynxJobId = job.acculynxJobId; // for AR-aging deep-link scroll-to-job
 
     const jobCell = document.createElement("td");
     jobCell.textContent = job.jobName;
@@ -627,6 +635,40 @@ for (const details of locationDetailsList) {
     if (details.open) void loadLocationJobs(details);
   });
 }
+
+// Highest AR Aging deep-link (2026-07-07): clicking the job link under the pill
+// un-nests the relevant office row in the breakdown below and scrolls to that job.
+function revealArAgingJob(accountKey: string, jobId: string | null) {
+  if (!accountKey) return;
+  const details = document.querySelector<HTMLDetailsElement>(
+    `[data-location-row][data-account-key="${accountKey}"]`,
+  );
+  if (!details) return;
+  details.open = true; // fires 'toggle' → loadLocationJobs fetches the job table
+  details.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!jobId) return;
+  // The job table loads async — poll briefly for the row, then scroll + flash it.
+  let attempts = 0;
+  const findRow = () => {
+    const row = details.querySelector<HTMLElement>(`tr[data-acculynx-job-id="${jobId}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("epl-job-flash");
+      setTimeout(() => row.classList.remove("epl-job-flash"), 2600);
+    } else if (attempts++ < 25) {
+      setTimeout(findRow, 150);
+    }
+  };
+  setTimeout(findRow, 200);
+}
+
+// Event delegation so the handler works for the SSR link AND any re-rendered link.
+document.addEventListener("click", (event) => {
+  const link = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-t7-ar-joblink]");
+  if (!link) return;
+  event.preventDefault();
+  revealArAgingJob(link.dataset.accountKey ?? "", link.dataset.jobId ?? null);
+});
 
 // ---------------------------------------------------------------------------
 // Global filter bar (D-13) — re-fetch /api/executive/pipeline.json on change
@@ -791,6 +833,29 @@ function renderTrailing7d(dashboard: ExecutivePipelineDashboard) {
 
   const agingEl = document.querySelector<HTMLElement>('[data-t7-val="highestArAgingDays"]');
   if (agingEl) agingEl.textContent = `${dashboard.trailing7d.highestArAgingDays}d`;
+
+  // Keep the Highest AR Aging job deep-link in sync on filter change (2026-07-07):
+  // the oldest-open-invoice job differs per filter, so update/create/remove the link.
+  const agingPill = agingEl?.closest(".epl-t7-pill") ?? null;
+  if (agingPill) {
+    let link = agingPill.querySelector<HTMLAnchorElement>("[data-t7-ar-joblink]");
+    const job = dashboard.highestArAgingJob;
+    if (job) {
+      if (!link) {
+        link = document.createElement("a");
+        link.className = "epl-t7-joblink";
+        link.setAttribute("data-t7-ar-joblink", "");
+        link.title = "Open this job in the office breakdown below";
+        agingPill.append(link);
+      }
+      link.dataset.accountKey = job.accountKey;
+      link.dataset.jobId = job.jobId;
+      link.href = `#office-${job.accountKey}`;
+      link.textContent = job.jobNumber ? `Job ${job.jobNumber}` : "View job";
+    } else if (link) {
+      link.remove();
+    }
+  }
 
   const collectedEl = document.querySelector<HTMLElement>('[data-t7-val="totalMoniesCollectedThisWeek"]');
   if (collectedEl) collectedEl.textContent = formatCurrency(dashboard.trailing7d.totalMoniesCollectedThisWeek);

@@ -221,6 +221,10 @@ export interface ExecutivePipelineDashboard {
   trailing7d: Trailing7dPillsV2;
   locationRollup: LocationRollupRow[];
   arTotal: number;
+  /** The job behind trailing7d.highestArAgingJobId, resolved to its job number +
+   * account_key so the Highest AR Aging pill can deep-link and un-nest to it in the
+   * per-office drill-down (2026-07-07). null when there is no oldest open invoice. */
+  highestArAgingJob: { jobId: string; jobNumber: string | null; accountKey: string } | null;
   freshness: FreshnessBadge[];
   /** Headline "pipeline value" KPI = the pre-close pipeline value (item 3). */
   pipelineValueTotal: number;
@@ -1601,6 +1605,9 @@ export interface Trailing7dPillsV2 {
   /** Oldest open invoice's age in days (from acculynx_invoices.invoice_date, where
    * balance_due > 0) — 0 when there are no open invoices with a usable date. */
   highestArAgingDays: number;
+  /** job_id of that oldest open invoice, for deep-linking the pill to the job
+   * (2026-07-07) — null when there is no such invoice. */
+  highestArAgingJobId: string | null;
   /** Sum of per-job invoice-ledger collected dollars (per-invoice total_price -
    * balance_due, floored — see collectedByJobId) for rows entering their current
    * stage within the SAME trailing-7-day window — "Monies Collected this week".
@@ -1624,6 +1631,7 @@ export const EMPTY_TRAILING_7D_V2: Trailing7dPillsV2 = {
   invoicedToClosed: { ...EMPTY_TRANSITION_PILL, secondaryValue: 0 },
   totalOutstandingAr: 0,
   highestArAgingDays: 0,
+  highestArAgingJobId: null,
   totalMoniesCollectedThisWeek: 0,
 };
 
@@ -1660,10 +1668,13 @@ function resolveTransitionDate(
     return { date: matches[0], usedFallback: false };
   }
 
-  // Fallback: milestone_date-entered-current-stage (only meaningful when the row's
-  // CURRENT queue actually IS the target — resolveTransitionDate is only ever called
-  // for rows already confirmed to be in that queue by the caller).
-  return { date: toDate(row.milestone_date), usedFallback: true };
+  // 2026-07-07 (user decision): HISTORY-ONLY. The trailing-7 pills are a pulse on
+  // real worker activity, so a job with no milestone-history transition for this
+  // target is NOT counted — the prior milestone_date fallback let a bulk/artifact
+  // milestone_date (e.g. 71 jobs stamped 2026-07-04 with no Closed history) fake a
+  // spike. No fallback: return null so the caller skips the row. Genuinely-recent
+  // transitions appear once the hourly walk ingests them.
+  return { date: null, usedFallback: false };
 }
 
 function buildCoverageNote(historyCount: number, fallbackCount: number): string {
@@ -1784,15 +1795,27 @@ export function computeTotalOutstandingArFromInvoices(invoices: InvoiceAgingRow[
  * among invoices with balance_due > 0 and a parseable invoice_date. Returns 0 when
  * there are no such invoices (never a fabricated/negative day count). */
 export function computeHighestArAgingDays(invoices: InvoiceAgingRow[], now: Date): number {
+  return computeHighestArAgingInvoice(invoices, now).days;
+}
+
+/** Like computeHighestArAgingDays but also returns the job_id of the oldest open
+ * invoice, so the UI can deep-link the Highest AR Aging pill to that specific job
+ * (2026-07-07 user request). jobId is null when there is no open invoice with a
+ * usable date. */
+export function computeHighestArAgingInvoice(invoices: InvoiceAgingRow[], now: Date): { days: number; jobId: string | null } {
   let oldestDays = 0;
+  let jobId: string | null = null;
   for (const inv of invoices) {
     if (toNumber(inv.balance_due) <= 0) continue;
     const invoiceDate = toDate(inv.invoice_date);
     if (!invoiceDate) continue;
     const days = daysBetweenDates(invoiceDate, now);
-    if (days > oldestDays) oldestDays = days;
+    if (days > oldestDays) {
+      oldestDays = days;
+      jobId = inv.job_id;
+    }
   }
-  return oldestDays;
+  return { days: oldestDays, jobId };
 }
 
 function daysBetweenDates(from: Date, to: Date): number {
@@ -1855,7 +1878,8 @@ export function computeTrailing7dPillsV2(
   );
 
   const totalOutstandingAr = computeTotalOutstandingArFromInvoices(relevantInvoices);
-  const highestArAgingDays = computeHighestArAgingDays(relevantInvoices, now);
+  const arAging = computeHighestArAgingInvoice(relevantInvoices, now);
+  const highestArAgingDays = arAging.days;
 
   // Monies Collected this week: summed across every row (any queue) whose entry into
   // its CURRENT stage falls in the trailing 7 days and has collected dollars — a
@@ -1877,6 +1901,7 @@ export function computeTrailing7dPillsV2(
     invoicedToClosed,
     totalOutstandingAr,
     highestArAgingDays,
+    highestArAgingJobId: arAging.jobId,
     totalMoniesCollectedThisWeek,
   };
 }
@@ -2005,6 +2030,7 @@ function degradedDashboard(status: DashboardStatus, errors: string[], filters: R
     trailing7d: { ...EMPTY_TRAILING_7D_V2 },
     locationRollup: [],
     arTotal: 0,
+    highestArAgingJob: null,
     freshness: [],
     pipelineValueTotal: 0,
     pipelineValueSplit: { ...EMPTY_SEGMENT_SPLIT },
@@ -2333,6 +2359,21 @@ export async function loadExecutivePipelineDashboard(
     // milestone_date, which is the current-stage date for a job past approval).
     const signed7d = computeSigned7d(filteredPipeline, jobs, stageDates, now);
 
+    // Highest AR Aging deep-link (2026-07-07): resolve the oldest-open-invoice job to
+    // its job number + account_key so the pill links into the per-office drill-down.
+    // The invoice's job is always within filteredPipeline (relevantInvoices is scoped
+    // to it), so the row lookup resolves.
+    const arAgingRow = trailing7d.highestArAgingJobId
+      ? filteredPipeline.find((row) => row.acculynx_job_id === trailing7d.highestArAgingJobId)
+      : undefined;
+    const highestArAgingJob = trailing7d.highestArAgingJobId
+      ? {
+          jobId: trailing7d.highestArAgingJobId,
+          jobNumber: arAgingRow ? compact(arAgingRow.client_job_number, "") || null : null,
+          accountKey: arAgingRow ? deriveRegionOffice(arAgingRow, jobs).accountKey : "unknown",
+        }
+      : null;
+
     // AR-truth fix (2026-07-03, user-approved fix 1): the headline AR Outstanding KPI
     // is the SAME point-in-time open-invoice number as the trailing-7 "Total
     // Outstanding AR" pill (both: acculynx_invoices scoped to the filter-bar-filtered
@@ -2389,6 +2430,7 @@ export async function loadExecutivePipelineDashboard(
       trailing7d,
       locationRollup,
       arTotal,
+      highestArAgingJob,
       freshness,
       pipelineValueTotal,
       pipelineValueSplit,

@@ -64,7 +64,11 @@ const initialFilters: DashboardFilters = {
 
 const dashboard = await loadExecutivePipelineDashboard(initialFilters);
 
-const ACCULYNX_JOB_BASE_URL = "https://proexteriors.acculynx.com/jobs";
+// AccuLynx web app is a single host (my.acculynx.com) — NOT a per-tenant subdomain.
+// The old "proexteriors.acculynx.com" host does not resolve (DNS NXDOMAIN), which
+// broke every job link. Real deep-link format is https://my.acculynx.com/jobs/{jobId}
+// where jobId is the AccuLynx job GUID (acculynx_job_id). Overridable via env.
+const ACCULYNX_JOB_BASE_URL = import.meta.env.ACCULYNX_JOB_BASE_URL ?? "https://my.acculynx.com/jobs";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
@@ -455,6 +459,16 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
         <div class="epl-t7-pill">
           <strong data-t7-val="highestArAgingDays">{trailing7dPills.highestArAgingDays}d</strong>
           <span>Highest AR Aging</span>
+          {dashboard.highestArAgingJob && (
+            <a
+              class="epl-t7-joblink"
+              data-t7-ar-joblink
+              data-account-key={dashboard.highestArAgingJob.accountKey}
+              data-job-id={dashboard.highestArAgingJob.jobId}
+              href={`#office-${dashboard.highestArAgingJob.accountKey}`}
+              title="Open this job in the office breakdown below"
+            >{dashboard.highestArAgingJob.jobNumber ? `Job ${dashboard.highestArAgingJob.jobNumber}` : "View job"}</a>
+          )}
         </div>
         <div class="epl-t7-pill">
           <strong data-t7-val="totalMoniesCollectedThisWeek">{formatCurrency(trailing7dPills.totalMoniesCollectedThisWeek)}</strong>
@@ -538,5 +552,24 @@ const locationRows: LocationRow[] = KNOWN_ACCOUNT_KEYS.filter(
 <style>
   .epl {
     display: block;
+  }
+  /* Highest AR Aging deep-link (2026-07-07): the job-number link under the pill. */
+  .epl-t7-joblink {
+    display: inline-block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #1d4ed8;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .epl-t7-joblink:hover { color: #1e3a8a; }
+  /* Flash the AR-aging job row when the deep-link scrolls to it. */
+  .epl-jobs-table tr.epl-job-flash {
+    animation: epl-job-flash 2.4s ease-out;
+  }
+  @keyframes epl-job-flash {
+    0%, 25% { background-color: #fde68a; }
+    100% { background-color: transparent; }
   }
 </style>

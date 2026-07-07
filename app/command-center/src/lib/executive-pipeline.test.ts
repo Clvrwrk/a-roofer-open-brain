@@ -6,6 +6,7 @@ import {
   computeAverageTicket,
   computeCloseRate,
   computeClosedInWindow,
+  computeHighestArAgingInvoice,
   computeSigned7d,
   computeFreshnessBadges,
   computeFunnelStagesWithSplit,
@@ -1598,7 +1599,7 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
     expect(pills.leadToProspect.source).toBe("history");
   });
 
-  it("Lead->Prospect: falls back to milestone_date-entered-current-stage when no history row exists, and flags coverage as fallback", () => {
+  it("Lead->Prospect: HISTORY-ONLY (2026-07-07) — a job with no milestone-history Prospect row is NOT counted (no milestone_date fallback)", () => {
     const pipeline = [
       makePipelineRow({
         id: 1,
@@ -1612,10 +1613,10 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
 
     const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
 
-    expect(pills.leadToProspect.count).toBe(1);
-    expect(pills.leadToProspect.value).toBe(3500);
-    expect(pills.leadToProspect.source).toBe("fallback");
-    expect(pills.leadToProspect.coverageNote).toContain("0 of 1");
+    // No Prospect history row → not counted (the prior milestone_date fallback let
+    // bulk/artifact milestone_dates fake a spike; trailing-7 is now history-only).
+    expect(pills.leadToProspect.count).toBe(0);
+    expect(pills.leadToProspect.source).toBe("none");
   });
 
   it("Prospect->Approved: counts jobs entering Approved in-window, value = contract value, secondaryValue = invoice-ledger Monies Collected (AR-truth fix)", () => {
@@ -1656,9 +1657,13 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
         milestone_date: "2026-06-29T00:00:00Z",
       }),
     ];
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-1", milestone_name: "Approved", milestone_date: "2026-06-29T00:00:00Z" },
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, history, [], NOW);
 
+    expect(pills.prospectToApproved.count).toBe(1);
     expect(pills.prospectToApproved.secondaryValue).toBe(0);
   });
 
@@ -1685,8 +1690,12 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
       makeInvoice({ job_id: "job-invoiced", total_price: 10000, balance_due: 4000 }),
       makeInvoice({ job_id: "job-closed", total_price: 8000, balance_due: 500 }),
     ];
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-invoiced", milestone_name: "Invoiced", milestone_date: "2026-06-29T00:00:00Z" },
+      { job_id: "job-closed", milestone_name: "Closed", milestone_date: "2026-06-30T00:00:00Z" },
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], invoices, NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, history, invoices, NOW);
 
     expect(pills.approvedToInvoiced.count).toBe(1);
     expect(pills.approvedToInvoiced.secondaryValue).toBe(4000);
@@ -1705,8 +1714,11 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
         milestone_date: "2026-06-29T00:00:00Z",
       }),
     ];
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "job-1", milestone_name: "Completed", milestone_date: "2026-06-29T00:00:00Z" },
+    ];
 
-    const pills = computeTrailing7dPillsV2(pipeline, [], [], NOW);
+    const pills = computeTrailing7dPillsV2(pipeline, history, [], NOW);
 
     expect(pills.prospectToApproved.count).toBe(1);
   });
@@ -1734,6 +1746,18 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
   it("computeHighestArAgingDays returns 0 when there are no open invoices with a usable date", () => {
     expect(computeHighestArAgingDays([], NOW)).toBe(0);
     expect(computeHighestArAgingDays([{ job_id: "job-1", invoice_date: null, balance_due: 500, total_price: 0 }], NOW)).toBe(0);
+  });
+
+  it("computeHighestArAgingInvoice returns the job_id of the oldest open invoice (for the AR-aging deep-link)", () => {
+    const invoices: InvoiceAgingRow[] = [
+      { job_id: "job-newer", invoice_date: "2026-06-20T00:00:00Z", balance_due: 1000, total_price: 0 },
+      { job_id: "job-oldest", invoice_date: "2026-01-05T00:00:00Z", balance_due: 500, total_price: 0 },
+      { job_id: "job-paid", invoice_date: "2020-01-01T00:00:00Z", balance_due: 0, total_price: 0 }, // no balance → ignored
+    ];
+    const result = computeHighestArAgingInvoice(invoices, NOW);
+    expect(result.jobId).toBe("job-oldest");
+    expect(result.days).toBeGreaterThan(150);
+    expect(computeHighestArAgingInvoice([], NOW)).toEqual({ days: 0, jobId: null });
   });
 
   it("totalMoniesCollectedThisWeek sums invoice-ledger collected dollars across every non-lead/prospect row entering its stage in-window (AR-truth fix)", () => {
@@ -1822,11 +1846,16 @@ describe("trailing-7-day 7-pill row V2 (fix round item 4, 2026-07-02)", () => {
       created_at: "2026-06-16T00:00:00Z",
     });
     const allRows = [wichitaJob, coloradoJob];
+    // History-only (2026-07-07): each job needs a real Prospect transition in-window.
+    const history: MilestoneHistoryRow[] = [
+      { job_id: "wichita-job", milestone_name: "Prospect", milestone_date: "2026-06-28T00:00:00Z" },
+      { job_id: "colorado-job", milestone_name: "Prospect", milestone_date: "2026-06-28T00:00:00Z" },
+    ];
 
-    const unfilteredPills = computeTrailing7dPillsV2(allRows, [], [], NOW);
+    const unfilteredPills = computeTrailing7dPillsV2(allRows, history, [], NOW);
     // Simulates the loader's D-13 filter bar having already narrowed the pipeline to
     // one location before this function ever sees it.
-    const wichitaOnlyPills = computeTrailing7dPillsV2([wichitaJob], [], [], NOW);
+    const wichitaOnlyPills = computeTrailing7dPillsV2([wichitaJob], history, [], NOW);
 
     expect(unfilteredPills.leadToProspect.count).toBe(2);
     expect(unfilteredPills.leadToProspect.value).toBe(37000);
