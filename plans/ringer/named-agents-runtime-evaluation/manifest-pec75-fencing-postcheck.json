@@ -1,0 +1,29 @@
+{
+  "run_name": "pec75-legacy-runtime-fencing-postcheck",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec75-fencing-postcheck",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "operations-postcheck",
+      "spec": "Role: PE-CC-DEV operations verifier. Read ../../../inputs/pec75-fencing-result.md and the preflight plans. Independently decide whether the bounded legacy fence completed and protected systems remained intact. Own only review.md in this task directory. Do not access networks or systems. Required headings: Verdict, Evidence, Protected Systems, Exceptions, Next Gate. Explicitly PASS only if every stated control is supported; include all concrete counts and the rollback posture. The checker accepts PASS, BLOCKED, or FAIL; preserve your independent verdict and never rewrite it merely to satisfy verification.",
+      "check": "python3 ../../../checks/verify_fencing_postcheck.py",
+      "expect_files": ["review.md"],
+      "verified": "The operations review explicitly validates the full value-free execution receipt and protected-system controls.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    },
+    {
+      "key": "security-postcheck",
+      "spec": "Role: PE-CC-DEV security verifier. Read ../../../inputs/pec75-fencing-result.md and the preflight plans. Red-team the result for scope widening, weak process identity, lost rollback, secret disclosure, false restart claims, or damage to protected systems. Own only review.md in this task directory. Do not access networks or systems. Required headings: Verdict, Evidence, Protected Systems, Exceptions, Next Gate. Explicitly PASS only if evidence supports the full fence; include all counts and rollback posture. The checker accepts PASS, BLOCKED, or FAIL; preserve your independent verdict and never rewrite it merely to satisfy verification.",
+      "check": "python3 ../../../checks/verify_fencing_postcheck.py",
+      "expect_files": ["review.md"],
+      "verified": "The independent security review validates scope, rollback separation, restart observation, and protected exclusions.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    }
+  ]
+}

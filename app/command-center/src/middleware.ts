@@ -17,6 +17,7 @@ function applySentryUser(actor: { id: string; type: string; displayName: string;
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { prewarmSurfaceCaches, recordCommandCenterActivity } from "@lib/prewarm.server";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
+import { isPec78RuntimePath, pec78Json, pec78Mode, shouldStopPec78Request } from "@lib/pec78/contract";
 
 prewarmSurfaceCaches();
 
@@ -110,6 +111,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const env = getRuntimeEnv();
+
+  // PEC-78 is a separate, fail-closed authorization plane. It must never inherit
+  // a legacy service token, local-operator fallback, or WorkOS browser session.
+  if (isPec78RuntimePath(pathname)) {
+    if (shouldStopPec78Request(pathname, pec78Mode(env.PEC78_ADAPTER_MODE))) return pec78Json(423, "adapter_stopped");
+    return next();
+  }
 
   // 2. Service agents: bearer token, API routes only.
   if (isApiRequest(pathname)) {

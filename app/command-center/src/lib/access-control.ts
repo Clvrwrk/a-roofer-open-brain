@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { DepartmentId, WorkDefinition } from "@lib/cadence";
 import { getRuntimeEnv, type RuntimeEnv } from "@lib/runtime-env";
 
-export type CommandCenterActorType = "human" | "named_agent" | "service_agent" | "local_operator";
+export type CommandCenterActorType = "human" | "named_agent" | "service_agent" | "local_operator" | "runtime_named_agent";
 
 export type CommandCenterPermission =
   | "command_center.read"
@@ -30,7 +30,7 @@ export interface CommandCenterActor {
   type: CommandCenterActorType;
   displayName: string;
   email: string | null;
-  source: "workos" | "service_token" | "local";
+  source: "workos" | "service_token" | "local" | "pec78_dpop";
   roles: string[];
   permissions: CommandCenterPermission[];
   departmentAccess: DepartmentId[] | "all";

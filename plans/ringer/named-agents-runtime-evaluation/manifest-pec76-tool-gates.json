@@ -1,0 +1,29 @@
+{
+  "run_name": "pec76-orgo-hermes-eve-tool-gates",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec76-tool-gates",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "operations-gate-review",
+      "spec": "Role: PE-CC-DEV operations reviewer. Read ../../../../../../docs/75-pec76-orgo-hermes-eve-third-party-gates.md, ../../../../../../docs/54-third-party-agent-tool-gate-2026-06-25.md, and the named-agent PLAN.md. Own only review.md. No network or system mutation. Required headings: Verdict, P0/P1 Findings, Gate Coverage, Authorization Boundary, Next Gate. Decide independently whether the three conditional tool gates are operationally complete for planning closure. The checker is verdict-neutral; never change a verdict to satisfy it.",
+      "check": "python3 ../../../checks/verify_pec76_gate.py",
+      "expect_files": ["review.md"],
+      "verified": "The operations review covers Orgo, Hermes, eve, installation boundaries, scans, ownership, rollback, and downstream gates.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    },
+    {
+      "key": "security-gate-review",
+      "spec": "Role: PE-CC-DEV security reviewer. Read ../../../../../../docs/75-pec76-orgo-hermes-eve-third-party-gates.md, ../../../../../../docs/54-third-party-agent-tool-gate-2026-06-25.md, and the named-agent PLAN.md. Own only review.md. No network or system mutation. Required headings: Verdict, P0/P1 Findings, Gate Coverage, Authorization Boundary, Next Gate. Red-team provenance, installer, egress, permissions, identity isolation, local-MCP compliance, secrets, beta drift, effect boundaries, and rollback. The checker is verdict-neutral; never change a verdict to satisfy it.",
+      "check": "python3 ../../../checks/verify_pec76_gate.py",
+      "expect_files": ["review.md"],
+      "verified": "The security review independently validates all mandatory third-party gate dimensions without granting execution authority.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    }
+  ]
+}

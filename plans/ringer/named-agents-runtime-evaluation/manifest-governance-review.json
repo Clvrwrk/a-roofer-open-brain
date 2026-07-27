@@ -1,0 +1,40 @@
+{
+  "run_name": "named-agents-runtime-governance-review",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/governance-review",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "quality-governance-review",
+      "spec": "Role: independent delivery-quality auditor. Objective: audit the approved named-agent runtime governance and Linear execution map for a strict Ringer plan/lint/execute/verify/red-team/synthesize loop that prevents unchecked agent work from being accepted. Read: /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/docs/74-named-agent-runtime-ringer-governance.md, /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/LINEAR-EXECUTION-MAP.md, and the final decision/pilot artifacts under runs/round3/decision-and-pilot-plan. Own only review.md in your task directory. Do not modify repository files or external systems. Deliver sections: ## Verdict, ## Blocking Findings, ## Evidence Coverage, ## Linear Readiness, ## Authorization Boundary. Give PASS only if missing/failed checks cannot be called done, retries remain visible, third-party and production gates are explicit, Linear structure is actionable, and the current scope is planning-only. Never include secret values.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_governance.py",
+      "expect_files": ["review.md"],
+      "verified": "The independent review confirms that the Ringer quality gate, Linear execution structure, security boundaries, and planning-only authorization are explicit and enforceable.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    },
+    {
+      "key": "security-governance-review",
+      "spec": "Role: independent security and identity reviewer. Objective: attack the named-agent runtime governance and Linear execution map for account-wide key leakage, shared identities, dual control planes, uncontrolled email/Slack effects, false health, missing rollback, and premature production authorization. Read the same governance, execution map, Hermes template, and final pilot plan. Own only review.md in your task directory. Do not modify repository files or external systems. Deliver sections: ## Verdict, ## Blocking Findings, ## Evidence Coverage, ## Linear Readiness, ## Authorization Boundary. PASS only if all critical risks are explicitly gated and no secret value is present. Never reproduce or infer secret values.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_governance.py",
+      "expect_files": ["review.md"],
+      "verified": "The security review confirms least privilege, single ownership, secret hygiene, effect safety, rollback, and explicit production authorization gates.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 900
+    },
+    {
+      "key": "operator-linear-review",
+      "spec": "Role: independent program operator. Objective: determine whether the Linear execution map can be created without ambiguity and used to prevent poor agent work from reaching Agent Done. Read the governance, execution map, decision memo, and pilot plan. Own only review.md in your task directory. Do not modify repository files or external systems. Deliver sections: ## Verdict, ## Blocking Findings, ## Evidence Coverage, ## Linear Readiness, ## Authorization Boundary. PASS only when parents, serial dependencies, universal issue contract, evidence requirements, human gates, and completion rule are operationally clear. Never include secret values.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_governance.py",
+      "expect_files": ["review.md"],
+      "verified": "The operator review confirms that Linear issues can be created with unambiguous dependencies, evidence, acceptance, rollback, and authorization boundaries.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-installed-disabled-review",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-implementation-review",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "security-review",
+      "spec": "Role: adversarial security reviewer. Review the PEC-78 installed-disabled implementation in ../../../../../../app/command-center/src/lib/pec78, middleware.ts, access-control.ts, env.d.ts, pages/healthz.ts, pages/api/agent/runtime/v1, and schema 188. Compare it to ../pec78-design/security-contract/design.md and ../pec78-design-retry/architecture-contract-retry/design.md. This is phase 1 installed-disabled only: no credential, schedule, provider binding, mailbox read, or outbound effect is authorized. Execute focused tests/build or static checks as useful. Own only review.md. Required headings: Verdict, Scope Reviewed, Executed Evidence, Findings, Phase Decision, Required Next Actions. Use explicit P0/P1/P2/P3 severities, distinguish blockers to installing disabled from blockers to shadow/enabled, and include one machine-readable PASS, FAIL, or CONDITIONAL_PASS verdict. No source edits, network, credentials, or external effects.",
+      "check": "python3 ../../../checks/verify_pec78_implementation_review.py",
+      "expect_files": ["review.md"],
+      "verified": "Independent security review classifies installation and activation blockers with executed evidence.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "review",
+      "timeout_s": 600
+    },
+    {
+      "key": "operations-database-review",
+      "spec": "Role: production operations and PostgreSQL authorization reviewer. Review the PEC-78 installed-disabled implementation in ../../../../../../app/command-center/src/lib/pec78, middleware.ts, pages/healthz.ts, pages/api/agent/runtime/v1, and ../../../../../../schemas/cleverwork-roofer/188-pec78-runtime-auth-v1-installed-disabled.sql. Compare it to ../pec78-design-retry/architecture-contract-retry/design.md. Assess additive safety, transaction behavior, RLS/grants, rollback, public health regression risk, false-green readiness, and whether phase 1 can be installed while remaining inert. Execute static checks/tests as useful. Own only review.md. Required headings: Verdict, Scope Reviewed, Executed Evidence, Findings, Phase Decision, Required Next Actions. Use explicit P0/P1/P2/P3 severities, distinguish blockers to installing disabled from blockers to shadow/enabled, and include one machine-readable PASS, FAIL, or CONDITIONAL_PASS verdict. No source edits, database/network access, migrations, credentials, or external effects.",
+      "check": "python3 ../../../checks/verify_pec78_implementation_review.py",
+      "expect_files": ["review.md"],
+      "verified": "Independent operations/database review proves or rejects inert additive installation and identifies activation gaps.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "review",
+      "timeout_s": 600
+    }
+  ]
+}

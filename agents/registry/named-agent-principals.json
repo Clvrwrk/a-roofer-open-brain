@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "registry_id": "pe-cc-named-agent-principals",
+  "slack_team_id": "T0B8QEGPVQW",
+  "workspace_domain": "cc.proexteriorsus.net",
+  "human_approver": "christopher-hussey",
+  "shared_token_fallback_allowed": false,
+  "unknown_principal_policy": "deny",
+  "effect_authorization": {"adapter_id":"pec78-runtime-authorization-v1","status":"not-installed","default_policy":"deny"},
+  "authorization_states": ["planned", "inventory-only", "verified", "authorized", "suspended", "revoked"],
+  "activation_order": ["maya-chen", "alex-rivers", "casey-morgan", "jordan-price", "sam-torres", "rowan-vale", "lena-brooks"],
+  "principals": [
+    {
+      "persona_id": "maya-chen", "display_name": "Maya Chen", "role": "document-intake", "activation_scope": "named-agent", "lifecycle": {"state":"inventory-only","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":null,"predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "maya.chen@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "operator-confirmed-authenticated"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD0PAEU2E", "bot_user_id":null,"installation_id":null,"token_env_key": "MAYA_CHEN_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:maya-chen", "service_role": "ob-accounting"},
+      "orgo": {"workspace_id": "8cf44774-2b46-4089-8bfe-4deb1b078e46", "workspace_name": "PE-open-brain", "computer_id": "37b262e0-a915-47e6-8c3b-f180a32ab6fe", "computer_name": "Maya Chen", "status": "observed-live"},
+      "runtime": {"owner_id": "runtime:maya-chen", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned-unverified"}
+    },
+    {
+      "persona_id": "alex-rivers", "display_name": "Alex Rivers", "role": "pricing-catalog", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"maya-chen","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "alex.rivers@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD4C9SUPP", "bot_user_id":null,"installation_id":null,"token_env_key": "ALEX_RIVERS_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:alex-rivers", "service_role": "ob-accounting"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-alex-rivers", "computer_id": null, "computer_name": "Alex Rivers", "status": "planned"},
+      "runtime": {"owner_id": "runtime:alex-rivers", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "casey-morgan", "display_name": "Casey Morgan", "role": "vendor-draft", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"alex-rivers","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "casey.morgan@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD85UG23C", "bot_user_id":null,"installation_id":null,"token_env_key": "CASEY_MORGAN_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:casey-morgan", "service_role": "ob-accounting"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-casey-morgan", "computer_id": null, "computer_name": "Casey Morgan", "status": "planned"},
+      "runtime": {"owner_id": "runtime:casey-morgan", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "jordan-price", "display_name": "Jordan Price", "role": "finance-reporting", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"casey-morgan","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "jordan.price@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BE2EMAA8Y", "bot_user_id":null,"installation_id":null,"token_env_key": "JORDAN_PRICE_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:jordan-price", "service_role": "ob-accounting"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-jordan-price", "computer_id": null, "computer_name": "Jordan Price", "status": "planned"},
+      "runtime": {"owner_id": "runtime:jordan-price", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "sam-torres", "display_name": "Sam Torres", "role": "qa-compliance", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"jordan-price","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "sam.torres@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD86ATVHQ", "bot_user_id":null,"installation_id":null,"token_env_key": "SAM_TORRES_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:sam-torres", "service_role": "ob-conductor"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-sam-torres", "computer_id": null, "computer_name": "Sam Torres", "status": "planned"},
+      "runtime": {"owner_id": "runtime:sam-torres", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "rowan-vale", "display_name": "Rowan Vale", "role": "external-research", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"sam-torres","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","external.research.propose","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "rowan.vale@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD1RMHFBM", "bot_user_id":null,"installation_id":null,"token_env_key": "ROWAN_VALE_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:rowan-vale", "service_role": "ob-researcher"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-rowan-vale", "computer_id": null, "computer_name": "Rowan Vale", "status": "planned"},
+      "runtime": {"owner_id": "runtime:rowan-vale", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "lena-brooks", "display_name": "Lena Brooks", "role": "marketing-proof", "activation_scope": "named-agent", "lifecycle": {"state":"planned","evidence_receipt_id":null,"human_approval_id":null,"predecessor_persona_id":"rowan-vale","predecessor_receipt_id":null},
+      "allowed_capabilities": ["mailbox.read","mailbox.classify","marketing.draft","command_center.record_decision","slack.send.christopher","email.send.admin"],
+      "google": {"primary_email": "lena.brooks@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BD1RH3FPD", "bot_user_id":null,"installation_id":null,"token_env_key": "LENA_BROOKS_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:lena-brooks", "service_role": "ob-marketing"},
+      "orgo": {"workspace_id": null, "workspace_name": "PE-open-brain-lena-brooks", "computer_id": null, "computer_name": "Lena Brooks", "status": "planned"},
+      "runtime": {"owner_id": "runtime:lena-brooks", "instance_id":null,"hermes_home": "/home/agent/.hermes", "credential_ref":null,"credential_scope": "persona-only", "status": "planned"}
+    },
+    {
+      "persona_id": "ops-conductor", "display_name": "Ops Conductor", "role": "ops-team-coordinator", "activation_scope": "control-plane-only", "lifecycle": {"state":"revoked","evidence_receipt_id":"pec75-pass-with-exceptions","human_approval_id":"pec75-human-risk-acceptance","predecessor_persona_id":null,"predecessor_receipt_id":null},
+      "allowed_capabilities": [],
+      "google": {"primary_email": "ops-conductor@cc.proexteriorsus.net", "customer_id":null,"subject_id":null,"credential_ref":null,"status": "profile-declared-unverified"},
+      "slack": {"team_id":"T0B8QEGPVQW","app_id": "A0BDG2CCCAJ", "bot_user_id":null,"installation_id":null,"token_env_key": "OPS_CONDUCTOR_BOT_TOKEN", "token_fingerprint":null,"status": "profile-declared-live-unverified"},
+      "command_center": {"subject": "named-agent:ops-conductor", "service_role": "ob-conductor"},
+      "orgo": {"workspace_id": null, "workspace_name": null, "computer_id": null, "computer_name": null, "status": "not-authorized"},
+      "runtime": {"owner_id": "runtime:ops-conductor", "instance_id":null,"hermes_home": null,"credential_ref":null,"credential_scope": "control-plane-only", "status": "not-authorized"}
+    }
+  ]
+}

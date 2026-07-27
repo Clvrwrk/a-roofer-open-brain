@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-runtime-neutral-contract",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-design",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "architecture-contract",
+      "spec": "Role: PE-CC-DEV runtime architect. Objective: design the implementation-ready PEC-78 v1 production authorization adapter contract for Maya-only pilot. Read ../../../../../../agents/registry, ../../../../../../app/command-center/src/lib/access-control.ts, middleware.ts, agent APIs, healthz, docs/74, and PEC-78 scope. Own only design.md. Do not access networks or systems. Required headings: Verdict, Versioned Contract, Maya Identity, Ingress and Work, Lease and Schedule, Approval and Effect, Receipt and Health, Persistence and Migration, Kill Switch and Rollback, Tests, Production Gate. Specify exact request/response schemas, state machines, additive tables/RLS/grants, named-agent bearer identity (never shared ob-accounting), 30-minute idempotent occurrence, Maya-only allowlists, Christopher-only destinations, receipts, health semantics, rollout/rollback, and file-level implementation map. Keep adapter disabled until post-review approval.",
+      "check": "python3 ../../../checks/verify_pec78_design.py",
+      "expect_files": ["design.md"],
+      "verified": "Architecture contract is implementation-ready, secret-free, Maya-only, default-deny, and covers every PEC-78 API class.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    },
+    {
+      "key": "security-contract",
+      "spec": "Role: PE-CC-DEV security architect. Objective: adversarially design the PEC-78 v1 production authorization adapter security contract for Maya-only pilot. Read ../../../../../../agents/registry, ../../../../../../app/command-center/src/lib/access-control.ts, middleware.ts, agent APIs, healthz, docs/54, docs/74, and PEC-78 scope. Own only design.md. Do not access networks or systems. Required headings: Verdict, Versioned Contract, Maya Identity, Ingress and Work, Lease and Schedule, Approval and Effect, Receipt and Health, Persistence and Migration, Kill Switch and Rollback, Tests, Production Gate. Define authenticated credential binding, replay protection, stale owner fencing, scoped approval verification, destination/capability denial, idempotency/reconciliation, RLS/service-role boundaries, false-green health prevention, revocation and rollback. Explicitly prohibit master key, shared token fallback, other agents, original-sender email, arbitrary Slack, external writes, and activation before a post-review human go/no-go.",
+      "check": "python3 ../../../checks/verify_pec78_design.py",
+      "expect_files": ["design.md"],
+      "verified": "Security contract closes identity, replay, lease, approval, destination, idempotency, health, revocation, and rollback threats.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "run_name": "named-agents-runtime-evaluation-round3",
+  "workdir": "plans/ringer/named-agents-runtime-evaluation/runs/round3",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "decision-and-pilot-plan",
+      "task_type": "planning",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Synthesize the accepted Round 1 and Round 2 artifacts under ../../round1/ and ../../round2/, plus ../../../HERMES-NAMED-AGENT-TEMPLATE.md. Work only in this task directory. Produce decision-memo.md and pilot-plan.md. The decision memo must select Hermes-inside-Orgo, eve-with-Orgo-as-tool, Cursor for DevTeam, Devin for browser adjunct, or a clearly justified hybrid with only one production control plane; include scored criteria, evidence, unknowns, and explicit no-go conditions. The pilot plan must be implementation-ready but must not execute: Phase A Maya Hermes-on-Orgo baseline, Phase B isolated eve comparison, synthetic data, architecture, tool-gate checklist, Slack and Google Workspace test path through Maya's existing Orgo desktop, exclusive schedule/Slack ownership, Command Center API boundary, `ORGO_PE_CC_MAYA_API_KEY` Bearer-token adapter without secret exposure, verified Orgo workspace-scoped key, credentials and approvals, observability, SLOs, acceptance tests, rollback, timeline, ownership, and a proposed Linear issue tree with acceptance criteria. Establish a complete Hermes package for every agent and a benchmarked T0/T1/T2 task model ladder with cheap auxiliary models, exact valid model IDs, provider data controls, token ceilings, cost receipts, escalation rules, and spend circuit breakers. After Maya's gate, specify a serial rollout to Alex, Casey, Jordan, Sam, Rowan, and Lena using dedicated Orgo workspaces/computers, keys, Google identities, Hermes homes, Slack identities, and role-specific least privilege. Jordan and Sam receive dedicated desktops in the target state. Preserve Rowan's external-only boundary and other role invariants. The Mac mini is out of scope. Preserve Supabase/Command Center as system of record unless overwhelming evidence says otherwise. decision-memo.md headings: Decision, Why, Scorecard, Evidence, Risks and Unknowns, No-Go Conditions, Reconsideration Triggers. pilot-plan.md headings: Objective, Scope, Architecture, Named Agent Template, Hermes Configuration, Model and Cost Policy, Security Gate, Implementation Phases, Acceptance Tests, Operations and SLOs, Rollback, Linear Issue Tree, Go-No-Go Review.",
+      "check": "python3 ../../../checks/verify_artifact.py decision-memo.md --headings Decision Why Scorecard Evidence 'Risks and Unknowns' 'No-Go Conditions' 'Reconsideration Triggers' --min-words 700 --require-url --require-local-evidence && python3 ../../../checks/verify_artifact.py pilot-plan.md --headings Objective Scope Architecture 'Named Agent Template' 'Hermes Configuration' 'Model and Cost Policy' 'Security Gate' 'Implementation Phases' 'Acceptance Tests' 'Operations and SLOs' Rollback 'Linear Issue Tree' 'Go-No-Go Review' --min-words 1800 --require-local-evidence",
+      "expect_files": ["decision-memo.md", "pilot-plan.md"],
+      "timeout_s": 2400,
+      "verified": "The synthesis makes one evidence-backed decision and supplies a gated, reversible Maya pilot plus a Linear issue tree."
+    }
+  ]
+}

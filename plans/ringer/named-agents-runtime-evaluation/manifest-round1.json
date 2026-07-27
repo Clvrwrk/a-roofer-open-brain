@@ -1,0 +1,51 @@
+{
+  "run_name": "named-agents-runtime-evaluation-round1",
+  "workdir": "plans/ringer/named-agents-runtime-evaluation/runs/round1",
+  "max_parallel": 4,
+  "tasks": [
+    {
+      "key": "linear-runtime-forensics",
+      "task_type": "research",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Independently audit the current named-agent architecture using the repository and ../../../inputs/linear-and-runtime-evidence.md as leads. Work only in this task directory and write runtime-forensics.md. Do not modify the source repository or external systems. Verify claims against local files, distinguish designed/configured/observed-live states, identify contradictions and missing health evidence, and map every named persona to Slack, email, runtime, schedule, and system of record. Output headings: Executive Finding, Current Architecture, Persona Matrix, Linear Findings, Contradictions, Failure Modes, Evidence, Unknowns. Cite local paths and PEC issue identifiers. Do not claim remote health without direct evidence.",
+      "check": "python3 ../../../checks/verify_artifact.py runtime-forensics.md --headings 'Executive Finding' 'Current Architecture' 'Persona Matrix' 'Linear Findings' Contradictions 'Failure Modes' Evidence Unknowns --min-words 900 --require-local-evidence",
+      "expect_files": ["runtime-forensics.md"],
+      "timeout_s": 1800,
+      "verified": "The report separates intended, configured, and observed state and cites repository or Linear evidence."
+    },
+    {
+      "key": "eve-fit",
+      "task_type": "research",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Evaluate Vercel eve for the seven named Roofing-Ops personas, beginning with Maya. Work only in this task directory and write eve-fit.md. Use current official Vercel pages and the official GitHub repository as primary sources; record access date 2026-07-26 and mark beta/uncertain behavior. Compare eve's channels, schedules, durable workflows, credentials, approvals, tracing, sandboxes, subagents, and email options against the requirements in ../../../inputs/linear-and-runtime-evidence.md. Compare eve against a measured Hermes-inside-Orgo baseline, which Orgo officially supports as a 24/7 runtime. Determine which one should exclusively own schedules and Slack events; do not recommend dual production ownership. Explicitly address data egress, multi-identity Slack, Gmail versus Resend, Vercel lock-in, Supabase preservation, Orgo invocation, rollback, and the repo's third-party-agent-tool gate. Output headings: Executive Finding, Verified Capabilities, Requirements Fit, Gaps and Unknowns, Security and Egress, Pilot Shape, Evidence, Recommendation. Every capability claim needs an HTTPS official source.",
+      "check": "python3 ../../../checks/verify_artifact.py eve-fit.md --headings 'Executive Finding' 'Verified Capabilities' 'Requirements Fit' 'Gaps and Unknowns' 'Security and Egress' 'Pilot Shape' Evidence Recommendation --min-words 900 --require-url --require-local-evidence",
+      "expect_files": ["eve-fit.md"],
+      "timeout_s": 1800,
+      "verified": "The report uses official sources, distinguishes beta facts from inference, and evaluates the repository-specific gates."
+    },
+    {
+      "key": "cursor-devin-fit",
+      "task_type": "research",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Compare Cursor Cloud Agents/Automations and Devin as alternatives or complements for this system. Work only in this task directory and write cursor-devin-fit.md. Use current official vendor documentation and record access date 2026-07-26. Evaluate named Slack identities, scheduled work, email access, browser/computer use, secrets, durable state, human approval, auditability, repo/code workflows, and self-hosting. Separate the DevTeam plane from Roofing-Ops personas. Determine whether either product should be core runtime, development workforce, or browser-only adjunct. Output headings: Executive Finding, Cursor Findings, Devin Findings, Capability Matrix, Security and Identity, Best-Fit Roles, Evidence, Recommendation. Every vendor claim needs an HTTPS official source.",
+      "check": "python3 ../../../checks/verify_artifact.py cursor-devin-fit.md --headings 'Executive Finding' 'Cursor Findings' 'Devin Findings' 'Capability Matrix' 'Security and Identity' 'Best-Fit Roles' Evidence Recommendation --min-words 900 --require-url --require-local-evidence",
+      "expect_files": ["cursor-devin-fit.md"],
+      "timeout_s": 1800,
+      "verified": "The report uses official sources and keeps development-agent capabilities separate from business-persona requirements."
+    },
+    {
+      "key": "maya-orgo-hermes-runtime",
+      "task_type": "research",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Design Maya's corrected Orgo + Hermes baseline and eve comparison without changing production, then turn the winning pattern into a reusable template for all seven named agents. Work only in this task directory and write maya-runtime.md. Use ../../../inputs/linear-and-runtime-evidence.md, ../../../HERMES-NAMED-AGENT-TEMPLATE.md, local repository docs, and official Orgo/Hermes documentation. Maya already has a dedicated authenticated Orgo Chrome desktop and will not use the Mac mini. Phase A must configure Hermes inside her existing Orgo computer as the sole baseline runtime. Phase B must test eve in isolation against the same synthetic workflow, with exactly one owner for Slack events and schedules. Address the `ORGO_PE_CC_MAYA_API_KEY` to client `ORGO_API_KEY` mapping without exposing secrets; verify account-wide versus workspace scope and never infer computer isolation from the variable name. Define one dedicated Orgo workspace, workspace-scoped key, computer, Google identity, Hermes home, Slack identity, and least-privilege Command Center identity per agent. Include Jordan and Sam as dedicated-desktop targets. Preserve Rowan's external-only boundary and every role-specific authority limit. Design a Hermes-native T0/T1/T2 model ladder with cheap auxiliary models, task-level escalation, token budgets, cost receipts, provider data controls, and benchmark gates. Discover and reuse existing desktops rather than provisioning duplicates. Cover Gmail API-first versus browser fallback, secret storage, health checks, outbound approval, account isolation, observability, duplicate-event prevention, serial rollout, and operator recovery. Output headings: Executive Finding, Runtime Ownership, Orgo Integration, Hermes Role, Eve Role, Named Agent Template, Model and Cost Policy, Email Design, Slack Design, Security Controls, Failure and Recovery, Evidence, Recommendation. Cite local paths and official HTTPS sources; clearly label assumptions.",
+      "check": "python3 ../../../checks/verify_artifact.py maya-runtime.md --headings 'Executive Finding' 'Runtime Ownership' 'Orgo Integration' 'Hermes Role' 'Eve Role' 'Named Agent Template' 'Model and Cost Policy' 'Email Design' 'Slack Design' 'Security Controls' 'Failure and Recovery' Evidence Recommendation --min-words 1300 --require-local-evidence",
+      "expect_files": ["maya-runtime.md"],
+      "timeout_s": 1800,
+      "verified": "The report defines one control plane and a role-safe Maya-derived template for all seven named agents."
+    }
+  ]
+}

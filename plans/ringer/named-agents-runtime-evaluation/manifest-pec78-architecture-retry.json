@@ -1,0 +1,16 @@
+{
+  "run_name": "pec78-runtime-neutral-contract",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-design-retry",
+  "max_parallel": 1,
+  "tasks": [{
+    "key": "architecture-contract-retry",
+    "spec": "Role: PE-CC-DEV runtime architect. The first architecture worker failed due to a stalled model stream; this is the recorded retry. Design an implementation-ready PEC-78 v1 Maya-only production authorization adapter. Read ../../../../../../agents/registry, ../../../../../../app/command-center/src/lib/access-control.ts, middleware.ts, agent APIs, healthz, docs/74, and the completed security contract at ../pec78-design/security-contract/design.md. Own only design.md. Do not access networks or systems. Required headings: Verdict, Versioned Contract, Maya Identity, Ingress and Work, Lease and Schedule, Approval and Effect, Receipt and Health, Persistence and Migration, Kill Switch and Rollback, Tests, Production Gate. Specify exact endpoints/schemas/state machines, additive tables/RLS/grants, dedicated named-agent bearer identity, 30-minute idempotent occurrence, Maya-only capabilities/destinations, file map, rollout and rollback. Keep production disabled pending post-review approval.",
+    "check": "python3 ../../../checks/verify_pec78_design.py",
+    "expect_files": ["design.md"],
+    "verified": "Architecture contract is implementation-ready, secret-free, Maya-only, default-deny, and covers every PEC-78 API class.",
+    "engine": "codex",
+    "model": "",
+    "task_type": "docs",
+    "timeout_s": 600
+  }]
+}

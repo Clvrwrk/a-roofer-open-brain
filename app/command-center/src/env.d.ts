@@ -35,6 +35,12 @@ interface ImportMetaEnv {
   readonly LINEAR_API_KEY?: string;
   readonly GITHUB_WEBHOOK_SECRET?: string;
   readonly SENTRY_WEBHOOK_SECRET?: string;
+  readonly PEC78_ADAPTER_MODE?: "disabled" | "shadow" | "enabled";
+  readonly PEC78_MAYA_PUBLIC_JWK?: string;
+  readonly PEC78_MAYA_JWK_THUMBPRINT?: string;
+  readonly PEC78_REGISTRY_VERSION?: string;
+  readonly PEC78_PRODUCTION_GATE_DIGEST?: string;
+  readonly PEC78_READINESS_TOKEN_SHA256?: string;
 }
 
 interface ImportMeta {

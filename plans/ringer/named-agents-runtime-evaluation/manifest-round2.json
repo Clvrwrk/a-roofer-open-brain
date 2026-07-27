@@ -1,0 +1,40 @@
+{
+  "run_name": "named-agents-runtime-evaluation-round2",
+  "workdir": "plans/ringer/named-agents-runtime-evaluation/runs/round2",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "architecture-red-team",
+      "task_type": "review",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Review the accepted Round 1 artifacts under ../../round1/. Work only in this task directory and write architecture-review.md. Attack the provisional eve-first pilot from a systems architecture perspective: duplicate queues, identity routing, schedule ownership, API contracts, source-of-truth drift, migration coupling, and rollback. Rank findings P0-P3 and propose the minimum architecture that meets the requirement. Output headings: Verdict, Findings, Architecture Invariants, Minimum Viable Architecture, Migration Risks, Required Proofs, Recommendation. Every finding must cite a Round 1 artifact or repository path.",
+      "check": "python3 ../../../checks/verify_artifact.py architecture-review.md --headings Verdict Findings 'Architecture Invariants' 'Minimum Viable Architecture' 'Migration Risks' 'Required Proofs' Recommendation --min-words 700 --require-local-evidence",
+      "expect_files": ["architecture-review.md"],
+      "timeout_s": 1500,
+      "verified": "The review prioritizes evidence-backed architecture risks and defines a smaller viable design."
+    },
+    {
+      "key": "security-red-team",
+      "task_type": "review",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Review the accepted Round 1 artifacts under ../../round1/. Work only in this task directory and write security-review.md. Apply the repository's third-party-agent-tool gate. Threat-model Slack impersonation, mailbox scope, OAuth/service accounts, prompt injection, data egress, browser sessions, approval bypass, secrets, logs, vendor tenancy, and compromised worker recovery. Rank findings P0-P3. Output headings: Verdict, Threat Model, Findings, Required Controls, Tool Gate Evidence, Pilot Boundaries, Kill Switch and Recovery, Recommendation. Cite source artifacts or local policy paths; never include credentials.",
+      "check": "python3 ../../../checks/verify_artifact.py security-review.md --headings Verdict 'Threat Model' Findings 'Required Controls' 'Tool Gate Evidence' 'Pilot Boundaries' 'Kill Switch and Recovery' Recommendation --min-words 750 --require-local-evidence",
+      "expect_files": ["security-review.md"],
+      "timeout_s": 1500,
+      "verified": "The review covers the repository tool gate and produces enforceable pilot boundaries and recovery controls."
+    },
+    {
+      "key": "operations-red-team",
+      "task_type": "review",
+      "engine": "codex",
+      "model": "gpt-5.6-sol",
+      "spec": "Review the accepted Round 1 artifacts under ../../round1/. Work only in this task directory and write operations-review.md. Evaluate whether a real operator can know which of seven agents is alive, what each consumed, what each sent, what is stuck, and how to recover after Mac restart, VPS outage, vendor outage, token expiry, duplicate event, or runaway schedule. Rank findings P0-P3 and define measurable SLOs and a human acceptance test. Output headings: Verdict, Findings, Operating Model, SLOs and Alerts, Acceptance Test, Incident Recovery, Cost and Staffing, Recommendation. Cite source artifacts or local paths.",
+      "check": "python3 ../../../checks/verify_artifact.py operations-review.md --headings Verdict Findings 'Operating Model' 'SLOs and Alerts' 'Acceptance Test' 'Incident Recovery' 'Cost and Staffing' Recommendation --min-words 700 --require-local-evidence",
+      "expect_files": ["operations-review.md"],
+      "timeout_s": 1500,
+      "verified": "The review defines measurable reliability and a human-executable acceptance and recovery procedure."
+    }
+  ]
+}

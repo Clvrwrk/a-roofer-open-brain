@@ -1,0 +1,29 @@
+{
+  "run_name": "pec75-legacy-runtime-fencing-preflight",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec75-fencing-preflight",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "operations-fencing-plan",
+      "spec": "Role: PE-CC-DEV operations reviewer. Objective: design a bounded production fencing action for the approved PEC-75 legacy-runtime cleanup. Read inputs/pec75-live-evidence.md and all PEC-75 inventory artifacts. Exact intended targets: disable the inactive roofing-ops-slack-listeners.service; gracefully SIGTERM the eight orphan wrapper processes and their eight Slack runtime children; for Alex and Ops Conductor only, create root-only private rollback artifacts and set exactly four currently enabled jobs to disabled; treat the other six stores as read-only hash negative controls; terminate only the stuck gateway-restart descendant and the stuck Kasm hermes cron list command. Receipts are value-free; private rollback artifacts are classified sensitive and never emitted. Protected exclusions: Kasm platform/containers, Hermes dashboards, ABC sync, Command Center, profiles, credentials, logs, messages, and all other processes. Own only plan.md. Do not access networks or mutate systems. Required headings: ## Verdict, ## Exact Targets, ## Protected Exclusions, ## Preflight Evidence, ## Action Sequence, ## Rollback, ## Postchecks, ## Stop Conditions. PASS only if exact target resolution, narrow private rollback artifacts, value-free receipt, TERM-before-KILL, 10-minute no-restart observation, rollback, and abort conditions are complete. Never include secrets.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_fencing_plan.py",
+      "expect_files": ["plan.md"],
+      "verified": "Operations plan precisely targets orphan listeners and enabled legacy jobs while preserving named exclusions and a tested rollback path.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    },
+    {
+      "key": "security-fencing-review",
+      "spec": "Role: PE-CC-DEV security reviewer. Objective: independently red-team the approved PEC-75 fencing action for accidental process kills, secret exposure, profile/job corruption, unintended Slack/email effects, loss of rollback, or damage to Kasm, Hermes dashboards, ABC sync, and Command Center. Read the same live evidence and inventory artifacts. Own only plan.md. Do not access networks or mutate systems. Produce the same eight required headings. PASS only if the action uses exact PID/command predicates; modifies Alex and Ops Conductor only; creates root-only private rollback artifacts whose contents never enter output while receipts remain value-free; validates JSON before atomic replacement; sends SIGTERM before bounded escalation; preserves protected exclusions; verifies zero listener/job restart for 10 minutes; and has explicit stop conditions. Never include secrets.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_fencing_plan.py",
+      "expect_files": ["plan.md"],
+      "verified": "Security review confirms least-destructive exact targeting, secret hygiene, protected exclusions, rollback integrity, and no-restart postchecks.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 900
+    }
+  ]
+}

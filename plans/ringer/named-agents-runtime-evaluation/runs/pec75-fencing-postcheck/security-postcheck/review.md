@@ -1,0 +1,38 @@
+# PEC-75 Security Postcheck
+
+## Verdict
+
+**FAIL** — the submitted result does not prove the full approved fence. The observed end state is encouraging, but execution and evidence departed from mandatory fail-closed controls. The original run cannot be called PASS because its 600-second watch has only 20 clean samples at elapsed seconds 0 through 571 and no predicate sample at or after 600 seconds. A later 25-sample read-only watch does not retroactively repair execution-time violations or missing pre-mutation controls.
+
+## Evidence
+
+- Claimed target counts and end state: 1 unit disabled/inactive/dead with MainPID 0; zero wrappers; zero runtime children; Alex enabled jobs 1 to 0; Ops Conductor enabled jobs 3 to 0; 6 negative controls hash-unchanged; 1 gateway leaf terminated; 1 Kasm cron-list leaf terminated; 5 Hermes dashboards reported unchanged; and 1 protected container inventory hash reported unchanged.
+- The original observation reports 600 seconds and 20 clean samples, but those samples run only from second 0 through 571. The script exits when the monotonic clock reaches 600 and then writes a duration assertion without taking the required final full predicate sample at or after `start + 600`. This violates the preflight endpoint requirement and makes the original no-restart claim incomplete.
+- The fresh postcheck reports 25 samples from 0 through 600,000 ms with a 25,000 ms maximum gap. It supports the later read-only state, but it began after the mutations and after the deficient original watch; it cannot prove continuous compliance during the original interval.
+- Both execution and fresh-postcheck scripts invoke `curl https://cc.proexteriorsus.net/healthz`. The preflight expressly prohibited network access, application-endpoint queries during observation, and baseline collection that connects to an endpoint. This widened the effect surface to a protected system even if the requests were read-only and successful.
+- Initial capture uses argv substrings and checks counts, UID, and immediate parentage, but does not prove complete relevant ancestry, approved executable identity, unique exact persona-to-wrapper mapping, approved minimum leaf ages, leaf status, or exclusion of dashboard/container ancestors. Resume and postcheck discovery is weaker still: it uses substring matches, and the reparent resume accepts newly captured PID tuples rather than proving equality to the sealed original identities.
+- The script contains no demonstrated exclusive host-local lock, sealed manifest, independent-reviewer revalidation, unit-definition hash, deployment-conflict check, or denylist-intersection check. Therefore the result does not exclude concurrent mutation or scope collision.
+- Store mutation disables every currently true `enabled` field in the two files. It verifies only aggregate counts 1 and 3, not the four approved stable job IDs or an exact normalized-tree four-boolean delta. File owner/mode is copied, but source device/inode/hash is not revalidated immediately before replacement, the installed file and containing directory are not fsynced after rename, and the installed result is not fully compared with the approved candidate.
+- Rollback posture is incomplete. Exactly 2 artifacts are later shown in 1 root-owned 0700 directory, root-owned mode 0600, JSON-parseable, with original enabled counts 1 and 3. However creation uses copy plus chmod without durable artifact/directory fsync, proves no atomic restore rehearsal, records no source-hash reproduction rehearsal, and does not demonstrate the approved retention/disposal policy. Rollback for the unit remains enable-only while inactive; terminated processes intentionally have no authorized relaunch path. The 6 negative controls have no rollback because mutation was forbidden and their hashes reportedly remained unchanged.
+- The leaf escalation waits are 30 seconds then 10 seconds, not the mandatory 60 seconds then 30 seconds. This is a direct loss of the approved bounded TERM-before-KILL posture, regardless of whether SIGKILL was ultimately needed.
+- No credential, token, environment value, job body, message content, customer data, or private rollback path appears in the submitted result. The receipt path is disclosed only generically as `/var/tmp`; rollback paths and contents remain excluded. No secret disclosure is evident in the reviewed artifacts.
+
+## Protected Systems
+
+- Kasm platform/container: reported not targeted; the fresh watch holds one container-inventory hash constant, but the execution run did not establish or sample the required complete Kasm/workload baseline and used weak command substrings.
+- Five Hermes dashboards: reported not targeted and counted unchanged in the fresh watch; execution evidence does not prove hashes, sockets, ancestors, siblings, or complete ancestry remained unchanged.
+- ABC sync: reported enabled/static in all 20 original and 25 fresh samples. Enabled state alone does not prove its service, processes, data, state, and schedule were undamaged.
+- Command Center: health reportedly succeeded in all samples, but the check itself crossed the forbidden network/endpoint boundary. A healthy response does not prove deployment, processes, queues, state, and data were unchanged.
+- Six non-target job stores: hashes reportedly unchanged through both watches. The evidence does not fully prove unchanged device/inode, owner, mode, stable-ID sets, or absence of staging/touching.
+- Profiles/persona metadata, Slack/email connections, sockets, outbound effects, other units/timers/processes/files/containers/endpoints: the result asserts no targeting but supplies no complete baseline or effect evidence sufficient to prove the exclusions.
+
+## Exceptions
+
+- Two resumptions are disclosed: one after 8 children reparented when 8 wrappers exited, and one for a gateway zombie before terminating the remaining Kasm leaf. Transparency is good, but neither continuation was authorized by the preflight as a relaxed identity mode; both use weaker predicates and therefore are scope-control failures, not acceptable exceptions.
+- A non-executing gateway zombie can reasonably be distinguished from a live restart, and the fresh postcheck later reports zero gateway matches. That does not cure the missing final original sample or the changed process-identity contract.
+- The later 600-second postcheck is useful evidence of durable quiescence: 25 clean samples, final sample at 600,000 ms, maximum gap 25,000 ms. It is not an exception to preflight requirements that had to hold before and during mutation.
+- No evidence shows actual damage to a protected system or secret disclosure. FAIL reflects unproven fencing and concrete control violations, not a claim that protected-system damage is known to have occurred.
+
+## Next Gate
+
+Do not treat PEC-75 as security-closed and do not authorize PEC-76 or any activation from this result. Preserve the current fenced state and both private rollback artifacts without emitting their paths or contents. A new local-only, read-only forensic gate must reconcile the value-free receipts and local metadata to determine exact signals used, whether any SIGKILL occurred, the four stable job IDs changed, source/candidate/installed hashes and metadata, lock/approval/reviewer records, protected baselines, and rollback durability. If those historical facts cannot be proven, record them permanently as execution exceptions; do not recreate evidence or restart any process. Any corrective mutation, rollback, endpoint query, process relaunch, or artifact disposal requires a new explicit approval and a new closed manifest.

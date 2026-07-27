@@ -1,0 +1,29 @@
+{
+  "run_name": "pec75-local-only-forensic-gate",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec75-local-forensics",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "operations-forensic-verdict",
+      "spec": "Role: PE-CC-DEV operations forensic reviewer. Read ../../../inputs/pec75-local-forensics.md, ../../../inputs/pec75-fencing-result.md, and both preflight plans. Decide whether the durable fenced state and exact semantic job delta permit PEC-75 closure with permanent exceptions, or whether it remains blocked. Own only review.md. No network/system access. Required headings: Verdict, Proven, Violated, Unprovable, Risk Decision, Next Gate. Verdict must be PASS_WITH_EXCEPTIONS, BLOCKED, or FAIL. The checker is verdict-neutral; preserve your independent decision. Never propose mutation merely to recreate evidence.",
+      "check": "python3 ../../../checks/verify_forensic_review.py",
+      "expect_files": ["review.md"],
+      "verified": "The review distinguishes recovered facts, confirmed violations, unprovable history, and the required human risk decision.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    },
+    {
+      "key": "security-forensic-verdict",
+      "spec": "Role: PE-CC-DEV security forensic reviewer. Read ../../../inputs/pec75-local-forensics.md, ../../../inputs/pec75-fencing-result.md, and both preflight plans. Independently assess whether permanent execution exceptions are tolerable given the proven durable fence and exact job delta. Own only review.md. No network/system access. Required headings: Verdict, Proven, Violated, Unprovable, Risk Decision, Next Gate. Verdict must be PASS_WITH_EXCEPTIONS, BLOCKED, or FAIL. The checker is verdict-neutral; preserve your independent decision. Never propose mutation merely to recreate evidence.",
+      "check": "python3 ../../../checks/verify_forensic_review.py",
+      "expect_files": ["review.md"],
+      "verified": "The security review gives an independent exception/risk verdict without fabricating missing historical proof.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    }
+  ]
+}

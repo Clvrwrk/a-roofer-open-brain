@@ -1,0 +1,40 @@
+{
+  "run_name": "named-agents-pec75-read-only-inventory",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec75-inventory",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "orgo-resource-inventory",
+      "spec": "Role: PE-CC-DEV infrastructure inventory reviewer. Objective: produce a sanitized, read-only inventory of known Orgo resources and determine what is observed versus merely planned. Read inputs/pec75-live-evidence.md, docs/74-named-agent-runtime-ringer-governance.md, HERMES-NAMED-AGENT-TEMPLATE.md, deployment/remote/orgo, and relevant agent documentation. Own only inventory.md in this task directory. Do not access secrets, networks, browsers, inboxes, or external systems; do not modify the repository. Deliver headings ## Verdict, ## Observed Inventory, ## Trigger Ownership, ## Conflicts and Unknowns, ## Freeze and Fencing, ## Next Gate. Identify stable IDs, Maya reuse facts, absent agents/resources, unverified health, and exact read-only boundary. Use PASS only for a complete inventory; BLOCKED if evidence is insufficient. Mention PEC-75, PEC-76, Christopher Hussey, and read-only. Never reproduce network endpoints, credentials, encrypted fields, or template tokens.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_pec75.py",
+      "expect_files": ["inventory.md"],
+      "verified": "Sanitized Orgo resource inventory distinguishes observed-live resources from missing or unverified target-state resources without exposing sensitive fields.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "research",
+      "timeout_s": 900
+    },
+    {
+      "key": "repository-trigger-inventory",
+      "spec": "Role: PE-CC-DEV runtime and trigger forensic reviewer. Objective: inspect the repository read-only for every listener, scheduler, cron/cadence authority, Slack runtime, email path, Hermes profile, VPS/Kasm/Orgo reference, health surface, and ownership declaration relevant to the named agents. Read AGENTS.md, CLAUDE.md, CONVENTIONS.md, agents/, app/command-center/, deployment/, docs/70-agent-coordination-stabilization-and-migration-plan.md, docs/71-phase2-cadence-identity-token-reconciliation.md, docs/roofing-ops-runtime-status.md, and the PEC-75 evidence input. Own only inventory.md. Do not modify source or external systems. Deliver the required six headings. Cite concrete paths and classify each item designed, configured, observed-live, stale, conflicting, or unknown. Build a trigger-owner table and a fail-closed freeze/fencing plan. Mention PEC-75, PEC-76, Christopher Hussey, and read-only. Never include secrets.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_pec75.py",
+      "expect_files": ["inventory.md"],
+      "verified": "Repository inventory names every discovered trigger authority and records conflicts, unknowns, and fencing requirements with concrete source evidence.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 1200
+    },
+    {
+      "key": "linear-authority-inventory",
+      "spec": "Role: PE-CC-DEV program-control reviewer. Objective: verify the documented Linear graph, sole-human authority, reviewer-agent separation, 30-minute mailbox target, evidence requirements, and current authorization boundary. Read LINEAR-EXECUTION-MAP.md, docs/74-named-agent-runtime-ringer-governance.md, the final pilot plan, and inputs/pec75-live-evidence.md. Own only inventory.md. Do not access or mutate Linear or any external system. Deliver the required six headings, including a mapping of current gate, next dependency, human/agent authority, and what remains unauthorized. Identify any contradiction that could let an issue advance on poor work. Mention PEC-75, PEC-76, Christopher Hussey, and read-only. Never include secrets.",
+      "check": "python3 /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/checks/verify_pec75.py",
+      "expect_files": ["inventory.md"],
+      "verified": "Program-control inventory confirms deterministic dependencies, sole-human approval, reviewer separation, and a planning/read-only authorization boundary.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "docs",
+      "timeout_s": 900
+    }
+  ]
+}

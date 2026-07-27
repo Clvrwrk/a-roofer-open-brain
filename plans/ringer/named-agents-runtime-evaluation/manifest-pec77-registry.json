@@ -1,0 +1,29 @@
+{
+  "run_name": "pec77-principal-resource-registry",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec77-registry",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "operations-registry-review",
+      "spec": "Role: PE-CC-DEV operations reviewer. Review the PEC-77 planning-only principal/resource registry against its exact Linear acceptance: unique stable persona/resource records and fail-closed mismatch tests. Production activation and runtime integration belong to blocked downstream PEC-78 and are expressly excluded; do not fail PEC-77 merely because no production consumer exists. Read ../../../../../../agents/registry/named-agent-principals.json, both validators, tests, agent profiles, docs/74, and the stated scope. Own only review.md. Do not access networks or systems. Required headings: Verdict, Registry Coverage, Mismatch Tests, P0/P1 Findings, Authorization Boundary, Next Gate. Evaluate canonical roster/order, profile drift, Ops Conductor separation, credential-reference claims, capability/default-deny fence, resource-status vocabulary, predecessor declarations, and whether all current states deny effects. The checker is verdict-neutral.",
+      "check": "python3 ../../../checks/verify_pec77_registry_review.py",
+      "expect_files": ["review.md"],
+      "verified": "Operations review plus executable mismatch tests validate canonical identity/resource coverage and fail-closed behavior.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    },
+    {
+      "key": "security-registry-review",
+      "spec": "Role: PE-CC-DEV security reviewer. Review the PEC-77 planning-only principal/resource registry against its exact Linear acceptance: unique stable persona/resource records and fail-closed mismatch tests. Production authorization-adapter installation and runtime integration belong to blocked downstream PEC-78 and are expressly excluded; confirm the current not-installed adapter fence denies every effect instead of requiring a production success path here. Read ../../../../../../agents/registry/named-agent-principals.json, both validators, tests, agent profiles, and docs/74. Own only review.md. Do not access networks or systems. Required headings: Verdict, Registry Coverage, Mismatch Tests, P0/P1 Findings, Authorization Boundary, Next Gate. Red-team credential-reference claims, capability allowlists, shared/fallback identities, unknown principals, duplicate IDs, all cross-persona claims, false-live statuses, predecessor drift, profile drift, and secret exposure. The checker is verdict-neutral.",
+      "check": "python3 ../../../checks/verify_pec77_registry_review.py",
+      "expect_files": ["review.md"],
+      "verified": "Security review plus executable negative tests prove identity mismatches and unknown principals fail closed.",
+      "engine": "codex",
+      "model": "",
+      "task_type": "code-review",
+      "timeout_s": 600
+    }
+  ]
+}
