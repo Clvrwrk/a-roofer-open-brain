@@ -20,6 +20,7 @@ The deployable template for a single roofing company's persistent, property-firs
 10. **No profanity. Clean, professional content** in docs, prompts, comments, seed data.
 11. **Live ⇄ Dev alignment.** Never start app work on a stale or uncommitted tree, and never let local dev and the deployed `cc.proexteriorsus.net` drift into separate branch lineages. Branch from the deployed branch, commit early, merge features back into it. See **Live ⇄ Dev alignment** below.
 12. **Third-party agent tool gate.** No external skill/plugin/MCP/agent wrapper/memory tool/installer becomes part of the brain or global workflow until it has A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. Current decisions: [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
+13. **QuickBooks Online production is read-only / mirror-only.** Never create, update, delete, void, or pay in live QBO. Extract into Supabase/Open Brain only. Defaults: `QUICKBOOKS_ACCESS_MODE=read_only`, `QUICKBOOKS_WRITE_ENABLED=false`. Use [`integrations/bridges/quickbooks/read-only-client.mjs`](integrations/bridges/quickbooks/read-only-client.mjs). Policy: [`docs/74-quickbooks-production-read-only-guardrails.md`](docs/74-quickbooks-production-read-only-guardrails.md) (PEC-98).
 
 ## Licensing & attribution
 

@@ -35,6 +35,21 @@ QuickBooks Online uses OAuth 2.0 with Intuit's identity platform.
 The `QUICKBOOKS_REALM_ID` (company ID) is specific to each QuickBooks company file and is
 provided after OAuth authorization. It lives in `.env` and must be set per client brain.
 
+## Production read-only / mirror-only (hard rule)
+
+**Live QB is extract-only.** Intuit's accounting scope is not platform-enforced read-only —
+Cleverwork enforces it. Canonical policy: [`docs/74-quickbooks-production-read-only-guardrails.md`](../../../docs/74-quickbooks-production-read-only-guardrails.md) (PEC-98).
+
+- Default: `QUICKBOOKS_ACCESS_MODE=read_only` + `QUICKBOOKS_WRITE_ENABLED=false`
+- Client: `read-only-client.mjs` — GET/query + token refresh only; blocks mutating company API calls
+- Agents must never create/update/delete/void/pay in production QB; mirrors land in Supabase/Open Brain
+- Composio write tools (`QUICKBOOKS_CREATE_*`, etc.) are banned against the production realm
+
+```bash
+# Smoke (loads env from the calling shell — source master.env first)
+node integrations/bridges/quickbooks/read-only-client.mjs
+```
+
 ---
 
 ## Ingested Objects

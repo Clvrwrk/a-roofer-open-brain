@@ -6,6 +6,8 @@
   "source_system_type": "saas-with-api",
   "enabled": false,
   "origin": "cleverwork",
+  "access_mode": "read_only",
+  "write_enabled": false,
   "bound_agents": ["capture", "conductor"],
   "env_vars": {
     "required": [
@@ -14,7 +16,13 @@
       "QUICKBOOKS_REFRESH_TOKEN",
       "QUICKBOOKS_REALM_ID"
     ],
-    "optional": ["QUICKBOOKS_SANDBOX_MODE"]
+    "optional": [
+      "QUICKBOOKS_SANDBOX_MODE",
+      "QUICKBOOKS_ACCESS_MODE",
+      "QUICKBOOKS_WRITE_ENABLED",
+      "QUICKBOOKS_ENV",
+      "QUICKBOOKS_APP_ID"
+    ]
   },
   "webhook_topics": ["Invoice", "Payment", "Bill", "VendorCredit"],
   "objects_ingested": [
@@ -27,5 +35,5 @@
   ],
   "debrief_trigger_milestone": null,
   "edition": "online",
-  "notes": "QBO only. QuickBooks Desktop is a separate Tier 3 adapter. Token refresh job required — refresh_token expires in 100 days. Set QUICKBOOKS_SANDBOX_MODE=true for non-production testing."
+  "notes": "QBO only. QuickBooks Desktop is a separate Tier 3 adapter. Token refresh job required — refresh_token expires in 100 days. Set QUICKBOOKS_SANDBOX_MODE=true for non-production testing. PRODUCTION IS READ-ONLY / MIRROR-ONLY (PEC-98 / docs/74): QUICKBOOKS_ACCESS_MODE=read_only and QUICKBOOKS_WRITE_ENABLED=false. Use read-only-client.mjs for all agent/sync pulls."
 }
