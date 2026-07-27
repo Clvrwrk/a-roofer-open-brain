@@ -89,3 +89,6 @@ docs/knowledge-base/CompanyCam/
 
 # QBO mirror run receipts (may contain company aggregates, not secrets)
 integrations/bridges/quickbooks/.mirror-runs/
+
+# CenterPoint mirror run receipts
+integrations/bridges/centerpoint/.mirror-runs/
