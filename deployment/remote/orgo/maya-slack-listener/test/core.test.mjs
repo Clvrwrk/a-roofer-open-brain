@@ -1,0 +1,300 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  PREFIX,
+  ReceiptStore,
+  buildHermesEnvironment,
+  buildReply,
+  buildSendArguments,
+  classifyError,
+  evaluateEvent,
+  normalizeEvent,
+  verifyTriggerInstancePreflight,
+} from "../core.mjs";
+import { APPROVED } from "../policy.mjs";
+
+const expected = APPROVED;
+
+function event(overrides = {}) {
+  const data = {
+    channel: expected.channelId,
+    channel_type: "channel",
+    team_id: expected.teamId,
+    ts: "1785160000.000001",
+    text: "Maya, give me a short accounting status.",
+    user: expected.ownerUserId,
+    ...overrides,
+  };
+  return {
+    id: expected.triggerId,
+    uuid: expected.triggerUuid,
+    triggerSlug: "SLACKBOT_CHANNEL_MESSAGE_RECEIVED",
+    toolkitSlug: "SLACKBOT",
+    userId: expected.composioUserId,
+    payload: data,
+    originalPayload: data,
+    metadata: {
+      id: expected.triggerId,
+      uuid: expected.triggerUuid,
+      triggerSlug: "SLACKBOT_CHANNEL_MESSAGE_RECEIVED",
+      toolkitSlug: "SLACKBOT",
+      triggerConfig: {},
+      connectedAccount: {
+        id: expected.connectedAccountId,
+        uuid: "connection-uuid-fixture",
+        authConfigId: "ac_fixture",
+        authConfigUUID: "auth-config-uuid-fixture",
+        userId: expected.composioUserId,
+        status: "ACTIVE",
+      },
+    },
+  };
+}
+
+test("normalizes the Composio SDK IncomingTriggerPayload contract", () => {
+  const normalized = normalizeEvent(event());
+  assert.equal(normalized.contractValid, true);
+  assert.equal(normalized.triggerId, expected.triggerId);
+  assert.equal(normalized.triggerUuid, expected.triggerUuid);
+  assert.equal(normalized.data.channel, expected.channelId);
+});
+
+test("rejects a raw webhook envelope that bypasses the SDK callback contract", () => {
+  const raw = {
+    id: "evt_fixture",
+    type: "composio.trigger.message",
+    metadata: { trigger_id: expected.triggerUuid },
+    data: event().payload,
+  };
+  assert.equal(evaluateEvent(raw, expected).reason, "invalid_composio_envelope");
+});
+
+test("accepts Maya used as an address and binds the source thread", () => {
+  const decision = evaluateEvent(event(), expected);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.threadTs, "1785160000.000001");
+});
+
+test("accepts the installed SDK V3 trigger UUID alias only after immutable startup policy", () => {
+  const v3 = event();
+  v3.uuid = expected.triggerId;
+  v3.metadata.uuid = expected.triggerId;
+  assert.equal(evaluateEvent(v3, expected).accepted, true);
+});
+
+test("accepts an exact Slack mention for Maya", () => {
+  const decision = evaluateEvent(event({ text: `<@${expected.mayaBotUserId}> status?` }), expected);
+  assert.equal(decision.accepted, true);
+});
+
+test("rejects incidental Maya text, bot messages, and an unapproved human", () => {
+  assert.equal(evaluateEvent(event({ text: "Can Maya review this?" }), expected).reason, "not_addressed");
+  assert.equal(evaluateEvent(event({ bot_id: "B0123456789" }), expected).reason, "bot_or_self");
+  assert.equal(evaluateEvent(event({ user: "U0999999999" }), expected).reason, "unapproved_actor");
+});
+
+test("rejects lookalikes, quoted text, code blocks, and zero-width tricks", () => {
+  for (const text of ["Mayabyte status?", "> Maya, status?", "```Maya, status?```", "M\u200baya, status?", "Mаya, status?"]) {
+    assert.equal(evaluateEvent(event({ text }), expected).reason, "not_addressed");
+  }
+});
+
+test("rejects wrong scope, subtypes, and attachments", () => {
+  assert.equal(evaluateEvent(event({ channel: "C0999999999" }), expected).reason, "wrong_channel");
+  assert.equal(evaluateEvent(event({ subtype: "message_changed" }), expected).reason, "message_subtype");
+  assert.equal(evaluateEvent(event({ files: [{ id: "F1" }] }), expected).reason, "attachments_not_allowed");
+  assert.equal(evaluateEvent(event({ files: "not-an-array" }), expected).reason, "malformed_attachment_container");
+  assert.equal(evaluateEvent(event({ attachments: { length: 0 } }), expected).reason, "malformed_attachment_container");
+});
+
+test("rejects inherited and accessor-backed callback authorization fields", () => {
+  const inherited = Object.create(event());
+  assert.equal(evaluateEvent(inherited, expected).reason, "invalid_composio_envelope");
+
+  const accessor = event();
+  Object.defineProperty(accessor, "id", { get: () => expected.triggerId, enumerable: true });
+  assert.equal(evaluateEvent(accessor, expected).reason, "invalid_composio_envelope");
+
+  const payloadAccessor = event();
+  Object.defineProperty(payloadAccessor.payload, "user", {
+    get: () => expected.ownerUserId,
+    enumerable: true,
+  });
+  assert.equal(evaluateEvent(payloadAccessor, expected).reason, "invalid_composio_envelope");
+});
+
+test("rejects arrays and non-plain objects at every callback boundary", () => {
+  const arrayMetadata = event();
+  arrayMetadata.metadata = [];
+  assert.equal(evaluateEvent(arrayMetadata, expected).reason, "invalid_composio_envelope");
+
+  const arrayAccount = event();
+  arrayAccount.metadata.connectedAccount = [];
+  assert.equal(evaluateEvent(arrayAccount, expected).reason, "invalid_composio_envelope");
+
+  const arrayPayload = event();
+  arrayPayload.payload = [];
+  assert.equal(evaluateEvent(arrayPayload, expected).reason, "invalid_composio_envelope");
+
+  const datedPayload = event();
+  datedPayload.payload = new Date();
+  assert.equal(evaluateEvent(datedPayload, expected).reason, "invalid_composio_envelope");
+});
+
+test("rejects mismatched trigger, account, Composio user, and Slack team", () => {
+  const wrongTrigger = event();
+  wrongTrigger.id = "ti_wrong";
+  wrongTrigger.metadata.id = "ti_wrong";
+  assert.equal(evaluateEvent(wrongTrigger, expected).reason, "wrong_trigger_id");
+  const wrongTriggerUuid = event();
+  wrongTriggerUuid.uuid = "00000000-0000-0000-0000-000000000000";
+  wrongTriggerUuid.metadata.uuid = "00000000-0000-0000-0000-000000000000";
+  assert.equal(evaluateEvent(wrongTriggerUuid, expected).reason, "wrong_trigger_uuid");
+  const wrongAccount = event();
+  wrongAccount.metadata.connectedAccount.id = "ca_wrong";
+  assert.equal(evaluateEvent(wrongAccount, expected).reason, "wrong_connected_account");
+  const wrongUser = event();
+  wrongUser.userId = "other-agent";
+  wrongUser.metadata.connectedAccount.userId = "other-agent";
+  assert.equal(evaluateEvent(wrongUser, expected).reason, "wrong_composio_user");
+  assert.equal(evaluateEvent(event({ team_id: "T0999999999" }), expected).reason, "wrong_team");
+});
+
+test("preflights the exact raw Composio trigger instance UUID, account, name, and user", () => {
+  const listing = {
+    items: [
+      {
+        id: expected.triggerId,
+        uuid: expected.triggerUuid,
+        connected_account_id: expected.connectedAccountId,
+        trigger_name: "SLACKBOT_CHANNEL_MESSAGE_RECEIVED",
+        user_id: expected.composioUserId,
+      },
+    ],
+  };
+  assert.deepEqual(verifyTriggerInstancePreflight(listing, expected), {
+    triggerId: expected.triggerId,
+    triggerUuid: expected.triggerUuid,
+    connectedAccountId: expected.connectedAccountId,
+    userId: expected.composioUserId,
+  });
+
+  for (const field of ["uuid", "connected_account_id", "trigger_name", "user_id"]) {
+    const changed = structuredClone(listing);
+    changed.items[0][field] = "wrong";
+    assert.throws(() => verifyTriggerInstancePreflight(changed, expected), /identity mismatch/);
+  }
+  assert.throws(
+    () => verifyTriggerInstancePreflight({ items: [listing.items[0], listing.items[0]] }, expected),
+    /not found/,
+  );
+});
+
+test("rejects disagreement inside duplicated SDK authorization metadata", () => {
+  const wrongIdCopy = event();
+  wrongIdCopy.metadata.id = "ti_wrong";
+  assert.equal(evaluateEvent(wrongIdCopy, expected).reason, "invalid_composio_envelope");
+  const wrongSlugCopy = event();
+  wrongSlugCopy.metadata.triggerSlug = "SLACKBOT_OTHER";
+  assert.equal(evaluateEvent(wrongSlugCopy, expected).reason, "invalid_composio_envelope");
+  const inactive = event();
+  inactive.metadata.connectedAccount.status = "INACTIVE";
+  assert.equal(evaluateEvent(inactive, expected).reason, "invalid_composio_envelope");
+});
+
+test("preserves an existing parent thread timestamp", () => {
+  const decision = evaluateEvent(event({ thread_ts: "1785159999.000001" }), expected);
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.threadTs, "1785159999.000001");
+});
+
+test("constructs a single-thread reply with an immutable signature", () => {
+  const reply = buildReply("Status received.");
+  assert.equal(reply, `${PREFIX} Status received.`);
+  assert.deepEqual(buildSendArguments(expected.channelId, "1785160000.000001", reply), {
+    channel: expected.channelId,
+    thread_ts: "1785160000.000001",
+    markdown_text: reply,
+    reply_broadcast: false,
+    link_names: false,
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+});
+
+test("removes model-generated Slack references", () => {
+  assert.equal(buildReply("Hello <@U123456789>"), `${PREFIX} Hello [reference removed]`);
+});
+
+test("maps dependency-provided error names to a fixed allowlist", () => {
+  assert.equal(classifyError({ name: "TimeoutError" }), "TimeoutError");
+  assert.equal(classifyError({ name: "AttackerControlled\nlog" }), "UnexpectedError");
+  assert.equal(classifyError(undefined), "UnexpectedError");
+});
+
+test("passes only the inference credential to Hermes", () => {
+  const environment = buildHermesEnvironment({
+    HOME: "/home/orgo/maya-agent",
+    PATH: "/usr/bin",
+    OPENROUTER_API_KEY: "inference-secret",
+    PYTHONDONTWRITEBYTECODE: "1",
+    COMPOSIO_API_KEY: "tool-secret",
+    SLACK_SIGNING_SECRET: "slack-secret",
+  });
+  assert.deepEqual(environment, {
+    HOME: "/home/orgo/maya-agent",
+    OPENROUTER_API_KEY: "inference-secret",
+    PATH: "/usr/bin",
+    PYTHONDONTWRITEBYTECODE: "1",
+  });
+  assert.equal("COMPOSIO_API_KEY" in environment, false);
+  assert.equal("SLACK_SIGNING_SECRET" in environment, false);
+});
+
+test("claims once, records no message content, and confirms atomically", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-receipts-"));
+  const store = new ReceiptStore(directory);
+  await store.initialize();
+  const first = await store.claim("team:channel:ts", {
+    actorId: expected.ownerUserId,
+    channelId: expected.channelId,
+    triggerId: expected.triggerId,
+  });
+  const second = await store.claim("team:channel:ts", {
+    actorId: expected.ownerUserId,
+    channelId: expected.channelId,
+    triggerId: expected.triggerId,
+  });
+  assert.equal(first.claimed, true);
+  assert.equal(second.claimed, false);
+  await store.confirm(first.name, "1785160001.000002", "google/gemini-3.1-flash-lite");
+  const receipt = JSON.parse(await readFile(path.join(directory, first.name), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.equal(JSON.stringify(receipt).includes("Maya, give"), false);
+});
+
+test("converts an interrupted prepared send to ambiguous on restart", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-receipts-"));
+  await writeFile(
+    path.join(directory, "fixture.json"),
+    JSON.stringify({ schema: 1, state: "prepared", event_hash: "fixture" }),
+  );
+  const store = new ReceiptStore(directory);
+  await store.initialize();
+  const receipt = JSON.parse(await readFile(path.join(directory, "fixture.json"), "utf8"));
+  assert.equal(receipt.state, "ambiguous");
+});
+
+test("claims the controlled-event budget exactly once across concurrent callers", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-receipts-"));
+  const store = new ReceiptStore(directory);
+  await store.initialize();
+  const claims = await Promise.all(
+    Array.from({ length: 8 }, () => store.claimOnceGate("pec78-one-controlled-slack-event")),
+  );
+  assert.equal(claims.filter(Boolean).length, 1);
+  assert.equal(await store.claimOnceGate("pec78-one-controlled-slack-event"), false);
+});
