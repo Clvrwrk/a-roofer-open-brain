@@ -60,6 +60,7 @@ New tables: `property`, `jurisdiction`, `regulatory_snapshot`, `job`, `insurance
 - These run as separate processes with separate credentials. This split closes the prompt-injection exfiltration path. Any agent/skill/bridge that blurs it fails the audit.
 - **MCPs are MCP containers on Hetzner only.** No local stdio MCP servers, no `claude_desktop_config`-style local Node. (Inherited from OB1.)
 - **One brain per client. Total isolation.** Cross-client sharing happens *only* through the consent-gated property read path (§7).
+- **QuickBooks Online production is read-only / mirror-only.** Agents and sync jobs may extract into Supabase/Open Brain; they must never create, update, delete, void, or pay in live QBO. Enforce via `QUICKBOOKS_ACCESS_MODE=read_only`, `QUICKBOOKS_WRITE_ENABLED=false`, and `integrations/bridges/quickbooks/read-only-client.mjs`. Policy: `docs/74-quickbooks-production-read-only-guardrails.md` (PEC-98).
 
 ## 5. Skill format (merged OB1 + InfraNodus)
 

@@ -8,6 +8,8 @@ Two kinds of agents run per client brain: **vertical** (client-facing in Slack) 
 
 > **Third-party agent tool invariant:** no external skill, plugin, MCP server, agent wrapper, memory tool, or installer repo becomes part of the brain or global workflow until it passes the `third-party-agent-tool-gate`: A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. The local-MCP ban still applies; see [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
 
+> **QuickBooks production invariant:** live QBO is **read-only / mirror-only** — extract into the brain, never mutate the company file. See [`docs/74-quickbooks-production-read-only-guardrails.md`](docs/74-quickbooks-production-read-only-guardrails.md) (PEC-98).
+
 ## The 13-agent workforce
 
 ### Vertical (5) — client-facing, mentioned in Slack
@@ -76,3 +78,5 @@ Repository worktree: /ABSOLUTE/PATH/TO/<task>-worktree
 Branch:              contrib/cleverwork/<short-task-name>
 Task:                <describe the exact work, naming the owned subtree>
 ```
+
+## Imported Claude Cowork project instructions
