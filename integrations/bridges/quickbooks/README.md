@@ -35,6 +35,18 @@ QuickBooks Online uses OAuth 2.0 with Intuit's identity platform.
 The `QUICKBOOKS_REALM_ID` (company ID) is specific to each QuickBooks company file and is
 provided after OAuth authorization. It lives in `.env` and must be set per client brain.
 
+## Supabase historical mirror (PEC-102)
+
+Relational extract into PE Supabase — see [`docs/76-qbo-supabase-mirror.md`](../../../docs/76-qbo-supabase-mirror.md).
+
+```bash
+node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=smoke
+node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=backfill
+bash scripts/qbo-thursday-sync.sh   # weekly Thu → Fri AR
+```
+
+Schema: `schemas/cleverwork-roofer/188-qbo-mirror-ddl.sql` (`qbo_*` tables). Client: `read-only-client.mjs` only.
+
 ## Production read-only / mirror-only (hard rule)
 
 **Live QB is extract-only.** Intuit's accounting scope is not platform-enforced read-only —

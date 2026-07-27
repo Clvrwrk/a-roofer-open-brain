@@ -4,11 +4,21 @@
   "version": "1.0.0",
   "tier": 1,
   "source_system_type": "saas-with-api",
-  "enabled": false,
+  "enabled": true,
   "origin": "cleverwork",
   "access_mode": "read_only",
   "write_enabled": false,
-  "bound_agents": ["capture", "conductor"],
+  "mirror": {
+    "destination": "supabase",
+    "schema_migration": "188-qbo-mirror-ddl.sql",
+    "register_views_migration": "189-qbo-register-views.sql",
+    "register_schema": "qbo_registers",
+    "job": "mirror-backfill.mjs",
+    "thursday_script": "scripts/qbo-thursday-sync.sh",
+    "docs": "docs/76-qbo-supabase-mirror.md",
+    "linear": ["PEC-102", "PEC-109"]
+  },
+  "bound_agents": ["capture", "conductor", "accounting"],
   "env_vars": {
     "required": [
       "QUICKBOOKS_CLIENT_ID",
@@ -26,12 +36,22 @@
   },
   "webhook_topics": ["Invoice", "Payment", "Bill", "VendorCredit"],
   "objects_ingested": [
+    "company_info",
+    "accounts",
+    "customers",
+    "vendors",
+    "classes",
     "invoices",
     "payments",
     "bills",
+    "bill_payments",
+    "purchases",
+    "deposits",
+    "journal_entries",
     "vendor_credits",
-    "classes",
-    "items"
+    "credit_memos",
+    "transfers",
+    "report_snapshots"
   ],
   "debrief_trigger_milestone": null,
   "edition": "online",

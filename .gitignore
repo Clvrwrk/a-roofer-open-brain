@@ -86,3 +86,6 @@ agents/dev-engine/**/.runtime/
 # committed (hard rule 2). If it should live here, integrate it deliberately (docs only,
 # excluding .env/.obsidian/.DS_Store).
 docs/knowledge-base/CompanyCam/
+
+# QBO mirror run receipts (may contain company aggregates, not secrets)
+integrations/bridges/quickbooks/.mirror-runs/
