@@ -23,9 +23,14 @@ const TEST_USER = "U0B8SGJJZLJ";
 
 function event(overrides = {}) {
   const data = {
+    attachments: null,
+    bot_id: null,
     channel: TEST_CHANNEL,
     channel_type: "channel",
+    files: null,
+    subtype: null,
     team_id: expected.teamId,
+    thread_ts: null,
     ts: "1785160000.000001",
     text: "Maya, give me a short accounting status.",
     user: TEST_USER,
@@ -115,11 +120,27 @@ test("rejects lookalikes, quoted text, code blocks, and zero-width tricks", () =
 test("accepts every valid channel and attachments while rejecting malformed scope", () => {
   assert.equal(evaluateEvent(event({ channel: "C0999999999" }), expected).accepted, true);
   assert.equal(evaluateEvent(event({ subtype: "message_changed" }), expected).reason, "message_subtype");
+  assert.equal(evaluateEvent(event({ files: null, attachments: null }), expected).accepted, true);
   assert.equal(evaluateEvent(event({ files: [{ id: "F1" }] }), expected).accepted, true);
+  assert.equal(evaluateEvent(event({ attachments: [{ id: "A1" }] }), expected).accepted, true);
   assert.equal(evaluateEvent(event({ channel: "bad channel" }), expected).reason, "invalid_channel");
   assert.equal(evaluateEvent(event({ channel_type: "im" }), expected).reason, "invalid_channel");
   assert.equal(evaluateEvent(event({ files: "not-an-array" }), expected).reason, "malformed_attachment_container");
   assert.equal(evaluateEvent(event({ attachments: { length: 0 } }), expected).reason, "malformed_attachment_container");
+});
+
+test("accepts the nullable optional fields emitted for an ordinary Composio Slack text message", () => {
+  const decision = evaluateEvent(event({
+    attachments: null,
+    bot_id: null,
+    files: null,
+    subtype: null,
+    thread_ts: null,
+  }), expected);
+
+  assert.equal(decision.accepted, true);
+  assert.equal(decision.reason, "accepted");
+  assert.equal(decision.threadTs, "1785160000.000001");
 });
 
 test("rejects inherited and accessor-backed callback authorization fields", () => {

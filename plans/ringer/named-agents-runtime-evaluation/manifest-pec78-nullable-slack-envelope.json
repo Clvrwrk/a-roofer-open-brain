@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-nullable-slack-envelope",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-nullable-slack-envelope",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "production-contract-review",
+      "task_type": "code-review",
+      "spec": "Role: independent production-contract reviewer. Read-only review the Maya Slack listener in /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md. Production evidence: three ordinary human Slack callbacks reached the listener on 2026-07-28 and were rejected as malformed_attachment_container because Composio emitted files: null and attachments: null. Verify core.mjs now accepts only undefined, null, or arrays for those optional fields; verify non-null strings and objects remain rejected; verify the default test callback mirrors the observed nullable payload and the focused regression test would fail against the prior code. Run npm test in deployment/remote/orgo/maya-slack-listener and report the exact passing count. Cite core.mjs and test/core.test.mjs. No source changes, credentials, network calls, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Explicitly cover malformed_attachment_container, files: null, attachments: null, bot/self protection, subtype protection, and the 71-test result. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "npm --prefix /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_nullable_slack_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Reviewer confirmed the implementation matches the observed nullable Composio callback while malformed non-null containers remain rejected.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "safety-regression-review",
+      "task_type": "code-review",
+      "spec": "Role: independent application-security regression reviewer. Read-only review the Maya Slack listener in /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md. Production evidence: three ordinary human Slack callbacks reached the listener on 2026-07-28 and were rejected as malformed_attachment_container because Composio emitted files: null and attachments: null. Verify the narrow nullable-array correction cannot allow bot messages, Maya self-replies, message subtypes, malformed actors, wrong trigger/account/user/team/channel, or unaddressed messages. Verify null is accepted only where the provider uses nullable optional fields and strings/objects remain rejected for files/attachments. Run npm test in deployment/remote/orgo/maya-slack-listener and report the exact passing count. Cite core.mjs and test/core.test.mjs. No source changes, credentials, network calls, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Explicitly cover malformed_attachment_container, files: null, attachments: null, bot/self protection, subtype protection, and the 71-test result. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "npm --prefix /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_nullable_slack_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Reviewer confirmed the production compatibility fix preserves all message-origin and authorization controls.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

@@ -116,6 +116,10 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isOptionalArray(value) {
+  return value === undefined || value === null || Array.isArray(value);
+}
+
 export function evaluateEvent(raw, expected) {
   const event = normalizeEvent(raw);
   const data = event.data ?? {};
@@ -137,10 +141,7 @@ export function evaluateEvent(raw, expected) {
   if (data.subtype) return reject("message_subtype");
   if (typeof data.user !== "string" || !SLACK_USER_ID.test(data.user)) return reject("invalid_actor");
   if (data.bot_id || data.user === expected.mayaBotUserId) return reject("bot_or_self");
-  if (
-    (data.files !== undefined && !Array.isArray(data.files)) ||
-    (data.attachments !== undefined && !Array.isArray(data.attachments))
-  ) {
+  if (!isOptionalArray(data.files) || !isOptionalArray(data.attachments)) {
     return reject("malformed_attachment_container");
   }
   if (!addressedToMaya(data.text, expected.mayaBotUserId)) return reject("not_addressed");
