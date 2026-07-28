@@ -1,0 +1,10 @@
+[Unit]
+Description=Thursday QBO mirror refresh at 20:00 America/Chicago (Friday AR prep; PEC-102)
+
+[Timer]
+OnCalendar=Thu *-*-* 20:00:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

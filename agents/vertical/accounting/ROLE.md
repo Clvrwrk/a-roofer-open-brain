@@ -83,6 +83,10 @@ Response: Queries job atoms and QuickBooks data for all open balances past 30 da
 
 ---
 
+## QuickBooks production boundary (hard)
+
+Live QuickBooks Online is **read-only / mirror-only** for this agent and every automation path. Pull cash, AR/AP, invoices, and payments into the brain; **never** create, update, delete, void, or pay in production QBO. Lucinda/Chandler change the books in the QB UI. Policy: [`docs/74-quickbooks-production-read-only-guardrails.md`](../../../docs/74-quickbooks-production-read-only-guardrails.md) (PEC-98). Client: `integrations/bridges/quickbooks/read-only-client.mjs`.
+
 ## Escalation
 
 - **To Conductor / Chris:** when a job has a disputed insurance item exceeding a configurable threshold (default: $2,000) that has not moved in 30 days; when a carrier has denied a supplement and the job owner needs a decision on whether to escalate to a public adjuster; when a QuickBooks reconciliation error cannot be resolved from available atoms.

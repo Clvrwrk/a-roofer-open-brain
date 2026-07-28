@@ -1,0 +1,16 @@
+[Unit]
+Description=Open Brain Thursday QBO → Supabase mirror refresh (read-only; PEC-102)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/qbo-thursday-sync.sh
+User=root
+# Full historical refresh can take a while; hard stop at 2h.
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
