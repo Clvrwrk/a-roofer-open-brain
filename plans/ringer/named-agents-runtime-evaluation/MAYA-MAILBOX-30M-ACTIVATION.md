@@ -1,6 +1,6 @@
 # Maya 30-Minute Mailbox/Task-Intake Activation
 
-Status: source gate passed; live activation and postcheck pending.
+Status: LIVE / PASS, 2026-07-28.
 Owner and sole human approver: Christopher Hussey.
 Runtime: Maya's dedicated Orgo computer `37b262e0-a915-47e6-8c3b-f180a32ab6fe`.
 Release: `@open-brain/maya-slack-listener` 0.2.0.
@@ -87,6 +87,29 @@ clean result.
 
 ## Live evidence
 
-Pending deployment. Record the deployed commit, release archive hash, trigger state,
-Supervisor state, bootstrap/schedule events, next occurrence result, and Linear
-issue/comment here and in the PE-CC-DevTeam activation record.
+- Orgo release source commit: `80136bc`.
+- Source archive SHA-256:
+  `49319f1726a7697bb05c2fb0ef68d781e7fe34fcfd36ef1cefba56ac43c61b43`.
+- Installed tree digest:
+  `43b600dbf75b236a2ddd58950ff88aeb6dffb65d4afd7bb261b2733924012b31`.
+- Stopped-state trust chain: PASS. Mailbox state and receipt directories are
+  `maya-agent:maya-agent` (numeric `999:999`) mode `0700`.
+- Exact Composio Slack trigger re-enabled at `2026-07-28T11:32:37Z` and confirmed
+  enabled again after the mailbox postcheck.
+- Supervisor: `RUNNING`, PID 4108, continuously healthy through the first
+  occurrence.
+- Activation bootstrap: `2026-07-28T11:32:53.013Z`; no historical mailbox read or
+  proactive provider effect.
+- First real occurrence: `mailbox_occurrence_complete` at
+  `2026-07-28T12:00:02.336Z`, zero candidates, zero processed messages, zero
+  Linear/Slack effects. The cursor advanced to epoch `1785240000` and the next run
+  scheduled for `2026-07-28T12:30:00Z`.
+- Command Center `/healthz`: HTTP 200 with build commit `80136bc` at the activation
+  checkpoint.
+- Linear: `PEC-83`, including activation comment
+  `ddb6cb70-de16-4ed5-850b-a0c4848a04a3` and terminal receipt comment
+  `245c7442-497c-4017-be7f-a7ea365510a5`; issue closed Done.
+
+This proves the live empty-mailbox path, cadence, cursor advancement, and continued
+Slack availability. It does not prove attachment analysis or outbound email; both
+remain explicitly unpromoted.
