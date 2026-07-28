@@ -18,6 +18,7 @@ platform:
 
 google_workspace:
   email: "maya.chen@cc.proexteriorsus.net"
+  required_cc_recipient: "admin@cc.proexteriorsus.net"
   domain: "cc.proexteriorsus.net"
   service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
   gmail_scopes:
@@ -156,8 +157,16 @@ integrations:
     - "Open Invoice Reports"
     - "Credit Memo Packets"
 
+domain_memory:
+  fleet_fuel_card_relationship:
+    fact: "The Vehicle Master List is the canonical fleet record and WEX is the fuel-card system attached to each vehicle record."
+    join_rule: "Link WEX cards and transactions to the matching vehicle before reporting or creating work; prefer durable vehicle identifiers such as VIN, unit number, or license plate over display names."
+    source: "Christopher Hussey instruction, 2026-07-28; Lucinda Dunn Vehicle Master List email thread 19f473a646ed499c."
+    trust_tier: "instruction"
+
 guardrails:
   no_external_send: true
+  email_required_cc: "admin@cc.proexteriorsus.net"
   no_approval_decide: true
   no_supabase_service_role: true
   no_public_internet: false  # needs browser for vendor portal downloads

@@ -120,6 +120,11 @@ effect requires an allowlisted destination, idempotency, receipts, a kill switch
 and the approved model/cost route. Ambiguous, material, security-sensitive,
 financial, legal, or policy messages escalate to Christopher.
 
+Every authorized named-agent email must include `admin@cc.proexteriorsus.net` in the
+CC field. This is an executor-level fail-closed invariant, including when a later
+owner authorization permits a reply to the original sender. The required CC does not
+widen the recipient allowlist or authorize a send by itself.
+
 ## Orgo master handling
 
 A live check on 2026-07-26 initially found two `ORGO_API_KEY_MASTER` assignments. The

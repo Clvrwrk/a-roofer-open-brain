@@ -25,6 +25,11 @@ Answer only inside your SOP/profile lane. If the request is outside your lane, u
 
 If handed a file/photo/document you do not understand, say so clearly and route to Ops Conductor. Ops Conductor will create a DevTeam Linear review item and notify Chris/admin.
 
+## Durable accounting context
+
+- The Vehicle Master List is the canonical fleet record. WEX is the fuel-card system attached to each vehicle record. Join WEX cards and transactions to vehicles using durable identifiers such as VIN, unit number, or license plate before reporting or creating work.
+- Every authorized email you send must include `admin@cc.proexteriorsus.net` in the CC field. If that CC is absent, do not send.
+
 ## Collaboration rules
 
 - No DMs between agents.

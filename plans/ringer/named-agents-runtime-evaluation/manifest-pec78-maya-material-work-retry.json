@@ -1,0 +1,18 @@
+{
+  "run_name": "pec78-maya-material-work",
+  "workdir": "/private/tmp/pec78-maya-material-work/plans/ringer/named-agents-runtime-evaluation/runs/pec78-maya-material-work-retry",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "email-policy-review-retry",
+      "task_type": "code-review",
+      "spec": "Role: independent agent-communications governance reviewer. This is a read-only retry after the prior report's machine check rejected harmless severity wording. Review the candidate at /private/tmp/pec78-maya-material-work and own only report.md. Inspect agents/profiles/maya-chen.yaml, agents/profiles/maya-chen/SOUL.md, deployment/remote/orgo/maya-slack-listener/SOUL.md, plans/ringer/named-agents-runtime-evaluation/HERMES-NAMED-AGENT-TEMPLATE.md, docs/74-named-agent-runtime-ringer-governance.md, and deployment/remote/orgo/maya-slack-listener/test/lifecycle.test.mjs. Verify the policy requires admin@cc.proexteriorsus.net in CC on every authorized agent-authored outbound email, applies to Maya and the named-agent template, explicitly does not widen the approved To-recipient allowlist, and is framed as an executor fail-closed contract rather than merely optional prompt advice. Do not falsely claim an email executor is implemented or live; distinguish written executor contract from deployed enforcement. Verify the Maya memory addition consistently states Vehicle Master List, WEX, VIN, unit number, and license plate. Run the full listener npm test and report the exact 73-pass result. No source changes, credentials, network, inference calls, email, Slack, Linear, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Explicitly mention Vehicle Master List, WEX, VIN, unit number, license plate, admin@cc.proexteriorsus.net, `does not widen`, and 73 tests pass. Every actual finding must include Evidence, Impact, Fix, Priority, Confidence. A PASS report must not contain any actual Priority or Severity field set to P0 or P1.",
+      "check": "npm --prefix /private/tmp/pec78-maya-material-work/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_maya_material_work_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The mandatory CC contract is consistently documented without overstating deployed enforcement or expanding recipient authority.",
+      "engine": "grok",
+      "model": "grok-4.5",
+      "timeout_s": 900
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-material-work",
+  "workdir": "/private/tmp/pec78-maya-material-work/plans/ringer/named-agents-runtime-evaluation/runs/pec78-maya-material-work",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "accounting-memory-review",
+      "task_type": "persona-review",
+      "spec": "Role: independent accounting-agent context reviewer. Read-only review the candidate at /private/tmp/pec78-maya-material-work. Own only report.md. Inspect agents/profiles/maya-chen.yaml, agents/profiles/maya-chen/SOUL.md, deployment/remote/orgo/maya-slack-listener/SOUL.md, and deployment/remote/orgo/maya-slack-listener/test/lifecycle.test.mjs. Verify all three Maya context surfaces consistently state that the Vehicle Master List is the canonical fleet record, WEX is the fuel-card system attached to each vehicle record, and reconciliation prefers durable identifiers VIN, unit number, or license plate. Verify this is clearly durable domain context rather than a claim that records have already been reconciled. Run the full listener npm test and report the exact 73-pass result. Also verify every agent-authored email must include admin@cc.proexteriorsus.net in CC and that this requirement does not widen the approved To-recipient allowlist. No source changes, credentials, network, inference calls, email, Slack, Linear, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Explicitly mention Vehicle Master List, WEX, VIN, unit number, license plate, admin@cc.proexteriorsus.net, `does not widen`, and 73 tests pass. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "npm --prefix /private/tmp/pec78-maya-material-work/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_maya_material_work_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Maya's durable accounting context accurately binds WEX fuel cards to vehicle records and the full listener suite passes.",
+      "engine": "grok",
+      "model": "grok-4.5",
+      "timeout_s": 900
+    },
+    {
+      "key": "email-policy-review",
+      "task_type": "code-review",
+      "spec": "Role: independent agent-communications governance reviewer. Read-only review the candidate at /private/tmp/pec78-maya-material-work. Own only report.md. Inspect agents/profiles/maya-chen.yaml, agents/profiles/maya-chen/SOUL.md, deployment/remote/orgo/maya-slack-listener/SOUL.md, plans/ringer/named-agents-runtime-evaluation/HERMES-NAMED-AGENT-TEMPLATE.md, docs/74-named-agent-runtime-ringer-governance.md, and deployment/remote/orgo/maya-slack-listener/test/lifecycle.test.mjs. Verify the executor-level rule requires admin@cc.proexteriorsus.net in the CC field on every agent-authored outbound email, applies to Maya and the named-agent template, is not merely prompt guidance, and explicitly does not widen the approved To-recipient allowlist. Verify the Maya memory addition states Vehicle Master List, WEX, and the durable identifiers VIN, unit number, and license plate consistently. Run the full listener npm test and report the exact 73-pass result. No source changes, credentials, network, inference calls, email, Slack, Linear, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Explicitly mention Vehicle Master List, WEX, VIN, unit number, license plate, admin@cc.proexteriorsus.net, `does not widen`, and 73 tests pass. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "npm --prefix /private/tmp/pec78-maya-material-work/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_maya_material_work_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The mandatory CC rule is consistently documented, tested, and does not expand outbound recipient authority.",
+      "engine": "grok",
+      "model": "grok-4.5",
+      "timeout_s": 900
+    }
+  ]
+}

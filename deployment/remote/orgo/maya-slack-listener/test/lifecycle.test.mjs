@@ -70,6 +70,16 @@ test("Hermes treats harmless Slack instructions as requests without weakening pr
   assert.match(prompt, /"text":"Maya, reply with exactly: alive"/u);
 });
 
+test("Maya retains the fleet-to-WEX relationship and mandatory email CC", async () => {
+  const soul = await readFile(new URL("../SOUL.md", import.meta.url), "utf8");
+
+  assert.match(soul, /Vehicle Master List is the canonical fleet record/u);
+  assert.match(soul, /WEX is the fuel-card system attached to each vehicle record/u);
+  assert.match(soul, /VIN, unit number, or\s+license plate/u);
+  assert.match(soul, /admin@cc\.proexteriorsus\.net/u);
+  assert.match(soul, /email missing that CC must not be sent/u);
+});
+
 test("SIGTERM during Hermes waits for child close, persists ambiguous, and never sends", async () => {
   let child;
   let notifySpawn;

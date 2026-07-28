@@ -141,6 +141,9 @@ Each generated package contains and validates:
 - Command Center auth: scoped bearer identity; no Supabase service role.
 - Logs/receipts: agent, job, model, provider, tokens, estimated cost, trace ID,
   outcome, retry/escalation, approval state, and external side effects.
+- Email policy: every authorized email, including an approved reply to an original
+  sender, must contain `admin@cc.proexteriorsus.net` in the CC field. Enforce this in
+  the executor and fail closed before provider I/O when the required CC is absent.
 - Health: gateway, cron, Slack socket, Orgo computer, Google session, Command Center,
   last/next run, queue depth, daily spend, and budget circuit breaker.
 
@@ -165,6 +168,9 @@ and effect records identity, source message, decision class, model, cost, approv
 state, destination, vendor receipt, and terminal status. Overlap, missing identity,
 unapproved recipient, or uncertain remote success fails closed and reconciles before
 retry.
+
+The mandatory CC rule applies independently of the destination allowlist: adding
+`admin@cc.proexteriorsus.net` to CC never authorizes an otherwise unapproved recipient.
 
 Sources:
 
