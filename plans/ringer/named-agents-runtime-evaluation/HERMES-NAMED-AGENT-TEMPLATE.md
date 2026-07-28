@@ -168,17 +168,22 @@ provider, prices, and date are retained so model drift triggers re-evaluation.
 
 ## Thirty-minute mailbox job
 
-Each production package contains one paused-by-default mailbox job scheduled by the
-canonical registry every 30 minutes. It uses the dedicated Google principal and a
-durable history cursor, claims one fenced occurrence, deduplicates by stable
-message/thread ID, classifies each new message, records its decision in Command
-Center, and contacts Christopher through that agent's existing Slack persona or by
-email only to `admin@cc.proexteriorsus.net`, subject to the approved effect gate. It
-never replies to the original sender during the initial operating phase. Every run
-and effect records identity, source message, decision class, model, cost, approval
-state, destination, vendor receipt, and terminal status. Overlap, missing identity,
-unapproved recipient, or uncertain remote success fails closed and reconciles before
-retry.
+Each production package contains one paused-by-default mailbox job scheduled every
+30 minutes by exactly one runtime owner. It uses the dedicated Google principal and
+a durable cursor, deduplicates by stable message ID, and classifies each new message.
+The Maya pilot records actionable work as a source-linked `[MAYA]` issue in the
+pinned PE-CC-DevTeam Linear team; future personas must pin their own approved task
+destination before activation. A blocked item may contact Christopher only through
+that agent's pinned Slack persona/destination. It never replies to the original
+sender or sends email during the initial operating phase. Every provider effect has
+a private receipt; an uncertain remote success becomes terminally ambiguous and is
+never retried automatically.
+
+The initial executor is intentionally task intake and routing, not unrestricted
+material execution. It does not parse attachment contents, pay, approve, publish,
+change access, or correspond with a sender. Those task classes require their own
+Composio action, deterministic acceptance checks, Ringer evidence, and production
+promotion.
 
 The mandatory CC rule applies independently of the destination allowlist: adding
 `admin@cc.proexteriorsus.net` to CC never authorizes an otherwise unapproved recipient.

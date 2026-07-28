@@ -9,6 +9,10 @@ import {
   HERMES_HOME,
   HERMES_MODEL,
   HERMES_PATH,
+  GMAIL_TOOL_VERSION,
+  LINEAR_TOOL_VERSION,
+  MAILBOX_INTERVAL_MS,
+  MAYA_MAILBOX_STATE_DIR,
   MAYA_RECEIPT_DIR,
   MAYA_RUNTIME_DIR,
   RELEASE_DIR,
@@ -139,11 +143,15 @@ test("authorization identities and runtime choices are immutable reviewed litera
     composioUserId: "maya-chen",
     receiveConnectedAccountId: "ca_X9dQyRDSS0sa",
     sendConnectedAccountId: "ca_V3cdfxA1veTS",
+    gmailConnectedAccountId: "ca_lwUJ8ZzTHrr5",
+    linearConnectedAccountId: "ca_CrdIUc0UNO1x",
     triggerId: "ti_G_lnPrrKPhWj",
     triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
     teamId: "T0B8QEGPVQW",
     mayaBotUserId: "U0BD0Q0H55G",
     ownerSlackUserId: "U0B8SGJJZLJ",
+    ownerSlackChannelId: "C0BD7L43PC2",
+    linearTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
   });
   assert.equal(Object.isFrozen(APPROVED), true);
   assert.equal(AGENT_HOME, "/home/orgo/maya-agent");
@@ -154,6 +162,10 @@ test("authorization identities and runtime choices are immutable reviewed litera
   assert.equal(HERMES_PATH, "/usr/local/bin:/usr/bin:/bin");
   assert.equal(MAYA_RUNTIME_DIR, "/home/orgo/maya-agent/runtime");
   assert.equal(MAYA_RECEIPT_DIR, "/home/orgo/maya-agent/state/receipts");
+  assert.equal(MAYA_MAILBOX_STATE_DIR, "/home/orgo/maya-agent/state/mailbox");
+  assert.equal(MAILBOX_INTERVAL_MS, 1_800_000);
+  assert.equal(GMAIL_TOOL_VERSION, "20260721_00");
+  assert.equal(LINEAR_TOOL_VERSION, "20260724_00");
   assert.equal(RELEASE_DIR, "/opt/pe-cc-agents/maya-slack-listener");
 });
 

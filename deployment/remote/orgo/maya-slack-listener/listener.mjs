@@ -6,10 +6,11 @@ import {
   hashId,
   verifyTriggerInstancePreflight,
 } from "./core.mjs";
-import { APPROVED, MAYA_RECEIPT_DIR } from "./policy.mjs";
+import { APPROVED, GMAIL_TOOL_VERSION, LINEAR_TOOL_VERSION, MAYA_RECEIPT_DIR } from "./policy.mjs";
 import { runAcceptedAttempt } from "./attempt.mjs";
 import { runHermes } from "./hermes-runner.mjs";
 import { createSerialQueue, createShutdownCoordinator } from "./shutdown.mjs";
+import { startMailboxExecutor } from "./mailbox-executor.mjs";
 
 const required = ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"];
 for (const name of required) {
@@ -22,7 +23,8 @@ await store.initialize();
 
 const composio = new Composio({
   apiKey: process.env.COMPOSIO_API_KEY,
-  toolkitVersions: { slackbot: TOOL_VERSION },
+  allowTracking: false,
+  toolkitVersions: { slackbot: TOOL_VERSION, gmail: GMAIL_TOOL_VERSION, linear: LINEAR_TOOL_VERSION },
 });
 
 const triggerListing = await composio.getClient().triggerInstances.listActive(
@@ -35,15 +37,20 @@ const triggerListing = await composio.getClient().triggerInstances.listActive(
 );
 verifyTriggerInstancePreflight(triggerListing, expected);
 
+let mailboxStop = Promise.resolve();
 const shutdown = createShutdownCoordinator({
-  onExit: scheduleCleanExit,
+  onExit: () => mailboxStop.finally(scheduleCleanExit),
   onLog: log,
 });
 const queue = createSerialQueue({
   handler: processAcceptedEvent,
   onError: (error) => log("queued_attempt_failed", { error_class: error?.name ?? "UnexpectedError" }),
 });
-process.once("SIGTERM", () => shutdown.handleSignal());
+const mailbox = await startMailboxExecutor({ composio, expected, onEvent: log });
+process.once("SIGTERM", () => {
+  mailboxStop = mailbox.stop();
+  shutdown.handleSignal();
+});
 
 log("listener_started", {
   trigger_hash: hashId(expected.triggerId),

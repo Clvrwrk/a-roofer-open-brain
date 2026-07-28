@@ -131,7 +131,8 @@ fi
 /usr/bin/install -o root -g root -m 0640 /dev/null "$log_file"
 /usr/bin/install -d -o maya-agent -g maya-agent -m 0700 \
   "$agent_home" "$agent_home/secrets" "$agent_home/runtime" "$agent_home/state" \
-  "$agent_home/state/receipts"
+  "$agent_home/state/receipts" "$agent_home/state/mailbox" \
+  "$agent_home/state/mailbox/receipts"
 
 if [[ -e "$incoming_dir" || -L "$incoming_dir" ]]; then
   echo "stale incoming release requires operator review: $incoming_dir" >&2

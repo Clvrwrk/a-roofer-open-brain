@@ -146,19 +146,13 @@ command_center:
   approval_decide: false
 
 hermes:
-  model: "anthropic/claude-sonnet-4-20250514"
+  model: "google/gemini-3.1-flash-lite"
   provider: "openrouter"
-  tier: "workhorse"
-  toolsets:
-    - "web"
-    - "file"
-    - "terminal"
-  skills:
-    - "open-brain-agent-onboarding"
-    - "google-workspace"
-    - "credential-handling-patterns"
-  cadence: "always-on"
-  cron_schedule: null  # always-on: polls Gmail every 60s via persistent loop
+  tier: "structured"
+  toolsets: []  # Composio calls are owned by the outer executor; Hermes is inference-only.
+  skills: []
+  cadence: "every-30-minutes"
+  cron_schedule: "0,30 * * * *"  # Canonical runtime timer aligns to UTC half-hour boundaries.
 
 integrations:
   abc_supply: true
@@ -179,7 +173,7 @@ domain_memory:
     trust_tier: "instruction"
 
 guardrails:
-  no_external_send: true
+  no_external_send: true  # Email remains draft-only; pinned owner Slack is governed separately.
   email_required_cc: "admin@cc.proexteriorsus.net"
   no_approval_decide: true
   no_supabase_service_role: true

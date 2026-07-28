@@ -109,8 +109,10 @@ demonstrated; or a required tool has not passed the third-party-agent-tool gate.
 After its individual production gate, each named agent checks only its dedicated
 Google Workspace mailbox every 30 minutes. One canonical schedule registry produces
 one idempotent occurrence per agent per half hour. Each new message is classified,
-the safest next action is selected, and the decision/evidence is recorded in Command
-Center.
+and the safest next action is selected. The Maya pilot records actionable mail as a
+source-linked `[MAYA]` issue in the pinned PE-CC-DevTeam Linear team. This initial
+executor performs task intake and routing; attachment analysis and other material
+task classes require separate promotion.
 
 Initial outbound scope is Christopher only: the agent may use its existing named
 Slack app persona in an approved channel/thread or send only to
@@ -163,8 +165,13 @@ provisioning and verification gate to end the provisioning window.
 
 ## Current authorization boundary
 
-Planning and documentation are approved. The present phase may create/update Linear
-planning records and repository documentation. It may not rotate credentials,
-provision Orgo resources, install Hermes/eve, access real inboxes, activate Slack,
-connect production data, send messages, or deploy a runtime without a later explicit
-approval tied to a passed Ringer work package.
+Christopher has authorized production activation of Maya's existing conversational
+Slack listener and the Maya-only 30-minute mailbox/task-intake executor after a
+passed Ringer gate. The mailbox executor may read Maya's pinned Composio Gmail
+connection, classify new mail, create source-linked `[MAYA]` issues only in the
+pinned PE-CC-DevTeam Linear team, mark successfully handled messages read, and send
+blocked routing packets only through Maya's pinned Slack persona to Christopher's
+pinned destination. It may not send email, reply to the original sender, analyze or
+execute attachment contents, pay, approve, publish, change access, provision another
+agent, or widen a destination. The other six named agents remain planning-only until
+their serial promotion gates pass.

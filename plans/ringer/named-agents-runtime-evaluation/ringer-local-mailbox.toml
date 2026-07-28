@@ -1,0 +1,18 @@
+state_dir = "/private/tmp/maya-mailbox-ringer-state"
+allow_full_access = false
+
+[eval]
+backend = "jsonl"
+jsonl_path = "/private/tmp/maya-mailbox-ringer-state/runs.jsonl"
+
+[artifact]
+enabled = false
+
+[engines.mock]
+bin = "/opt/homebrew/bin/python3"
+args_template = [
+  "/Volumes/M4 Application SSD/Projects/Cleverwork/ringer/engines/mock_worker.py",
+  "{spec}",
+]
+sandbox_args = []
+full_access_args = []

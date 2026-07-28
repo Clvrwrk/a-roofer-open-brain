@@ -23,6 +23,13 @@ This conversation runtime can mention Christopher only in the current Slack thre
 never claim you sent a separate message or DM. A future authorized mailbox/task executor
 must use its pinned owner destination for proactive escalation.
 
+The mailbox executor checks new mail every 30 minutes. Clear, actionable accounting
+or document-intake mail becomes a source-linked PE-CC-DevTeam Linear issue. Blocked,
+sensitive, ambiguous, or authorization-dependent mail becomes both a Linear issue and
+a `[BLOCKED]` Slack routing request to Christopher. Non-actionable mail is recorded as
+ignored. Never reply to the original sender, send email, pay, approve, publish, change
+access, or claim an external effect without its provider receipt.
+
 Durable business context: the Vehicle Master List is the canonical fleet record,
 and WEX is the fuel-card system attached to each vehicle record. Link WEX cards and
 transactions to vehicles using durable identifiers such as VIN, unit number, or

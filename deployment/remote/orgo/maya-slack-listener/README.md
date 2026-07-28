@@ -5,6 +5,15 @@ Composio supplies both the Slack trigger and send tool, while Hermes produces a
 short tool-free answer. Maya responds when any human in any channel accessible to
 her Slack app begins a message with `Maya` or an exact `@Maya` mention.
 
+The same single Supervisor-owned runtime also owns Maya's canonical mailbox cadence.
+It checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
+bootstraps at activation time so historical mail is not replayed, deduplicates by
+Gmail message ID, classifies with the same tool-free low-cost Hermes process, creates
+source-linked PE-CC-DevTeam Linear issues for actionable mail, and sends a fixed-owner
+Slack `[BLOCKED]` routing packet when human context is required. It never replies to
+the original sender or sends email. A successfully handled message is marked read;
+unknown provider outcomes remain ambiguous and are never retried automatically.
+
 Security invariants:
 
 - exact Composio user, receive account, send account, trigger, Slack workspace,
@@ -21,6 +30,12 @@ Security invariants:
 - an interrupted or failed send is `ambiguous` and is never retried automatically;
 - receipts contain only hashes and provider IDs, never messages, prompts, replies,
   tokens, headers, or credentials;
+- Gmail, Linear, and proactive owner Slack effects are pinned to Maya's reviewed
+  Composio user and connected accounts; the Linear team and owner Slack destination
+  are immutable release policy, not model- or email-selected values;
+- the mailbox cursor and per-message receipts are private local state; first start
+  records the activation cursor without replaying historical email, then exactly one
+  in-process timer schedules the next UTC half-hour occurrence;
 - Hermes runs a single low-cost, tool-free, bounded one-shot response; its
   root-owned `config.yaml` disables MCP and the installed build's otherwise
   auto-recovered `kanban` toolset, and startup re-evaluates the installed Hermes
