@@ -20,7 +20,8 @@
     "vendor:reconcile:write": "node scripts/reconcile-vendor-branches.mjs --write",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "perf:warm": "node scripts/warm-command-center.mjs",
-    "perf:cadence": "node scripts/cadence-command-center.mjs"
+    "perf:cadence": "node scripts/cadence-command-center.mjs",
+    "pec78:db-integration": "node scripts/pec78-db-integration.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^10.1.3",
@@ -36,6 +37,7 @@
     "svix": "^1.95.1"
   },
   "devDependencies": {
+    "postgres": "^3.4.7",
     "vitest": "^4.1.9"
   }
 }

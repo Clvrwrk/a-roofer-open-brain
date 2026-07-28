@@ -188,6 +188,13 @@ export function buildReply(text) {
     .trim()
     .slice(0, 1_500);
   if (!cleaned) throw new Error("Hermes returned an empty reply");
+  if (cleaned.split(/\s+/u).length > 120) throw new Error("Hermes reply exceeded the word limit");
+  if (/(?:system prompt|developer message|api[_ -]?key|access token|refresh token|password|signing secret|client secret)/iu.test(cleaned)) {
+    throw new Error("Hermes reply failed the disclosure policy");
+  }
+  if (/\b(?:i|we)\s+(?:sent|emailed|posted|updated|created|deleted|approved|paid|purchased|changed)\b/iu.test(cleaned)) {
+    throw new Error("Hermes reply made an unverified action claim");
+  }
   return `${PREFIX} ${cleaned}`;
 }
 

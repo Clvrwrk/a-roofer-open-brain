@@ -29,12 +29,19 @@ async function jsonRequest(url, { token, ...options }) {
   return body;
 }
 
-export async function runRollback({ disableTrigger, stopRuntime, disableInference }) {
+export async function runRollback({ disableTrigger, fenceDatabase, stopRuntime, disableInference }) {
   const order = [];
   await disableTrigger();
   order.push("trigger_disabled");
 
   const errors = [];
+  try {
+    await fenceDatabase();
+    order.push("database_fenced");
+  } catch (error) {
+    errors.push(error);
+    order.push("database_fence_failed");
+  }
   try {
     await stopRuntime();
     order.push("runtime_stopped");
@@ -130,14 +137,29 @@ export function validateRuntimeEvidence(value) {
 }
 
 async function disableTrigger() {
+  const triggerId = requiredEnv("PEC78_COMPOSIO_TRIGGER_ID");
+  if (!/^ti_[A-Za-z0-9_-]{6,128}$/.test(triggerId) || triggerId === APPROVED.triggerId) {
+    throw new Error("The reviewed new Composio trigger ID is required");
+  }
   const composio = new Composio({ apiKey: requiredEnv("COMPOSIO_API_KEY") });
-  await composio.triggers.disable(APPROVED.triggerId, { signal: AbortSignal.timeout(30_000) });
+  await composio.triggers.disable(triggerId, { signal: AbortSignal.timeout(30_000) });
   const listing = await composio.triggers.listActive(
-    { triggerIds: [APPROVED.triggerId], showDisabled: true, limit: 10 },
+    { triggerIds: [triggerId], showDisabled: true, limit: 10 },
     { signal: AbortSignal.timeout(30_000) },
   );
-  const trigger = listing.items.find((item) => item.id === APPROVED.triggerId);
+  const trigger = listing.items.find((item) => item.id === triggerId);
   if (!trigger?.disabledAt) throw new Error("Composio did not confirm the Maya trigger as disabled");
+}
+
+async function fenceDatabase() {
+  const body = await jsonRequest("https://cc.proexteriorsus.net/api/agent/runtime/v1/operator/rollback", {
+    method: "POST",
+    token: requiredEnv("PEC78_ROLLBACK_TOKEN"),
+    body: JSON.stringify({ reason: "Trigger-first operator rollback for Maya Composio runtime" }),
+  });
+  if (body?.status !== "fenced" || !Number.isSafeInteger(body?.fenceEpoch)) {
+    throw new Error("Command Center did not confirm the Maya database fence");
+  }
 }
 
 async function stopRuntime() {
@@ -161,7 +183,7 @@ async function disableInference() {
 }
 
 async function main() {
-  const order = await runRollback({ disableTrigger, stopRuntime, disableInference });
+  const order = await runRollback({ disableTrigger, fenceDatabase, stopRuntime, disableInference });
   process.stdout.write(`${JSON.stringify({ status: "rolled_back", order, at: new Date().toISOString() })}\n`);
 }
 

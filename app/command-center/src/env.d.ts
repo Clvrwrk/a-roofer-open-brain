@@ -38,9 +38,21 @@ interface ImportMetaEnv {
   readonly PEC78_ADAPTER_MODE?: "disabled" | "shadow" | "enabled";
   readonly PEC78_MAYA_PUBLIC_JWK?: string;
   readonly PEC78_MAYA_JWK_THUMBPRINT?: string;
+  readonly PEC78_ISSUER_PRIVATE_JWK?: string;
+  readonly PEC78_ISSUER_PUBLIC_JWK?: string;
+  readonly PEC78_ISSUER_KEY_ID?: string;
   readonly PEC78_REGISTRY_VERSION?: string;
+  readonly PEC78_RUNTIME_INSTANCE_ID?: string;
   readonly PEC78_PRODUCTION_GATE_DIGEST?: string;
   readonly PEC78_READINESS_TOKEN_SHA256?: string;
+  readonly PEC78_ROLLBACK_TOKEN_SHA256?: string;
+  readonly PEC78_COMPOSIO_INGRESS_MODE?: "disabled" | "validation" | "enabled";
+  readonly PEC78_COMPOSIO_WEBHOOK_SECRET?: string;
+  readonly PEC78_EVENT_ENCRYPTION_KEY?: string;
+  readonly PEC78_EVENT_ENCRYPTION_KEY_VERSION?: string;
+  readonly PEC78_COMPOSIO_TRIGGER_ID?: string;
+  readonly PEC78_COMPOSIO_CONNECTED_ACCOUNT_ID?: string;
+  readonly PEC78_COMPOSIO_USER_ID?: string;
 }
 
 interface ImportMeta {

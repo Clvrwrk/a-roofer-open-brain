@@ -1,0 +1,34 @@
+{
+  "run_name": "pec78-maya-composio-production-implementation",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-composio-production-implementation",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-implementation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only security review of the implemented PEC-78 Maya Composio production path. Use absolute repo root /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect PEC78-MAYA-COMPOSIO-PRODUCTION.md, migrations 188-190, every file under app/command-center/src/lib/pec78, the Composio webhook route, PEC-78 runtime route, middleware/env contract, and every first-party file under deployment/remote/orgo/maya-slack-listener. Run the focused Command Center PEC-78 tests, Command Center build, and listener tests. Verify exact raw-body HMAC/freshness, V3 tuple pinning, encrypted storage, no plaintext logging/receipts, DPoP claim, prompt-injection handling, event/thread effect binding, no direct Slack auth/tool path, unknown-outcome stop, secret confinement, activation separation, and rollback. Own only report.md. Required: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Executable security review passes with no P0/P1.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    },
+    {
+      "key": "database-implementation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only PostgreSQL/Supabase review of the implemented PEC-78 Maya Composio production path at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect migrations 188-190, store.server.ts, webhook and runtime routes, readiness, and the Supabase preflight docs. Run static SQL inspection and focused tests; do not write production. Verify migration signature/grant correctness, capability constraint transition, private forced RLS, service-role direct-DML revocation, SECURITY DEFINER search paths, ciphertext constraints, two-key dedupe races, activation consumption, claim concurrency, lease expiry/reclaim, fence/gate/capability/source/kill checks on every transition, effect/event/thread linkage, unknown outcome, receipt chain/immutability, readiness, rollback/forward-fix, and non-production test requirements. Own only report.md. Required sections and fields as in security review; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Executable database design passes with no P0/P1 before preview application.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    },
+    {
+      "key": "operations-implementation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only operations/SRE review of the implemented PEC-78 Maya Composio production path at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect the plan, migrations 188-190, full PEC-78 app source/routes, and full Maya listener subtree. Run focused tests/build. Verify exact public path and raw body, installed-disabled startup, one-owner worker behavior, 180-second lease versus 60-second inference/30-second send, bounded queue/attempts, exact provider/account/channel/thread, model/tool/cost limits, false-green readiness prevention, old-trigger quarantine, trigger-last activation, one-use fresh-message authorization, unknown-effect runbook, trigger-first rollback, and operator evidence. Own only report.md. Required sections and fields as in security review; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Executable operations path passes with no P0/P1 before any external activation.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    }
+  ]
+}

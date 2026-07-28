@@ -10,11 +10,12 @@ test("operator rollback enforces trigger-first order", async () => {
   const calls = [];
   const order = await runRollback({
     disableTrigger: async () => calls.push("trigger"),
+    fenceDatabase: async () => calls.push("database"),
     stopRuntime: async () => calls.push("runtime"),
     disableInference: async () => calls.push("inference"),
   });
-  assert.deepEqual(calls, ["trigger", "runtime", "inference"]);
-  assert.deepEqual(order, ["trigger_disabled", "runtime_stopped", "inference_disabled"]);
+  assert.deepEqual(calls, ["trigger", "database", "runtime", "inference"]);
+  assert.deepEqual(order, ["trigger_disabled", "database_fenced", "runtime_stopped", "inference_disabled"]);
 });
 
 test("operator rollback refuses downstream mutation when trigger disable is unconfirmed", async () => {
@@ -22,6 +23,7 @@ test("operator rollback refuses downstream mutation when trigger disable is unco
   await assert.rejects(
     runRollback({
       disableTrigger: async () => { calls.push("trigger"); throw new Error("not confirmed"); },
+      fenceDatabase: async () => calls.push("database"),
       stopRuntime: async () => calls.push("runtime"),
       disableInference: async () => calls.push("inference"),
     }),
@@ -35,12 +37,27 @@ test("operator rollback still disables inference when runtime quarantine fails",
   await assert.rejects(
     runRollback({
       disableTrigger: async () => calls.push("trigger"),
+      fenceDatabase: async () => calls.push("database"),
       stopRuntime: async () => { calls.push("runtime"); throw new Error("quarantine failed"); },
       disableInference: async () => calls.push("inference"),
     }),
     /Rollback incomplete/,
   );
-  assert.deepEqual(calls, ["trigger", "runtime", "inference"]);
+  assert.deepEqual(calls, ["trigger", "database", "runtime", "inference"]);
+});
+
+test("operator rollback continues containment when the database fence fails", async () => {
+  const calls = [];
+  await assert.rejects(
+    runRollback({
+      disableTrigger: async () => calls.push("trigger"),
+      fenceDatabase: async () => { calls.push("database"); throw new Error("fence failed"); },
+      stopRuntime: async () => calls.push("runtime"),
+      disableInference: async () => calls.push("inference"),
+    }),
+    /Rollback incomplete/,
+  );
+  assert.deepEqual(calls, ["trigger", "database", "runtime", "inference"]);
 });
 
 test("remote containment validates exact stopped and quarantine evidence", () => {

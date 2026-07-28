@@ -1,0 +1,40 @@
+{
+  "run_name": "pec78-maya-shadow-activation",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-shadow-design",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-shadow-contract",
+      "task_type": "code-review",
+      "spec": "You are the security reviewer for the PEC-78 Maya shadow activation. Read only /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-SHADOW-ACTIVATION.md plus the existing PEC-78 design/review files and current app/command-center/src/lib/pec78 and schema 188. Own only report.md in your task directory. Find concrete P0-P3 gaps in issuer/DPoP separation, replay, idempotency, destination restriction, secret handling, effect ambiguity, kill/rollback, and authorization scope. Do not modify the repository. Output # Review Report, ## Summary (max 3 bullets), ## Findings, ## Clean, ## Assumptions, and a final MACHINE_VERDICT: PASS|FAIL. Every finding must include Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The security contract is independently reviewed with parseable severity and verdict fields; PASS cannot contain P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "database-shadow-contract",
+      "task_type": "code-review",
+      "spec": "You are the PostgreSQL/Supabase reviewer for the PEC-78 Maya shadow activation. Read only /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-SHADOW-ACTIVATION.md, schema 188, and prior PEC-78 reviews. Own only report.md in your task directory. Review atomic authorization, SECURITY DEFINER safety, RLS/service-role containment, replay races, idempotency, effect reservation/reconciliation, immutable receipts, destination grants, expiration, fencing, and rollback. Do not modify the repository. Output # Review Report, ## Summary (max 3 bullets), ## Findings, ## Clean, ## Assumptions, and final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The database contract is independently reviewed for transactional and privilege correctness; PASS cannot contain P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "operations-shadow-contract",
+      "task_type": "code-review",
+      "spec": "You are the operations reviewer for the PEC-78 Maya shadow activation. Read only /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-SHADOW-ACTIVATION.md and the existing named-agent runtime plan/governance. Own only report.md in your task directory. Review one-owner scheduling, exact recipient proof, synthetic test safety, provider ambiguity, receipts, observability, readiness, cost limits, kill switch, rollback, and whether Maya can be called live after this gate. Do not modify the repository. Output # Review Report, ## Summary (max 3 bullets), ## Findings, ## Clean, ## Assumptions, and final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The operating gate is independently reviewed for bounded effects and recoverability; PASS cannot contain P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

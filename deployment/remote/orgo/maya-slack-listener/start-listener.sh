@@ -57,6 +57,9 @@ set +a
 
 : "${COMPOSIO_API_KEY:?missing Composio credential}"
 : "${OPENROUTER_API_KEY:?missing inference credential}"
+: "${PEC78_MAYA_PRIVATE_JWK:?missing DPoP credential}"
+: "${PEC78_CREDENTIAL_ID:?missing credential identity}"
+: "${PEC78_RUNTIME_INSTANCE_ID:?missing runtime identity}"
 
 exec /usr/bin/env -i \
   HOME="$agent_home" \
@@ -65,4 +68,7 @@ exec /usr/bin/env -i \
   NODE_ENV="production" \
   COMPOSIO_API_KEY="$COMPOSIO_API_KEY" \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
-  /usr/bin/node /opt/pe-cc-agents/maya-slack-listener/listener.mjs
+  PEC78_MAYA_PRIVATE_JWK="$PEC78_MAYA_PRIVATE_JWK" \
+  PEC78_CREDENTIAL_ID="$PEC78_CREDENTIAL_ID" \
+  PEC78_RUNTIME_INSTANCE_ID="$PEC78_RUNTIME_INSTANCE_ID" \
+  /usr/bin/node /opt/pe-cc-agents/maya-slack-listener/production-worker.mjs

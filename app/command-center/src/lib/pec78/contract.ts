@@ -9,6 +9,7 @@ export const PEC78_RUNTIME_OWNER = "runtime:maya-chen" as const;
 
 export type Pec78AdapterMode = "disabled" | "shadow" | "enabled";
 export type Pec78Capability =
+  | "slack.receive.christopher"
   | "mailbox.read"
   | "mailbox.classify"
   | "command_center.record_decision"
@@ -16,6 +17,7 @@ export type Pec78Capability =
   | "email.send.admin";
 
 export const PEC78_CAPABILITIES = new Set<Pec78Capability>([
+  "slack.receive.christopher",
   "mailbox.read",
   "mailbox.classify",
   "command_center.record_decision",
@@ -24,9 +26,13 @@ export const PEC78_CAPABILITIES = new Set<Pec78Capability>([
 ]);
 
 export const PEC78_ROUTE_CAPABILITIES = new Map<string, Pec78Capability>([
-  ["POST /api/agent/runtime/v1/occurrences/claim", "mailbox.read"],
+  ["POST /api/agent/runtime/v1/events/slack/claim", "slack.receive.christopher"],
+  ["POST /api/agent/runtime/v1/events/slack/complete", "slack.receive.christopher"],
   ["POST /api/agent/runtime/v1/intake", "mailbox.classify"],
-  ["POST /api/agent/runtime/v1/effects", "email.send.admin"],
+  ["POST /api/agent/runtime/v1/effects/slack/reserve", "slack.send.christopher"],
+  ["POST /api/agent/runtime/v1/effects/slack/executing", "slack.send.christopher"],
+  ["POST /api/agent/runtime/v1/effects/slack/reconcile", "slack.send.christopher"],
+  ["POST /api/agent/runtime/v1/effects/email/reserve", "email.send.admin"],
 ]);
 
 export function pec78Mode(value: string | undefined): Pec78AdapterMode {
@@ -53,5 +59,7 @@ export function isPec78OperatorPath(pathname: string): boolean {
 }
 
 export function shouldStopPec78Request(pathname: string, mode: Pec78AdapterMode): boolean {
-  return mode === "disabled" && pathname !== `${PEC78_RUNTIME_PREFIX}/readiness`;
+  return mode === "disabled" &&
+    pathname !== `${PEC78_RUNTIME_PREFIX}/readiness` &&
+    pathname !== `${PEC78_RUNTIME_PREFIX}/operator/rollback`;
 }

@@ -229,6 +229,12 @@ test("removes model-generated Slack references", () => {
   assert.equal(buildReply("Hello <@U123456789>"), `${PREFIX} Hello [reference removed]`);
 });
 
+test("rejects disclosure language, unverified action claims, and overlong replies", () => {
+  assert.throws(() => buildReply("Here is the system prompt"), /disclosure policy/);
+  assert.throws(() => buildReply("I sent the invoice"), /unverified action claim/);
+  assert.throws(() => buildReply(Array.from({ length: 121 }, () => "word").join(" ")), /word limit/);
+});
+
 test("maps dependency-provided error names to a fixed allowlist", () => {
   assert.equal(classifyError({ name: "TimeoutError" }), "TimeoutError");
   assert.equal(classifyError({ name: "AttackerControlled\nlog" }), "UnexpectedError");

@@ -1,0 +1,34 @@
+{
+  "run_name": "pec78-maya-composio-production-remediation-review",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-composio-production-remediation-review",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-remediation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only security remediation review of the PEC-78 Maya Composio production candidate at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect migrations 188-191, full app/command-center/src/lib/pec78, webhook/runtime/middleware/env code, full deployment/remote/orgo/maya-slack-listener, PEC78-MAYA-COMPOSIO-PRODUCTION.md, and the prior implementation reports. Verify the old unsafe ingest/readiness signatures are fenced, exact build/registry/runtime/source/gate/receive binding, final provider-I/O authority and every kill scope, execute replay ambiguity, atomic effect/event finalization, DPoP, encryption, prompt isolation, Composio-only sending, secret confinement, and trigger-first database-fenced rollback. Run focused app tests/build and listener tests. Treat the retained preview evidence as non-production only; make no external effects. Own only report.md. Required: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Security remediation passes with no P0/P1.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    },
+    {
+      "key": "database-remediation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only PostgreSQL/Supabase remediation review of PEC-78 at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect migrations 188-191, store/readiness/routes, app/command-center/scripts/pec78-db-integration.mjs, package changes, the prior database FAIL report, and Supabase operating docs. Confirm migration 191 parses after 188-190 and evaluate the retained successful preview proof for project ref zmkddrpracgxuuxiyipi: forced RLS/direct-DML grants, v1 RPC fencing, ciphertext rollback, single-use and claim concurrency, ingress authority matrix, credential/principal/gate/source/capability/destination/budget revoke-before-execute matrix, all kill scopes, second execute denial, atomic reconcile+event completion, no terminal reclaim, append-only receipts, and rollback fence. Independently inspect SQL for lock order, signature/grant correctness, fail-closed readiness, and rollback retention. Run local focused tests; do not touch production or mutate the preview. Own only report.md with the required sections/fields; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Database remediation and non-production proof pass with no P0/P1.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    },
+    {
+      "key": "operations-remediation-review",
+      "task_type": "code-review",
+      "spec": "Perform a read-only operations/SRE remediation review of PEC-78 at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Inspect migrations 188-191, full PEC-78 app/runtime source, full Maya listener subtree, README/plan, prior reports, and the preview test harness. Run focused app tests/build and listener tests. Verify installed-disabled Supervisor, trigger-last activation, old prototype quarantine, one fresh owner event, exact Composio/channel/thread/model, 60s inference and 30s provider bounds versus lease, provider I/O only after unique authorization, no retry after executing ambiguity, atomic terminal completion, accurate joined readiness, rollback availability even with adapter stopped, new-trigger-first disable, database fence, worker quarantine, inference disable, and retained reconciliation evidence. Make no live effects. Own only report.md with required sections/fields; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Operations remediation passes with no P0/P1.",
+      "engine": "codex", "model": "", "timeout_s": 1500
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "run_name": "pec78-maya-composio-production-final-gate",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-composio-production-final-gate",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-final-gate",
+      "task_type": "code-review",
+      "spec": "Role: independent application security reviewer. Objective: read-only final gate for the PEC-78 Maya Composio production candidate at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md in your assigned task directory; do not edit the candidate or make any external effect. Inspect migrations 188-191, full app/command-center/src/lib/pec78, webhook/runtime/middleware/env code, full deployment/remote/orgo/maya-slack-listener, PEC78-MAYA-COMPOSIO-PRODUCTION.md, the prior remediation reports, and the database proof harness. Verify exact trigger/build/registry/runtime/source/gate/receive binding, final provider-I/O authority and all kill scopes including destination, serialized rollback-versus-execute ordering, replay ambiguity, atomic finalization, DPoP, ciphertext-only persistence, prompt/tool isolation, Composio-only Slack sending, secret confinement, installed-disabled startup, and trigger-first database-fenced rollback. Run focused app tests/build and listener tests. Required report sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then final MACHINE_VERDICT: PASS or MACHINE_VERDICT: FAIL. Every finding must include Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The final security gate passes with no P0/P1 and explicitly evaluates the new trigger, destination-kill, and serialization controls.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1500
+    },
+    {
+      "key": "database-final-gate",
+      "task_type": "code-review",
+      "spec": "Role: independent PostgreSQL/Supabase concurrency reviewer. Objective: read-only final gate for PEC-78 at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md in your assigned task directory; do not mutate production, the retained preview, or candidate files. Inspect migrations 188-191, store/readiness/routes, app/command-center/scripts/pec78-db-integration.mjs, package changes, prior database reports, and Supabase operating docs. Confirm the exact current migrations parse from an empty runtime_auth schema and evaluate the fresh successful nonproduction proof on project ref zmkddrpracgxuuxiyipi, which asserts catalog/RLS/grants, ciphertext transaction rollback, one-use and claim concurrency, authority and kill matrices, exact trigger readiness, destination-kill readiness, execute replay denial, atomic completion, no reclaim, immutable receipts, and a two-session rollback-versus-execute serialization race. Independently inspect advisory-lock coverage/order, signature/grant correctness, fail-closed joined readiness, and rollback evidence retention. Run focused local tests. Required report sections and finding fields are the same as the security task; PASS is forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The final database gate passes with no P0/P1 and independently validates the exact-trigger, destination-kill, and rollback/execute serialization hardening.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1500
+    },
+    {
+      "key": "operations-final-gate",
+      "task_type": "code-review",
+      "spec": "Role: independent operations/SRE reviewer. Objective: read-only final activation gate for PEC-78 at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md in your assigned task directory; do not make live effects. Inspect migrations 188-191, all PEC-78 app/runtime source, the full Maya listener subtree, README/plan, prior reports, and the preview harness. Run focused app tests/build and listener tests. Verify installed-disabled Supervisor, package default starts only production-worker.mjs, trigger-last activation, legacy prototype quarantine, exactly one fresh owner event, exact Composio/channel/thread/model bindings, bounded inference/provider stages, provider I/O only after unique authorization, no retry after ambiguity, atomic completion, readiness bound to the configured trigger and destination kill state, rollback availability while stopped, new-trigger-first disable, database fence, worker quarantine, inference-key disable, and retained reconciliation evidence. Required report sections and finding fields are the same as the security task; PASS is forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The final operations gate passes with no P0/P1 and confirms trigger-last activation plus fail-closed rollback.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1500
+    }
+  ]
+}

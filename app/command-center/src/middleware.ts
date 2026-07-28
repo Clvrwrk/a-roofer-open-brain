@@ -30,6 +30,7 @@ prewarmSurfaceCaches();
  * - /agent/*          agent-auth placeholder endpoints (NOT /agents page; NOT /api/agent/*)
  * - /oauth2/*         agent OAuth token/revoke placeholders
  * - /api/agentmail/webhook  svix-signature-verified inbound webhook
+ * - /api/integrations/composio/v1/webhook  Composio-HMAC-verified inbound webhook
  * - /submit-agreement/*      vendor magic-link page (single-claim uuid token = the auth)
  * - /api/price-agreement/submit/*  token-gated vendor submission endpoint
  */
@@ -39,6 +40,7 @@ const PUBLIC_EXACT = new Set([
   "/healthz",
   "/sw.js",
   "/api/agentmail/webhook",
+  "/api/integrations/composio/v1/webhook",
   "/api/dev/webhooks/github",
   "/api/dev/webhooks/sentry",
 ]);

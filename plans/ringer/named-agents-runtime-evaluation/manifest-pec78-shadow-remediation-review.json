@@ -1,0 +1,34 @@
+{
+  "run_name": "pec78-maya-shadow-activation",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-shadow-remediation-review",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-remediation",
+      "task_type": "code-review",
+      "spec": "Read-only security remediation review of PEC-78 Maya shadow. Inspect PEC78-SHADOW-ACTIVATION.md, the three prior shadow-design FAIL reports, app/command-center/src/lib/pec78, app/command-center/src/pages/api/agent/runtime/v1/[...path].ts, env.d.ts, and schema 189. Run the focused PEC-78 vitest suite. Determine whether every prior security P1 is closed in code/schema and whether new P0-P3 issues exist. Pay special attention to issuer/proof separation, DPoP claims, replay/idempotency ordering, exact destinations, effect reservation/reconciliation, service-role/RLS exposure, secrets, and rollback. Own only report.md. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then MACHINE_VERDICT: PASS|FAIL. Every finding: Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Security remediation has executable evidence and zero P0/P1 for PASS.",
+      "engine": "codex", "model": "", "timeout_s": 1200
+    },
+    {
+      "key": "database-remediation",
+      "task_type": "code-review",
+      "spec": "Read-only PostgreSQL/Supabase remediation review of PEC-78 Maya shadow. Inspect PEC78-SHADOW-ACTIVATION.md, prior database FAIL report, schemas 188 and 189, and the PEC-78 store/route code. Review SQL validity, atomicity, race behavior, constraints, SECURITY DEFINER search paths, grants, RLS, service-role boundary, replay/idempotency, receipt chain, exact budget/destination controls, rollback, and readiness. Do not claim live catalog evidence. Own only report.md. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then MACHINE_VERDICT: PASS|FAIL. Every finding: Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Database remediation is statically valid and has zero P0/P1 for PASS.",
+      "engine": "codex", "model": "", "timeout_s": 1200
+    },
+    {
+      "key": "operations-remediation",
+      "task_type": "code-review",
+      "spec": "Read-only operations remediation review of PEC-78 Maya shadow. Inspect PEC78-SHADOW-ACTIVATION.md, prior operations FAIL report, schema 189, readiness/store/route code, and focused tests. Judge exact recipient and provider identity, synthetic-only input, one owner/fencing, one-shot budgets, cost controls, readiness, ambiguous outcomes, rollback, and whether a successful test could accidentally be treated as live scheduling. Own only report.md. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then MACHINE_VERDICT: PASS|FAIL. Every finding: Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Operations remediation has bounded effects and zero P0/P1 for PASS.",
+      "engine": "codex", "model": "", "timeout_s": 1200
+    }
+  ]
+}

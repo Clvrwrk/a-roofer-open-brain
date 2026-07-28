@@ -18,11 +18,11 @@ import { composioSendRequestOptions } from "../request-options.mjs";
 
 const root = new URL("../", import.meta.url);
 
-test("Supervisor keeps the Maya listener disabled and one-shot", async () => {
+test("Supervisor keeps the Maya production worker installed disabled with bounded restart", async () => {
   const config = await readFile(new URL("maya-slack-listener.conf", root), "utf8");
   assert.match(config, /^user=maya-agent$/m);
   assert.match(config, /^autostart=false$/m);
-  assert.match(config, /^autorestart=false$/m);
+  assert.match(config, /^autorestart=unexpected$/m);
   assert.match(config, /^startretries=0$/m);
   assert.match(config, /^stopsignal=TERM$/m);
   assert.match(config, /^stopasgroup=true$/m);
@@ -87,19 +87,22 @@ test("Hermes uses the root-owned zero-tool policy without a CLI override", async
   assert.match(verifier, /verify-hermes-no-tools\.py/);
 });
 
-test("rollback is trigger-first and remotely revokes the inference key", async () => {
+test("rollback is trigger-first, fences the database, and remotely revokes the inference key", async () => {
   const rollback = await readFile(new URL("operator-rollback.mjs", root), "utf8");
   assert.match(rollback, /await disableTrigger\(\)/);
+  assert.match(rollback, /await fenceDatabase\(\)/);
   assert.match(rollback, /await stopRuntime\(\)/);
   assert.match(rollback, /await disableInference\(\)/);
-  assert.match(rollback, /composio\.triggers\.disable\(APPROVED\.triggerId/);
+  assert.match(rollback, /composio\.triggers\.disable\(triggerId/);
+  assert.match(rollback, /api\/agent\/runtime\/v1\/operator\/rollback/);
+  assert.match(rollback, /PEC78_ROLLBACK_TOKEN/);
   assert.match(rollback, /showDisabled: true/);
   assert.match(rollback, /\/computers\/\$\{ORGO_COMPUTER_ID\}\/bash/);
   assert.match(rollback, /JSON\.stringify\(\{ disabled: true \}\)/);
   assert.doesNotMatch(rollback, /(?:xapp-|xox[bp]-|sk_live_|ak_)/);
 });
 
-test("launcher sources only the owner-only environment file and execs the pinned listener", async () => {
+test("launcher sources only the owner-only environment file and execs the pinned production worker", async () => {
   const launcher = await readFile(new URL("start-listener.sh", root), "utf8");
   assert.match(launcher, /^set -euo pipefail$/m);
   assert.match(launcher, /^umask 077$/m);
@@ -115,9 +118,12 @@ test("launcher sources only the owner-only environment file and execs the pinned
   assert.match(launcher, /^exec \/usr\/bin\/env -i \\/m);
   assert.match(launcher, /^  COMPOSIO_API_KEY="\$COMPOSIO_API_KEY" \\/m);
   assert.match(launcher, /^  OPENROUTER_API_KEY="\$OPENROUTER_API_KEY" \\/m);
+  assert.match(launcher, /^  PEC78_MAYA_PRIVATE_JWK="\$PEC78_MAYA_PRIVATE_JWK" \\/m);
+  assert.match(launcher, /^  PEC78_CREDENTIAL_ID="\$PEC78_CREDENTIAL_ID" \\/m);
+  assert.match(launcher, /^  PEC78_RUNTIME_INSTANCE_ID="\$PEC78_RUNTIME_INSTANCE_ID" \\/m);
   assert.match(
     launcher,
-    /^  \/usr\/bin\/node \/opt\/pe-cc-agents\/maya-slack-listener\/listener\.mjs$/m,
+    /^  \/usr\/bin\/node \/opt\/pe-cc-agents\/maya-slack-listener\/production-worker\.mjs$/m,
   );
   assert.doesNotMatch(launcher, /(?:xapp-|xox[bp]-|sk_live_|ak_)/);
 });
@@ -146,13 +152,13 @@ test("authorization identities and runtime choices are immutable reviewed litera
   assert.equal(VALIDATION_GATE, "pec78-one-controlled-slack-event");
 });
 
-test("listener accepts environment input only for its two credentials", async () => {
-  const listener = await readFile(new URL("listener.mjs", root), "utf8");
+test("production worker accepts only its two provider credentials and DPoP identity", async () => {
+  const listener = await readFile(new URL("production-worker.mjs", root), "utf8");
   const hermesRunner = await readFile(new URL("hermes-runner.mjs", root), "utf8");
   const references = [...`${listener}\n${hermesRunner}`.matchAll(/process\.env\.([A-Z0-9_]+)/g)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(references, ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"]);
+  assert.deepEqual(references, ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY", "PEC78_CREDENTIAL_ID", "PEC78_MAYA_PRIVATE_JWK", "PEC78_RUNTIME_INSTANCE_ID"]);
   assert.doesNotMatch(
     listener,
     /process\.env\.(?:COMPOSIO_USER_ID|COMPOSIO_CONNECTED_ACCOUNT_ID|COMPOSIO_TRIGGER_ID|SLACK_TEAM_ID|SLACK_CHANNEL_ID|SLACK_MAYA_BOT_USER_ID|SLACK_OWNER_USER_ID|HERMES_BIN|HERMES_MODEL|MAYA_RUNTIME_DIR|MAYA_RECEIPT_DIR)/,

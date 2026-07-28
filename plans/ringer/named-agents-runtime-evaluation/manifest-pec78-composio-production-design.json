@@ -1,0 +1,40 @@
+{
+  "run_name": "pec78-maya-composio-production-design",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-composio-production-design",
+  "max_parallel": 3,
+  "tasks": [
+    {
+      "key": "security-design-review",
+      "task_type": "code-review",
+      "spec": "Read-only security review of the PEC-78 Maya Composio production plan. Read /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-MAYA-COMPOSIO-PRODUCTION.md, docs/74-named-agent-runtime-ringer-governance.md, docs/75-pec76-orgo-hermes-eve-third-party-gates.md, schemas/cleverwork-roofer/188-pec78-runtime-auth-v1-installed-disabled.sql, schemas/cleverwork-roofer/189-pec78-maya-shadow-boundary.sql, and the full app/command-center/src/lib/pec78 plus deployment/remote/orgo/maya-slack-listener subtrees. Own only report.md. Evaluate webhook authentication/replay, exact identity and tenant pinning, encrypted event storage, DPoP claim, prompt injection boundary, Composio-only tool/auth compliance, outbound destination/thread binding, duplicate/unknown effects, secrets, kill/rollback, and whether activation is correctly separate. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Security design has zero unresolved P0/P1 and preserves the approved egress and identity boundary.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1200
+    },
+    {
+      "key": "database-design-review",
+      "task_type": "code-review",
+      "spec": "Read-only PostgreSQL/Supabase review of the PEC-78 Maya Composio production plan. Read /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-MAYA-COMPOSIO-PRODUCTION.md, schemas 188 and 189, current app/command-center/src/lib/pec78 and route code, and the Supabase change-preflight instructions referenced by docs/36-supabase-infrastructure-ops.md. Own only report.md. Evaluate additive migration feasibility, forced RLS and grants, SECURITY DEFINER search paths, ciphertext handling, independent delivery/message dedupe, concurrent claims, lease expiry, fence/gate/capability checks, effect linkage, receipt immutability, rollback, and testability without production writes. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Database design is transactionally sound, private by default, and has zero unresolved P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1200
+    },
+    {
+      "key": "operations-design-review",
+      "task_type": "code-review",
+      "spec": "Read-only operations/SRE review of the PEC-78 Maya Composio production plan. Read /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/PEC78-MAYA-COMPOSIO-PRODUCTION.md, docs/74-named-agent-runtime-ringer-governance.md, current PEC-78 readiness/store/routes, and the full Maya listener subtree. Own only report.md. Evaluate public ingress availability, one-owner fencing, durable queue/lease behavior, startup and activation order, exact provider/recipient proof, observable readiness, no duplicate sends, unknown-outcome recovery, trigger-first rollback, cost/time bounds, old-trigger quarantine, and the next fresh-message authorization. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS|FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_shadow_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Operations design can be installed disabled, activated in a deterministic order, and rolled back without duplicate effects, with zero unresolved P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 1200
+    }
+  ]
+}
