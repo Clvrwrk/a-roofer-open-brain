@@ -11,6 +11,12 @@ import { evaluatePec78Policy, type Pec78PolicyDecision } from "./policy.server";
 
 type Json = Record<string, unknown>;
 const MAX_HEADER = 8192;
+const PEC78_PUBLIC_ORIGIN = "https://cc.proexteriorsus.net";
+
+function canonicalPublicUrl(request: Request): string {
+  const url = new URL(request.url);
+  return `${PEC78_PUBLIC_ORIGIN}${url.pathname}${url.search}`;
+}
 
 function decodePart(part: string): Json {
   return JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Json;
@@ -104,8 +110,8 @@ export async function verifyPec78TokenProof(request: Request, env: RuntimeEnv): 
     }
     const key = createPublicKey({ key: mayaPublic as never, format: "jwk" });
     if (!verify(null, Buffer.from(proof.signingInput), key, proof.signature)) return { ok: false, status: 401, code: "invalid_proof" };
-    const url = new URL(request.url); const body = await request.clone().text(); const now = Math.floor(Date.now() / 1000); const p = proof.claims;
-    if (url.protocol !== "https:" || p.htm !== "POST" || p.htu !== `${url.origin}${url.pathname}${url.search}` ||
+    const body = await request.clone().text(); const now = Math.floor(Date.now() / 1000); const p = proof.claims;
+    if (p.htm !== "POST" || p.htu !== canonicalPublicUrl(request) ||
         p.body_sha256 !== sha256Digest(body) || typeof p.iat !== "number" || Math.abs(now - p.iat) > 30 ||
         typeof p.jti !== "string" || !p.jti) return { ok: false, status: 401, code: "invalid_proof" };
     return { ok: true, proofJti: String(p.jti), proofThumbprint: thumbprint };
@@ -154,10 +160,10 @@ export async function verifyPec78Request(request: Request, env: RuntimeEnv): Pro
       return { ok: false, status: 401, code: "invalid_proof" };
     }
     const url = new URL(request.url);
-    const canonicalUrl = `${url.origin}${url.pathname}${url.search}`;
+    const canonicalUrl = canonicalPublicUrl(request);
     const body = request.method === "GET" ? "" : await request.clone().text();
     const ath = createHash("sha256").update(accessJwt).digest("base64url");
-    if (url.protocol !== "https:" || p.htm !== request.method || p.htu !== canonicalUrl || p.ath !== ath || p.body_sha256 !== sha256Digest(body) || typeof p.iat !== "number" || Math.abs(now - p.iat) > 30) {
+    if (p.htm !== request.method || p.htu !== canonicalUrl || p.ath !== ath || p.body_sha256 !== sha256Digest(body) || typeof p.iat !== "number" || Math.abs(now - p.iat) > 30) {
       return { ok: false, status: 401, code: "invalid_proof" };
     }
     const required = [c.runtime_instance_id, c.credential_id, c.capability, c.jti, p.jti];
