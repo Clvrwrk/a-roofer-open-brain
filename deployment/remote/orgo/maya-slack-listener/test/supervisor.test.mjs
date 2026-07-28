@@ -111,10 +111,12 @@ test("launcher sources only the owner-only environment file and execs the pinned
   assert.match(launcher, /^require_owned_path "\$env_file" file 600$/m);
   assert.match(launcher, /^require_static_path \/usr\/bin\/node file 755$/m);
   assert.match(launcher, /^require_static_path "\$verifier" file 644$/m);
+  assert.match(launcher, /^require_static_path "\$private_jwk_loader" file 644$/m);
+  assert.match(launcher, /^require_static_path "\$listener_env_loader" file 644$/m);
   assert.match(launcher, /^\/usr\/bin\/node "\$verifier"$/m);
   assert.match(launcher, /^\s*\[\[ ! -L "\$path" \]\] \|\| return 1$/m);
   assert.match(launcher, /\/usr\/bin\/stat -c '%u:%g:%a'/);
-  assert.match(launcher, /^\. "\$env_file"$/m);
+  assert.match(launcher, /^\. "\$listener_env_loader" "\$env_file" "\$private_jwk_loader" \/usr\/bin\/node$/m);
   assert.match(launcher, /^exec \/usr\/bin\/env -i \\/m);
   assert.match(launcher, /^  COMPOSIO_API_KEY="\$COMPOSIO_API_KEY" \\/m);
   assert.match(launcher, /^  OPENROUTER_API_KEY="\$OPENROUTER_API_KEY" \\/m);
