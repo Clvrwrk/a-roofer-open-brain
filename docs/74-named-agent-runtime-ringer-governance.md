@@ -120,6 +120,19 @@ effect requires an allowlisted destination, idempotency, receipts, a kill switch
 and the approved model/cost route. Ambiguous, material, security-sensitive,
 financial, legal, or policy messages escalate to Christopher.
 
+Concise natural-language assignments are the normal named-agent work interface; a
+human is not required to translate them into tool syntax or a formal task schema.
+When an agent is blocked, materially uncertain, missing access or authorization, or
+cannot determine ownership, it must promptly ask Christopher in Slack for context
+and routing. The originating operational thread is preferred so source provenance is
+retained; sensitive matters use an approved private owner destination. The escalation
+must identify the agent, source/assignment, completed attempts, exact blocker,
+recommended route or bounded options, and the specific decision needed. The agent
+continues unblocked work, resumes after the answer, and never silently stalls.
+A conversation-only listener asks in its current thread and must not claim it sent a
+separate owner message. A mailbox/task executor may initiate the Slack escalation only
+through its pinned Christopher destination with the normal authorization and receipt.
+
 Every authorized named-agent email must include `admin@cc.proexteriorsus.net` in the
 CC field. This is an executor-level fail-closed invariant, including when a later
 owner authorization permits a reply to the original sender. The required CC does not

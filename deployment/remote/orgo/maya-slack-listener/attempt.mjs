@@ -23,7 +23,7 @@ export async function runAcceptedAttempt({
     onEvent("event_claimed", { event_hash: claim.digest });
     const answer = await runHermes(decision.messageText, attemptSignal);
     throwIfAborted(attemptSignal);
-    const reply = buildReply(answer);
+    const reply = buildReply(answer, expected.ownerSlackUserId);
     const arguments_ = buildSendArguments(decision.event.data.channel, decision.threadTs, reply);
     throwIfAborted(attemptSignal);
     const outcome = await executeSlackSendOnce({

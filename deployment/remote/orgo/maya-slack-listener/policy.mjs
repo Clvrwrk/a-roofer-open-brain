@@ -6,6 +6,7 @@ export const APPROVED = Object.freeze({
   triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
   teamId: "T0B8QEGPVQW",
   mayaBotUserId: "U0BD0Q0H55G",
+  ownerSlackUserId: "U0B8SGJJZLJ",
 });
 
 export const AGENT_HOME = "/home/orgo/maya-agent";

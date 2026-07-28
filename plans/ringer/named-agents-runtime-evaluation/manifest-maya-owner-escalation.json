@@ -1,0 +1,29 @@
+{
+  "run_name": "maya-owner-context-routing",
+  "workdir": "/private/tmp/maya-context-routing/plans/ringer/named-agents-runtime-evaluation/runs/maya-owner-context-routing",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "behavior-review",
+      "task_type": "persona-review",
+      "spec": "Role: independent accounting-agent behavior reviewer. Read-only review the candidate at /private/tmp/maya-context-routing. Own only report.md. Inspect agents/profiles/maya-chen.yaml, agents/profiles/maya-chen/SOUL.md, deployment/remote/orgo/maya-slack-listener/SOUL.md, deployment/remote/orgo/maya-slack-listener/hermes-runner.mjs, core.mjs, attempt.mjs, policy.mjs, and the listener tests. Verify concise natural-language assignments are treated as normal work; Maya infers reasonable in-scope next steps; and a blocked, materially uncertain, missing-access/authorization, or unclear-routing response begins with [BLOCKED]. Verify the escalation tells Christopher the source or assignment, completed attempts, exact blocker, recommended route or bounded options, and specific decision needed. Verify the current listener truthfully mentions Christopher only in the current Slack thread and never claims a separate message or DM. Verify future proactive mailbox/task escalation remains restricted to a pinned owner destination with authorization and receipt. Verify model-supplied mentions are stripped and only the immutable owner identity is injected for [BLOCKED] output. Run the full listener npm test and report the exact 76 tests pass. No source changes, credentials, network, inference, Slack, email, Linear, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, and final MACHINE_VERDICT: PASS or FAIL. Explicitly include: natural-language assignments, [BLOCKED], Christopher, current Slack thread, source or assignment, exact blocker, recommended route or bounded options, specific decision, model-supplied mentions, separate message or DM, pinned owner destination, and 76 tests pass. Every actual finding includes Evidence, Impact, Fix, Priority, Confidence. A PASS report must not contain an actual Priority or Severity field set to P0 or P1.",
+      "check": "npm --prefix /private/tmp/maya-context-routing/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_maya_owner_escalation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Maya turns a blocker into a complete, honest, owner-routed Slack request while continuing normal natural-language work.",
+      "engine": "grok",
+      "model": "grok-4.5",
+      "timeout_s": 900
+    },
+    {
+      "key": "authorization-review",
+      "task_type": "code-review",
+      "spec": "Role: independent Slack authorization and runtime reviewer. Read-only review the candidate at /private/tmp/maya-context-routing. Own only report.md. Inspect deployment/remote/orgo/maya-slack-listener in full plus agents/profiles/maya-chen.yaml, agents/profiles/maya-chen/SOUL.md, plans/ringer/named-agents-runtime-evaluation/HERMES-NAMED-AGENT-TEMPLATE.md, and docs/74-named-agent-runtime-ringer-governance.md. Verify the fixed owner Slack identity is immutable and not model/request supplied; ordinary replies never mention the owner; only a sanitized response beginning [BLOCKED] receives the fixed Christopher mention; other model-supplied mentions remain stripped; destination channel and thread remain bound to the accepted source event; and the runtime does not claim a separate message or DM. Verify concise natural-language assignments remain answerable and each blocker carries source or assignment, attempted work, exact blocker, recommended route or bounded options, and specific decision needed. Verify proactive email/task escalation is only a future executor contract through a pinned owner destination with normal authorization and receipt, not falsely claimed as live. Run the full listener npm test and report the exact 76 tests pass. No source changes, credentials, network, inference, Slack, email, Linear, deployment, or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, and final MACHINE_VERDICT: PASS or FAIL. Explicitly include: natural-language assignments, [BLOCKED], Christopher, current Slack thread, source or assignment, exact blocker, recommended route or bounded options, specific decision, model-supplied mentions, separate message or DM, pinned owner destination, and 76 tests pass. Every actual finding includes Evidence, Impact, Fix, Priority, Confidence. A PASS report must not contain an actual Priority or Severity field set to P0 or P1.",
+      "check": "npm --prefix /private/tmp/maya-context-routing/deployment/remote/orgo/maya-slack-listener test && python3 ../../../checks/verify_maya_owner_escalation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The blocked-owner mention is immutable, source-thread bound, mention-safe, and does not overstate proactive messaging capability.",
+      "engine": "grok",
+      "model": "grok-4.5",
+      "timeout_s": 900
+    }
+  ]
+}

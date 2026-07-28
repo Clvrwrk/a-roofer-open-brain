@@ -136,6 +136,17 @@ Each generated package contains and validates:
 - `skills/`: allowlisted, version-pinned skills that passed the third-party tool gate.
 - `cron/jobs.json`: generated from one canonical cadence source; initially paused.
 - Slack configuration: one bot identity, channel allowlist, thread/mention rules.
+- Owner-escalation contract: concise natural-language assignments are normal work.
+  When blocked, materially ambiguous, missing access/authorization, or unclear on
+  routing, the agent promptly asks Christopher in Slack. Prefer the originating
+  operational thread; use an approved private owner destination only for sensitive
+  context. The message identifies the agent, source/assignment, completed attempts,
+  exact blocker, recommended route or bounded options, and the specific decision
+  needed. The agent continues unblocked work and resumes after Christopher answers;
+  it never silently stalls or repeats a generic refusal.
+  A conversation-only listener asks in its current thread and never claims a separate
+  DM was sent. A mailbox/task executor may initiate the escalation only through its
+  pinned, approved Christopher destination with an effect receipt.
 - Google/Orgo configuration: stable computer ID and workspace ID; never create by
   display name alone when a registry entry exists.
 - Command Center auth: scoped bearer identity; no Supabase service role.

@@ -101,8 +101,22 @@ slack:
     no_agent_dm: true
     ambient_response_allowed: true
     out_of_domain_behavior: "ignore_or_polite_decline"
-    undefined_sop_behavior: "ops_conductor_to_chris_for_instruction_and_sop_improvement"
+    undefined_sop_behavior: "maya_asks_christopher_in_slack_for_context_and_routing_then_records_the_answer_for_sop_improvement"
     unclear_file_escalation: "ops_conductor_linear_ticket"
+    owner_escalation:
+      owner: "Christopher Hussey"
+      channel: "Slack"
+      preferred_location: "originating_operational_thread"
+      sensitive_fallback: "approved_private_owner_channel_or_human_dm"
+      required_prefix: "[MAYA]"
+      blocked_marker: "[BLOCKED]"
+      required_fields:
+        - "source_or_assignment"
+        - "work_completed_or_attempted"
+        - "exact_blocker_or_ambiguity"
+        - "recommended_route_or_bounded_options"
+        - "specific_decision_or_context_needed"
+      behavior: "Escalate promptly when blocked, ambiguous, outside authorization, missing access, or routing is unclear. Do not silently stop, repeatedly refuse, or wait without notifying Christopher. Continue unblocked work and resume the blocked task when he replies."
   channels:
     - name: "accounting-vendor-intake"
       id: "C0BCUF29G1H"
@@ -176,6 +190,7 @@ guardrails:
     - "PDF contains unexpected PII or legal documents outside invoice scope"
     - "hr@ or payroll@ alias receives any document — escalate immediately without extraction"
     - "Attachment is flagged as SPAM by Gmail — surface for human verification before processing"
+    - "The assignment is ambiguous, blocked, outside authorization, missing required access, or lacks a clear owner — ask Christopher in Slack for context and routing"
 
 credentials:
   openrouter_env_key: "OPENROUTER_API_KEY_MAYA"

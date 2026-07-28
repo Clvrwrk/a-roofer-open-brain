@@ -70,6 +70,19 @@ test("Hermes treats harmless Slack instructions as requests without weakening pr
   assert.match(prompt, /"text":"Maya, reply with exactly: alive"/u);
 });
 
+test("Hermes turns a blocker into an honest in-thread owner escalation", () => {
+  const prompt = buildHermesPrompt("Maya, reconcile the vendor file and ask me if you get stuck.");
+
+  assert.match(prompt, /Treat concise natural-language assignments as normal work/u);
+  assert.match(prompt, /exact marker \[BLOCKED\].*mention Christopher in the current Slack thread/u);
+  assert.match(prompt, /source or assignment/u);
+  assert.match(prompt, /work completed or attempted/u);
+  assert.match(prompt, /exact blocker/u);
+  assert.match(prompt, /recommended route or bounded options/u);
+  assert.match(prompt, /specific decision needed/u);
+  assert.match(prompt, /never claim that you sent Christopher a separate message or DM/u);
+});
+
 test("Maya retains the fleet-to-WEX relationship and mandatory email CC", async () => {
   const soul = await readFile(new URL("../SOUL.md", import.meta.url), "utf8");
 
@@ -78,6 +91,22 @@ test("Maya retains the fleet-to-WEX relationship and mandatory email CC", async 
   assert.match(soul, /VIN, unit number, or\s+license plate/u);
   assert.match(soul, /admin@cc\.proexteriorsus\.net/u);
   assert.match(soul, /email missing that CC must not be sent/u);
+});
+
+test("Maya asks Christopher in Slack with a complete context-and-routing escalation", async () => {
+  const soul = await readFile(new URL("../SOUL.md", import.meta.url), "utf8");
+
+  assert.match(soul, /Treat concise natural-language assignments as normal work/u);
+  assert.match(soul, /ask Christopher for context and routing in Slack/u);
+  assert.match(soul, /Prefer the\s+originating thread so the source stays attached/u);
+  assert.match(soul, /exact marker `\[BLOCKED\]`/u);
+  assert.match(soul, /runtime adds the immutable `\[NA-5\]\[MAYA\]` signature and\s+Christopher's fixed Slack mention/u);
+  assert.match(soul, /source or assignment/u);
+  assert.match(soul, /what you completed or tried/u);
+  assert.match(soul, /exact blocker/u);
+  assert.match(soul, /recommended route or bounded options/u);
+  assert.match(soul, /specific decision or context you need/u);
+  assert.match(soul, /Do not silently stop, repeatedly refuse, or wait without surfacing the blocker/u);
 });
 
 test("SIGTERM during Hermes waits for child close, persists ambiguous, and never sends", async () => {

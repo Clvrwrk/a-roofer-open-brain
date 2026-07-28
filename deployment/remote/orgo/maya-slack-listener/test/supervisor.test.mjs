@@ -143,6 +143,7 @@ test("authorization identities and runtime choices are immutable reviewed litera
     triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
     teamId: "T0B8QEGPVQW",
     mayaBotUserId: "U0BD0Q0H55G",
+    ownerSlackUserId: "U0B8SGJJZLJ",
   });
   assert.equal(Object.isFrozen(APPROVED), true);
   assert.equal(AGENT_HOME, "/home/orgo/maya-agent");

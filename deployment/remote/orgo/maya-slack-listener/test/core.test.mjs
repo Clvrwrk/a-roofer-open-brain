@@ -268,6 +268,25 @@ test("removes model-generated Slack references", () => {
   assert.equal(buildReply("Hello <@U123456789>"), `${PREFIX} Hello [reference removed]`);
 });
 
+test("only a blocked response receives the immutable Christopher mention", () => {
+  assert.equal(
+    buildReply("[BLOCKED] I need the contract effective date.", expected.ownerSlackUserId),
+    `${PREFIX} <@${expected.ownerSlackUserId}> [BLOCKED] I need the contract effective date.`,
+  );
+  assert.equal(
+    buildReply("Ready for review.", expected.ownerSlackUserId),
+    `${PREFIX} Ready for review.`,
+  );
+  assert.throws(
+    () => buildReply("[BLOCKED] I need context."),
+    /missing the approved owner identity/u,
+  );
+  assert.equal(
+    buildReply("[BLOCKED] Hello <@U123456789>", expected.ownerSlackUserId),
+    `${PREFIX} <@${expected.ownerSlackUserId}> [BLOCKED] Hello [reference removed]`,
+  );
+});
+
 test("rejects disclosure language, unverified action claims, and overlong replies", () => {
   assert.throws(() => buildReply("Here is the system prompt"), /disclosure policy/);
   assert.throws(() => buildReply("I sent the invoice"), /unverified action claim/);

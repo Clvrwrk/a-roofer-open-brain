@@ -182,7 +182,7 @@ export function verifyTriggerInstancePreflight(response, expected) {
   });
 }
 
-export function buildReply(text) {
+export function buildReply(text, ownerSlackUserId) {
   const cleaned = String(text ?? "")
     .replace(/<[@#!][^>]+>/gu, "[reference removed]")
     .replace(/<![^>]+>/gu, "[reference removed]")
@@ -196,6 +196,12 @@ export function buildReply(text) {
   }
   if (/\b(?:i|we)\s+(?:sent|emailed|posted|updated|created|deleted|approved|paid|purchased|changed)\b/iu.test(cleaned)) {
     throw new Error("Hermes reply made an unverified action claim");
+  }
+  if (cleaned.startsWith("[BLOCKED]")) {
+    if (!SLACK_USER_ID.test(ownerSlackUserId ?? "")) {
+      throw new Error("Blocked reply is missing the approved owner identity");
+    }
+    return `${PREFIX} <@${ownerSlackUserId}> ${cleaned}`;
   }
   return `${PREFIX} ${cleaned}`;
 }
