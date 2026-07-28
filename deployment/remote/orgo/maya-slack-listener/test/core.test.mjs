@@ -46,7 +46,7 @@ function event(overrides = {}) {
       toolkitSlug: "SLACKBOT",
       triggerConfig: {},
       connectedAccount: {
-        id: expected.connectedAccountId,
+        id: expected.receiveConnectedAccountId,
         uuid: "connection-uuid-fixture",
         authConfigId: "ac_fixture",
         authConfigUUID: "auth-config-uuid-fixture",
@@ -181,7 +181,7 @@ test("preflights the exact raw Composio trigger instance UUID, account, name, an
       {
         id: expected.triggerId,
         uuid: expected.triggerUuid,
-        connected_account_id: expected.connectedAccountId,
+        connected_account_id: expected.receiveConnectedAccountId,
         trigger_name: "SLACKBOT_CHANNEL_MESSAGE_RECEIVED",
         user_id: expected.composioUserId,
         disabled_at: null,
@@ -191,7 +191,7 @@ test("preflights the exact raw Composio trigger instance UUID, account, name, an
   assert.deepEqual(verifyTriggerInstancePreflight(listing, expected), {
     triggerId: expected.triggerId,
     triggerUuid: expected.triggerUuid,
-    connectedAccountId: expected.connectedAccountId,
+    connectedAccountId: expected.receiveConnectedAccountId,
     userId: expected.composioUserId,
   });
 

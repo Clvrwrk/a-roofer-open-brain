@@ -7,8 +7,9 @@ her Slack app begins a message with `Maya` or an exact `@Maya` mention.
 
 Security invariants:
 
-- exact Composio user/account/trigger, Slack workspace, and Maya bot values are
-  pinned in the release;
+- exact Composio user, receive account, send account, trigger, Slack workspace,
+  and Maya bot values are pinned in the release; the OAuth account receives channel
+  events and the bot-token account sends replies;
 - the listener release and Hermes configuration are root-owned under `/opt`; the
   launcher verifies their complete ownership/mode/symlink trust chain, the pinned
   system executables, and Maya's writable runtime/state/secret paths before strictly

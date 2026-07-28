@@ -169,3 +169,18 @@ test("overlapping events are serialized without dropping either event", async ()
   assert.deepEqual(order, ["start:first", "end:first", "start:second", "end:second"]);
   assert.equal(queue.pendingCount(), 0);
 });
+
+test("receive and send use their separately pinned Composio connections", async () => {
+  let executeBody;
+  const state = await harness({
+    runHermesImpl: async () => "I am online.",
+    executeImpl: async (_slug, body) => {
+      executeBody = body;
+      return { successful: true, data: { ok: true, ts: "1785160001.000002" } };
+    },
+  });
+  assert.equal((await state.pending).state, "confirmed");
+  state.shutdown.completeAttempt();
+  assert.equal(executeBody.connectedAccountId, APPROVED.sendConnectedAccountId);
+  assert.notEqual(APPROVED.receiveConnectedAccountId, APPROVED.sendConnectedAccountId);
+});

@@ -29,7 +29,7 @@ export async function runAcceptedAttempt({
     const outcome = await executeSlackSendOnce({
       composio,
       userId: expected.composioUserId,
-      connectedAccountId: expected.connectedAccountId,
+      connectedAccountId: expected.sendConnectedAccountId,
       arguments_,
       store,
       claimName: claim.name,

@@ -67,7 +67,7 @@ await composio.triggers.subscribe(
   },
   {
     triggerId: expected.triggerId,
-    connectedAccountId: expected.connectedAccountId,
+    connectedAccountId: expected.receiveConnectedAccountId,
     userId: expected.composioUserId,
   },
 );

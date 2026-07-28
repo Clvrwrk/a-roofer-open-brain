@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-slack-dual-connection",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-slack-dual-connection",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "security-review",
+      "task_type": "code-review",
+      "spec": "Role: independent application-security reviewer. Read-only review the current Maya Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain after the receive/send Composio connection split. Own only report.md. The live probe proved the trigger-bound OAuth connection returns auth_refresh_required for SLACKBOT_SEND_MESSAGE, while the separately created bearer bot-token connection has prior confirmed send evidence. Verify code pins the OAuth account exclusively for trigger preflight, callback identity, and subscription, and pins the bot-token account exclusively for send execution. Verify untrusted events cannot choose either account, both remain under the pinned Maya Composio user, no credential is embedded, and all prior open-listener security properties remain intact. Run npm test. No credentials or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Security reviewer confirmed immutable receive/send account separation with no open P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "operations-review",
+      "task_type": "code-review",
+      "spec": "Role: independent operations/SRE reviewer. Read-only review the current Maya Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain after the receive/send Composio connection split. Own only report.md. Verify trigger preflight/subscription use receiveConnectedAccountId ca_X9dQyRDSS0sa, sends use sendConnectedAccountId ca_V3cdfxA1veTS, policy/test/docs are aligned, receive and send share the pinned Maya Composio user, and no runtime credential beyond COMPOSIO_API_KEY and OPENROUTER_API_KEY was introduced. Recheck queue, lifecycle, provider confirmation, Supervisor entrypoint, and exact test coverage. Run npm test. No credentials or external effects. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, final MACHINE_VERDICT: PASS or FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Operations reviewer confirmed the separately pinned receive and send paths are deployable with no open P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

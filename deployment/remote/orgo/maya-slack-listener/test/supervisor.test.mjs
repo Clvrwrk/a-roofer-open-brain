@@ -137,7 +137,8 @@ test("the package start command is the same open listener used by Supervisor", a
 test("authorization identities and runtime choices are immutable reviewed literals", () => {
   assert.deepEqual(APPROVED, {
     composioUserId: "maya-chen",
-    connectedAccountId: "ca_X9dQyRDSS0sa",
+    receiveConnectedAccountId: "ca_X9dQyRDSS0sa",
+    sendConnectedAccountId: "ca_V3cdfxA1veTS",
     triggerId: "ti_G_lnPrrKPhWj",
     triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
     teamId: "T0B8QEGPVQW",

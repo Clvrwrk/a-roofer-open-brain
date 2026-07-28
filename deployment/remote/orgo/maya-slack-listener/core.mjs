@@ -127,7 +127,7 @@ export function evaluateEvent(raw, expected) {
   if (event.triggerUuid !== expected.triggerUuid && event.triggerUuid !== expected.triggerId) {
     return reject("wrong_trigger_uuid");
   }
-  if (event.connectedAccountId !== expected.connectedAccountId) {
+  if (event.connectedAccountId !== expected.receiveConnectedAccountId) {
     return reject("wrong_connected_account");
   }
   if (event.userId !== expected.composioUserId) return reject("wrong_composio_user");
@@ -168,7 +168,7 @@ export function verifyTriggerInstancePreflight(response, expected) {
   const trigger = matches[0];
   const valid =
     ownDataValue(trigger, "uuid") === expected.triggerUuid &&
-    ownDataValue(trigger, "connected_account_id") === expected.connectedAccountId &&
+    ownDataValue(trigger, "connected_account_id") === expected.receiveConnectedAccountId &&
     ownDataValue(trigger, "trigger_name") === TRIGGER_SLUG &&
     ownDataValue(trigger, "user_id") === expected.composioUserId &&
     ownDataValue(trigger, "disabled_at") === null;
@@ -176,7 +176,7 @@ export function verifyTriggerInstancePreflight(response, expected) {
   return Object.freeze({
     triggerId: expected.triggerId,
     triggerUuid: expected.triggerUuid,
-    connectedAccountId: expected.connectedAccountId,
+    connectedAccountId: expected.receiveConnectedAccountId,
     userId: expected.composioUserId,
   });
 }

@@ -1,6 +1,7 @@
 export const APPROVED = Object.freeze({
   composioUserId: "maya-chen",
-  connectedAccountId: "ca_X9dQyRDSS0sa",
+  receiveConnectedAccountId: "ca_X9dQyRDSS0sa",
+  sendConnectedAccountId: "ca_V3cdfxA1veTS",
   triggerId: "ti_G_lnPrrKPhWj",
   triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
   teamId: "T0B8QEGPVQW",
