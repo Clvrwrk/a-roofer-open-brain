@@ -20,11 +20,11 @@ google_workspace:
   email: "maya.chen@cc.proexteriorsus.net"
   required_cc_recipient: "admin@cc.proexteriorsus.net"
   domain: "cc.proexteriorsus.net"
-  service_account_key_path: "/opt/openbrain/agents/google-service-account.json"
+  auth_provider: "composio"
   gmail_scopes:
     - "https://www.googleapis.com/auth/gmail.readonly"
     - "https://www.googleapis.com/auth/gmail.modify"
-    - "https://www.googleapis.com/auth/gmail.send"  # drafts only
+    - "https://www.googleapis.com/auth/gmail.send"
   drive_scopes:
     - "https://www.googleapis.com/auth/drive.readonly"
     - "https://www.googleapis.com/auth/drive.file"
@@ -65,8 +65,8 @@ google_workspace:
       classification: "payroll_sensitive_escalate"
       priority: "high"
       slack_channel_id: "C0BCUF29G1H"
-  gmail_send_authorized: false
-  external_send_authorized: false
+  gmail_send_authorized: true
+  external_send_authorized: true
 
 kasm:
   desktop_enabled: true
@@ -173,9 +173,9 @@ domain_memory:
     trust_tier: "instruction"
 
 guardrails:
-  no_external_send: true  # Email remains draft-only; pinned owner Slack is governed separately.
+  no_external_send: false  # PEC-113: broad Maya Composio operations; mandatory owner CC remains enforced in code.
   email_required_cc: "admin@cc.proexteriorsus.net"
-  no_approval_decide: true
+  no_approval_decide: true  # Payments, access-control changes, and irreversible deletion remain separate owner decisions.
   no_supabase_service_role: true
   no_public_internet: false  # needs browser for vendor portal downloads
   escalation_triggers:
@@ -188,8 +188,4 @@ guardrails:
 
 credentials:
   openrouter_env_key: "OPENROUTER_API_KEY_MAYA"
-  gw_password_source: "Agent Credentials.xlsx"
-  fal_env_key: "FAL_API_KEY_MAYA"
-  firecrawl_env_key: "FIRECRAWL_API_KEY_MAYA"
-  exa_env_key: "EXA_API_KEY_MAYA"
-  tavily_env_key: "TAVILY_API_KEY_MAYA"
+  composio_env_key: "COMPOSIO_API_KEY"

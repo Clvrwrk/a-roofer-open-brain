@@ -167,6 +167,39 @@ test("an empty mailbox completes without depending on Linear", async () => {
   assert.deepEqual(calls.map((call) => call.slug), ["GMAIL_FETCH_EMAILS"]);
 });
 
+test("production mailbox mode delegates full work to the capability agent and records confirmed effects", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-capability-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ action: "track" });
+  let packet;
+  const capabilityAgent = async (input) => {
+    packet = input;
+    await input.store.recordAction(input.claimName, "gmail_reply", "provider-message-1");
+    return { text: "Replied to Lucinda and updated the WEX task.", confirmedWrites: 1, history: [] };
+  };
+  const result = await runMailboxOccurrence({
+    composio,
+    capabilityAgent,
+    classifier: async () => { throw new Error("legacy classifier must not run"); },
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  assert.equal(packet.source, "email");
+  assert.match(packet.request, /Vendor price update/u);
+  assert.equal(packet.sourceContext.ownerSlackChannelId, APPROVED.ownerSlackChannelId);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_LIST_LINEAR_ISSUES").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 1);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.equal(receipt.action, "capability_work");
+  assert.equal(receipt.confirmedWrites, 1);
+  assert.equal(receipt.actions.length, 1);
+});
+
 test("ignored mail creates no external task or Slack effect and is marked read", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ignore-"));
   const state = new MailboxState(directory);

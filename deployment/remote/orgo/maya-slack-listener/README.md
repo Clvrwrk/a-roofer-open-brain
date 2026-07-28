@@ -1,18 +1,28 @@
 # Maya Composio Slack listener
 
 This package runs Maya's Slack conversation loop on her existing Orgo computer.
-Composio supplies both the Slack trigger and send tool, while Hermes produces a
-short tool-free answer. Maya responds when any human in any channel accessible to
-her Slack app begins a message with `Maya` or an exact `@Maya` mention.
+Composio supplies Maya's Slack trigger and the only Gmail, Linear, and Slack
+application tool/auth layer. Hermes plans one bounded action at a time; the outer
+executor validates and executes each action with Maya's pinned accounts and returns
+provider results for the next reasoning step. Maya responds when any human in any
+channel accessible to her Slack app begins a message with `Maya` or an exact `@Maya`
+mention.
 
 The same single Supervisor-owned runtime also owns Maya's canonical mailbox cadence.
 It checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
-bootstraps at activation time so historical mail is not replayed, deduplicates by
-Gmail message ID, classifies with the same tool-free low-cost Hermes process, creates
-source-linked PE-CC-DevTeam Linear issues for actionable mail, and sends a fixed-owner
-Slack `[BLOCKED]` routing packet when human context is required. It never replies to
-the original sender or sends email. A successfully handled message is marked read;
-unknown provider outcomes remain ambiguous and are never retried automatically.
+bootstraps at activation time so historical mail is not replayed, and deduplicates by
+Gmail message ID. For each new message, Maya may search/read Gmail, retrieve an
+attachment, reply/send/draft email, file or recoverably trash mail, search/create/
+update/comment in PE-CC-Dev Linear, and read or communicate through accessible Slack
+channels. A successfully handled message is marked read; unknown provider outcomes
+remain ambiguous and are never retried automatically.
+
+PEC-113 removes the old intake-only, draft-only, no-attachment, create-only Linear,
+and fixed-owner-only Slack limitations. The release still enforces Maya attribution,
+mandatory email CC to `admin@cc.proexteriorsus.net`, exact account/team identity,
+credential secrecy, hashed effect receipts, and an operator kill switch. Permanent
+deletion, payment execution, credential disclosure, and access-control administration
+are not exposed because they are not required for normal Maya work.
 
 Security invariants:
 
@@ -26,17 +36,18 @@ Security invariants:
 - all human authors and all accessible channel, private-channel, and multi-person
   channel types are accepted when the message addresses Maya;
 - bot/self messages, subtypes, duplicates, and malformed scope fail closed;
-- routing, destination, thread binding, deduplication, and the Maya prefix are code;
+- identity, deduplication, owner email CC, and the Maya prefix are code; normal
+  Slack destinations may be selected from channels accessible to Maya;
 - an interrupted or failed send is `ambiguous` and is never retried automatically;
 - receipts contain only hashes and provider IDs, never messages, prompts, replies,
   tokens, headers, or credentials;
-- Gmail, Linear, and proactive owner Slack effects are pinned to Maya's reviewed
-  Composio user and connected accounts; the Linear team and owner Slack destination
-  are immutable release policy, not model- or email-selected values;
+- Gmail, Linear, and Slack effects are pinned to Maya's reviewed Composio user and
+  connected accounts; new Linear issues are always pinned to PE-CC-DevTeam;
 - the mailbox cursor and per-message receipts are private local state; first start
   records the activation cursor without replaying historical email, then exactly one
   in-process timer schedules the next UTC half-hour occurrence;
-- Hermes runs a single low-cost, tool-free, bounded one-shot response; its
+- Hermes runs low-cost, tool-free, bounded one-shot planning turns; all external
+  tools remain in the validated outer executor. Its
   root-owned `config.yaml` disables MCP and the installed build's otherwise
   auto-recovered `kanban` toolset, and startup re-evaluates the installed Hermes
   selector to require exactly zero enabled CLI toolsets;

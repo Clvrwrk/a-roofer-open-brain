@@ -11,6 +11,7 @@ import { runAcceptedAttempt } from "./attempt.mjs";
 import { runHermes } from "./hermes-runner.mjs";
 import { createSerialQueue, createShutdownCoordinator } from "./shutdown.mjs";
 import { startMailboxExecutor } from "./mailbox-executor.mjs";
+import { runCapabilityAgent } from "./capability-agent.mjs";
 
 const required = ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"];
 for (const name of required) {
@@ -93,6 +94,7 @@ async function processAcceptedEvent(decision) {
       composio,
       attemptSignal,
       runHermes,
+      runAgent: runCapabilityAgent,
       onEvent: log,
     });
   } finally {

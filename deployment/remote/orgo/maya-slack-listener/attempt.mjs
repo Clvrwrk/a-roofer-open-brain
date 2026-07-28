@@ -9,6 +9,7 @@ export async function runAcceptedAttempt({
   composio,
   attemptSignal,
   runHermes,
+  runAgent,
   onEvent,
 }) {
   let claim;
@@ -21,9 +22,29 @@ export async function runAcceptedAttempt({
     if (!claim.claimed) return { state: "duplicate" };
     throwIfAborted(attemptSignal);
     onEvent("event_claimed", { event_hash: claim.digest });
-    const answer = await runHermes(decision.messageText, attemptSignal);
+    const agentResult = runAgent
+      ? await runAgent({
+          source: "slack",
+          request: decision.messageText,
+          sourceContext: {
+            actorId: decision.event.data.user,
+            channel: decision.event.data.channel,
+            threadTs: decision.threadTs,
+            ownerSlackChannelId: expected.ownerSlackChannelId,
+            ownerSlackUserId: expected.ownerSlackUserId,
+          },
+          composio,
+          signal: attemptSignal,
+          expected,
+          store,
+          claimName: claim.name,
+          onEvent,
+        })
+      : { text: await runHermes(decision.messageText, attemptSignal), confirmedWrites: 0 };
     throwIfAborted(attemptSignal);
-    const reply = buildReply(answer, expected.ownerSlackUserId);
+    const reply = buildReply(agentResult.text, expected.ownerSlackUserId, {
+      allowVerifiedActionClaims: agentResult.confirmedWrites > 0,
+    });
     const arguments_ = buildSendArguments(decision.event.data.channel, decision.threadTs, reply);
     throwIfAborted(attemptSignal);
     const outcome = await executeSlackSendOnce({

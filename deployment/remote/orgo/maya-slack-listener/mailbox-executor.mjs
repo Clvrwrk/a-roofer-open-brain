@@ -10,6 +10,7 @@ import {
   MAYA_MAILBOX_STATE_DIR,
 } from "./policy.mjs";
 import { TOOL_SLUG, TOOL_VERSION, classifyError, isSlackTimestamp } from "./core.mjs";
+import { runCapabilityAgent } from "./capability-agent.mjs";
 
 const GMAIL_FETCH = "GMAIL_FETCH_EMAILS";
 const GMAIL_FETCH_MESSAGE = "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID";
@@ -71,6 +72,7 @@ export function normalizeMailboxMessage(data) {
     receivedAt: new Date(receivedEpochMs).toISOString(),
     receivedEpochMs,
     sender: String(firstDefined(data, ["sender", "from"]) ?? headers.from ?? "unknown").slice(0, 500),
+    senderEmail: extractEmailAddress(String(firstDefined(data, ["sender", "from"]) ?? headers.from ?? "")),
     recipients: String(firstDefined(data, ["to", "recipient"]) ?? headers.to ?? "").slice(0, 500),
     subject: String(firstDefined(data, ["subject"]) ?? headers.subject ?? "(no subject)").slice(0, 500),
     body: typeof bodyValue === "string" ? bodyValue.slice(0, 12_000) : "",
@@ -81,10 +83,18 @@ export function normalizeMailboxMessage(data) {
       ? attachments.slice(0, 25).map((item) => ({
           filename: String(firstDefined(item, ["filename", "fileName"]) ?? "attachment").slice(0, 255),
           mimeType: String(firstDefined(item, ["mimeType", "mime_type"]) ?? "application/octet-stream").slice(0, 150),
+          attachmentId: String(firstDefined(item, ["attachmentId", "attachment_id", "id"]) ?? "").slice(0, 2_000),
+          size: Number(firstDefined(item, ["size", "sizeBytes", "size_bytes"]) ?? 0),
         }))
       : [],
     displayUrl: String(firstDefined(data, ["displayUrl", "display_url"]) ?? `https://mail.google.com/mail/u/0/#inbox/${messageId}`),
   });
+}
+
+function extractEmailAddress(value) {
+  const bracketed = value.match(/<([^<>\s@]+@[^<>\s@]+)>/u)?.[1];
+  const plain = value.match(/(?:^|\s)([^<>\s@]+@[^<>\s@]+)(?:$|\s)/u)?.[1];
+  return String(bracketed ?? plain ?? "").toLowerCase().slice(0, 320);
 }
 
 export function buildLinearIssueArguments(message, decision, expected = APPROVED) {
@@ -267,7 +277,7 @@ async function markRead(composio, message, signal, expected) {
   return "marked_read";
 }
 
-async function processMessage({ composio, classifier, state, listMessage, occurrenceId, signal, expected, onEvent, linearSourceIds }) {
+async function processMessage({ composio, classifier, capabilityAgent, state, listMessage, occurrenceId, signal, expected, onEvent, linearSourceIds }) {
   const messageId = String(firstDefined(listMessage, ["messageId", "message_id", "id"]) ?? "");
   if (!/^[0-9a-fA-F]+$/u.test(messageId)) throw new Error("Gmail list returned an invalid message ID");
   const claim = await state.claim(messageId, occurrenceId);
@@ -277,6 +287,48 @@ async function processMessage({ composio, classifier, state, listMessage, occurr
   let slackAttempted = false;
   try {
     message = await hydrateMessage(composio, messageId, signal, expected);
+    if (capabilityAgent) {
+      // A capability run may perform multiple external writes. Any uncertain failure
+      // is terminally ambiguous, so the legacy fallback send must not run afterward.
+      slackAttempted = true;
+      const result = await capabilityAgent({
+        source: "email",
+        request: JSON.stringify({
+          sender: message.sender,
+          senderEmail: message.senderEmail,
+          recipients: message.recipients,
+          subject: message.subject,
+          body: message.body,
+          receivedAt: message.receivedAt,
+          messageId: message.messageId,
+          threadId: message.threadId,
+          displayUrl: message.displayUrl,
+          attachments: message.attachments,
+        }),
+        sourceContext: {
+          messageId: message.messageId,
+          threadId: message.threadId,
+          senderEmail: message.senderEmail,
+          ownerSlackChannelId: expected.ownerSlackChannelId,
+          ownerSlackUserId: expected.ownerSlackUserId,
+        },
+        composio,
+        signal,
+        expected,
+        store: state,
+        claimName: claim.name,
+        onEvent,
+      });
+      const readState = await markRead(composio, message, signal, expected);
+      await state.confirm(claim.name, {
+        action: "capability_work",
+        confirmedWrites: result.confirmedWrites,
+        finalDigest: hash(result.text),
+        readState,
+      });
+      onEvent("mailbox_message_confirmed", { message_hash: claim.messageDigest, action: "capability_work" });
+      return { state: "confirmed", action: "capability_work" };
+    }
     decision = await classifier(message, signal);
     let linearIssue;
     if (decision.action !== "ignore") {
@@ -336,6 +388,7 @@ async function processMessage({ composio, classifier, state, listMessage, occurr
 export async function runMailboxOccurrence({
   composio,
   classifier = classifyMailboxMessage,
+  capabilityAgent,
   state,
   signal,
   expected = APPROVED,
@@ -356,7 +409,7 @@ export async function runMailboxOccurrence({
   for (const candidate of candidates) {
     if (signal.aborted) throw new Error("Mailbox occurrence aborted");
     const result = await processMessage({
-      composio, classifier, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearSourceIds,
+      composio, classifier, capabilityAgent, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearSourceIds,
     });
     if (result.state !== "duplicate") processed += 1;
   }
@@ -369,7 +422,7 @@ export async function runMailboxOccurrence({
   return { state: "complete", processed, candidates: candidates.length };
 }
 
-export async function startMailboxExecutor({ composio, expected = APPROVED, onEvent = () => {}, stateDirectory = MAYA_MAILBOX_STATE_DIR }) {
+export async function startMailboxExecutor({ composio, expected = APPROVED, onEvent = () => {}, stateDirectory = MAYA_MAILBOX_STATE_DIR, capabilityAgent = runCapabilityAgent }) {
   const controller = new AbortController();
   const state = new MailboxState(stateDirectory);
   let timer;
@@ -377,7 +430,7 @@ export async function startMailboxExecutor({ composio, expected = APPROVED, onEv
   let stopped = false;
   const run = () => {
     if (stopped) return;
-    active = runMailboxOccurrence({ composio, state, signal: controller.signal, expected, onEvent })
+    active = runMailboxOccurrence({ composio, state, signal: controller.signal, expected, onEvent, capabilityAgent })
       .catch((error) => onEvent("mailbox_occurrence_failed", { error_class: classifyError(error) }))
       .finally(() => schedule());
   };

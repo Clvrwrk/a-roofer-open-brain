@@ -33,10 +33,20 @@ export function buildHermesPrompt(messageText) {
 export async function runHermes(
   messageText,
   attemptSignal,
-  { spawnImpl = spawn, openRouterApiKey = process.env.OPENROUTER_API_KEY } = {},
+  { spawnImpl = spawn, openRouterApiKey } = {},
+) {
+  const prompt = buildHermesPrompt(messageText);
+
+  return await runHermesPrompt(prompt, attemptSignal, { spawnImpl, openRouterApiKey, outputLimit: 4_000 });
+}
+
+export async function runHermesPrompt(
+  prompt,
+  attemptSignal,
+  { spawnImpl = spawn, openRouterApiKey, outputLimit = 16_000 } = {},
 ) {
   if (attemptSignal.aborted) throw abortError();
-  const prompt = buildHermesPrompt(messageText);
+  openRouterApiKey ??= process.env.OPENROUTER_API_KEY;
 
   return await new Promise((resolve, reject) => {
     const child = spawnImpl(
@@ -82,7 +92,7 @@ export async function runHermes(
     }, 60_000);
     child.stdout.on("data", (chunk) => {
       outputBytes += chunk.length;
-      if (outputBytes > 4_000) {
+      if (outputBytes > outputLimit) {
         terminalError = new Error("Hermes inference exceeded the output limit");
         child.kill("SIGKILL");
         return;

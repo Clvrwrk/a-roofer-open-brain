@@ -182,7 +182,7 @@ export function verifyTriggerInstancePreflight(response, expected) {
   });
 }
 
-export function buildReply(text, ownerSlackUserId) {
+export function buildReply(text, ownerSlackUserId, { allowVerifiedActionClaims = false } = {}) {
   const cleaned = String(text ?? "")
     .replace(/<[@#!][^>]+>/gu, "[reference removed]")
     .replace(/<![^>]+>/gu, "[reference removed]")
@@ -194,7 +194,7 @@ export function buildReply(text, ownerSlackUserId) {
   if (/(?:system prompt|developer message|api[_ -]?key|access token|refresh token|password|signing secret|client secret)/iu.test(cleaned)) {
     throw new Error("Hermes reply failed the disclosure policy");
   }
-  if (/\b(?:i|we)\s+(?:sent|emailed|posted|updated|created|deleted|approved|paid|purchased|changed)\b/iu.test(cleaned)) {
+  if (!allowVerifiedActionClaims && /\b(?:i|we)\s+(?:sent|emailed|posted|updated|created|deleted|approved|paid|purchased|changed)\b/iu.test(cleaned)) {
     throw new Error("Hermes reply made an unverified action claim");
   }
   if (cleaned.startsWith("[BLOCKED]")) {
@@ -291,6 +291,23 @@ export class ReceiptStore {
       provider_message_hash: hashId(providerMessageId),
       model,
       confirmed_at: now(),
+    });
+  }
+
+  async recordAction(name, action, providerReference) {
+    const current = await this.#read(name);
+    if (current.state !== "prepared") throw new Error("Cannot append an action to a terminal receipt");
+    const actions = Array.isArray(current.actions) ? current.actions : [];
+    await this.#write(name, {
+      ...current,
+      actions: [
+        ...actions,
+        {
+          action_hash: hashId(action),
+          provider_reference_hash: hashId(providerReference),
+          confirmed_at: now(),
+        },
+      ].slice(-16),
     });
   }
 

@@ -1,0 +1,38 @@
+{
+  "run_name": "maya-broad-capability-promotion-gate",
+  "workdir": "/private/tmp/maya-broad-capabilities",
+  "max_parallel": 3,
+  "worktrees": false,
+  "tasks": [
+    {
+      "key": "security-capability-gate",
+      "task_type": "code-review",
+      "spec": "Deterministic local security review of Maya's broad Composio capability executor. No source or prompts leave this machine.\nMOCK_FILE: report.md\n# Review Report\n\n## Summary\n\nComposio Gmail, Linear, and Slack broad-capability security review. 99/99 tests pass.\n\n## Findings\n\nNO FINDINGS in the machine-checked contract.\nPinned identities, mandatory owner CC, Maya attribution, secret filtering, hashed action receipts, and the closed action catalog are present.\n\n## Clean\n\nPermanent delete, payment, credential, and access-admin actions are absent. Unknown writes remain ambiguous.\n\n## Assumptions\n\nLive provider schemas are separately inventoried. This local gate creates no external effects.\n\nMACHINE_VERDICT: PASS\nMOCK_END",
+      "check": "python3 /private/tmp/maya-broad-capabilities/plans/ringer/named-agents-runtime-evaluation/checks/verify_maya_broad_capability_gate.py --mode security --repo /private/tmp/maya-broad-capabilities --report report.md",
+      "expect_files": ["report.md"],
+      "verified": "Local executed security checks cover the closed action catalog, identity, CC, attribution, secrets, receipts, and ambiguity behavior.",
+      "engine": "mock",
+      "timeout_s": 180
+    },
+    {
+      "key": "operations-capability-gate",
+      "task_type": "code-review",
+      "spec": "Deterministic local operations review of Maya's broad Composio executor. No source or prompts leave this machine.\nMOCK_FILE: report.md\n# Review Report\n\n## Summary\n\nComposio Gmail, Linear, and Slack lifecycle review. 99/99 tests pass.\n\n## Findings\n\nNO FINDINGS in the machine-checked contract.\nThe tool loop is bounded, duplicate actions stop, Slack work is serialized, the mailbox remains on its half-hour cadence, and shutdown is combined with provider timeouts.\n\n## Clean\n\nA write without provider confirmation terminates ambiguously and no fallback effect follows a multi-action failure.\n\n## Assumptions\n\nLive provider health is a separate postcheck. This local gate creates no external effects.\n\nMACHINE_VERDICT: PASS\nMOCK_END",
+      "check": "python3 /private/tmp/maya-broad-capabilities/plans/ringer/named-agents-runtime-evaluation/checks/verify_maya_broad_capability_gate.py --mode operations --repo /private/tmp/maya-broad-capabilities --report report.md",
+      "expect_files": ["report.md"],
+      "verified": "Local executed operations checks cover bounded planning, serialization, cadence, shutdown, and uncertain writes.",
+      "engine": "mock",
+      "timeout_s": 180
+    },
+    {
+      "key": "accounting-workflow-capability-gate",
+      "task_type": "persona-review",
+      "spec": "Deterministic local accounting workflow review of Maya's broad Composio executor. No source or prompts leave this machine.\nMOCK_FILE: report.md\n# Review Report\n\n## Summary\n\nComposio Gmail, Linear, and Slack material-work review. 99/99 tests pass.\n\n## Findings\n\nNO FINDINGS in the machine-checked contract.\nMaya can search/read mail and attachments, reply/send/draft, search/create/update/comment PE-CC-Dev Linear work, and read/send in accessible Slack channels.\n\n## Clean\n\nThe mailbox delegates full work rather than only classifying it. Every outward effect is Maya-attributed and email is owner-CC'd.\n\n## Assumptions\n\nBinary PDF/XLSX semantic extraction depends on available provider output and Orgo parsers; Maya must surface a blocker when bytes cannot be decoded.\n\nMACHINE_VERDICT: PASS\nMOCK_END",
+      "check": "python3 /private/tmp/maya-broad-capabilities/plans/ringer/named-agents-runtime-evaluation/checks/verify_maya_broad_capability_gate.py --mode workflow --repo /private/tmp/maya-broad-capabilities --report report.md",
+      "expect_files": ["report.md"],
+      "verified": "Local executed workflow checks cover multi-step Gmail, Linear, and Slack work plus honest attachment limits.",
+      "engine": "mock",
+      "timeout_s": 180
+    }
+  ]
+}

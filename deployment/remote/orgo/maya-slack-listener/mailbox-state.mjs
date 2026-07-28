@@ -80,6 +80,20 @@ export class MailboxState {
     });
   }
 
+  async recordAction(name, action, providerReference) {
+    const target = path.join(this.receiptDirectory, name);
+    const receipt = JSON.parse(await readFile(target, "utf8"));
+    if (receipt.state !== "processing") throw new Error("Mailbox action receipt rejected");
+    const actions = Array.isArray(receipt.actions) ? receipt.actions : [];
+    await this.#write(target, {
+      ...receipt,
+      actions: [
+        ...actions,
+        { actionDigest: digest(action), providerReferenceDigest: digest(providerReference), confirmedAt: now() },
+      ].slice(-16),
+    });
+  }
+
   async ambiguous(name, errorClass, fields = {}) {
     await this.#transition(name, "processing", {
       state: "ambiguous",
