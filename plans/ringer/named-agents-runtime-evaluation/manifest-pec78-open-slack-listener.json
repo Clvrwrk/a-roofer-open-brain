@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-open-slack-listener",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-open-slack-listener",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "security-review",
+      "task_type": "code-review",
+      "spec": "Role: independent application-security reviewer. Objective: read-only review of the Maya open Slack listener candidate at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md in your assigned task directory; do not edit the repository, access credentials, or make external effects. Inspect every file under deployment/remote/orgo/maya-slack-listener, focusing on policy.mjs, core.mjs, listener.mjs, attempt.mjs, hermes-runner.mjs, send-once.mjs, start-listener.sh, README.md, and tests. The authorized product behavior is: any human may address Maya at the start of a message using plain Maya or an exact Slack mention, in any public/private/multi-person channel accessible to her app; Maya ignores bot/self messages; Composio is the only Slack auth/tool layer; Hermes is tool-free and low-cost; replies remain in-thread and carry [NA-5][MAYA]. Verify trigger/account/workspace pinning, arbitrary-human/arbitrary-channel acceptance without self-loop, prompt isolation, secret confinement, dedupe, provider confirmation, no automatic retry after ambiguity, and least-privilege inference environment. Run npm test in the listener package. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then final MACHINE_VERDICT: PASS or MACHINE_VERDICT: FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The security reviewer executed the listener tests and found no P0/P1 in the all-accessible-channel, all-human, Composio-only conversation loop.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "operations-review",
+      "task_type": "code-review",
+      "spec": "Role: independent operations/SRE reviewer. Objective: read-only activation review of the Maya open Slack listener candidate at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain. Own only report.md in your assigned task directory; do not edit the repository, access credentials, or make external effects. Inspect every file under deployment/remote/orgo/maya-slack-listener with emphasis on the Supervisor launcher, trust-chain installer, policy and trigger preflight, shutdown, receipts, Composio subscribe/send flow, and test coverage. The target is a simple durable conversation loop: every human in every app-accessible public/private/multi-person channel can receive an in-thread Maya response when the message begins with Maya or an exact @Maya mention; bot/self messages never trigger; no one-use validation budget or owner/channel allowlist remains; Composio is the only Slack tool/auth layer. Run npm test in the listener package. Verify restart behavior, duplicate suppression, bounded inference/send, provider timestamp confirmation, deployability to Maya's existing Orgo Supervisor, and that start-listener.sh launches listener.mjs with only Composio and inference credentials. Required sections: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, then final MACHINE_VERDICT: PASS or MACHINE_VERDICT: FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The operations reviewer executed the listener tests and confirmed a durable deployable open conversation loop with no P0/P1.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

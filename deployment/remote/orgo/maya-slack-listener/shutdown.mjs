@@ -21,13 +21,38 @@ export function createShutdownCoordinator({ onExit, onLog }) {
     completeAttempt() {
       active = false;
       attemptController = undefined;
-      onExit();
+      if (requested) onExit();
     },
     isActive() {
       return active;
     },
     isShuttingDown() {
       return requested;
+    },
+  });
+}
+
+export function createSerialQueue({ handler, onError }) {
+  let tail = Promise.resolve();
+  let pending = 0;
+
+  return Object.freeze({
+    enqueue(value) {
+      pending += 1;
+      const task = tail
+        .then(() => handler(value))
+        .catch((error) => onError?.(error))
+        .finally(() => {
+          pending -= 1;
+        });
+      tail = task;
+      return task;
+    },
+    pendingCount() {
+      return pending;
+    },
+    whenIdle() {
+      return tail;
     },
   });
 }

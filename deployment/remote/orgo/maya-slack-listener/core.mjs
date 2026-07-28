@@ -9,6 +9,7 @@ export const PREFIX = "[NA-5][MAYA] -";
 
 const SLACK_TS = /^\d{10}\.\d{6}$/;
 const SAFE_ID = /^[A-Za-z0-9_-]{3,128}$/;
+const SLACK_USER_ID = /^[UW][A-Z0-9]{8,}$/;
 const ERROR_CLASSES = new Set([
   "AbortError",
   "ComposioRequestCancelledError",
@@ -19,6 +20,10 @@ const ERROR_CLASSES = new Set([
 
 export function hashId(value) {
   return createHash("sha256").update(String(value)).digest("hex");
+}
+
+export function isSlackTimestamp(value) {
+  return typeof value === "string" && SLACK_TS.test(value);
 }
 
 export function classifyError(error) {
@@ -127,26 +132,21 @@ export function evaluateEvent(raw, expected) {
   }
   if (event.userId !== expected.composioUserId) return reject("wrong_composio_user");
   if (data.team_id !== expected.teamId) return reject("wrong_team");
-  if (data.channel !== expected.channelId || data.channel_type !== "channel") {
-    return reject("wrong_channel");
-  }
-  if (!SLACK_TS.test(data.ts ?? "")) return reject("invalid_timestamp");
+  if (!SAFE_ID.test(data.channel ?? "") || !["channel", "group", "mpim"].includes(data.channel_type)) return reject("invalid_channel");
+  if (!isSlackTimestamp(data.ts)) return reject("invalid_timestamp");
   if (data.subtype) return reject("message_subtype");
+  if (typeof data.user !== "string" || !SLACK_USER_ID.test(data.user)) return reject("invalid_actor");
   if (data.bot_id || data.user === expected.mayaBotUserId) return reject("bot_or_self");
-  if (data.user !== expected.ownerUserId) return reject("unapproved_actor");
   if (
     (data.files !== undefined && !Array.isArray(data.files)) ||
     (data.attachments !== undefined && !Array.isArray(data.attachments))
   ) {
     return reject("malformed_attachment_container");
   }
-  if ((data.files?.length ?? 0) > 0 || (data.attachments?.length ?? 0) > 0) {
-    return reject("attachments_not_allowed");
-  }
   if (!addressedToMaya(data.text, expected.mayaBotUserId)) return reject("not_addressed");
 
-  const threadTs = SLACK_TS.test(data.thread_ts ?? "") ? data.thread_ts : data.ts;
-  const eventKey = `${expected.teamId}:${expected.channelId}:${data.ts}`;
+  const threadTs = isSlackTimestamp(data.thread_ts) ? data.thread_ts : data.ts;
+  const eventKey = `${expected.teamId}:${data.channel}:${data.ts}`;
   return {
     accepted: true,
     reason: "accepted",
@@ -170,7 +170,8 @@ export function verifyTriggerInstancePreflight(response, expected) {
     ownDataValue(trigger, "uuid") === expected.triggerUuid &&
     ownDataValue(trigger, "connected_account_id") === expected.connectedAccountId &&
     ownDataValue(trigger, "trigger_name") === TRIGGER_SLUG &&
-    ownDataValue(trigger, "user_id") === expected.composioUserId;
+    ownDataValue(trigger, "user_id") === expected.composioUserId &&
+    ownDataValue(trigger, "disabled_at") === null;
   if (!valid) throw new Error("Composio trigger-instance identity mismatch");
   return Object.freeze({
     triggerId: expected.triggerId,
@@ -199,7 +200,7 @@ export function buildReply(text) {
 }
 
 export function buildSendArguments(channelId, threadTs, reply) {
-  if (!SAFE_ID.test(channelId) || !SLACK_TS.test(threadTs)) {
+  if (!SAFE_ID.test(channelId) || !isSlackTimestamp(threadTs)) {
     throw new Error("Unsafe Slack destination binding");
   }
   if (!reply.startsWith(`${PREFIX} `)) throw new Error("Missing Maya communication prefix");
@@ -270,26 +271,6 @@ export class ReceiptStore {
       return { claimed: true, name, digest };
     } catch (error) {
       if (error?.code === "EEXIST") return { claimed: false, name, digest };
-      throw error;
-    } finally {
-      await handle?.close();
-    }
-  }
-
-  async claimOnceGate(gateName) {
-    const name = `gate-${hashId(gateName)}.json`;
-    const target = path.join(this.directory, name);
-    let handle;
-    try {
-      handle = await open(target, "wx", 0o600);
-      await handle.writeFile(
-        `${JSON.stringify({ schema: 1, state: "claimed", gate_hash: hashId(gateName), created_at: now() })}\n`,
-      );
-      await handle.sync();
-      await syncDirectory(this.directory);
-      return true;
-    } catch (error) {
-      if (error?.code === "EEXIST") return false;
       throw error;
     } finally {
       await handle?.close();

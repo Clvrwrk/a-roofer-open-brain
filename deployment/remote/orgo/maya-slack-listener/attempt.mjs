@@ -1,7 +1,4 @@
-import {
-  VALIDATION_GATE,
-  HERMES_MODEL,
-} from "./policy.mjs";
+import { HERMES_MODEL } from "./policy.mjs";
 import { buildReply, buildSendArguments, classifyError, hashId } from "./core.mjs";
 import { executeSlackSendOnce } from "./send-once.mjs";
 
@@ -16,14 +13,9 @@ export async function runAcceptedAttempt({
 }) {
   let claim;
   try {
-    const gateClaimed = await store.claimOnceGate(VALIDATION_GATE);
-    if (!gateClaimed) {
-      onEvent("validation_budget_exhausted");
-      return { state: "budget_exhausted" };
-    }
     claim = await store.claim(decision.eventKey, {
       actorId: decision.event.data.user,
-      channelId: expected.channelId,
+      channelId: decision.event.data.channel,
       triggerId: expected.triggerId,
     });
     if (!claim.claimed) return { state: "duplicate" };
@@ -32,7 +24,7 @@ export async function runAcceptedAttempt({
     const answer = await runHermes(decision.messageText, attemptSignal);
     throwIfAborted(attemptSignal);
     const reply = buildReply(answer);
-    const arguments_ = buildSendArguments(expected.channelId, decision.threadTs, reply);
+    const arguments_ = buildSendArguments(decision.event.data.channel, decision.threadTs, reply);
     throwIfAborted(attemptSignal);
     const outcome = await executeSlackSendOnce({
       composio,

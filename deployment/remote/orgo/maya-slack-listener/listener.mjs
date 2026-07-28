@@ -9,7 +9,7 @@ import {
 import { APPROVED, MAYA_RECEIPT_DIR } from "./policy.mjs";
 import { runAcceptedAttempt } from "./attempt.mjs";
 import { runHermes } from "./hermes-runner.mjs";
-import { createShutdownCoordinator } from "./shutdown.mjs";
+import { createSerialQueue, createShutdownCoordinator } from "./shutdown.mjs";
 
 const required = ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"];
 for (const name of required) {
@@ -39,37 +39,31 @@ const shutdown = createShutdownCoordinator({
   onExit: scheduleCleanExit,
   onLog: log,
 });
+const queue = createSerialQueue({
+  handler: processAcceptedEvent,
+  onError: (error) => log("queued_attempt_failed", { error_class: error?.name ?? "UnexpectedError" }),
+});
 process.once("SIGTERM", () => shutdown.handleSignal());
 
 log("listener_started", {
   trigger_hash: hashId(expected.triggerId),
   trigger_uuid_hash: hashId(expected.triggerUuid),
-  channel_hash: hashId(expected.channelId),
+  channel_scope: "all_accessible",
 });
 await composio.triggers.subscribe(
   async (raw) => {
-    if (shutdown.isActive() || shutdown.isShuttingDown()) return;
+    if (shutdown.isShuttingDown()) {
+      log("event_rejected", { reason: "shutdown_requested" });
+      return;
+    }
     const decision = evaluateEvent(raw, expected);
     if (!decision.accepted) {
       log("event_rejected", { reason: decision.reason });
       return;
     }
 
-    const attemptSignal = shutdown.beginAttempt();
-    if (!attemptSignal) return;
-    try {
-      await runAcceptedAttempt({
-        decision,
-        expected,
-        store,
-        composio,
-        attemptSignal,
-        runHermes,
-        onEvent: log,
-      });
-    } finally {
-      shutdown.completeAttempt();
-    }
+    log("event_queued", { pending: queue.pendingCount() + 1 });
+    return queue.enqueue(decision);
   },
   {
     triggerId: expected.triggerId,
@@ -77,6 +71,27 @@ await composio.triggers.subscribe(
     userId: expected.composioUserId,
   },
 );
+
+async function processAcceptedEvent(decision) {
+  const attemptSignal = shutdown.beginAttempt();
+  if (!attemptSignal) {
+    log("event_rejected", { reason: "shutdown_requested" });
+    return;
+  }
+  try {
+    await runAcceptedAttempt({
+      decision,
+      expected,
+      store,
+      composio,
+      attemptSignal,
+      runHermes,
+      onEvent: log,
+    });
+  } finally {
+    shutdown.completeAttempt();
+  }
+}
 
 function log(event, fields = {}) {
   process.stdout.write(`${JSON.stringify({ ts: new Date().toISOString(), event, ...fields })}\n`);

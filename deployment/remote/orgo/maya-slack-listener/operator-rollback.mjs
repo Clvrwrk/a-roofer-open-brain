@@ -137,10 +137,7 @@ export function validateRuntimeEvidence(value) {
 }
 
 async function disableTrigger() {
-  const triggerId = requiredEnv("PEC78_COMPOSIO_TRIGGER_ID");
-  if (!/^ti_[A-Za-z0-9_-]{6,128}$/.test(triggerId) || triggerId === APPROVED.triggerId) {
-    throw new Error("The reviewed new Composio trigger ID is required");
-  }
+  const triggerId = APPROVED.triggerId;
   const composio = new Composio({ apiKey: requiredEnv("COMPOSIO_API_KEY") });
   await composio.triggers.disable(triggerId, { signal: AbortSignal.timeout(30_000) });
   const listing = await composio.triggers.listActive(

@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-open-slack-listener-remediation",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-open-slack-listener-remediation",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "security-review",
+      "task_type": "code-review",
+      "spec": "Role: independent application-security remediation reviewer. Perform a read-only review of the current Maya open Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain and own only report.md in your assigned task directory. First read the prior FAIL at plans/ringer/named-agents-runtime-evaluation/runs/pec78-open-slack-listener/security-review/report.md. Verify every prior finding is resolved: ordinary completion keeps the listener running, overlapping events are serialized rather than dropped, provider confirmation requires an exact Slack timestamp, and authors must be valid non-bot/non-self Slack users. Also inspect every first-party file under deployment/remote/orgo/maya-slack-listener for regressions. Authorized behavior: any human may address Maya at message start using plain Maya or exact @Maya in any public/private/multi-person channel accessible to the app; Composio is the only Slack auth/tool layer; replies remain in-thread with [NA-5][MAYA]; Hermes is tool-free and low-cost. Run npm test. Do not access credentials or external systems. Required sections: # Review Report, ## Summary, ## Prior Findings, ## Findings, ## Clean, ## Assumptions, then final MACHINE_VERDICT: PASS or MACHINE_VERDICT: FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any unresolved prior finding or any P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The security remediation reviewer executed tests and confirmed all prior findings resolved with no P0/P1 regression.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "operations-review",
+      "task_type": "code-review",
+      "spec": "Role: independent operations/SRE remediation reviewer. Perform a read-only review of the current Maya open Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain and own only report.md in your assigned task directory. First read the prior FAIL at plans/ringer/named-agents-runtime-evaluation/runs/pec78-open-slack-listener/operations-review/report.md. Verify every prior finding is resolved: the listener stays up after replies; concurrent events queue; the launcher strictly accepts exactly the Composio and inference credentials without DPoP; provider timestamps are exact; startup rejects a disabled trigger; the one-use gate and broken production-worker entrypoint are removed. Inspect launcher, Supervisor, installer, rollback, receipt lifecycle, shutdown, queue, docs, package entrypoint, and tests. Target behavior is a durable all-accessible-channel, all-human Composio-only conversation loop. Run npm test. Do not access credentials or external systems. Required sections: # Review Report, ## Summary, ## Prior Findings, ## Findings, ## Clean, ## Assumptions, then final MACHINE_VERDICT: PASS or MACHINE_VERDICT: FAIL. Every finding includes Evidence, Impact, Fix, Priority, Confidence. PASS is forbidden with any unresolved prior finding or any P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "The operations remediation reviewer executed tests and confirmed every prior blocker resolved and the open listener deployable.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

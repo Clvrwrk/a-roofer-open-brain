@@ -1,4 +1,4 @@
-import { TOOL_SLUG, TOOL_VERSION, classifyError } from "./core.mjs";
+import { TOOL_SLUG, TOOL_VERSION, classifyError, isSlackTimestamp } from "./core.mjs";
 import { HERMES_MODEL } from "./policy.mjs";
 import { composioSendRequestOptions } from "./request-options.mjs";
 
@@ -22,7 +22,7 @@ export async function executeSlackSendOnce({
       },
       composioSendRequestOptions(undefined, abortSignal),
     );
-    if (!result?.successful || !result?.data?.ok || !result?.data?.ts) {
+    if (!result?.successful || !result?.data?.ok || !isSlackTimestamp(result?.data?.ts)) {
       throw new Error("Composio Slack send did not return a confirmed provider timestamp");
     }
     await store.confirm(claimName, result.data.ts, HERMES_MODEL);

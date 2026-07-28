@@ -9,7 +9,7 @@ import { runAcceptedAttempt } from "../attempt.mjs";
 import { ReceiptStore } from "../core.mjs";
 import { runHermes } from "../hermes-runner.mjs";
 import { APPROVED } from "../policy.mjs";
-import { createShutdownCoordinator } from "../shutdown.mjs";
+import { createSerialQueue, createShutdownCoordinator } from "../shutdown.mjs";
 
 async function harness({ runHermesImpl, executeImpl }) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-attempt-lifecycle-"));
@@ -29,7 +29,7 @@ async function harness({ runHermesImpl, executeImpl }) {
   };
   const decision = {
     eventKey: `team:channel:${Date.now()}:${Math.random()}`,
-    event: { data: { user: APPROVED.ownerUserId } },
+    event: { data: { user: "U0B8SGJJZLJ", channel: "C0BD7L43PC2" } },
     messageText: "Maya, controlled status?",
     threadTs: "1785160000.000001",
   };
@@ -135,4 +135,37 @@ test("SIGTERM during one pending send aborts once and exits only after persisten
   assert.equal((await onlyReceipt(state.directory)).state, "ambiguous");
   state.shutdown.completeAttempt();
   assert.equal(state.exitCount, 1);
+});
+
+test("ordinary attempt completion keeps the listener alive for the next attempt", () => {
+  let exitCount = 0;
+  const shutdown = createShutdownCoordinator({ onExit: () => { exitCount += 1; } });
+  assert.ok(shutdown.beginAttempt());
+  shutdown.completeAttempt();
+  assert.equal(exitCount, 0);
+  assert.ok(shutdown.beginAttempt());
+  shutdown.completeAttempt();
+  assert.equal(exitCount, 0);
+});
+
+test("overlapping events are serialized without dropping either event", async () => {
+  const order = [];
+  let releaseFirst;
+  const firstBlocked = new Promise((resolve) => { releaseFirst = resolve; });
+  const queue = createSerialQueue({
+    handler: async (value) => {
+      order.push(`start:${value}`);
+      if (value === "first") await firstBlocked;
+      order.push(`end:${value}`);
+    },
+  });
+  const first = queue.enqueue("first");
+  const second = queue.enqueue("second");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ["start:first"]);
+  assert.equal(queue.pendingCount(), 2);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ["start:first", "end:first", "start:second", "end:second"]);
+  assert.equal(queue.pendingCount(), 0);
 });

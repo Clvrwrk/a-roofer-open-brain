@@ -1,27 +1,21 @@
-# Maya Composio production worker
+# Maya Composio Slack listener
 
-This package is the installed-disabled PEC-78 production worker for Maya's existing
-Orgo computer. Command Center accepts a signed Composio V3 webhook, encrypts the
-minimized event, and stores it behind the PEC-78 database authority plane. The Orgo
-worker obtains DPoP-bound short-lived authorization, claims one encrypted event,
-generates one tool-free Hermes reply, reserves and uniquely authorizes the exact
-Slack effect, and sends only through Maya's pinned Composio connected account.
-
-`listener.mjs` is the quarantined validation prototype. It is retained only for
-forensic and rollback evidence; Supervisor launches `production-worker.mjs` and
-the production path never uses Composio WebSocket `subscribe()`.
+This package runs Maya's Slack conversation loop on her existing Orgo computer.
+Composio supplies both the Slack trigger and send tool, while Hermes produces a
+short tool-free answer. Maya responds when any human in any channel accessible to
+her Slack app begins a message with `Maya` or an exact `@Maya` mention.
 
 Security invariants:
 
-- exact Composio user/account/trigger and Slack workspace/channel/bot/owner values
-  are verified by the signed webhook boundary and database source binding;
+- exact Composio user/account/trigger, Slack workspace, and Maya bot values are
+  pinned in the release;
 - the listener release and Hermes configuration are root-owned under `/opt`; the
   launcher verifies their complete ownership/mode/symlink trust chain, the pinned
-  system executables, and Maya's writable runtime/state/secret paths before sourcing
-  any credential;
-- only human-authored, owner-authored, addressed messages are accepted;
-- bot/self messages, subtypes, attachments, duplicates, and scope mismatches fail
-  closed;
+  system executables, and Maya's writable runtime/state/secret paths before strictly
+  reading the two allowed credentials;
+- all human authors and all accessible channel, private-channel, and multi-person
+  channel types are accepted when the message addresses Maya;
+- bot/self messages, subtypes, duplicates, and malformed scope fail closed;
 - routing, destination, thread binding, deduplication, and the Maya prefix are code;
 - an interrupted or failed send is `ambiguous` and is never retried automatically;
 - receipts contain only hashes and provider IDs, never messages, prompts, replies,
@@ -45,20 +39,16 @@ Security invariants:
   (`logs/curator`, `memories`, `pairing`, `hooks`, `image_cache`, `audio_cache`,
   and `skills`) is pre-created empty as root-owned mode-`0755`; `maya-agent`
   can traverse these paths but cannot persist state, hooks, caches, or skills;
-- the durable validation authorization is bound to the exact build, registry,
-  runtime instance, source, principal fence, and one fresh owner event;
 - structured journal events contain only reason codes and identifier hashes;
-- rollback disables and confirms the reviewed new Composio trigger first, fences
-  database authority and active leases, stops/quarantines the worker credentials,
-  and disables the dedicated inference key while retaining ambiguous effects.
+- rollback disables and confirms the reviewed Composio trigger first, then stops
+  the runtime and quarantines its credentials while retaining ambiguous effects.
 
 The service is installed disabled under Orgo's existing Supervisor process manager.
-`autostart` and automatic start retries remain disabled; unexpected restart is
-bounded by the database-consumed authorization and lease/effect state. Activation
-requires a passed Ringer review, creation of the exact disabled Composio trigger,
-completion of the owner-only two-credential environment file with mode 0600, Hermes config
-validation, and an explicit controlled test. Only the Supervisor definition is shipped;
-there is no systemd fallback that could accidentally restart this one-shot listener.
+`autostart` and automatic start retries remain disabled. Activation requires a passed
+Ringer review, the exact enabled Composio trigger, the owner-only two-credential
+environment file with mode 0600, and Hermes configuration validation. Once started,
+the listener remains online and serializes overlapping messages instead of dropping
+them. Only the Supervisor definition is shipped; there is no systemd fallback.
 
 `install-disabled.sh` builds a fresh root-owned release, rejects symlinks, normalizes
 all release modes, hardens the pre-existing Hermes lock file, preserves any prior

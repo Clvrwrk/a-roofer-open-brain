@@ -12,13 +12,12 @@ import {
   MAYA_RECEIPT_DIR,
   MAYA_RUNTIME_DIR,
   RELEASE_DIR,
-  VALIDATION_GATE,
 } from "../policy.mjs";
 import { composioSendRequestOptions } from "../request-options.mjs";
 
 const root = new URL("../", import.meta.url);
 
-test("Supervisor keeps the Maya production worker installed disabled with bounded restart", async () => {
+test("Supervisor keeps the Maya open listener installed disabled with bounded restart", async () => {
   const config = await readFile(new URL("maya-slack-listener.conf", root), "utf8");
   assert.match(config, /^user=maya-agent$/m);
   assert.match(config, /^autostart=false$/m);
@@ -102,7 +101,7 @@ test("rollback is trigger-first, fences the database, and remotely revokes the i
   assert.doesNotMatch(rollback, /(?:xapp-|xox[bp]-|sk_live_|ak_)/);
 });
 
-test("launcher sources only the owner-only environment file and execs the pinned production worker", async () => {
+test("launcher strictly reads only two credentials and execs the pinned open listener", async () => {
   const launcher = await readFile(new URL("start-listener.sh", root), "utf8");
   assert.match(launcher, /^set -euo pipefail$/m);
   assert.match(launcher, /^umask 077$/m);
@@ -111,35 +110,38 @@ test("launcher sources only the owner-only environment file and execs the pinned
   assert.match(launcher, /^require_owned_path "\$env_file" file 600$/m);
   assert.match(launcher, /^require_static_path \/usr\/bin\/node file 755$/m);
   assert.match(launcher, /^require_static_path "\$verifier" file 644$/m);
-  assert.match(launcher, /^require_static_path "\$private_jwk_loader" file 644$/m);
-  assert.match(launcher, /^require_static_path "\$listener_env_loader" file 644$/m);
   assert.match(launcher, /^\/usr\/bin\/node "\$verifier"$/m);
   assert.match(launcher, /^\s*\[\[ ! -L "\$path" \]\] \|\| return 1$/m);
   assert.match(launcher, /\/usr\/bin\/stat -c '%u:%g:%a'/);
-  assert.match(launcher, /^\. "\$listener_env_loader" "\$env_file" "\$private_jwk_loader" \/usr\/bin\/node$/m);
+  assert.match(launcher, /^while IFS= read -r line \|\| \[\[ -n "\$line" \]\]; do$/m);
+  assert.match(launcher, /^    COMPOSIO_API_KEY=\*\)$/m);
+  assert.match(launcher, /^    OPENROUTER_API_KEY=\*\)$/m);
+  assert.match(launcher, /^    \*\) exit 1 ;;$/m);
+  assert.match(launcher, /^done < "\$env_file"$/m);
+  assert.doesNotMatch(launcher, /(?:source|^\.) .*listener\.env/m);
   assert.match(launcher, /^exec \/usr\/bin\/env -i \\/m);
   assert.match(launcher, /^  COMPOSIO_API_KEY="\$COMPOSIO_API_KEY" \\/m);
   assert.match(launcher, /^  OPENROUTER_API_KEY="\$OPENROUTER_API_KEY" \\/m);
-  assert.match(launcher, /^  PEC78_MAYA_PRIVATE_JWK="\$PEC78_MAYA_PRIVATE_JWK" \\/m);
-  assert.match(launcher, /^  PEC78_CREDENTIAL_ID="\$PEC78_CREDENTIAL_ID" \\/m);
-  assert.match(launcher, /^  PEC78_RUNTIME_INSTANCE_ID="\$PEC78_RUNTIME_INSTANCE_ID" \\/m);
   assert.match(
     launcher,
-    /^  \/usr\/bin\/node \/opt\/pe-cc-agents\/maya-slack-listener\/production-worker\.mjs$/m,
+    /^  \/usr\/bin\/node \/opt\/pe-cc-agents\/maya-slack-listener\/listener\.mjs$/m,
   );
   assert.doesNotMatch(launcher, /(?:xapp-|xox[bp]-|sk_live_|ak_)/);
+});
+
+test("the package start command is the same open listener used by Supervisor", async () => {
+  const manifest = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  assert.equal(manifest.scripts.start, "node listener.mjs");
 });
 
 test("authorization identities and runtime choices are immutable reviewed literals", () => {
   assert.deepEqual(APPROVED, {
     composioUserId: "maya-chen",
     connectedAccountId: "ca_X9dQyRDSS0sa",
-    triggerId: "ti_5Zoxig5EIJmY",
-    triggerUuid: "1dbd2dcc-d37c-4b14-92ac-ffef8aadc974",
+    triggerId: "ti_G_lnPrrKPhWj",
+    triggerUuid: "32f67255-b604-419b-8f86-85b92c9dbe30",
     teamId: "T0B8QEGPVQW",
-    channelId: "C0BD7L43PC2",
     mayaBotUserId: "U0BD0Q0H55G",
-    ownerUserId: "U0B8SGJJZLJ",
   });
   assert.equal(Object.isFrozen(APPROVED), true);
   assert.equal(AGENT_HOME, "/home/orgo/maya-agent");
@@ -151,16 +153,15 @@ test("authorization identities and runtime choices are immutable reviewed litera
   assert.equal(MAYA_RUNTIME_DIR, "/home/orgo/maya-agent/runtime");
   assert.equal(MAYA_RECEIPT_DIR, "/home/orgo/maya-agent/state/receipts");
   assert.equal(RELEASE_DIR, "/opt/pe-cc-agents/maya-slack-listener");
-  assert.equal(VALIDATION_GATE, "pec78-one-controlled-slack-event");
 });
 
-test("production worker accepts only its two provider credentials and DPoP identity", async () => {
-  const listener = await readFile(new URL("production-worker.mjs", root), "utf8");
+test("open listener accepts only its two provider credentials", async () => {
+  const listener = await readFile(new URL("listener.mjs", root), "utf8");
   const hermesRunner = await readFile(new URL("hermes-runner.mjs", root), "utf8");
   const references = [...`${listener}\n${hermesRunner}`.matchAll(/process\.env\.([A-Z0-9_]+)/g)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(references, ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY", "PEC78_CREDENTIAL_ID", "PEC78_MAYA_PRIVATE_JWK", "PEC78_RUNTIME_INSTANCE_ID"]);
+  assert.deepEqual(references, ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"]);
   assert.doesNotMatch(
     listener,
     /process\.env\.(?:COMPOSIO_USER_ID|COMPOSIO_CONNECTED_ACCOUNT_ID|COMPOSIO_TRIGGER_ID|SLACK_TEAM_ID|SLACK_CHANNEL_ID|SLACK_MAYA_BOT_USER_ID|SLACK_OWNER_USER_ID|HERMES_BIN|HERMES_MODEL|MAYA_RUNTIME_DIR|MAYA_RECEIPT_DIR)/,

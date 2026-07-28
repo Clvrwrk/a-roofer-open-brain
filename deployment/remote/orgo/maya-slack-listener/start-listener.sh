@@ -7,8 +7,6 @@ readonly secrets_dir="${agent_home}/secrets"
 readonly env_file="${secrets_dir}/listener.env"
 readonly release_dir="/opt/pe-cc-agents/maya-slack-listener"
 readonly verifier="${release_dir}/verify-trust-chain.mjs"
-readonly private_jwk_loader="${release_dir}/load-private-jwk.mjs"
-readonly listener_env_loader="${release_dir}/load-listener-env.sh"
 readonly expected_uid="$(/usr/bin/id -u)"
 readonly expected_gid="$(/usr/bin/id -g)"
 
@@ -50,19 +48,27 @@ require_static_path /usr/bin/bash file 755
 require_static_path /usr/bin/id file 755
 require_static_path /usr/bin/stat file 755
 require_static_path "$verifier" file 644
-require_static_path "$private_jwk_loader" file 644
-require_static_path "$listener_env_loader" file 644
 /usr/bin/node "$verifier"
 
-# shellcheck disable=SC1091
-. "$listener_env_loader" "$env_file" "$private_jwk_loader" /usr/bin/node
+COMPOSIO_API_KEY=""
+OPENROUTER_API_KEY=""
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -n "$line" && "$line" != *$'\r'* ]] || exit 1
+  case "$line" in
+    COMPOSIO_API_KEY=*)
+      [[ -z "$COMPOSIO_API_KEY" ]] || exit 1
+      COMPOSIO_API_KEY="${line#COMPOSIO_API_KEY=}"
+      ;;
+    OPENROUTER_API_KEY=*)
+      [[ -z "$OPENROUTER_API_KEY" ]] || exit 1
+      OPENROUTER_API_KEY="${line#OPENROUTER_API_KEY=}"
+      ;;
+    *) exit 1 ;;
+  esac
+done < "$env_file"
 
 : "${COMPOSIO_API_KEY:?missing Composio credential}"
 : "${OPENROUTER_API_KEY:?missing inference credential}"
-: "${PEC78_MAYA_PRIVATE_JWK:?missing DPoP credential}"
-: "${PEC78_CREDENTIAL_ID:?missing credential identity}"
-: "${PEC78_RUNTIME_INSTANCE_ID:?missing runtime identity}"
-
 exec /usr/bin/env -i \
   HOME="$agent_home" \
   HERMES_HOME="/opt/pe-cc-agents/maya-hermes-home" \
@@ -70,7 +76,4 @@ exec /usr/bin/env -i \
   NODE_ENV="production" \
   COMPOSIO_API_KEY="$COMPOSIO_API_KEY" \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
-  PEC78_MAYA_PRIVATE_JWK="$PEC78_MAYA_PRIVATE_JWK" \
-  PEC78_CREDENTIAL_ID="$PEC78_CREDENTIAL_ID" \
-  PEC78_RUNTIME_INSTANCE_ID="$PEC78_RUNTIME_INSTANCE_ID" \
-  /usr/bin/node /opt/pe-cc-agents/maya-slack-listener/production-worker.mjs
+  /usr/bin/node /opt/pe-cc-agents/maya-slack-listener/listener.mjs

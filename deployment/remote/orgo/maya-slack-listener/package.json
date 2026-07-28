@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node production-worker.mjs",
+    "start": "node listener.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
