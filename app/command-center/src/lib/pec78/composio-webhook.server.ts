@@ -82,6 +82,10 @@ function addressedToMaya(text: string): boolean {
   return mention.test(text) || /^\s*maya(?:[,:;.!?]|\s)/iu.test(text);
 }
 
+function hasNoItems(value: unknown): boolean {
+  return value === undefined || value === null || (Array.isArray(value) && value.length === 0);
+}
+
 export function verifyPec78ComposioWebhook(input: {
   rawBody: string;
   headers: Headers;
@@ -128,9 +132,7 @@ export function verifyPec78ComposioWebhook(input: {
       typeof data.text !== "string" || data.subtype || data.bot_id || data.user === PEC78_SLACK_MAYA_BOT_ID) {
     return { ok: false, status: 403, code: "slack_event_denied" };
   }
-  if ((data.files !== undefined && !Array.isArray(data.files)) || (data.attachments !== undefined && !Array.isArray(data.attachments)) ||
-      (Array.isArray(data.files) && data.files.length > 0) || (Array.isArray(data.attachments) && data.attachments.length > 0) ||
-      !addressedToMaya(data.text)) {
+  if (!hasNoItems(data.files) || !hasNoItems(data.attachments) || !addressedToMaya(data.text)) {
     return { ok: false, status: 403, code: "message_denied" };
   }
   const threadTs = typeof data.thread_ts === "string" && SLACK_TS.test(data.thread_ts) ? data.thread_ts : data.ts;

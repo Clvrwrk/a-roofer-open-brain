@@ -31,6 +31,7 @@ function verify(body = envelope(), h = headers(body), overrides: Record<string, 
 describe("PEC-78 signed Composio ingress", () => {
   it("accepts an exact signed V3 owner message", () => expect(verify().ok).toBe(true));
   it("accepts an exact Maya mention", () => expect(verify(envelope({ text: "<@U0BD0Q0H55G> callback status?" })).ok).toBe(true));
+  it("accepts Composio's null empty Slack collection fields", () => expect(verify(envelope({ files: null, attachments: null })).ok).toBe(true));
   it.each([
     ["wrong trigger", { trigger_id: "ti_wrong" }],
     ["wrong account", { connected_account_id: "ca_wrong" }],
@@ -42,7 +43,9 @@ describe("PEC-78 signed Composio ingress", () => {
   it.each([
     ["wrong team", { team_id: "T_WRONG" }], ["wrong channel", { channel: "C_WRONG" }],
     ["wrong owner", { user: "U_WRONG" }], ["bot", { bot_id: "B_FIXTURE" }],
-    ["subtype", { subtype: "message_changed" }], ["attachment", { files: [{ id: "F1" }] }],
+    ["subtype", { subtype: "message_changed" }], ["file", { files: [{ id: "F1" }] }],
+    ["attachment", { attachments: [{ id: "A1" }] }], ["invalid files shape", { files: {} }],
+    ["invalid attachments shape", { attachments: "none" }],
     ["incidental name", { text: "Can Maya review this?" }], ["confusable", { text: "Mаya, status?" }],
   ])("rejects %s", (_label, changed) => expect(verify(envelope(changed), headers(envelope(changed)))).toMatchObject({ ok: false }));
   it("rejects a byte-changed body", () => { const body = envelope(); expect(verify(`${body} `, headers(body))).toMatchObject({ ok: false, code: "signature_invalid" }); });
