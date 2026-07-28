@@ -238,7 +238,6 @@ test("constructs a single-thread reply with an immutable signature", () => {
     thread_ts: "1785160000.000001",
     markdown_text: reply,
     reply_broadcast: false,
-    link_names: false,
     unfurl_links: false,
     unfurl_media: false,
   });

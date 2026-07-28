@@ -1,0 +1,29 @@
+{
+  "run_name": "pec78-maya-slack-send-schema",
+  "workdir": "/Users/chussey/.codex/worktrees/3550/a-roofers-open-brain/plans/ringer/named-agents-runtime-evaluation/runs/pec78-slack-send-schema",
+  "max_parallel": 2,
+  "tasks": [
+    {
+      "key": "security-review",
+      "task_type": "code-review",
+      "spec": "Independent read-only security review of the current Maya Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain after removing unsupported link_names from SLACKBOT_SEND_MESSAGE arguments. Own only report.md. Live Composio evidence proves requests containing link_names were authoritatively rejected before provider effect and the same pinned bot-token account confirmed a send after the field was removed. Verify destination/thread/prefix/link-reference protections remain safe without link_names, no untrusted tool arguments or credentials were introduced, and provider confirmation remains exact. Run npm test. No external effects. Required: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, MACHINE_VERDICT: PASS or FAIL; findings include Evidence, Impact, Fix, Priority, Confidence; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Security reviewer confirmed the supported send schema preserves the listener security boundary.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    },
+    {
+      "key": "operations-review",
+      "task_type": "code-review",
+      "spec": "Independent read-only operations review of the current Maya Slack listener at /Users/chussey/.codex/worktrees/3550/a-roofers-open-brain after removing unsupported link_names from SLACKBOT_SEND_MESSAGE arguments. Own only report.md. Verify buildSendArguments and tests match the live accepted Composio schema, the confirmed live provider timestamp is consistent with the runtime contract, and all prior receive/send separation, queue, lifecycle, Supervisor, credential, and no-retry controls remain intact. Run npm test. No external effects. Required: # Review Report, ## Summary, ## Findings, ## Clean, ## Assumptions, MACHINE_VERDICT: PASS or FAIL; findings include Evidence, Impact, Fix, Priority, Confidence; PASS forbidden with P0/P1.",
+      "check": "python3 ../../../checks/verify_composio_implementation_review.py report.md",
+      "expect_files": ["report.md"],
+      "verified": "Operations reviewer confirmed the supported Composio send schema is deployable with prior controls intact.",
+      "engine": "codex",
+      "model": "",
+      "timeout_s": 900
+    }
+  ]
+}

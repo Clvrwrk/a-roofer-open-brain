@@ -209,7 +209,6 @@ export function buildSendArguments(channelId, threadTs, reply) {
     thread_ts: threadTs,
     markdown_text: reply,
     reply_broadcast: false,
-    link_names: false,
     unfurl_links: false,
     unfurl_media: false,
   };
