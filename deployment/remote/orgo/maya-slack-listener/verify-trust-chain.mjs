@@ -161,6 +161,8 @@ export async function verifyProductionTrustChain() {
     "/home/orgo/maya-agent/runtime",
     "/home/orgo/maya-agent/state",
     "/home/orgo/maya-agent/state/receipts",
+    "/home/orgo/maya-agent/state/mailbox",
+    "/home/orgo/maya-agent/state/mailbox/receipts",
   ]) {
     await assertExactPath(target, {
       kind: "directory",

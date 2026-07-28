@@ -58,6 +58,10 @@ export async function verifyMayaManagedPaths({
     `${agentHome}/state`,
     `${agentHome}/state/receipts`,
   ];
+  const extensionDirectories = [
+    `${agentHome}/state/mailbox`,
+    `${agentHome}/state/mailbox/receipts`,
+  ];
   let homePresent = false;
   try {
     await lstat(agentHome);
@@ -70,11 +74,16 @@ export async function verifyMayaManagedPaths({
     for (const target of directories) {
       await assertExactPath(target, { kind: "directory", uid: identity.uid, gid: identity.gid, mode: 0o700 });
     }
+    for (const target of extensionDirectories) {
+      await assertAbsentOrExact(target, {
+        kind: "directory", uid: identity.uid, gid: identity.gid, mode: 0o700,
+      });
+    }
     await assertAbsentOrExact(`${agentHome}/secrets/listener.env`, {
       kind: "file", uid: identity.uid, gid: identity.gid, mode: 0o600,
     });
   } else {
-    for (const target of directories) await assertAbsent(target);
+    for (const target of [...directories, ...extensionDirectories]) await assertAbsent(target);
   }
   await assertAbsent(incoming);
 }

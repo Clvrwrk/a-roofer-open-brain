@@ -56,3 +56,23 @@ test("managed-path preflight rejects a hostile incoming symlink before mutation"
     /expected it to be absent/,
   );
 });
+
+test("managed-path preflight permits an absent mailbox extension but rejects a mailbox symlink", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "maya-preflight-mailbox-"));
+  const agentHome = path.join(root, "maya-agent");
+  for (const target of [
+    agentHome,
+    path.join(agentHome, "secrets"),
+    path.join(agentHome, "runtime"),
+    path.join(agentHome, "state"),
+    path.join(agentHome, "state", "receipts"),
+  ]) await mkdir(target, { recursive: true, mode: 0o700 });
+  const incoming = path.join(root, ".incoming");
+  const identity = { uid: process.getuid(), gid: process.getgid() };
+  await verifyMayaManagedPaths({ agentHome, incoming, identity });
+  await symlink(agentHome, path.join(agentHome, "state", "mailbox"));
+  await assert.rejects(
+    verifyMayaManagedPaths({ agentHome, incoming, identity }),
+    /symbolic link is forbidden/,
+  );
+});

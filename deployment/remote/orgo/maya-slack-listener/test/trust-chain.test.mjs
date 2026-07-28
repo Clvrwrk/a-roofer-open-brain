@@ -57,6 +57,7 @@ test("tree integrity changes when executable content changes", async () => {
 test("runtime trust verifier excludes Supervisor-owned logs", async () => {
   const verifier = await readFile(new URL("../verify-trust-chain.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(verifier, /\/var\/log\/pe-cc-agents/);
+  assert.match(verifier, /\/home\/orgo\/maya-agent\/state\/mailbox\/receipts/);
   const config = await readFile(new URL("../maya-slack-listener.conf", import.meta.url), "utf8");
   assert.match(config, /^stdout_logfile=\/var\/log\/pe-cc-agents\/maya-slack-listener\.log$/m);
   assert.match(config, /^redirect_stderr=true$/m);

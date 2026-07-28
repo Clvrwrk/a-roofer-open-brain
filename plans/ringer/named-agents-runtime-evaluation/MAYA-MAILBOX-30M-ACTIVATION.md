@@ -28,10 +28,10 @@ classes require separate Composio actions and production promotion.
 
 ## Deterministic evidence
 
-- Listener tests: 90/90 PASS.
+- Listener tests: 91/91 PASS.
 - Ringer manifest lint: clean, three tasks.
 - Final full local Ringer run:
-  `maya-mailbox-30m-production-gate-20260728T112243Z-p97871`.
+  `maya-mailbox-30m-production-gate-20260728T112938Z-p99742`.
 - Security/egress gate: PASS, first attempt.
 - Operations/cadence gate: PASS, first attempt.
 - Accounting workflow gate: PASS, first attempt.
@@ -46,6 +46,15 @@ security and operations but failed the workflow checker because its README wordi
 match was case-sensitive. The follow-up exposed a second checker-only line-break
 defect. Both failures remain recorded. The check was corrected and independently
 executed before the final three-gate PASS; no product failure was waived.
+
+The first stopped-state deployment also exposed that the new mailbox directories
+were created with the correct private ownership but were not named in both layers of
+the trust verifier. Activation remained fenced. The installer now rejects a hostile
+pre-existing mailbox symlink while permitting the extension to be absent during an
+upgrade, and the runtime trust chain requires both mailbox directories to be exact
+owner-only paths. The 91-test suite and all three Ringer gates were rerun after this
+fix; the earlier full PASS `maya-mailbox-30m-production-gate-20260728T112243Z-p97871`
+is superseded by the final run above.
 
 The initially selected external adversarial reviewers were not used because that
 would have disclosed private repository content to external model providers without

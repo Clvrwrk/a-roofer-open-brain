@@ -35,13 +35,13 @@ test_run = subprocess.run(
 )
 if test_run.returncode != 0:
     errors.append("listener npm test failed")
-require(test_run.stdout, r"# tests 90\b", "exact 90-test count")
-require(test_run.stdout, r"# pass 90\b", "all 90 tests pass")
+require(test_run.stdout, r"# tests 91\b", "exact 91-test count")
+require(test_run.stdout, r"# pass 91\b", "all 91 tests pass")
 require(test_run.stdout, r"# fail 0\b", "zero test failures")
 
 report = args.report.read_text(encoding="utf-8") if args.report.is_file() else ""
 require(report, r"^MACHINE_VERDICT: PASS\s*$", "report PASS verdict")
-for phrase in ("30-minute", "Composio", "Gmail", "Linear", "Slack", "90/90"):
+for phrase in ("30-minute", "Composio", "Gmail", "Linear", "Slack", "91/91"):
     require(report.lower(), re.escape(phrase.lower()), f"report evidence {phrase}")
 
 policy = read("deployment/remote/orgo/maya-slack-listener/policy.mjs")
@@ -51,6 +51,8 @@ state = read("deployment/remote/orgo/maya-slack-listener/mailbox-state.mjs")
 listener = read("deployment/remote/orgo/maya-slack-listener/listener.mjs")
 tests = read("deployment/remote/orgo/maya-slack-listener/test/mailbox.test.mjs")
 readme = read("deployment/remote/orgo/maya-slack-listener/README.md")
+preflight = read("deployment/remote/orgo/maya-slack-listener/installer-preflight.mjs")
+trust_chain = read("deployment/remote/orgo/maya-slack-listener/verify-trust-chain.mjs")
 
 all_changed = "\n".join((policy, executor, hermes, state, listener, tests, readme))
 forbid(all_changed, r"(?:sk_live_|xox[bp]-|lin_api_|xoxe\.)", "credential material in candidate")
@@ -75,6 +77,8 @@ if args.mode == "operations":
     require(executor, r"controller\.abort\(\).*?await active", "graceful executor stop")
     require(tests, r"empty mailbox completes without depending on Linear", "empty-inbox isolation test")
     require(tests, r"startup schedules the next boundary without an immediate provider poll", "restart cadence test")
+    require(preflight, r"state/mailbox/receipts", "mailbox path preinstall trust check")
+    require(trust_chain, r"state/mailbox/receipts", "mailbox runtime trust check")
 
 if args.mode == "workflow":
     require(hermes, r"new Set\(\[\"ignore\", \"track\", \"block\"\]\)", "three-way task decision")
@@ -88,4 +92,4 @@ if args.mode == "workflow":
 if errors:
     print(f"{args.mode} gate failed: " + "; ".join(errors))
     raise SystemExit(1)
-print(f"{args.mode} gate passed: 90/90 tests and deterministic source invariants")
+print(f"{args.mode} gate passed: 91/91 tests and deterministic source invariants")

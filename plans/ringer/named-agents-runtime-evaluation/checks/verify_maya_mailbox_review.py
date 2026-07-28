@@ -10,7 +10,7 @@ errors = []
 for section in ("# Review Report", "## Summary", "## Findings", "## Clean", "## Assumptions"):
     if section not in text:
         errors.append(f"missing {section}")
-for phrase in ("30-minute", "Composio", "Gmail", "Linear", "Slack", "90/90"):
+for phrase in ("30-minute", "Composio", "Gmail", "Linear", "Slack", "91/91"):
     if phrase.lower() not in text.lower():
         errors.append(f"missing required evidence phrase: {phrase}")
 if not re.search(r"^MACHINE_VERDICT: PASS\s*$", text, re.MULTILINE):
