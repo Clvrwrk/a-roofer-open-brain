@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "b3b-fix-accounts",
+      "task_type": "code-fix",
+      "spec": "You are a staging repair worker for jt-acculynx-mirror bulk round. Three precise defects from the B3 execution report (/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/b3-execute/execution-report.md — read it first): (1) 380 customer_accounts rows failed with 'A customer with the name X already exists' — JobTread enforces unique customer names, and the official escape hatch is the createAccount input field suffixIfNecessary (in the schema signature). These are genuinely distinct AccuLynx contacts sharing names; the faithful replica keeps them as separate suffixed accounts. (2) 56 'gap contacts': staged locations reference contacts via {\"$ref\": \"acculynx_contact:<id>\"} that have NO crosswalk mapping and NO staged customer_accounts row (staging's primary-contact selection mismatch). (3) 1 locations row failed at the systemic gate for one such gap contact (Graciela Vaquera). BOUNDARY: SQL only against Supabase project rnhmvcpsvtqjlffpsayu; UPDATE/INSERT only jt_mirror.pending_write rows (statuses staged/failed) — never touch executed/skipped; no API calls; one deliverable: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/b3b-fix-accounts/fix-report.md; no credential values anywhere. SQL access: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. REPAIRS: (1) For ALL customer_accounts rows in status ('staged','failed'): set payload = jsonb_set(payload, '{suffixIfNecessary}', 'true'); reset the 380 failed rows to status='staged', error=null, attempt=0. (2) Identify the gap contacts with this exact logic: distinct location accountId $refs among staged locations where no crosswalk row (jt_type='account', source_id=<contact id>) exists and no customer_accounts row in ('staged','executed','failed') has source_ref='acculynx_contact:<id>'. For each, INSERT a new pending_write row: domain='customer_accounts', pave_op='createAccount', status='staged', source_ref='acculynx_contact:<id>', payload built from public.acculynx_contacts using the SAME structure as existing staged customer_accounts rows (query one as template): name per convention (trim first+last, else company_name, else 'Unknown Customer — AccuLynx <id>'), type as in the template, organizationId 22PazeRM5FCH, suffixIfNecessary true, email/phone enrichment from acculynx_backfill.contact_emails/contact_phones when present, \"__execution_order\": 70. (3) Reset the failed locations row to status='staged', error=null, attempt=0. VERIFY with live SQL before finishing: zero failed rows anywhere; zero gap contacts remain (re-run the gap query); all staged customer_accounts have suffixIfNecessary=true. DELIVERABLE fix-report.md sections: ## Repairs Applied (SQL + rows affected), ## Gap Contacts (list of the ~56 ids and names staged), ## Verification, ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/b3b_fix_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/b3b-fix-accounts/fix-report.md"
+      ],
+      "timeout_s": 1800,
+      "verified": "suffixIfNecessary on all staged accounts, 56 gap contacts staged, zero failed rows"
+    }
+  ]
+}

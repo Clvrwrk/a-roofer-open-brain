@@ -1,0 +1,116 @@
+[
+  {
+    "variant": "V1",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V1",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": 1,
+                  "unitPrice": 10,
+                  "description": "probe"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":1,\"unitPrice\":10,\"description\":\"probe\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": null
+  },
+  {
+    "variant": "V2",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V2",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": 1,
+                  "unitPrice": 10,
+                  "description": "probe",
+                  "costCodeId": "22PbdLkpZX5s"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":1,\"unitPrice\":10,\"description\":\"probe\",\"costCodeId\":\"22PbdLkpZX5s\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": null
+  },
+  {
+    "variant": "V3",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V3",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": 1,
+                  "unitPrice": 10,
+                  "description": "probe",
+                  "costCodeId": "22PbdLkpZX5s",
+                  "costTypeId": "22PazefY5x4j"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":1,\"unitPrice\":10,\"description\":\"probe\",\"costCodeId\":\"22PbdLkpZX5s\",\"costTypeId\":\"22PazefY5x4j\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": null
+  }
+]

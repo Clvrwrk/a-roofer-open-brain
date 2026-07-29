@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r2-schema",
+      "task_type": "code-feature",
+      "spec": "You are a database schema engineer building the JobTread-mirror scaffolding in Supabase for the jt-acculynx-mirror project. BOUNDARY: you may create ONLY new objects inside two NEW schemas: jt_mirror and acculynx_backfill. You must NEVER create, alter, or drop anything in public, qbo_registers, or any other existing schema; never modify existing tables; never touch the JobTread or AccuLynx APIs. You own exactly one deliverable file: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r2-schema/schema.sql (the full idempotent DDL you applied). NEVER copy credential values anywhere — env var names only. CONTEXT: read the nine mapping contracts at /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/<domain>/mapping.md (domains: cost-accounting, jobs-core, branches-salesreps, pricing-catalog, vendors, companycam-links, estimates, stages-milestones, production) — especially each '## Loader Plan' section — and pattern-match the existing write infrastructure by inspecting public.acculynx_pending_write and public.acculynx_write_action_log column shapes via information_schema. HOW TO RUN SQL: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; then curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. REQUIRED OBJECTS (minimum; add more if the mapping docs demand them): schema jt_mirror with tables: crosswalk (source_system, source_id, source_table, jt_type, jt_id, domain, created_at, unique on (source_system, source_id, jt_type)), pending_write (id, domain, pave_op, payload jsonb, status with allowed values staged/approved/executed/failed/skipped, source_ref, attempt, error, jt_id, created_at, executed_at), write_action_log (append-only execution log), accounts, locations, jobs, documents, cost_items, cost_codes, custom_fields (read-back mirrors of created JT entities: jt id, name/number fields, raw jsonb, synced_at); schema acculynx_backfill with tables: estimate_sections, estimate_items, job_representatives, vendors, contact_types, contact_emails, contact_phones, milestone_settings, worksheet_lines (columns per the relevant mapping.md loader plans, always including the AccuLynx id, parent ids, raw jsonb payload, fetched_at, and provenance of the API endpoint used). All DDL must be idempotent (CREATE SCHEMA IF NOT EXISTS / CREATE TABLE IF NOT EXISTS). Apply the DDL live, then verify your own work by querying information_schema and fixing any gaps BEFORE finishing. Write the exact applied DDL to schema.sql with a header comment listing the mapping.md sources you honored. HARD RULES: no DROP except DROP TABLE IF EXISTS limited to jt_mirror/acculynx_backfill during your own iteration; no data inserts; no RLS changes on existing tables; if a mapping.md demands something conflicting, prefer the mapping doc and note the decision in a SQL comment.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r2_schema_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r2-schema/schema.sql"
+      ],
+      "timeout_s": 1800,
+      "verified": "jt_mirror and acculynx_backfill schemas live in Supabase with required tables and pending-write pattern; existing objects untouched"
+    }
+  ]
+}

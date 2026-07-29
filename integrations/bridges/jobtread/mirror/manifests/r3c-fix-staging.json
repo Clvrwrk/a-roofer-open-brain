@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r3c-fix-staging",
+      "task_type": "code-fix",
+      "spec": "You are a staging-data repair worker for jt-acculynx-mirror. The pilot executor failed on four staging defects; your job is surgical SQL repairs to jt_mirror.pending_write ONLY. BOUNDARY: UPDATE only jt_mirror.pending_write rows with status='failed' or status='staged'; NEVER touch rows with status='executed' or 'skipped'; no external API calls except read-only Supabase SQL plus the repairs themselves; one deliverable file: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3c-fix-staging/fix-report.md; no credential values anywhere. Supabase SQL: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. THE FOUR REPAIRS: (1) custom_fields: the 3 failed rows used payload type 'dropdown'; Pave's enum is 'option' (valid enum: address, boolean, date, datetime, emailAddress, number, option, phoneNumber, text, time, url). Set payload = jsonb_set(payload, '{type}', '\"option\"'), status='staged', error=null, attempt=0 on those rows. Inspect the payloads first: if dropdown options are carried under a key that looks wrong for Pave (e.g. 'options'), keep the data but note in your report — do NOT rename keys you cannot verify against the docs at '/Users/chussey/Library/CloudStorage/Dropbox-AIA4/Cleverwork Main/GROK/Tools/catalog/jobtread/api/docs/' (a custom-fields CRUD snapshot exists there — check it and align option-list key naming to it). (2) cost_types: the 4 failed rows lack required boolean isTaxable. Set payload = jsonb_set(payload, '{isTaxable}', 'false'), status='staged', error=null, attempt=0. Default false because these are cost types derived from QBO expense-side accounts; note the default decision in your report. (3) catalog_items: the 1 failed row (unresolvable $ref qbo_accounts:cost-type-labor) failed only because cost_types had not been created; verify its $ref format matches the refs used by the other 122 staged catalog rows (fix format only if it deviates from that convention) and reset it to status='staged', error=null, attempt=0. (4) customer_accounts: the 1 failed row was a canary halted by the EXECUTOR'S OWN jq bug — the payload itself may be fine. Validate its payload is well-formed JSON with the same required keys as the executed customer_accounts row (compare live), then reset to status='staged', error=null, attempt=0. VERIFY YOUR WORK with live SQL before finishing: zero rows in status='failed'; staged counts: custom_fields=3, cost_types=4, catalog_items=123, customer_accounts=24. DELIVERABLE fix-report.md sections: ## Repairs Applied (each with the exact UPDATE and rows affected), ## Docs Evidence (what the custom-fields CRUD snapshot says about type/option key naming), ## Verification (live counts), ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r3c_fix_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3c-fix-staging/fix-report.md"
+      ],
+      "timeout_s": 1200,
+      "verified": "failed rows repaired to staged with corrected payloads; executed rows untouched"
+    }
+  ]
+}

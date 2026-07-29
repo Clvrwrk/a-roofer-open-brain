@@ -1,0 +1,20 @@
+{
+    "currentGrant": {
+        "id": "22Pbd8KMqDU4",
+        "user": {
+            "id": "22PHc5hF4TUw",
+            "name": "chris hussey",
+            "memberships": {
+                "nodes": [
+                    {
+                        "id": "22PazeRM5FCJ",
+                        "organization": {
+                            "id": "22PazeRM5FCH",
+                            "name": "Pro Exteriors"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}

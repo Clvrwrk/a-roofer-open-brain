@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r3f-fix-staging",
+      "task_type": "code-fix",
+      "spec": "You are a staging-data repair worker for jt-acculynx-mirror, third repair pass. Two defect classes remain; both are fixable entirely from Supabase (crosswalk already holds the JT ids you need) — no API calls of any kind. BOUNDARY: UPDATE only jt_mirror.pending_write rows with status in ('failed','staged'); never touch 'executed'/'skipped'; read jt_mirror.crosswalk freely; one deliverable: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3f-fix-staging/fix-report.md; no credential values anywhere. SQL access: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. REPAIR 1 — job name too long (1 failed jobs row): JobTread caps job name at 30 characters. Truncate payload name to at most 30 chars (word-boundary + ellipsis if possible), prepend the ORIGINAL full name to the description field (create description if absent, format 'AccuLynx name: <full name>\\n\\n<existing description>'), reset status='staged', error=null, attempt=0. Note the rule in your report — the bulk loader will need systematic truncation. REPAIR 2 — job_custom_values (16 failed + 9 staged = all 25): rebuild EVERY payload to the CANONICAL Pave update shape proven by the official docs example: {\"$\": {\"id\": \"<literal JT job id>\", \"customFieldValues\": {\"<literal JT custom field id>\": <value>, ...}}, \"job\": {\"$\": {\"id\": \"<same JT job id>\"}, \"id\": {}}, \"__execution_order\": 100}. Get literal ids from jt_mirror.crosswalk: job ids via jt_type='job' matched on each row's source_ref/acculynx job id; custom field ids via jt_type='customField' (5 rows — match by the field names carried in the old payloads' refs like 'jt_stage_custom_field:<name>'; inspect crosswalk source_id/source_table to align names; if crosswalk lacks a name linkage, join through jt_mirror.custom_fields or the executed custom_fields pending_write rows whose payload->>'name' matches and whose jt_id is set). Preserve each row's original VALUES exactly (branch label, sales rep, milestone string, AccuLynx job #, CompanyCam URL). For the ONE job not yet created (the truncated-name job), you cannot bake a literal job id: keep {\"$ref\": \"acculynx_job:<id>\"} as $.id and job.$.id for that row only — the executor resolves it after creating the job. Reset all 25 rows to status='staged', error=null, attempt=0. VERIFY with live SQL: 25 canonical staged job_custom_values; every customFieldValues key exists in crosswalk as a jt_type='customField' jt_id; zero failed rows anywhere. DELIVERABLE fix-report.md sections: ## Repairs Applied, ## Id Resolution (how names mapped to field ids, the 5 pairs), ## Closed-Job Note (list the 7 job ids whose updates hit 'You don't have permission to update this job' and whether their createJob payloads carried closedOn — pure SQL analysis for the executor), ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r3f_fix_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3f-fix-staging/fix-report.md"
+      ],
+      "timeout_s": 1800,
+      "verified": "canonical updateJob payloads with literal crosswalk ids, name truncation applied, no failed rows"
+    }
+  ]
+}
