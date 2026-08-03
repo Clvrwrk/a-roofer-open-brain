@@ -34,3 +34,14 @@ test("Supervisor auto-starts a disabled service shell", async () => {
   assert.match(config, /^startretries=2$/mu);
   assert.match(config, /^command=\/usr\/local\/bin\/node /mu);
 });
+
+test("Maya writable state is isolated from the interactive Orgo home", async () => {
+  const installer = await readFile(new URL("../runtime/install-paused.sh", import.meta.url), "utf8");
+  const manifest = await read("manifest.yaml");
+  const config = await readFile(new URL("../runtime/maya-runtime-v1.conf", import.meta.url), "utf8");
+  assert.equal(manifest.runtime.state_root, "/var/lib/cleverwork/maya-agent-v1/state");
+  assert.match(installer, /agent_root="\/var\/lib\/cleverwork\/maya-agent-v1"/u);
+  assert.doesNotMatch(installer, /usermod/u);
+  assert.match(config, /^directory=\/opt\/cleverwork\/maya-runtime-v1\/runtime$/mu);
+  assert.doesNotMatch(config, /\/home\/orgo/u);
+});

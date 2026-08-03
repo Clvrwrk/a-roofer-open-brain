@@ -6,7 +6,7 @@ set -euo pipefail
 
 source_directory="$(realpath "$1")"
 release_root="/opt/cleverwork/maya-runtime-v1"
-agent_root="/home/orgo/maya-agent-v1"
+agent_root="/var/lib/cleverwork/maya-agent-v1"
 supervisor_config="/etc/supervisor/conf.d/maya-runtime-v1.conf"
 node_binary="/usr/local/bin/node"
 
@@ -19,7 +19,8 @@ node_version="$($node_binary --version)"
 
 getent passwd maya-agent >/dev/null || /usr/sbin/useradd --system --home-dir "$agent_root" --shell /usr/sbin/nologin maya-agent
 /usr/bin/install -d -o root -g root -m 0755 /opt/cleverwork
-/usr/bin/install -d -o maya-agent -g maya-agent -m 0700 "$agent_root" "$agent_root/runtime" "$agent_root/state" "$agent_root/gates"
+/usr/bin/install -d -o root -g root -m 0755 /var/lib/cleverwork
+/usr/bin/install -d -o maya-agent -g maya-agent -m 0700 "$agent_root" "$agent_root/state" "$agent_root/gates"
 /usr/bin/install -d -o root -g root -m 0750 /var/log/cleverwork
 
 incoming="$(mktemp -d /opt/cleverwork/.maya-runtime-v1.incoming.XXXXXX)"

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-const target = process.env.MAYA_HEALTH_PATH ?? "/home/orgo/maya-agent-v1/state/health.json";
+const target = process.env.MAYA_HEALTH_PATH ?? "/var/lib/cleverwork/maya-agent-v1/state/health.json";
 const maximumAgeMs = 120_000;
 const health = JSON.parse(await readFile(target, "utf8"));
 const age = Date.now() - Date.parse(health.observed_at);

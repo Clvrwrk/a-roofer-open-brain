@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { collectPackageFiles } from "./package-files.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const required = [
   "manifest.yaml", "AGENTS.md", "SOUL.md", "autonomy-budget.md", "queue-policy.yaml",
   "permissions.yaml", "schedules.yaml", "memory-policy.md", "tool-router.yaml", "skills.lock",
   "runtime/service.mjs", "runtime/maya-runtime-v1.conf", "runtime/NODE-RUNTIME.md",
-  "runbooks/pause.md", "runbooks/rollback.md",
+  "runtime/install-paused.sh", "scripts/create-transfer-archive.sh",
+  "runbooks/build-transfer.md", "runbooks/pause.md", "runbooks/rollback.md",
 ];
 
 for (const relative of required) await stat(path.join(root, relative));
@@ -29,18 +31,7 @@ const prohibited = [
   /\bti_[A-Za-z0-9_-]{8,}\b/u,
   /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password)\s*[:=]\s*["'][^"']{12,}["']/iu,
 ];
-const ignored = new Set(["node_modules", ".git"]);
-const files = [];
-async function walk(directory) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (ignored.has(entry.name)) continue;
-    const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) await walk(target);
-    else if (entry.isFile()) files.push(target);
-    else throw new Error("non_regular_package_entry");
-  }
-}
-await walk(root);
+const files = await collectPackageFiles(root);
 for (const target of files) {
   const content = await readFile(target, "utf8");
   if (prohibited.some((pattern) => pattern.test(content))) throw new Error(`secret_scan_failed:${path.relative(root, target)}`);
