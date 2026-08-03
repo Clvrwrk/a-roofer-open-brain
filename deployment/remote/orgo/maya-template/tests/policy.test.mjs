@@ -32,7 +32,14 @@ test("Supervisor auto-starts a disabled service shell", async () => {
   assert.match(config, /MAYA_ENABLED="false"/u);
   assert.match(config, /^user=maya-agent$/mu);
   assert.match(config, /^startretries=2$/mu);
-  assert.match(config, /^command=\/usr\/local\/bin\/node /mu);
+  assert.match(config, /\/usr\/local\/bin\/node \/opt\/cleverwork\/maya-runtime-v1\/runtime\/service\.mjs$/mu);
+});
+
+test("Supervisor child environment is a closed allowlist", async () => {
+  const config = await readFile(new URL("../runtime/maya-runtime-v1.conf", import.meta.url), "utf8");
+  const command = config.split("\n").find((line) => line.startsWith("command="));
+  assert.equal(command, 'command=/usr/bin/env -i HOME="/var/lib/cleverwork/maya-agent-v1" MAYA_ENABLED="false" NODE_ENV="production" PATH="/usr/local/bin:/usr/bin:/bin" /usr/local/bin/node /opt/cleverwork/maya-runtime-v1/runtime/service.mjs');
+  assert.doesNotMatch(config, /^environment=/mu);
 });
 
 test("Maya writable state is isolated from the interactive Orgo home", async () => {

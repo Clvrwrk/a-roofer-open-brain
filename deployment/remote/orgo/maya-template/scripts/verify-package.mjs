@@ -22,7 +22,9 @@ if (Object.values(manifest.communications).some((mode) => mode !== "off")) throw
 if (permissions.provider_adapters.length !== 0 || permissions.claims || permissions.schedules) throw new Error("capability_enabled");
 if (manifest.runtime.node_path !== "/usr/local/bin/node" || manifest.runtime.node_version !== "22.22.3") throw new Error("node_runtime_unpinned");
 const supervisor = await readFile(path.join(root, "runtime/maya-runtime-v1.conf"), "utf8");
-if (!supervisor.includes("command=/usr/local/bin/node ")) throw new Error("supervisor_node_path_unpinned");
+const cleanCommand = "command=/usr/bin/env -i HOME=\"/var/lib/cleverwork/maya-agent-v1\" MAYA_ENABLED=\"false\" NODE_ENV=\"production\" PATH=\"/usr/local/bin:/usr/bin:/bin\" /usr/local/bin/node ";
+if (!supervisor.includes(cleanCommand)) throw new Error("supervisor_environment_not_scrubbed");
+if (/^environment=/mu.test(supervisor)) throw new Error("supervisor_environment_inheritance_enabled");
 
 const prohibited = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,

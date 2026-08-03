@@ -1,9 +1,9 @@
 # Maya runtime release candidate
 
-- Version: `1.0.0-rc.3`
+- Version: `1.0.0-rc.4`
 - State: build only; not activated
-- Package-content commit: `465812f57577bc535dcdd54f19244ca41e4dde86`
-- Package digest: `80ce143a3acf5055600de3d7be2b39a40cb453967089e50248aa47eed33118a8`
+- Package-content commit: `PENDING_CONTENT_COMMIT`
+- Package digest: `d946e0f30e1235efb7d296b07816c543cf50c9d388f71957fdefbbb4780e7ce1`
 - Builder: `cw-codex`
 - Auditor: pending independent disposable acceptance
 - Destination identity: `INJECT_AT_LAUNCH`
@@ -12,16 +12,16 @@
 
 ## Build verification
 
-- Node.js tests: 18 passed; 0 failed
+- Node.js tests: 19 passed; 0 failed
 - Negative secret and destination-identity scan: pass
 - Required artifact and manifest validation: pass
 - Shell syntax check: pass
 - Dependency audit: 0 dependencies; 0 known vulnerabilities
-- Package dry run: 39 published files; 15.9 kilobytes compressed; 51.6 kilobytes unpacked
+- Package dry run: 39 published files; 16.1 kilobytes compressed; 52.4 kilobytes unpacked
 - Software Bill of Materials (`SBOM`): `sbom.spdx.json`
 
-## RC3 repair
+## RC4 repair
 
-RC3 retains RC2's pinned official Node.js 22.22.3 runtime. It moves Maya's private writable state under `/var/lib/cleverwork`, keeps the runtime code root-owned under `/opt/cleverwork`, and grants no access to the interactive Orgo user's home. Its package verifier and transfer builder fail closed on macOS AppleDouble, Finder, and `__MACOSX` metadata.
+RC4 retains RC3's verified transfer and filesystem isolation repairs. It launches Maya through `/usr/bin/env -i` with only `HOME`, `MAYA_ENABLED`, `NODE_ENV`, and `PATH`, preventing Supervisor's platform environment—including the Virtual Network Computing password variable—from entering the Maya process.
 
 The package content and builder verification are frozen. Candidate acceptance and activation remain blocked until an independent auditor records the disposable-computer verdict.
