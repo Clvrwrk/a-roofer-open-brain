@@ -18,7 +18,7 @@ function context(overrides = {}) {
     approval: "fixture-approval",
     cost_reservation: "zero",
     idempotency_key: "fixture-idempotency-key",
-    runtime_version: "1.0.0-rc.1",
+    runtime_version: "1.0.0-rc.2",
     ...overrides,
   };
 }

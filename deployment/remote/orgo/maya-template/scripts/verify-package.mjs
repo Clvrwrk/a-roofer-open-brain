@@ -7,7 +7,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const required = [
   "manifest.yaml", "AGENTS.md", "SOUL.md", "autonomy-budget.md", "queue-policy.yaml",
   "permissions.yaml", "schedules.yaml", "memory-policy.md", "tool-router.yaml", "skills.lock",
-  "runtime/service.mjs", "runtime/maya-runtime-v1.conf", "runbooks/pause.md", "runbooks/rollback.md",
+  "runtime/service.mjs", "runtime/maya-runtime-v1.conf", "runtime/NODE-RUNTIME.md",
+  "runbooks/pause.md", "runbooks/rollback.md",
 ];
 
 for (const relative of required) await stat(path.join(root, relative));
@@ -17,6 +18,9 @@ if (manifest.identity.destination !== "INJECT_AT_LAUNCH") throw new Error("desti
 if (manifest.activation.enabled_by_default !== false) throw new Error("template_not_disabled");
 if (Object.values(manifest.communications).some((mode) => mode !== "off")) throw new Error("communication_enabled");
 if (permissions.provider_adapters.length !== 0 || permissions.claims || permissions.schedules) throw new Error("capability_enabled");
+if (manifest.runtime.node_path !== "/usr/local/bin/node" || manifest.runtime.node_version !== "22.22.3") throw new Error("node_runtime_unpinned");
+const supervisor = await readFile(path.join(root, "runtime/maya-runtime-v1.conf"), "utf8");
+if (!supervisor.includes("command=/usr/local/bin/node ")) throw new Error("supervisor_node_path_unpinned");
 
 const prohibited = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,

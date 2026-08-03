@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "maya-runtime",
-  "runtime_version": "1.0.0-rc.1",
+  "runtime_version": "1.0.0-rc.2",
   "release_state": "build_only",
   "identity": {
     "persona_id": "maya-chen",
@@ -20,7 +20,9 @@
     "release_root": "/opt/cleverwork/maya-runtime-v1",
     "state_root": "/home/orgo/maya-agent-v1/state",
     "health_path": "/home/orgo/maya-agent-v1/state/health.json",
-    "supervisor": "supervisor"
+    "supervisor": "supervisor",
+    "node_path": "/usr/local/bin/node",
+    "node_version": "22.22.3"
   },
   "work": {
     "tracker_home": "CODEX AGENT TEAM",

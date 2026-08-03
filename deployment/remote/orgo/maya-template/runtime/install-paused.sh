@@ -8,10 +8,14 @@ source_directory="$(realpath "$1")"
 release_root="/opt/cleverwork/maya-runtime-v1"
 agent_root="/home/orgo/maya-agent-v1"
 supervisor_config="/etc/supervisor/conf.d/maya-runtime-v1.conf"
+node_binary="/usr/local/bin/node"
 
 [[ -f "${source_directory}/manifest.yaml" ]] || { echo "manifest missing" >&2; exit 1; }
 [[ -z "$(find "$source_directory" -type l -print -quit)" ]] || { echo "symbolic links prohibited" >&2; exit 1; }
-/usr/bin/node "${source_directory}/scripts/verify-package.mjs"
+[[ -x "$node_binary" ]] || { echo "pinned Node.js runtime missing" >&2; exit 1; }
+node_version="$($node_binary --version)"
+[[ "$node_version" == "v22.22.3" ]] || { echo "pinned Node.js runtime mismatch" >&2; exit 1; }
+"$node_binary" "${source_directory}/scripts/verify-package.mjs"
 
 getent passwd maya-agent >/dev/null || /usr/sbin/useradd --system --home-dir "$agent_root" --shell /usr/sbin/nologin maya-agent
 /usr/bin/install -d -o root -g root -m 0755 /opt/cleverwork

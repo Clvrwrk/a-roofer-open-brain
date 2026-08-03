@@ -32,4 +32,5 @@ test("Supervisor auto-starts a disabled service shell", async () => {
   assert.match(config, /MAYA_ENABLED="false"/u);
   assert.match(config, /^user=maya-agent$/mu);
   assert.match(config, /^startretries=2$/mu);
+  assert.match(config, /^command=\/usr\/local\/bin\/node /mu);
 });

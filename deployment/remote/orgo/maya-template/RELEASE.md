@@ -1,9 +1,9 @@
 # Maya runtime release candidate
 
-- Version: `1.0.0-rc.1`
+- Version: `1.0.0-rc.2`
 - State: build only; not activated
-- Package-content commit: `98dc9c9b39d18302513d0797f27e3d0888c33c08`
-- Package digest: `7eca30f6e3c3bc9a5ebbbe3ed00081983d2e197bd49040d049a8eb0fbb030842`
+- Package-content commit: pending CAT-17 repair commit
+- Package digest: `d5dff848964296292cd703fd41a53c81c4dadc287bae2d7835187bce9a90e8fd`
 - Builder: `cw-codex`
 - Auditor: pending independent disposable acceptance
 - Destination identity: `INJECT_AT_LAUNCH`
@@ -17,7 +17,11 @@
 - Required artifact and manifest validation: pass
 - Shell syntax check: pass
 - Dependency audit: 0 dependencies; 0 known vulnerabilities
-- Package dry run: 34 published files; 13.6 kilobytes compressed; 44.6 kilobytes unpacked
+- Package dry run: 35 published files; 14.6 kilobytes compressed; 47.1 kilobytes unpacked
 - Software Bill of Materials (`SBOM`): `sbom.spdx.json`
+
+## RC2 repair
+
+Disposable preflight found that the verified Orgo base template provides Node.js 18.19.1 and no npm. RC2 pins official Node.js 22.22.3 for Linux x86-64, records its official checksum, requires `/usr/local/bin/node`, and fails installation closed on a missing or mismatched runtime.
 
 The package content and builder verification are frozen. Candidate acceptance and activation remain blocked until an independent auditor records the disposable-computer verdict.
