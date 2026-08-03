@@ -2,7 +2,7 @@
 
 - Version: `1.0.0-rc.1`
 - State: build only; not activated
-- Source commit: pending CAT-17 package-content commit
+- Package-content commit: `98dc9c9b39d18302513d0797f27e3d0888c33c08`
 - Package digest: `7eca30f6e3c3bc9a5ebbbe3ed00081983d2e197bd49040d049a8eb0fbb030842`
 - Builder: `cw-codex`
 - Auditor: pending independent disposable acceptance
@@ -20,4 +20,4 @@
 - Package dry run: 34 published files; 13.6 kilobytes compressed; 44.6 kilobytes unpacked
 - Software Bill of Materials (`SBOM`): `sbom.spdx.json`
 
-This receipt becomes immutable only after tests, negative secret scan, package digest, source commit, and independent review are recorded.
+The package content and builder verification are frozen. Candidate acceptance and activation remain blocked until an independent auditor records the disposable-computer verdict.
