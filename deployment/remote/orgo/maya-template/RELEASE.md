@@ -2,7 +2,7 @@
 
 - Version: `1.0.0-rc.4`
 - State: build only; not activated
-- Package-content commit: `PENDING_CONTENT_COMMIT`
+- Package-content commit: `536f51d05552daccce1c158128087c9df43428a8`
 - Package digest: `d946e0f30e1235efb7d296b07816c543cf50c9d388f71957fdefbbb4780e7ce1`
 - Builder: `cw-codex`
 - Auditor: pending independent disposable acceptance
