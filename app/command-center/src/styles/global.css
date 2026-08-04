@@ -1509,10 +1509,35 @@ main {
   border-radius: 999px;
 }
 
-.office-legend-mark {
-  border-radius: 2px 2px 999px 999px;
-  background: var(--primary);
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+/* Legend swatches mirror the map markers: a white disc whose ring carries status. */
+.vendor-map-legend i.legend-ring {
+  width: 13px;
+  height: 13px;
+  background: #ffffff;
+  border: 3px solid currentColor;
+  box-sizing: border-box;
+}
+
+.vendor-map-legend .legend-badge {
+  display: inline-block;
+  vertical-align: -3px;
+  border-radius: 999px;
+}
+
+.vendor-map-legend .legend-note {
+  text-transform: none;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* Cluster count pill parked beside a single-vendor badge. */
+.vendor-cluster-count {
+  background: #ffffff;
+  border: 1.5px solid #0f172a;
+  border-radius: 999px;
+  padding: 0 4px;
+  line-height: 14px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 35%);
 }
 
 /* Map popup (Google InfoWindow KPI card + quick links) */
