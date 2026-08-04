@@ -330,26 +330,26 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           .filter(Boolean)
           .join("");
 
-        let contact = "";
-        if (scope) {
-          const rows = [];
-          if (branch.phone) rows.push(`<a href="tel:${escapeHtml(branch.phone)}">Call branch · ${escapeHtml(branch.phone)}</a>`);
-          if (branch.managerName || branch.managerEmail) {
-            const mgr = escapeHtml(branch.managerName || "Branch manager");
-            rows.push(
-              branch.managerEmail
-                ? `<a href="mailto:${escapeHtml(branch.managerEmail)}">Email ${mgr}</a>`
-                : `<span>${mgr}</span>`,
-            );
-          }
+        // Call/email hotlinks render for every branch regardless of drive-time scope —
+        // the scope note stays, but contact data is always one click away.
+        const rows = [];
+        if (branch.phone) rows.push(`<a href="tel:${escapeHtml(branch.phone)}">Call branch · ${escapeHtml(branch.phone)}</a>`);
+        if (branch.managerName || branch.managerEmail) {
+          const mgr = escapeHtml(branch.managerName || "Branch manager");
           rows.push(
-            branch.salesRepName
-              ? `<span>Sales rep · ${escapeHtml(branch.salesRepName)} <small>(email soon)</small></span>`
-              : `<span class="vmpop-muted">Sales rep contact — to be added</span>`,
+            branch.managerEmail
+              ? `<a href="mailto:${escapeHtml(branch.managerEmail)}">Email ${mgr}</a>`
+              : `<span>${mgr}</span>`,
           );
-          contact = `<div class="vmpop-contact"><p class="vmpop-section">Fleet / branch contact</p>${rows.join("")}</div>`;
-        } else {
-          contact = `<p class="vmpop-muted">Outside 2-hour drive time — not in active scope.</p>`;
+        }
+        rows.push(
+          branch.salesRepName
+            ? `<span>Sales rep · ${escapeHtml(branch.salesRepName)} <small>(email soon)</small></span>`
+            : `<span class="vmpop-muted">Sales rep contact — to be added</span>`,
+        );
+        let contact = `<div class="vmpop-contact"><p class="vmpop-section">Fleet / branch contact</p>${rows.join("")}</div>`;
+        if (!scope) {
+          contact = `<p class="vmpop-muted">Outside 2-hour drive time — not in active scope.</p>` + contact;
         }
 
         return `
@@ -451,7 +451,21 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         });
       }
 
+      // Vendor favicons (self-hosted in /vendor-icons) are the brand marker; the two
+      // alert priorities keep the colored-circle treatment so pricing/routing alerts
+      // stay visually distinct from the branded mass.
+      const VENDOR_ICON_SLUGS = new Set(["abc-supply", "qxo", "srs"]);
+      function vendorFaviconIcon(slug, px) {
+        return {
+          url: `/vendor-icons/${slug}.png`,
+          scaledSize: new google.maps.Size(px, px),
+          anchor: new google.maps.Point(px / 2, px / 2),
+        };
+      }
       function branchIcon(branch, scale = 6) {
+        if (branch.markerPriority !== "needs_office_route" && VENDOR_ICON_SLUGS.has(branch.vendorSlug)) {
+          return vendorFaviconIcon(branch.vendorSlug, Math.round(scale * 3.4));
+        }
         return {
           path: google.maps.SymbolPath.CIRCLE,
           fillColor: lensColor(branch),

@@ -489,7 +489,7 @@ const PLANNED_VENDORS: VendorMapVendor[] = [
   {
     id: "planned-srs",
     name: "SRS Distribution",
-    slug: "srs-distribution",
+    slug: "srs",
     color: "#0f766e",
     isActive: false,
     isPlanned: true,
