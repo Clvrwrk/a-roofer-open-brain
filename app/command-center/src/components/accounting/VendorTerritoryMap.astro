@@ -110,6 +110,7 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         <span><i class="legend-ring" style="border-color:#dc2626"></i>Problem</span>
         <span><i class="legend-ring" style="border-color:#64748b"></i>Out of scope</span>
         <span><img class="legend-badge" src="/vendor-icons/pe-office-badge.png" alt="" width="18" height="18" />PE office</span>
+        <span><i class="legend-territory"></i>2-hr drive time (shared pricing)</span>
         <span class="legend-note">Branch discs carry the vendor logo; the ring shows status.</span>
       </div>
     </div>
@@ -601,14 +602,18 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
 
         visibleOffices().forEach((office) => {
           if (office.boundary?.coordinates?.[0]?.length && (selectedState === "all" || office.state === selectedState)) {
+            // The 2-hour drive-time ring IS the pricing territory: branches inside one ring
+            // are expected to carry the same negotiated pricing, so it needs to read clearly
+            // rather than sit at the edge of visibility.
             const polygon = new google.maps.Polygon({
               paths: office.boundary.coordinates[0].map((point) => ({ lat: point[1], lng: point[0] })),
-              strokeColor: "#11133f",
-              strokeOpacity: 0.58,
-              strokeWeight: 1.4,
+              strokeColor: "#0f766e",
+              strokeOpacity: 0.85,
+              strokeWeight: 2.4,
               fillColor: "#0f766e",
-              fillOpacity: 0.07,
+              fillOpacity: 0.13,
               map: state.map,
+              title: `${office.name} — ${office.driveTimeMinutes ?? 120}-minute drive time`,
             });
             polygon.addListener("click", () => renderOfficeDetail(office));
             state.polygons.push(polygon);

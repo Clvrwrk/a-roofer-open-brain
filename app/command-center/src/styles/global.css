@@ -1524,6 +1524,15 @@ main {
   border-radius: 999px;
 }
 
+.vendor-map-legend i.legend-territory {
+  width: 15px;
+  height: 11px;
+  border-radius: 3px;
+  background: rgb(15 118 110 / 13%);
+  border: 2px solid rgb(15 118 110 / 85%);
+  box-sizing: border-box;
+}
+
 .vendor-map-legend .legend-note {
   text-transform: none;
   font-weight: 600;
