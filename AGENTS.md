@@ -80,3 +80,12 @@ Task:                <describe the exact work, naming the owned subtree>
 ```
 
 ## Imported Claude Cowork project instructions
+
+## Cursor Cloud specific instructions
+
+The runnable product in this repo is the **Command Center** — an Astro SSR web app at [`app/command-center`](app/command-center) (Node 22 + npm; there is no root/monorepo `package.json`, so run all commands from inside that directory). Standard commands are already documented in [`app/command-center/README.md`](app/command-center/README.md) and `app/command-center/package.json` scripts — the canonical ones are `npm run dev` (dev server on `http://127.0.0.1:4321`), `npm test` (Vitest), and `npm run build` (also the `check` script). The other Node packages (`deployment/remote/dashboard`, `deployment/remote/orgo/maya-slack-listener`) are legacy/ancillary and are not part of the core dev loop. The `server/` MCP and Supabase Edge Functions are Deno, and most `integrations/bridges/*` are on-demand scripts — none are needed just to run/test the web app.
+
+Non-obvious caveats for running here:
+- **The app boots with zero secrets in a degraded/unconfigured mode.** SSR routes still render, but data-backed areas show empty states / a yellow "Live data issue: SUPABASE_URL … SUPABASE_SERVICE_ROLE_KEY" banner. To see real data, provide a repo-root `.env` (copy `config/.env.example`) with `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`; env is resolved from `process.env` first, then by walking up from the app dir to find `.env`/`.env.local`. The only configured Supabase is **shared production** — respect the repo's read-only / no-destructive-write discipline; do not write dashboard decisions against it from a dev session.
+- **Degraded-mode dev gotcha:** without Supabase, `/accounting` (which 302-redirects to `/accounting/invoice-audit`) throws during SSR, and `AppShell` background-prefetches that route, so Vite's dev error overlay can pop over *any* page under `npm run dev`. This is a code-level degraded-path issue, not an environment problem — it disappears once Supabase env is set, and it does not occur in the production build. For a clean, DB-less visual check, run the built app: `npm run build` then `npm run preview` (e.g. `-- --port 4325`), which has no Vite HMR overlay.
+- Git hooks are **opt-in**: `bash scripts/setup-githooks.sh` points `core.hooksPath` at `.githooks/` (a pre-commit app-version bump). They are not active until you run that; skip a bump with `SKIP_VERSION_BUMP=1` or `[skip version]` in the message.
