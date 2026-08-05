@@ -1,21 +1,19 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
 import VendorTerritoryMap from "../../components/accounting/VendorTerritoryMap.astro";
-import PriceListCoverage from "../../components/audit/PriceListCoverage.astro";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { createVendorTerritoryShellSurface } from "@lib/vendor-territories";
-import { loadPriceListCoverage } from "@lib/price-list-coverage";
 
 // Rebuilt 2026-08-05 (docs/82 map cutover): the old static-SVG "Price List Audit"
 // surface here had rotted (its count fields no longer exist) — this page now serves
-// the same interactive territory map as the Command Center home, honoring ?office=,
-// with the Price List Coverage table below it.
+// the same interactive territory map as the Command Center home, honoring ?office=.
+// The "Price List Requests" panel was REMOVED 2026-08-05: it rendered demo profile
+// data (hardcoded 2026-06-17 clock, synthetic request dates) as if live. Its real
+// replacement is the Price Agreement Management surface (docs/83, P2 Request & Ingest).
 const territorySurface = createVendorTerritoryShellSurface();
 const mapsBrowserKey = getRuntimeEnv().GOOGLE_MAPS_BROWSER_KEY ?? "";
-const coverage = await loadPriceListCoverage();
 ---
 
 <AppShell title="Vendor Regions" eyebrow="Accounting · Vendor Map" activePage="accounting">
   <VendorTerritoryMap surface={territorySurface} mapsBrowserKey={mapsBrowserKey} deferLoad />
-  <PriceListCoverage coverage={coverage} />
 </AppShell>

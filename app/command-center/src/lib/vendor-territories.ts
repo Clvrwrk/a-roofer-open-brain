@@ -433,7 +433,9 @@ export function compactVendorTerritoryMapPayload(surface: VendorTerritoryMapPayl
       boundary: office.boundary,
       boundaryMethod: office.boundaryMethod,
       boundaryComputedAt: office.boundaryComputedAt,
-      activePriceAgreements: [],
+      // All-vendor in-force agreement chains (migration 205) — the office card's
+      // whole point; tiny (a handful of chains per office), so never compact away.
+      activePriceAgreements: office.activePriceAgreements,
       branchCounts: office.branchCounts,
     })),
     branches: surface.branches.map((branch) => ({
@@ -1614,10 +1616,17 @@ export async function loadVendorTerritoryMapPayload(
       .filter((office) => office.is_active !== false)
       .map((office) => {
         const region = office.region_id ? regionById.get(office.region_id) : null;
-        const activePriceAgreements = agreements
-          .filter((agreement) => agreement.region_id === office.region_id && isAgreementCurrent(agreement))
-          .sort(compareAgreements)
-          .map((agreement) => agreementSummary(agreement, vendorById, regionById, "region"));
+        // v2: the office card lists ALL vendors' in-force agreement chains (migration
+        // 205), not just region-keyed ABC rows — expired-evergreen chains included
+        // (the expiry chip marks them; they still price the audit, PAEXP).
+        const activePriceAgreements: PriceAgreementSummary[] = [];
+        for (const [key, list] of officeVendorCoverage) {
+          if (!key.startsWith(`${office.id}:`)) continue;
+          const vendorName = vendorById.get(key.slice(office.id.length + 1))?.name ?? "Vendor";
+          for (const cov of list) activePriceAgreements.push(officeCoverageAgreementSummary(cov, vendorName, office.name));
+        }
+        activePriceAgreements.sort((a, b) =>
+          a.vendorName.localeCompare(b.vendorName) || String(b.effectiveDate ?? "").localeCompare(String(a.effectiveDate ?? "")));
 
         return {
           id: office.id,
