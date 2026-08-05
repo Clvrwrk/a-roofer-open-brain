@@ -3,8 +3,22 @@ import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
 import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
 
-const data = await loadAgreementBuilderOverview();
-const coverage = await loadPriceAgreementCoverage();
+// Each loader degrades to its own empty shape rather than 500-ing the page: the cost
+// roll-up reads v_negotiable_items, which intermittently exceeds the statement timeout,
+// and that should not take the territory-coverage section down with it (or vice versa).
+const [overviewResult, coverageResult] = await Promise.allSettled([
+  loadAgreementBuilderOverview(),
+  loadPriceAgreementCoverage(),
+]);
+const loadErrors: string[] = [];
+if (overviewResult.status === "rejected") loadErrors.push(`Cost roll-up unavailable: ${overviewResult.reason?.message ?? overviewResult.reason}`);
+if (coverageResult.status === "rejected") loadErrors.push(`Territory coverage unavailable: ${coverageResult.reason?.message ?? coverageResult.reason}`);
+const data = overviewResult.status === "fulfilled"
+  ? overviewResult.value
+  : { status: "unconfigured" as const, generatedAt: new Date().toISOString(), recipient: { name: "", email: "" }, offices: [], totals: { offices: 0, branches: 0, projectedCost: 0, historicalSpend: 0, savings: 0, negotiableItems: 0 } };
+const coverage = coverageResult.status === "fulfilled"
+  ? coverageResult.value
+  : { status: "unconfigured" as const, generatedAt: new Date().toISOString(), offices: [], totals: { offices: 0, vendors: 0, branchRows: 0, primaryBranches: 0, regionCoveredBranches: 0, branchesInheriting: 0, pricedItems: 0, gaps: 0 } };
 const milesLabel = (m: number | null) => (m == null ? "—" : `${m.toFixed(1)} mi`);
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
@@ -17,6 +31,11 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 
 <AppShell title="Agreement Builder" eyebrow="Accounting" activePage="accounting">
   <section class="iv" data-theme="light" data-pref="system">
+    {loadErrors.length > 0 && (
+      <div class="iv-load-warning" role="status">
+        <strong>Partial data.</strong> {loadErrors.join(" ")} The rest of this page is still accurate.
+      </div>
+    )}
     <div class="iv-toolbar">
       <input class="iv-input" id="iv-search" type="search" placeholder="Search office, branch…" autocomplete="off" />
       <select class="iv-select" id="iv-office">
@@ -142,6 +161,7 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 </AppShell>
 
 <style is:global>
+  .iv-load-warning{margin:0 0 12px;padding:10px 13px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;font-size:13px}
   .iv{
     --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
     --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
