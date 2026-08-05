@@ -54,10 +54,11 @@ Dead code flagged: `compactInvoiceAuditForInitialPayload` (0 callers), `triggerD
 - **[Approve] on invoice bar** → adds the invoice's discrepancy lines to this week's credit memo email (see R2).
 - **Credit-Memo pill repurposed** → opens the weekly HTML credit memo request email with a "download reconciliation spreadsheet" action. *Exact pill identity pending (question).* 
 
-## 5. Open questions (blocking implementation)
+## 5. Decisions (Chris, 2026-08-05)
 
-1. Which "Credit Memo pill" gets repurposed — the KPI card, the per-invoice pill, or both?
-2. Agent write-path: `mark`/`run-disposition` are agent-allowlisted for Alex's auto-classification. Delete outright, or replace with a v2 agent endpoint that writes `invoice_line_audit` classifications?
-3. Service/Warranty v2 flow: what actions should that surface offer now that dispositions are gone?
-4. Engine cutover (R1): OK to switch audit pricing to office inheritance in one migration (KPIs will shift — No-Price will drop sharply, at-risk will rise), with a before/after delta report — or stage behind a comparison view first?
-5. QXO invoice source: where do QXO invoice files live (CSV export? portal PDFs?)?
+1. **CM pill = the KPI card.** Repurpose "Credit Memo Requested": value from `credit_memo_requests` (draft+approved), with a button opening the weekly HTML request email + reconciliation-spreadsheet/tracker downloads.
+2. **Agent write-path = new v2 endpoint.** Delete all 12 orphaned routes (+ 2 test files); add one v2 endpoint for agents to record line classifications into `invoice_line_audit`.
+3. **Engine cutover = now.** Migration 201 switches the live audit views to office-inherited, invoice-date-effective, lowest-price-wins pricing in one step, with a before/after KPI delta report delivered the same session.
+4. **Service/Warranty surface = RETIRED.** Remove the nav entry and the `?audit=service_warranty` page variant; the `service_warranty_audit_queue` table and transfer flow remain (data untouched, hard rule 1).
+
+**Still open:** QXO invoice source (CSV export? portal PDFs?) — required before QXO appears in the audit (Phase 5).
