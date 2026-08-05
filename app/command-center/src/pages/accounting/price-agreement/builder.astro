@@ -1,8 +1,11 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
+import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
 
 const data = await loadAgreementBuilderOverview();
+const coverage = await loadPriceAgreementCoverage();
+const milesLabel = (m: number | null) => (m == null ? "—" : `${m.toFixed(1)} mi`);
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
 const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
@@ -43,6 +46,94 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 
     {data.offices.length === 0 && <p class="iv-empty">No negotiable items found.</p>}
     <div id="iv-tree"></div>
+
+    <h2 class="tc-head">Territory Coverage — who inherits which price list</h2>
+    <p class="iv-note">A price agreement held by <b>any</b> branch inside a PE office's 2-hour drive-time ring is <b>inherited by every branch of that vendor in that ring</b>. Where two agreements compete, they resolve <b>per item — lowest price wins</b>, and the source branch is recorded. A lapsed list is <b>still in force</b> until the vendor replaces it, so it shows as <b>Extended (awaiting replacement)</b>, never as an error. A branch that sits inside two office rings is listed under <b>both</b> offices — that is intentional.</p>
+
+    {coverage.offices.length === 0 && <p class="iv-empty">No territory coverage rows found.</p>}
+
+    {coverage.offices.map((office) => (
+      <details class="iv-office">
+        <summary>
+          <span class="iv-chev">›</span>
+          <span class="iv-office-name">{office.officeName}{office.officeState ? ` · ${office.officeState}` : ""}</span>
+          <div class="iv-mini">
+            <div><strong>{office.vendors.length}</strong><span>Vendors</span></div>
+            <div><strong>{office.vendors.reduce((s, v) => s + v.branchesInTerritory, 0)}</strong><span>In territory</span></div>
+            <div><strong>{office.vendors.reduce((s, v) => s + v.primaryBranches + v.regionCoveredBranches, 0)}</strong><span>Hold agreement</span></div>
+            <div><strong>{office.vendors.reduce((s, v) => s + v.pricedItems, 0).toLocaleString()}</strong><span>Priced items</span></div>
+          </div>
+        </summary>
+        <div class="iv-office-body">
+          {office.vendors.map((vendor) => (
+            <details class="iv-vendor">
+              <summary>
+                <span class="iv-chev">›</span>
+                <span class="iv-vendor-name">{vendor.vendorName}</span>
+                <div class="iv-mini">
+                  <div><strong>{vendor.branchesInTerritory}</strong><span>In territory</span></div>
+                  <div><strong>{vendor.primaryBranches}</strong><span>Primary</span></div>
+                  <div><strong>{vendor.branchesInheriting}</strong><span>Inheriting</span></div>
+                  <div><strong>{vendor.pricedItems.toLocaleString()}</strong><span>Priced items</span></div>
+                </div>
+                <div class="iv-branch-tags">
+                  {vendor.hasGap && <span class="pill pill-red">No agreement — gap</span>}
+                  {vendor.anyLapsed && <span class="pill pill-yellow">Extended (awaiting replacement)</span>}
+                  {vendor.competingAgreements > 1 && <span class="pill pill-brand">{vendor.competingAgreements} competing lists — lowest price per item</span>}
+                  {vendor.allVerified && <span class="pill pill-green">CEO verified</span>}
+                </div>
+              </summary>
+              <div class="iv-vendor-body">
+                <div class="iv-actions">
+                  <span class="iv-actions-id">{vendor.vendorSlug}</span>
+                  <a class="iv-export" href={`/api/price-agreement/coverage-export?vendor=${encodeURIComponent(vendor.vendorSlug)}&format=pdf`}>⬇ Export PDF</a>
+                  <a class="iv-export" href={`/api/price-agreement/coverage-export?vendor=${encodeURIComponent(vendor.vendorSlug)}&format=csv`}>⬇ Export CSV</a>
+                </div>
+                {vendor.branches.length === 0 ? (
+                  <p class="iv-loading">No branches mapped into this office ring.</p>
+                ) : (
+                  <table class="iv-table">
+                    <thead>
+                      <tr>
+                        <th>Branch #</th>
+                        <th>Branch</th>
+                        <th>City / State</th>
+                        <th class="num">Miles</th>
+                        <th>Phone</th>
+                        <th>Coverage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vendor.branches.map((branch) => (
+                        <tr class={branch.role === "Inherits" ? "" : "tc-holder"}>
+                          <td class="iv-sku">{branch.branchNumber || "—"}</td>
+                          <td>{branch.branchName || "—"}</td>
+                          <td>{[branch.city, branch.state].filter(Boolean).join(", ") || "—"}</td>
+                          <td class="num">{milesLabel(branch.milesFromOffice)}</td>
+                          <td>{branch.phone || "—"}</td>
+                          <td>
+                            {branch.role === "Primary" && <span class="pill pill-brand">Primary — holds agreement</span>}
+                            {branch.role === "Region-covered" && <span class="pill pill-green">Region agreement</span>}
+                            {branch.role === "Inherits" && <span class="pill pill-grey">Inherits ring price list</span>}
+                            {branch.holdsAgreement && (
+                              <span class="tc-agree">
+                                {branch.agreementNumber ?? "no agreement #"}
+                                {branch.effectiveDate ? ` · eff. ${branch.effectiveDate}` : ""}
+                                {branch.isLapsed ? " · Extended (awaiting replacement)" : ""}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </details>
+          ))}
+        </div>
+      </details>
+    ))}
   </section>
 
   <script type="application/json" id="iv-data" set:html={payload}></script>
@@ -167,6 +258,10 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
   .iv-progress-head b{color:var(--ink);font-size:12.5px}
   .iv-progress-track{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
   .iv-progress-fill{height:100%;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:99px;transition:width .35s ease}
+  /* Territory coverage — who inherits which price list */
+  .iv .tc-head{font-size:16px;font-weight:750;margin:26px 0 8px;padding-top:20px;border-top:1px solid var(--line)}
+  .iv .tc-holder td{background:var(--panel2)}
+  .iv .tc-agree{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} .iv-mini{gap:10px} }
 </style>
 
