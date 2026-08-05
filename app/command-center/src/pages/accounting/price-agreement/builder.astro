@@ -161,7 +161,8 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 </AppShell>
 
 <style is:global>
-  .iv-load-warning{margin:0 0 12px;padding:10px 13px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;font-size:13px}
+  .iv .iv-load-warning{margin:0 0 12px;padding:10px 13px;border-radius:8px;background:var(--yellow-bg);border:1px solid var(--yellow);color:var(--yellow);font-size:13px}
+  .iv .iv-load-warning strong{color:var(--ink)}
   .iv{
     --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
     --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
@@ -279,7 +280,7 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
   .iv-progress-track{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
   .iv-progress-fill{height:100%;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:99px;transition:width .35s ease}
   /* Territory coverage — who inherits which price list */
-  .iv .tc-head{font-size:16px;font-weight:750;margin:26px 0 8px;padding-top:20px;border-top:1px solid var(--line)}
+  .iv .tc-head{font-size:16px;font-weight:750;margin:26px 0 8px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink)}
   .iv .tc-holder td{background:var(--panel2)}
   .iv .tc-agree{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
   @media (max-width:1100px){ .iv-kpis{grid-template-columns:repeat(2,1fr)} .iv-mini{gap:10px} }
