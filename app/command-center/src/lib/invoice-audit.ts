@@ -675,38 +675,6 @@ export function findInvoiceAuditInvoice(data: InvoiceAuditData, invoiceNumber: s
   return null;
 }
 
-export function compactInvoiceAuditForInitialPayload(data: InvoiceAuditData): InvoiceAuditData {
-  return {
-    ...data,
-    offices: data.offices.map((office) => ({
-      ...office,
-      branches: office.branches.map((branch) => {
-        const hasPriceList = branch.invoices.some((invoice) => invoice.lines.some((line) => line.negotiatedPrice != null));
-        return {
-          ...branch,
-          invoices: branch.invoices.map((invoice) => ({
-            ...invoice,
-            hasPriceList,
-            searchText: [
-              invoice.invoiceNumber,
-              invoice.po,
-              invoice.jobNumber,
-              invoice.clientName,
-              invoice.jobCategory,
-              invoice.branchCode,
-              invoice.branchName,
-            ]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase(),
-            lines: [],
-          } as Invoice & { hasPriceList: boolean; searchText: string })),
-        } as InvBranch & { invoices: Array<Invoice & { hasPriceList: boolean; searchText: string }> };
-      }),
-    })),
-  };
-}
-
 const INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS = 5 * 60_000;
 const INVOICE_AUDIT_SUMMARY_MAX_STALE_MS = 24 * 60 * 60_000;
 let invoiceAuditSummaryCache: { expiresAt: number; data: InvoiceAuditData } | null = null;
@@ -1058,27 +1026,9 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(),
   return invoiceAuditSummaryInflight;
 }
 
-// Service/Warranty Audit summary — the same engine/screens scoped to the transferred set
-// (docs/61). Separate cache from the invoice-audit path so neither evicts the other; the
-// set is small so the simple TTL cache is enough.
-let serviceWarrantyAuditSummaryCache: { expiresAt: number; data: InvoiceAuditData } | null = null;
-export function invalidateServiceWarrantyAuditSummaryCache() {
-  serviceWarrantyAuditSummaryCache = null;
-}
-export async function loadServiceWarrantyAuditSummary(
-  env: RuntimeEnv = getRuntimeEnv(),
-  options: { force?: boolean } = {},
-): Promise<InvoiceAuditData> {
-  const now = Date.now();
-  if (!options.force && serviceWarrantyAuditSummaryCache && serviceWarrantyAuditSummaryCache.expiresAt > now) {
-    return serviceWarrantyAuditSummaryCache.data;
-  }
-  const data = await loadFreshInvoiceAuditSummary(env, "service_warranty");
-  if (data.status === "live") {
-    serviceWarrantyAuditSummaryCache = { expiresAt: Date.now() + INVOICE_AUDIT_SUMMARY_CACHE_TTL_MS, data };
-  }
-  return data;
-}
+// The Service/Warranty summary loader was retired with its page variant (docs/82 §5.4).
+// The AuditMode plumbing stays: invoice mode still excludes the transferred
+// Commercial ship-to set, and the queue table/transfer flow are untouched.
 
 export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: RuntimeEnv = getRuntimeEnv()): Promise<Invoice | null> {
   const wanted = invoiceNumber.trim();

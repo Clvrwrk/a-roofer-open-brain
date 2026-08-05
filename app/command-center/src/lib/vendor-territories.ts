@@ -1439,6 +1439,9 @@ export async function loadVendorTerritoryMapPayload(
     const candidateByBranch = new Map<string, CandidateOffice[]>();
     for (const candidate of candidateRows) {
       const office = officeById.get(candidate.office_id);
+      // Archived offices keep their candidate rows as history (hard rule 1) but their
+      // drive-time rings never surface on the map (docs/82 R5: Euless archived).
+      if (office?.is_active === false) continue;
       const list = candidateByBranch.get(candidate.vendor_branch_id) ?? [];
       const straightKm = toNumber(candidate.straight_km);
       list.push({

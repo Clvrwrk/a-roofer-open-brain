@@ -1,16 +1,13 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
-import { loadInvoiceAuditSummary, loadServiceWarrantyAuditSummary } from "@lib/invoice-audit";
+import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
-// Same surface, two audits (docs/61): ?audit=service_warranty shows ONLY the transferred
-// Commercial-ship-to invoices (the mirrored Service/Warranty Audit, human-in-loop = Chris);
-// default shows the pricing Invoice Audit (which now excludes the transferred set).
-const isSW = Astro.url.searchParams.get("audit") === "service_warranty";
-const auditLabel = isSW ? "Service/Warranty Audit" : "Invoice Audit";
-const loadSummary = (opts: { force: boolean }) =>
-  isSW ? loadServiceWarrantyAuditSummary(undefined, opts) : loadInvoiceAuditSummary(undefined, opts);
+// The Service/Warranty page variant (?audit=service_warranty) was retired in docs/82
+// §5.4 — the transfer flow and queue table remain, and this audit still EXCLUDES the
+// transferred Commercial ship-to invoices.
+const loadSummary = (opts: { force: boolean }) => loadInvoiceAuditSummary(undefined, opts);
 
 const perfMetrics: PerfMetric[] = [];
 const forceLiveRefresh = Astro.url.searchParams.has("refresh") || Astro.url.searchParams.has("live");
@@ -33,19 +30,42 @@ let cmApprovedTotal = 0;
 let cmDraftTotal = 0;
 let cmApprovedCount = 0;
 let cmDraftCount = 0;
+let claimLinesTotal = 0;
+let claimLinesUnreviewed = 0;
 {
   const { client } = createServerSupabaseClient();
   if (client) {
     const [pipe, pay, cms] = await Promise.all([
       client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
       client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
-      client.from("credit_memo_requests").select("status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
+      client.from("credit_memo_requests").select("invoice_number, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
     ]);
     auditPendingCount = pipe.count ?? 0;
     pendingVerificationCount = pay.count ?? 0;
     for (const r of cms.data ?? []) {
       if (r.status === "approved") { cmApprovedTotal += Number(r.expected_credit ?? 0); cmApprovedCount += 1; }
       else { cmDraftTotal += Number(r.expected_credit ?? 0); cmDraftCount += 1; }
+    }
+    // Claims To Review (docs/82 R5): the human review gate — claim lines of each CM
+    // invoice's LATEST re-audit run not yet acknowledged. Same math as
+    // /api/credit-memos/pending, so this card always agrees with the checkboxes.
+    const cmInvoices = (cms.data ?? []).map((r) => r.invoice_number);
+    if (cmInvoices.length) {
+      const { data: lines } = await client
+        .from("invoice_line_reaudit")
+        .select("run_label, invoice_number, variance_ext, reviewed_at, created_at")
+        .in("invoice_number", cmInvoices)
+        .eq("classification", "discrepancy")
+        .order("created_at", { ascending: false })
+        .limit(2000);
+      const latestRun = new Map<string, string>();
+      for (const l of lines ?? []) if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
+      for (const l of lines ?? []) {
+        if (latestRun.get(l.invoice_number) !== l.run_label) continue;
+        if (Number(l.variance_ext ?? 0) < 0.05) continue;
+        claimLinesTotal += 1;
+        if (!l.reviewed_at) claimLinesUnreviewed += 1;
+      }
     }
   }
 }
@@ -58,7 +78,7 @@ logPerfMetrics("invoice-audit", perfMetrics);
 const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
 ---
 
-<AppShell title={auditLabel} eyebrow="Accounting" activePage="accounting">
+<AppShell title="Invoice Audit" eyebrow="Accounting" activePage="accounting">
   <section class="iv" data-theme="light" data-pref="system" data-initial-payload-bytes={initialPayloadBytes}>
     <div class="iv-toolbar">
       <input class="iv-input" id="iv-search" type="search" placeholder="Search invoice, item, branch…" autocomplete="off" />
@@ -96,7 +116,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
     <div class="iv-kpis">
       <div class="iv-kpi"><span class="iv-kpi-lab">Open Invoices</span><span class="iv-kpi-val">{data.totals.openInvoices.toLocaleString()}</span><span class="iv-kpi-sub">active · {data.totals.paidInvoices} paid/closed</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Due Now</span><span class="iv-kpi-val">{data.totals.dueNow.toLocaleString()}</span><span class="iv-kpi-sub">payment due · invoice + 60 days</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">To Audit</span><span class="iv-kpi-val">{data.totals.pending.toLocaleString()}</span><span class="iv-kpi-sub">lines without an audit record (legacy metric)</span></div>
+      <div class="iv-kpi"><span class="iv-kpi-lab">Claims To Review</span><span class="iv-kpi-val">{claimLinesUnreviewed.toLocaleString()}</span><span class="iv-kpi-sub">of {claimLinesTotal.toLocaleString()} claim lines · human review gate</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">un-audited overcharge vs negotiated</span></div>
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Credit Memo Requested</span>

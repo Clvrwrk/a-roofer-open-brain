@@ -719,12 +719,6 @@ if (root && dataEl && mount) {
       return { ok: false, data: { error_description: "network error" } };
     }
   }
-  function triggerDownload(url: string) {
-    const a = document.createElement("a");
-    a.href = url; a.rel = "noopener";
-    document.body.appendChild(a); a.click(); a.remove();
-  }
-
   // v2 Process (docs/81 decision 9): pure status stamp — every Invoice Audit Pending
   // invoice flips to Invoice Audit Complete with a completion date. No export.
   const processBtn = document.getElementById("iv-process") as HTMLButtonElement | null;
@@ -744,11 +738,9 @@ if (root && dataEl && mount) {
   // with a one-click Paid-Verified toggle. Invoice-level only — no line detail.
   const payBtn = document.getElementById("iv-payments");
   let payDirty = false;
-  let pendingManageBatch: string | null = null; // legacy #manage-<batchId> links still open the panel
   function closePay(overlay: HTMLElement) { overlay.remove(); if (payDirty) window.location.reload(); }
   async function renderPay(body: HTMLElement) {
     body.innerHTML = '<p class="iv-pay-empty">Loading…</p>';
-    pendingManageBatch = null;
     const res = await fetch("/api/invoice-audit/pending-verification", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
     const invoices: any[] = res?.invoices ?? [];
     const parts: string[] = [];
@@ -796,9 +788,9 @@ if (root && dataEl && mount) {
   // recipient who clicks a weekly-package link lands straight on the payments
   // panel (after WorkOS login if needed) instead of a JSON 401 from a raw API.
   function openManageFromHash() {
+    // Legacy #manage-<batchId> links still open the panel; the batch id itself is ignored.
     const m = /^#manage(?:-(.+))?$/.exec(window.location.hash);
     if (!m || !payBtn) return;
-    pendingManageBatch = m[1] ? decodeURIComponent(m[1]) : null;
     payBtn.click();
   }
   openManageFromHash();
