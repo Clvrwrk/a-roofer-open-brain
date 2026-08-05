@@ -45,7 +45,7 @@ Dead code flagged: `compactInvoiceAuditForInitialPayload` (0 callers), `triggerD
 
 **R4 — Reset v2 semantics.** Copy + guards + `invoice_pipeline_status` sync.
 
-**R5 — Cleanup.** Delete the 12 orphaned routes + 2 test files; remove dead code; S/W variant defaults.
+**R5 — Cleanup.** Delete the 12 orphaned routes + 2 test files; remove dead code; **retire the Service/Warranty surface** (decision §5.4); add the v2 agent classification endpoint (decision §5.2); decide the legacy "To Audit" metric's fate; **archive the Euless, TX office + its drive-time rings** (Chris 2026-08-05: Euless is closed — Richardson is the sole Texas office; archive, don't delete, per hard rule 1).
 
 **R6 — Producers (Phase 6).** Daily processing writes `invoice_pipeline_status`; Tuesday INV-PROCESSED file writes the payment ledger (`exported`), keeping Process/Manage alive. Phase 5 fills SRS/QXO.
 

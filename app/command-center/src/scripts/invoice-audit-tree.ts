@@ -181,7 +181,7 @@ if (root && dataEl && mount) {
   // (all-pending) state. Append-only on the server; here we just re-fetch the truth.
   async function resetInvoice(inv: Invoice, det: HTMLDetailsElement, btn: HTMLButtonElement) {
     const ok = window.confirm(
-      `Reset invoice ${inv.invoiceNumber}?\n\nThis re-pends every line, reverses not-to-be-paid holds, and cancels any draft credit memo. Prior decisions stay in history and sent communications are not affected.`,
+      `Reset invoice ${inv.invoiceNumber}?\n\nThis re-pends every decided line, clears the claim-line review checks, cancels the draft/approved (un-sent) credit memo request, and returns the invoice to Audit Pending. Prior decisions stay in history; sent requests and communications are not affected.`,
     );
     if (!ok) return;
     const prevLabel = btn.textContent;
@@ -202,8 +202,10 @@ if (root && dataEl && mount) {
       }
       toast(
         `Invoice ${inv.invoiceNumber} reset — ${r.linesReset} line(s) re-pended` +
-          (r.creditMemosCancelled ? `, ${r.creditMemosCancelled} draft credit memo cancelled` : "") + ".",
+          (r.creditMemosCancelled ? `, ${r.creditMemosCancelled} credit memo request cancelled` : "") +
+          (r.reviewsCleared ? `, ${r.reviewsCleared} review check(s) cleared` : "") + ".",
       );
+      void loadCreditMemoRequests(); // the CM pill/Approve state changed
       // Re-fetch the invoice (loadInvoiceLines syncs the summary tags + bar via the tree).
       inv.lines = [];
       inv.linesLoaded = false;
@@ -325,7 +327,7 @@ if (root && dataEl && mount) {
     // included. cc.proexteriorsus.net is where a human fixes agent work, so the option must be
     // universal for open+unpaid worked invoices. Hidden only on paid/exported (server refuses those).
     const resetBtn = (!inv.paid && !inv.awaitingPayment && inv.hasWork === true)
-      ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset all lines to pending, reverse not-to-be-paid holds, and cancel any draft credit memo (sent communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
+      ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset: re-pend all lines, clear claim-line review checks, and cancel the un-sent credit memo request (sent requests and communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `
       <details class="iv-inv" data-search="${esc(inv.searchText || (inv.invoiceNumber + " " + inv.po + " " + inv.lines.map((l) => l.itemNumber + " " + l.itemDescription).join(" ")).toLowerCase())}" data-worst="${inv.worstPct}" data-noprice="${inv.noPriceLines}" data-pending="${inv.pendingLines}" data-audited="${inv.auditedLines}" data-auditable="${inv.auditedLines + inv.pendingLines}" data-atrisk="${inv.atRisk}" data-paid="${inv.paid ? "1" : "0"}" data-cm="${inv.isCreditMemo ? "1" : "0"}" data-date="${esc(inv.invoiceDate)}" data-actionable="${inv.actionable ? "1" : "0"}" data-duenow="${inv.dueNow ? "1" : "0"}" data-topay="${(refreshToBePaid(inv) && isPayable(inv)) ? "1" : "0"}">

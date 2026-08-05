@@ -6,15 +6,19 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
-// docs/59 Task 6 — per-invoice "Go back" reset. Append-only by design: the
-// invoice_audit_reset() RPC re-pends every non-pending line (never deletes),
-// cancels only DRAFT credit-memo candidates, logs the action, and refuses
-// paid / exported / credit-memo invoices — all in one transaction (RT-2).
-// Never touches communications: sent comms are never reversed here.
+// v2 "Go back" reset (docs/82 R4, migration 203). Append-only by design: re-pends
+// every decided line (never deletes), cancels the DRAFT/APPROVED (un-sent) credit-memo
+// request, clears the claim-line review acknowledgments, and returns the pipeline
+// status to Audit Pending / Processed — all in one transaction. Refuses paid /
+// exported / paid-pending-verification / paid-verified / credit-memo invoices.
+// Sent communications and sent requests are never reversed here.
 const RESET_ERRORS: Record<string, { status: number; message: string }> = {
   not_found: { status: 404, message: "Invoice not found." },
+  credit_memo_not_resettable: { status: 409, message: "A vendor credit memo cannot be reset." },
   invoice_paid: { status: 409, message: "A paid invoice cannot be reset." },
   invoice_exported: { status: 409, message: "An invoice already exported for payment cannot be reset." },
+  invoice_paid_pending_verification: { status: 409, message: "This invoice is in payment verification — verify or return it before resetting." },
+  invoice_paid_verified: { status: 409, message: "A payment-verified invoice cannot be reset." },
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -43,19 +47,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: "reset_failed", error_description: error.message }, { status: 500 });
   }
 
-  const result = (data ?? {}) as { ok?: boolean; error?: string; lines_reset?: number; credit_memos_cancelled?: number; action_id?: string };
+  const result = (data ?? {}) as { ok?: boolean; error?: string; lines_reset?: number; credit_memos_cancelled?: number; reviews_cleared?: number; pipeline_status?: string; action_id?: string };
   if (!result.ok) {
     const mapped = RESET_ERRORS[result.error ?? ""] ?? { status: 400, message: "Reset failed." };
     return jsonApiResponse({ error: result.error ?? "reset_failed", error_description: mapped.message }, { status: mapped.status });
   }
 
-  // A decision changes toBePaid/payable/held — drop the 5-min summary cache so the
-  // KPI cards agree with the tree and the Process button on the next page load.
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({
     ok: true,
     linesReset: result.lines_reset ?? 0,
     creditMemosCancelled: result.credit_memos_cancelled ?? 0,
+    reviewsCleared: result.reviews_cleared ?? 0,
+    pipelineStatus: result.pipeline_status ?? null,
     actionId: result.action_id ?? null,
   });
 };
