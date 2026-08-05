@@ -68,3 +68,23 @@ Dead code flagged: `compactInvoiceAuditForInitialPayload` (0 callers), `triggerD
 4. **Service/Warranty surface = RETIRED.** Remove the nav entry and the `?audit=service_warranty` page variant; the `service_warranty_audit_queue` table and transfer flow remain (data untouched, hard rule 1).
 
 **Still open:** QXO invoice source (CSV export? portal PDFs?) — required before QXO appears in the audit (Phase 5).
+
+## 6. Vendor-regions territory map cutover (Chris 2026-08-05, second wave — ✅ DONE)
+
+Chris reported `/accounting/vendor-regions` broken: everything ringed PROBLEM, popup KPIs all "No negotiated / 0 price lines / Blocked", GoTo links dead. Root cause: the map still ran the **pre-v2 pricing model** — an agreement only counted if `ceo_verified=true` AND unexpired AND keyed to the exact branch/region; essentially zero prod agreements passed, and the office-inheritance views were ABC-only so SRS was invisible everywhere.
+
+**Decisions (Chris):**
+1. Ring semantics — **Healthy** = branch's office has an in-force, IN-DATE agreement (direct or office-inherited); **Needs Attention** = expired-but-evergreen (PAEXP, renewal needed) or branch not yet routed to an office; **Problem** = no agreement on file at all; **Out of scope** = outside every 2-hr window.
+2. QXO = **Problem (red)** — no-agreement is red everywhere.
+3. `ceo_verified` is **display-only**, never a gate (matches the audit engine).
+4. **Full union** — office inheritance covers all vendors. Migration 205 adds `v_office_vendor_agreements` (abc arm + generic `price_agreements` arm; text keys). The audit engine keeps its ABC views for now — its generic arm lands with Phase 5 SRS/QXO invoice ingestion, when there are real rows to verify against.
+
+**Shipped:**
+- Migration 205 `v_office_vendor_agreements`; the two duplicate number-less SRS rows from the R2 first pass archived (`is_active=false`).
+- `vendor-territories.ts`: office+vendor in-force coverage (newest per chain, effective ≤ today, evergreen) drives `currentAgreement` / waterfall / marker priority; new `agreement_expired` priority; ceo gate dropped from `isAgreementCurrent`.
+- Map component: coverage lens = green in-date / yellow expired-or-unrouted / red none / grey out-of-scope; `?office=` focuses that office; branch GoTo links fixed (Price Agreement Audit = ABC-only, self-link removed).
+- `/accounting/vendor-regions` **rebuilt**: the rotted static-SVG "Price List Audit" surface (NaN counts from removed fields) replaced by the interactive territory map + Price List Coverage table.
+- `branch-price-list.ts`: office-inherited list is now all-vendor (SSMEL → SRS-MELISSA-L4 97 items; DJWIC → 0049828559 17 items) with dual item sources (`abc_price_list_items` / `price_agreement_items`).
+- Invoice-audit tree: a `?branch=` not present in the tree now scopes the search box instead of silently rendering unfiltered.
+
+**Verified (dev):** in-scope split 41 healthy / 27 expired / 29 unrouted / 75 problem (QXO 45 + offices with genuinely no agreement); Richardson card 26 branches · 25 healthy · 1 missing; SBP-WAXAHACHIE = yellow needs-office-route (assign → inherits Richardson SRS L4 → green); SRS gates open under evergreen.

@@ -276,8 +276,11 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           if (issues === 1) return LENS_YELLOW;
           return LENS_RED;
         }
-        // coverage (default)
+        // coverage (default) — v2 semantics (docs/82, Chris 2026-08-05):
+        // green = in-force IN-DATE agreement · yellow = expired-evergreen (PAEXP) or
+        // needs office routing · red = no agreement at all · grey = out of scope.
         if (!inDriveTime(branch)) return LENS_GREY;
+        if (branch.markerPriority === "needs_office_route" || branch.markerPriority === "agreement_expired") return LENS_YELLOW;
         if (isNegotiated(branch)) return LENS_GREEN;
         if (branch.pricingWaterfall && branch.pricingWaterfall.itemCount > 0) return LENS_YELLOW;
         return LENS_RED;
@@ -325,8 +328,7 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         const links = [
           branch.branchNumber ? linkRow(`/accounting/price-list/branch${branchParam}`, "Active Price List", false, true) : "",
           linkRow(`/accounting/invoice-audit${branchParam}`, "Invoice Audit"),
-          linkRow(`/abc-price-agreement-gaps`, "Price Agreement Audit"),
-          scope ? linkRow(`/accounting/vendor-regions`, "Price List Coverage") : "",
+          branch.vendorSlug === "abc-supply" ? linkRow(`/abc-price-agreement-gaps`, "Price Agreement Audit") : "",
           linkRow("", "Proposal / Estimate", true),
         ]
           .filter(Boolean)
@@ -867,8 +869,12 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           if (!state.branchMarkers.length && !state.clusterMarkers.length) renderBranches();
         });
 
-        // Default selection: Richardson, TX PE office (not the first branch).
-        const defaultOffice = (payload.offices || []).find((o) => /richardson/i.test(o.name || ""));
+        // Default selection: the ?office= URL param (used by the office popup's own
+        // "Price List Coverage" link) or the Richardson, TX PE office.
+        const officeParam = new URLSearchParams(window.location.search).get("office");
+        const defaultOffice =
+          (officeParam && (payload.offices || []).find((o) => (o.name || "").toLowerCase() === officeParam.toLowerCase())) ||
+          (payload.offices || []).find((o) => /richardson/i.test(o.name || ""));
         if (defaultOffice && defaultOffice.latitude != null && defaultOffice.longitude != null) {
           renderOfficeDetail(defaultOffice);
           state.map.setCenter({ lat: defaultOffice.latitude, lng: defaultOffice.longitude });

@@ -687,6 +687,13 @@ if (root && dataEl && mount) {
     });
     if (officeSel.value) applyFilter();
     if (target) (target as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (wantBranch && search) {
+      // Branch not in the tree (e.g. an SRS/QXO branch before Phase 5 ingestion): scope
+      // the search box to it so the page honestly shows the empty result instead of
+      // silently rendering unfiltered.
+      search.value = decodeURIComponent(wantBranch);
+      applyFilter();
+    }
   }
 
   /* ---- theme toggle ---- */

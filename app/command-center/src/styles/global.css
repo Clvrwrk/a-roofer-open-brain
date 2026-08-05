@@ -1826,7 +1826,8 @@ a.vmpop-link:hover {
   text-transform: uppercase;
 }
 
-.marker-needs_office_route {
+.marker-needs_office_route,
+.marker-agreement_expired {
   background: #fef3c7;
   color: #78350f;
 }

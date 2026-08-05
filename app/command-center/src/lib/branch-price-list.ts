@@ -12,7 +12,7 @@ export interface BranchPriceItem {
   unitPrice: number;
   manufacturer: string;
   category: string;
-  agreementId: number | null;
+  agreementId: string | number | null;
   agreementNumber: string;
   effective: string;
   expiry: string;
@@ -36,7 +36,7 @@ export interface BranchPriceList {
   items: BranchPriceItem[];
   activeItems: number;
   expiredItems: number;
-  agreements: { id: number; number: string; effective: string; expiry: string; active: boolean; itemCount: number }[];
+  agreements: { id: string | number; number: string; effective: string; expiry: string; active: boolean; itemCount: number }[];
   categories: { key: string; label: string; sortOrder: number }[];
 }
 
@@ -53,14 +53,15 @@ function formatBranchAddress(br: any): string {
 }
 
 // R3 (docs/82): the office-inherited price list — the same agreement set the v2 audit
-// engine prices against (migration 201). branch -> covered vendor_branch -> office ->
-// in-force agreement versions at refDate (newest per agreement_number; evergreen).
-async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string): Promise<{ officeName: string; agreements: { id: number; number: string; effective: string; expiry: string }[] } | null> {
+// engine prices against. branch -> vendor_branch -> office -> in-force agreement
+// versions at refDate (newest per agreement_number; evergreen). Migration 205: reads the
+// all-vendor v_office_vendor_agreements, scoped to the branch's own vendor, so SRS (and
+// any future vendor) branches inherit exactly like ABC ones.
+async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string): Promise<{ officeName: string; agreements: { key: string; source: string; number: string; effective: string; expiry: string }[] } | null> {
   const norm = branchNumber.replace(/^0+/, "");
   const { data: vbRows } = await client
     .from("vendor_branches")
-    .select("branch_number, pricing_territory_office_id")
-    .eq("pricing_status", "covered")
+    .select("branch_number, vendor_id, pricing_territory_office_id")
     .not("pricing_territory_office_id", "is", null)
     .limit(2000);
   const vb = ((vbRows as any[] | null) ?? []).find((v) => String(v.branch_number ?? "").replace(/^0+/, "") === norm);
@@ -68,9 +69,10 @@ async function loadOfficeInheritedList(client: any, branchNumber: string, refDat
   const { data: officeRows } = await client.from("office").select("name").eq("id", vb.pricing_territory_office_id).limit(1);
   const officeName = (officeRows as any[] | null)?.[0]?.name ?? "";
   const { data: oavRows } = await client
-    .from("mv_office_agreement_versions")
-    .select("agreement_id, agreement_number, effective_date, expiry_date")
-    .eq("office_id", vb.pricing_territory_office_id);
+    .from("v_office_vendor_agreements")
+    .select("source, agreement_key, agreement_number, effective_date, expiry_date")
+    .eq("office_id", vb.pricing_territory_office_id)
+    .eq("vendor_id", vb.vendor_id);
   const versions = ((oavRows as any[] | null) ?? []).filter((a) => !a.effective_date || d10(a.effective_date) <= refDate);
   // newest in-force version per agreement chain (evergreen — expiry never disqualifies)
   const newest = new Map<string, any>();
@@ -78,7 +80,13 @@ async function loadOfficeInheritedList(client: any, branchNumber: string, refDat
     const cur = newest.get(a.agreement_number);
     if (!cur || d10(a.effective_date) > d10(cur.effective_date)) newest.set(a.agreement_number, a);
   }
-  const agreements = [...newest.values()].map((a) => ({ id: a.agreement_id, number: a.agreement_number, effective: d10(a.effective_date), expiry: d10(a.expiry_date) }));
+  const agreements = [...newest.values()].map((a) => ({
+    key: String(a.agreement_key),
+    source: String(a.source),
+    number: a.agreement_number ?? String(a.agreement_key),
+    effective: d10(a.effective_date),
+    expiry: d10(a.expiry_date),
+  }));
   return agreements.length ? { officeName, agreements } : null;
 }
 
@@ -90,11 +98,18 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
   const { data: catData } = await client.from("roof_system_category").select("key,label,sort_order").order("sort_order");
   const categories = ((catData as any[] | null) ?? []).map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
 
-  // Branch name + address (lives in abc_vendor_branches, not vendor_branches).
+  // Branch name + address (lives in abc_vendor_branches for ABC; fall back to
+  // vendor_branches for non-ABC vendors like SRS/QXO).
   const { data: brRows } = await client.from("abc_vendor_branches").select("branch_name,address_json,city,state,postal").eq("branch_number", branchNumber).limit(1);
   const br = (brRows as any[] | null)?.[0] ?? null;
-  const branchName = br?.branch_name ?? "";
-  const branchAddress = formatBranchAddress(br);
+  let branchName = br?.branch_name ?? "";
+  let branchAddress = formatBranchAddress(br);
+  if (!br) {
+    const { data: vbRows } = await client.from("vendor_branches").select("branch_name,address,city,state").eq("branch_number", branchNumber).limit(1);
+    const vb = (vbRows as any[] | null)?.[0] ?? null;
+    branchName = vb?.branch_name ?? "";
+    branchAddress = [vb?.address, [vb?.city, vb?.state].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+  }
 
   // Invoice scoping: find the agreement active on the invoice's date for its ship-to.
   let scopedAgreementId: number | null = null;
@@ -167,34 +182,68 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     const refDate = scopedInvoiceDate || new Date().toISOString().slice(0, 10);
     const inherited = await loadOfficeInheritedList(client, branchNumber, refDate);
     if (inherited) {
-      const agIds = inherited.agreements.map((a) => a.id);
-      const { data: pliRows } = await client.from("abc_price_list_items")
-        .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id,category_key")
-        .in("agreement_id", agIds).order("description");
-      const agById = new Map(inherited.agreements.map((a) => [a.id, a]));
-      const items: BranchPriceItem[] = (((pliRows as any[] | null) ?? [])).map((r) => {
-        const ag = agById.get(r.agreement_id);
-        return {
-          itemNumber: r.item_number ?? "",
-          description: r.description ?? "",
-          uom: r.unit ?? "",
-          unitPrice: num(r.unit_price),
-          manufacturer: r.manufacturer ?? "",
-          category: r.product_category ?? "",
-          agreementId: r.agreement_id ?? null,
-          agreementNumber: ag?.number ?? "",
-          effective: ag?.effective ?? "",
-          expiry: ag?.expiry ?? "",
-          active: true, // in force at refDate by construction (evergreen)
-          categoryKey: r.category_key ?? "uncategorized",
-        };
-      });
+      // Items come from the source each agreement lives in: abc_price_list_items for
+      // ABC (int keys) vs price_agreement_items for generic vendors like SRS (uuids).
+      const abcIds = inherited.agreements.filter((a) => a.source === "abc").map((a) => Number(a.key));
+      const genericIds = inherited.agreements.filter((a) => a.source === "generic").map((a) => a.key);
+      const [abcRes, genericRes] = await Promise.all([
+        abcIds.length
+          ? client.from("abc_price_list_items")
+              .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id,category_key")
+              .in("agreement_id", abcIds).order("description")
+          : Promise.resolve({ data: [] }),
+        genericIds.length
+          ? client.from("price_agreement_items")
+              .select("raw_item_number,raw_description,price_uom,negotiated_price,agreement_id")
+              .in("agreement_id", genericIds).order("raw_description")
+          : Promise.resolve({ data: [] }),
+      ]);
+      const agByKey = new Map(inherited.agreements.map((a) => [a.key, a]));
+      const items: BranchPriceItem[] = [
+        ...(((abcRes.data as any[] | null) ?? [])).map((r) => {
+          const ag = agByKey.get(String(r.agreement_id));
+          return {
+            itemNumber: r.item_number ?? "",
+            description: r.description ?? "",
+            uom: r.unit ?? "",
+            unitPrice: num(r.unit_price),
+            manufacturer: r.manufacturer ?? "",
+            category: r.product_category ?? "",
+            agreementId: r.agreement_id ?? null,
+            agreementNumber: ag?.number ?? "",
+            effective: ag?.effective ?? "",
+            expiry: ag?.expiry ?? "",
+            active: true, // in force at refDate by construction (evergreen)
+            categoryKey: r.category_key ?? "uncategorized",
+          };
+        }),
+        ...(((genericRes.data as any[] | null) ?? [])).map((r) => {
+          const ag = agByKey.get(String(r.agreement_id));
+          return {
+            itemNumber: r.raw_item_number ?? "",
+            description: r.raw_description ?? "",
+            uom: r.price_uom ?? "",
+            unitPrice: num(r.negotiated_price),
+            manufacturer: "",
+            category: "",
+            agreementId: r.agreement_id ?? null,
+            agreementNumber: ag?.number ?? "",
+            effective: ag?.effective ?? "",
+            expiry: ag?.expiry ?? "",
+            active: true,
+            categoryKey: "uncategorized",
+          };
+        }),
+      ];
       if (items.length) {
         return {
           status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber,
           inheritedOffice: inherited.officeName,
           items, activeItems: items.length, expiredItems: 0,
-          agreements: inherited.agreements.map((a) => ({ ...a, active: true, itemCount: items.filter((i) => i.agreementId === a.id).length })),
+          agreements: inherited.agreements.map((a) => ({
+            id: a.key, number: a.number, effective: a.effective, expiry: a.expiry, active: true,
+            itemCount: items.filter((i) => String(i.agreementId) === a.key).length,
+          })),
           categories,
         };
       }

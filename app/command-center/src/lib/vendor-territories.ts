@@ -14,7 +14,7 @@ export type BranchPriceEvidenceStatus =
   | "api_pull_pending_approval"
   | "invoice_history_90d"
   | "no_price_available";
-export type TerritoryMarkerPriority = "needs_office_route" | "missing_branch_pricing" | "vendor_brand";
+export type TerritoryMarkerPriority = "needs_office_route" | "agreement_expired" | "missing_branch_pricing" | "vendor_brand";
 
 interface RegionRow {
   id: string;
@@ -94,6 +94,28 @@ interface BranchTerritoryRow {
   territory_decided_at: string | null;
   pricing_approved: boolean | null;
   candidate_office_count: number | string | null;
+}
+
+// v_office_vendor_agreements (migration 205): all-vendor office agreement coverage —
+// the map's source of truth for HEALTHY / NEEDS ATTENTION / PROBLEM (docs/82).
+interface OfficeVendorAgreementRow {
+  office_id: string;
+  vendor_id: string | null;
+  source: "abc" | "generic";
+  agreement_key: string;
+  agreement_number: string | null;
+  effective_date: string | null;
+  expiry_date: string | null;
+  item_count: number | null;
+}
+
+interface OfficeVendorCoverage {
+  agreementNumber: string;
+  effectiveDate: string | null;
+  expiryDate: string | null;
+  itemCount: number;
+  source: "abc" | "generic";
+  inDate: boolean;
 }
 
 interface CandidateRow {
@@ -226,7 +248,7 @@ export interface VendorMapVendor {
 
 export interface PriceAgreementSummary {
   id: string;
-  scope: "branch" | "region";
+  scope: "branch" | "region" | "office";
   vendorName: string;
   regionCode: string | null;
   regionName: string | null;
@@ -508,6 +530,7 @@ const VENDOR_COLORS: Array<{ pattern: RegExp; color: string }> = [
 
 const MARKER_COLORS: Record<TerritoryMarkerPriority, string> = {
   needs_office_route: "#eab308",
+  agreement_expired: "#eab308",
   missing_branch_pricing: "#dc2626",
   vendor_brand: "#0f766e",
 };
@@ -1007,10 +1030,11 @@ function buildRecentObservationCountByBranch(rows: AbcPriceObservationLineRow[])
 }
 
 function isAgreementCurrent(agreement: PriceAgreementRow) {
+  // v2 (docs/82 map cutover, Chris 2026-08-05): ceo_verified is a display badge, not a
+  // hard gate — status derives from in-force agreements exactly like the audit engine.
   const today = new Date().toISOString().slice(0, 10);
   return (
     agreement.is_active !== false &&
-    agreement.ceo_verified === true &&
     (!agreement.effective_date || agreement.effective_date <= today) &&
     (!agreement.expiry_date || agreement.expiry_date >= today)
   );
@@ -1020,7 +1044,7 @@ function agreementSummary(
   agreement: PriceAgreementRow,
   vendorById: Map<string, VendorMapVendor>,
   regionById: Map<string, RegionRow>,
-  scope: "branch" | "region",
+  scope: "branch" | "region" | "office",
 ): PriceAgreementSummary {
   const region = agreement.region_id ? regionById.get(agreement.region_id) : null;
   return {
@@ -1037,6 +1061,51 @@ function agreementSummary(
     ceoVerified: agreement.ceo_verified === true,
     isActive: agreement.is_active !== false,
     sourceFile: agreement.source_file,
+  };
+}
+
+// v2 map cutover (docs/82): the office-inherited agreement rendered as a summary the
+// popup already knows how to display (PA chip + expiry chip).
+function officeCoverageAgreementSummary(
+  coverage: OfficeVendorCoverage,
+  vendorName: string,
+  officeName: string | null,
+): PriceAgreementSummary {
+  return {
+    id: coverage.agreementNumber,
+    scope: "office",
+    vendorName,
+    regionCode: null,
+    regionName: officeName,
+    agreementNumber: coverage.agreementNumber,
+    versionLabel: null,
+    accountNumber: null,
+    effectiveDate: coverage.effectiveDate,
+    expiryDate: coverage.expiryDate,
+    ceoVerified: false,
+    isActive: true,
+    sourceFile: null,
+  };
+}
+
+// Office-inherited coverage as a waterfall summary: authoritative because it is the very
+// set the v2 audit engine prices against (evergreen — expiry keeps the gate open, PAEXP).
+function officeCoverageWaterfall(coverage: OfficeVendorCoverage, officeName: string | null): PriceWaterfallSummary {
+  const suffix = coverage.inDate ? "" : " — expired (PAEXP), renewal needed";
+  return {
+    status: "pdf_price_list_ingested",
+    label: `Office price list ${coverage.agreementNumber} (${coverage.itemCount} lines)${officeName ? ` — inherited from ${officeName}` : ""}${suffix}`,
+    sourceRank: sourceRankFor("pdf_price_list_ingested"),
+    sourceTable: coverage.source === "abc" ? "abc_price_agreements" : "price_agreements",
+    agreementId: null,
+    agreementNumber: coverage.agreementNumber,
+    itemCount: coverage.itemCount,
+    uniqueSkuCount: coverage.itemCount,
+    expectedSkuMin: EXPECTED_PRICE_AGREEMENT_SKU_MIN,
+    expectedSkuMax: EXPECTED_PRICE_AGREEMENT_SKU_MAX,
+    requiresApproval: false,
+    isAuthoritative: true,
+    auditStatus: "complete",
   };
 }
 
@@ -1143,7 +1212,8 @@ function reviewBranchesFrom(branches: VendorBranchMapNode[]) {
   const rank: Record<TerritoryMarkerPriority, number> = {
     needs_office_route: 0,
     missing_branch_pricing: 1,
-    vendor_brand: 2,
+    agreement_expired: 2,
+    vendor_brand: 3,
   };
 
   return branches
@@ -1324,7 +1394,7 @@ function attachOfficeBranchCounts(offices: OfficeMapNode[], branches: VendorBran
     if (!office) continue;
     office.branchCounts.total += 1;
     if (branch.markerPriority === "needs_office_route") office.branchCounts.needsOfficeRoute += 1;
-    else if (branch.markerPriority === "missing_branch_pricing") office.branchCounts.missingPricing += 1;
+    else if (branch.markerPriority === "missing_branch_pricing" || branch.markerPriority === "agreement_expired") office.branchCounts.missingPricing += 1;
     else office.branchCounts.healthy += 1;
   }
 }
@@ -1351,6 +1421,7 @@ export async function loadVendorTerritoryMapPayload(
       candidateRows,
       agreements,
       priceAgreementItems,
+      officeVendorAgreementRows,
       abcEvidenceRows,
       abcPriceListItems,
       recentObservationRows,
@@ -1395,6 +1466,12 @@ export async function loadVendorTerritoryMapPayload(
           "agreement_id,product_id,color_variant_id,raw_item_number,raw_description,raw_description_normalized,approval_status",
           nonCriticalErrors,
         ),
+        optionalSelectAll<OfficeVendorAgreementRow>(
+          client,
+          "v_office_vendor_agreements",
+          "office_id,vendor_id,source,agreement_key,agreement_number,effective_date,expiry_date,item_count",
+          nonCriticalErrors,
+        ),
         optionalSelectAll<AbcAgreementEvidenceRow>(
           client,
           "abc_price_agreements",
@@ -1435,6 +1512,38 @@ export async function loadVendorTerritoryMapPayload(
           : null,
       ]),
     );
+
+    // v2 office-inherited coverage (docs/82 map cutover, migration 205): per (office, vendor),
+    // the in-force set = newest version per agreement chain with effective_date <= today.
+    // Evergreen (docs/81 §4): an expired in-force agreement still prices the audit (PAEXP)
+    // but flags renewal — Needs Attention, not Problem. No agreement at all = Problem.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const officeVendorCoverage = new Map<string, OfficeVendorCoverage[]>();
+    {
+      const chainsByKey = new Map<string, Map<string, OfficeVendorAgreementRow>>();
+      for (const row of officeVendorAgreementRows) {
+        if (!row.office_id || !row.vendor_id) continue;
+        if (row.effective_date && String(row.effective_date).slice(0, 10) > todayIso) continue;
+        const key = `${row.office_id}:${row.vendor_id}`;
+        const chains = chainsByKey.get(key) ?? new Map<string, OfficeVendorAgreementRow>();
+        const chainKey = row.agreement_number ?? row.agreement_key;
+        const current = chains.get(chainKey);
+        if (!current || String(row.effective_date ?? "") > String(current.effective_date ?? "")) chains.set(chainKey, row);
+        chainsByKey.set(key, chains);
+      }
+      for (const [key, chains] of chainsByKey) {
+        const list: OfficeVendorCoverage[] = [...chains.values()].map((row) => ({
+          agreementNumber: row.agreement_number ?? row.agreement_key,
+          effectiveDate: row.effective_date ? String(row.effective_date).slice(0, 10) : null,
+          expiryDate: row.expiry_date ? String(row.expiry_date).slice(0, 10) : null,
+          itemCount: Number(row.item_count) || 0,
+          source: row.source,
+          inDate: !row.expiry_date || String(row.expiry_date).slice(0, 10) >= todayIso,
+        }));
+        list.sort((a, b) => Number(b.inDate) - Number(a.inDate) || String(b.effectiveDate ?? "").localeCompare(String(a.effectiveDate ?? "")));
+        officeVendorCoverage.set(key, list);
+      }
+    }
 
     const candidateByBranch = new Map<string, CandidateOffice[]>();
     for (const candidate of candidateRows) {
@@ -1553,31 +1662,55 @@ export async function loadVendorTerritoryMapPayload(
           : null;
         const candidateOffices = candidateByBranch.get(branch.vendor_branch_id) ?? [];
         const pricingStatus = normalizeStatus(branch.pricing_status);
-        const currentAgreement = findCurrentAgreement(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
-        const agreementOnFile = currentAgreement ?? findAgreementOnFile(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
+        // v2 coverage: the branch's PE office + this branch's vendor → in-force agreement set.
+        const officeCoverage =
+          branch.pricing_territory_office_id && branch.vendor_id
+            ? (officeVendorCoverage.get(`${branch.pricing_territory_office_id}:${branch.vendor_id}`) ?? [])
+            : [];
+        const bestCoverage = officeCoverage[0] ?? null;
+        const officeName = branch.assigned_office_name ?? assignedOffice?.name ?? null;
+        const coverageSummary = bestCoverage
+          ? officeCoverageAgreementSummary(bestCoverage, vendorName, officeName)
+          : null;
+        const legacyCurrent = findCurrentAgreement(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
+        // Green requires an IN-DATE agreement; an expired-evergreen one is only "on file".
+        const currentAgreement = bestCoverage?.inDate ? coverageSummary : legacyCurrent;
+        const agreementOnFile =
+          currentAgreement ?? coverageSummary ?? findAgreementOnFile(branch, rawBranch, assignedOffice, agreements, vendorById, regionById);
         const branchNumber = nullableText(abcApiBranch?.branch_number ?? branch.branch_number ?? rawBranch?.branch_number);
         const branchNumberKey = normalizeBranchNumber(branchNumber);
-        const currentAgreementStats = currentAgreement
-          ? (priceAgreementItemStatsById.get(currentAgreement.id) ?? emptyItemStats())
+        const currentAgreementStats = legacyCurrent
+          ? (priceAgreementItemStatsById.get(legacyCurrent.id) ?? emptyItemStats())
           : emptyItemStats();
         const apiStats = aggregateApiAgreementStats(
           branchNumberKey ? (abcAgreementsByBranchNumber.get(branchNumberKey) ?? []) : [],
           abcPriceListStatsByAgreementId,
         );
-        const pricingWaterfall = buildWaterfallSummary({
-          currentAgreement,
+        let pricingWaterfall = buildWaterfallSummary({
+          currentAgreement: legacyCurrent,
           currentAgreementStats,
           apiStats,
           branchNumber,
           invoiceHistoryCount: branchNumberKey ? (recentObservationCountByBranch.get(branchNumberKey) ?? 0) : 0,
         });
+        // Office-inherited coverage is authoritative (it is what the audit engine prices
+        // against — evergreen, so even an expired PAEXP agreement keeps the gate open).
+        const usesOfficeCoverage = Boolean(bestCoverage) && !pricingWaterfall.isAuthoritative;
+        if (bestCoverage && usesOfficeCoverage) {
+          pricingWaterfall = officeCoverageWaterfall(bestCoverage, officeName);
+        }
         const pricingApproved = pricingWaterfall.isAuthoritative;
-        const priority = markerPriority({
+        let priority = markerPriority({
           assignedOfficeId: branch.pricing_territory_office_id,
           pricingStatus,
           candidateOffices,
           pricingWaterfall,
         });
+        // v2 status semantics (Chris 2026-08-05): in-date in-force = Healthy; only an
+        // expired-evergreen agreement = Needs Attention; no agreement at all = Problem.
+        if (priority !== "needs_office_route" && bestCoverage) {
+          priority = bestCoverage.inDate ? "vendor_brand" : "agreement_expired";
+        }
 
         return {
           id: branch.vendor_branch_id,
