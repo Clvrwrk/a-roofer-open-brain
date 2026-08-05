@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "pilot-selection",
+      "task_type": "code-feature",
+      "spec": "You are a data engineer selecting the 25-job pilot cohort for the jt-acculynx-mirror project. BOUNDARY: SQL only against Supabase project rnhmvcpsvtqjlffpsayu; you may CREATE and INSERT into jt_mirror.pilot_jobs ONLY; never modify any other table, never call any external API. You own one deliverable file: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/pilot-selection/pilot-selection.md. NEVER copy credential values anywhere. HOW TO RUN SQL: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; then curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. GOAL: create table jt_mirror.pilot_jobs (acculynx_job_id text primary key, job_name text, job_number text, branch_key text, milestone text, has_estimate boolean, has_invoice boolean, selection_reason text, created_at timestamptz default now()) and fill it with EXACTLY 25 jobs from public.acculynx_jobs (source columns: id, job_name, job_number, account_key -> branch_key, current_milestone -> milestone). Selection criteria, in priority order: (1) exclude archived jobs (archived_at is null) and the sandbox branch; (2) at least 10 jobs must have rows in public.acculynx_estimates (join on estimates.job_id); (3) at least 8 must have rows in public.acculynx_invoices; (4) cover at least 4 distinct branch_key values and at least 4 distinct milestones (include at least 2 completed/closed-milestone jobs and at least 2 early-milestone lead-stage jobs); (5) prefer jobs with rich data (contacts via public.acculynx_job_contacts, financials via public.acculynx_job_financials); (6) prefer recent modified_date. Inspect the real milestone vocabulary first (select distinct current_milestone, count(*) from public.acculynx_jobs group by 1) and the branch spread, then encode your choices. Set selection_reason to a short human-readable phrase per row. Deliverable pilot-selection.md must contain: ## Selection SQL (the exact INSERT you ran), ## Cohort (markdown table of all 25 rows: job_number, name, branch, milestone, has_estimate, has_invoice, reason), ## Coverage Summary (branch counts, milestone counts, estimate/invoice counts). HARD RULES: exactly 25 rows; idempotent (delete from jt_mirror.pilot_jobs before insert is allowed — that table only); if jt_mirror.pilot_jobs does not exist yet, create it exactly as specified.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r25_backfill_check.py pilot-selection",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/pilot-selection/pilot-selection.md"
+      ],
+      "timeout_s": 1200,
+      "verified": "jt_mirror.pilot_jobs holds exactly 25 live-verified jobs spanning branches and milestones with estimate coverage"
+    }
+  ]
+}

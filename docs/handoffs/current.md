@@ -1,112 +1,131 @@
-# Project Handoff — a-roofers-open-brain (Command Center)
-**Project:** Roofer Open Brain — Command Center (Invoice Audit pipeline + agent fleet restoration)
+# Project Handoff — PE Open Brain / Command Center
+**Project:** a-roofers-open-brain (Pro Exteriors Command Center + memory brain)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
-**Production URL:** https://cc.proexteriorsus.net (Coolify auto-builds `origin/main`; verify via `/healthz` → `buildCommit`)
-**Date:** 2026-07-06 08:36
-**Agent:** Lead Orchestrator
-**Reason:** End of session (user-requested /project-handoff)
-
-> Prior handoff (2026-06-28 invoice-audit + 06-29 OKF mid-flight note) archived at
-> `docs/handoffs/archive/2026-07-06-0836-prior-current.md`.
+**Production URL:** https://cc.proexteriorsus.net
+**Date:** 2026-08-04 23:50
+**Agent:** Claude Code (Fable 5) — Lead Orchestrator
+**Reason:** User-requested `/project-handoff` (+ full Linear handoff)
 
 ---
 
 ## Accomplished This Session
 
-### Incident diagnosis (invoice pipeline outage, Jun 29 – Jul 6 — full record: `docs/67-invoice-pipeline-outage-and-restoration-2026-07-06.md`)
+### Vendor expansion — QXO + SRS modelled end to end
+- `integrations/bridges/{qxo,srs-roofhub}/data/branches-2026-08-04.{json,csv}`: **QXO 566 stores** (via the finder's backend `beacon-ng.becn.com/v1/store-location`; 30-item cap beaten with an adaptive quadtree sweep, 480 calls) and **SRS 448 branches** (find-a-branch + all 448 detail pages, schema.org LD+JSON): address, geo, phone, fax, hours, branch manager + email, products, sales-team roster.
+- `integrations/bridges/load-vendor-branches.mjs`: idempotent loader → 1,014 rows in `vendor_branches`. SRS has no public branch numbers, so stable codes are derived from detail-page slugs.
+- `schemas/cleverwork-roofer/192-vendor-invoices-multi-vendor.sql`: `vendor_invoices`, `vendor_invoice_lines`, `vendor_invoice_uploads`, `vendor_branch_code_map`, `vendor_item_uom_map`.
+- `integrations/bridges/ingest-vendor-invoice-csv.mjs`: one Billtrust-shape parser, two column maps. Loaded SRS 30 invoices ($73,968) + QXO 23 ($17,556, 2 accounts) = **283 priced lines**. QXO statement export yields AR open/closed + paid-date proxy.
+- `integrations/bridges/ingest-agreement-pdfs-2026-08-04.mjs`: ABC Denver (153 items), DFW (137), + SRS Melissa TX Level 4 (97), Wichita quote (17).
+- `integrations/bridges/abc-supply/ingest-price-sheet-ocr.mjs`: Unstructured `hi_res` OCR for image-only sheets. Wichita 2036874-16 went **0 → 157 items**.
+- `docs/79`, `docs/80`: onboarding plan + file-format/ingestion spec.
 
-- Diagnosed four independent failures presenting as one "disjointed screen": (1) nightly ABC sync scheduled in a Cowork sandbox that kills processes >45s; (2) agent-fleet scheduler designed (docs/56) but never installed — no systemd units, all Hermes cron jobs `enabled: false` since ~Jun 30 07:10; (3) `agent-tick.sh` never reached hermes (Kasm image entrypoint swallows command args); (4) three different "ready to pay" predicates + missing cache invalidation in the app.
+### Emergency infrastructure rebuild (both hosts crashed)
+- **PE.CC.DEV `178.105.220.14`** (cpx62, fsn1): key-only SSH, Coolify installed, Cloudflare DNS repointed, `command-center` app recreated, **119 env vars restored**, TLS on both hostnames, GitHub webhook re-secreted — push→deploy verified.
+- **PE-US-AGENTS `178.156.203.23`** (cpx21, Ubuntu 24.04, **ash**): created because ABC's WAF 403s the EU IP. `openbrain-abc-sync.timer` runs here (03:30 ET), disabled on the EU host.
+- All 4 SSH keypairs backed up to 1Password **CW_Master** (SHA-256 verified identical).
 
-### App fixes (merged to `main`, deployed, verified live)
+### Territory + pricing
+- `schemas/cleverwork-roofer/193`: **Atlanta (Jonesboro), GA office** — was missing entirely; 48 GA branches had no pricing territory. Real 120-min isochrone via **Routes API** (`google_routes_bearing_v1`, 150.0 km mean radius).
+- `scripts/compute-office-drive-time-boundary.mjs`, `scripts/geocode-vendor-branches.mjs`, mig `194` (`assign_branch_territories()`): **589 ABC branches geocoded, 0 failures**; 138 branches now territory-assigned across 6 offices.
+- `schemas/cleverwork-roofer/195`: inheritance views — `v_vendor_agreement_current`, `v_office_vendor_branch`, `v_office_vendor_price_item`, `v_office_vendor_inheritance`.
+- `app/command-center/src/lib/price-agreement-coverage.ts` + Territory Coverage section on the Agreement Builder + `src/pages/api/price-agreement/coverage-export.ts` (PDF/CSV per vendor, accounting-gated).
 
-- `app/command-center/src/lib/invoice-audit.ts`: totals gain `payable` (what process-batch will export) + `held` (fully reviewed, credit-memo do-not-pay); ScopeTotalsInvoice picks `approvedToPay`.
-- `app/command-center/src/pages/accounting/invoice-audit.astro`: Process button counts/disables on `payable`; KPI sub-line shows held count.
-- `app/command-center/src/scripts/invoice-audit-tree.ts`: client predicate now mirrors the server (`transferred` short-circuit + `approvedToPay`); "Held — credit memo" pill; roll-ups count payable; credit-flag disposition sets hold state client-side.
-- `app/command-center/src/pages/api/invoice-audit/process-batch.ts`: 409 explains held invoices (`heldCount` in payload).
-- `app/command-center/src/pages/api/invoice-audit/{mark,reset}.ts`: invalidate the 5-min summary cache on every decision.
-- `app/command-center/src/pages/api/invoice-audit/run-disposition.ts` (NEW): Alex's docs/57 §1 daily pass wired to the tested engine (`invoice-audit-disposition.ts` `disposeInvoice` — previously had ZERO production callers). Human-gated (`approval.decide`), `dryRun`/`office`/`maxInvoices` staged-rollout params, writes `source='backfill'` + `approved_by='Alex'` (CHECK constraint allows only auto_match|manual|backfill), paginated per docs/42 playbooks 3/9/11, mark-endpoint parity (credit-memo tracking, action log, cache invalidation).
-- `app/command-center/src/lib/invoice-audit.unit.test.ts`: regression test — transferred+credit-flag invoice counts `held`, never `payable`. 250 tests green.
-
-### Ops / host (Hetzner agent host `5.78.146.161`, SSH key `~/.ssh/a_roofers_open_brain_ed25519`, user root)
-
-- `scripts/abc-nightly-sync.sh`: host-portable (`REPO_ROOT` derived from script path; was hardcoded to the Mac) + appended nightly invoice ingest (`mirror-backfill --only=invoices`, rolling 10-day idempotent window per docs/63).
-- `scripts/agent-tick.sh`: `--entrypoint hermes --network host` + 1h hang-stop (bare `docker run IMAGE hermes cron tick` boots the Kasm desktop and hangs forever).
-- `deployment/remote/systemd/openbrain-abc-sync.{service,timer}` (NEW): nightly 03:30 America/New_York.
-- Host provisioning: real git clone at `/opt/openbrain/a-roofers-open-brain` (replaced a broken rsync'd worktree snapshot, preserved as `*.broken-worktree-20260706`); scoped `.env` composed on-host from Alex's Kasm profile env (never displayed locally); timers `openbrain-abc-sync.timer` + `openbrain-dev-tick@alex.rivers.timer` enabled and proven; stray debug container removed; Alex's `nepq-agent-communication` skill collision resolved (duplicate disabled); `alex-morning-abc-sync` re-enabled (backup: `jobs.json.bak-20260706`).
-
-### Backlog cleared + Slack proven
-
-- Invoice catch-up: 20 invoices / 136 lines ingested (current through Jul 2 — ABC has nothing newer, holiday weekend).
-- Disposition pass (dry-run → 5-invoice gate → full): **62 invoices, 191 line decisions** — 148 accept-neg, 23 accept-nochallenge (coverage gaps → Jordan), 7 accept-30d, 3 accept-svc, 5 credit-flag (credit-memo requests drafted), **16 gate-negotiated lines left pending for human ruling** (40 invoices held out of the payment export by design).
-- Alex posted the run summary to `#accounting-invoice-processing` (`C0BDRFACQ4S`, ts `1783351625.222829`) via his own bot token from the host.
+### Map
+- `app/command-center/public/vendor-icons/*`: vendor logos on opaque white discs (ring = status lens), PE roof badge for offices, single-vendor cluster badges.
+- `VendorTerritoryMap.astro` / `vendor-territories.ts`: **2-hour drive-time rings restored** (the compact payload was nulling `boundary`), contact hotlinks for all branches.
 
 ## Git State
-- **Branch:** `main` (== `origin/main`, deployed)
-- **Last commit:** `9e84409` — "docs(memory): invoice pipeline outage + restoration record (docs/67); daily logs 07-04..06; memory refresh"
-- **Uncommitted changes:** only this handoff file + its archive copy (committed immediately after writing)
+- **Branch:** `main` — **`main == origin/main` (0 ahead / 0 behind)**
+- **Last commit:** `e5011fc` — "fix(builder): Territory Coverage heading invisible in dark mode"
+- **Uncommitted changes:**
+
+| File | Status | Note |
+|------|--------|------|
+| `docs/handoffs/current.md` | Modified | This handoff (commit with it) |
+| `context/memory/2026-07-27.md` | Untracked | Pre-existing, unrelated |
+| `docs/analytics/`, `scripts/analytics/` | Untracked | Pre-existing — GROK `/analytics` Aspose pack (see archived 2026-07-30 handoff) |
+| `scripts/build-cpa-bank-decision-pack.py` | Untracked | Pre-existing |
+| `raw data/` | Untracked | Pre-existing — xlsx working files, do NOT commit (client data) |
+| `docs/handoffs/archive/2026-07-30-0006.md` | Untracked | Prior handoff archive |
 
 ## Task Cut Off
-None — session ended at a clean boundary. All five planned tasks completed.
+None — session ended at a clean boundary. Last change (dark-mode heading fix) is deployed and live.
 
 ## Next Task — Start Here
 
-**Task:** Decide + implement daily automation of the disposition pass (docs/67 §6 item 1)
+**Task:** Send vendor coverage rosters to the reps (PEC-137)
+
 **What to check / do:**
-1. Read `docs/67-invoice-pipeline-outage-and-restoration-2026-07-06.md` §6 — the open-items list.
-2. Ask Chris to pick the automation path: (a) provision Alex a fresh Command Center bearer (`AGENT_SERVICE_TOKEN_SHA256_ALEX-RIVERS`, generate new — never reuse existing secrets) + decide whether named agents may hold a disposition-run permission (they deliberately lack `approval.decide`); (b) in-app scheduled cadence under a system actor; or (c) keep it a daily human click / curl.
-3. Meanwhile verify this morning's automation ran: on the host, `systemctl list-timers | grep openbrain` and `tail -30 ~/.abc-sync/logs/abc-sync.log`; Alex's tick journal `journalctl -u "openbrain-dev-tick@alex.rivers.service" -n 20`.
+1. Open https://cc.proexteriorsus.net/accounting/price-agreement/builder → "Territory Coverage — who inherits which price list". **Verify it renders in both light and dark mode** (PEC-141 — no UI was visually verified this session).
+2. Export per vendor: `GET /api/price-agreement/coverage-export?vendor=abc-supply&format=pdf` (also `qxo`, `srs`).
+3. Confirm the gaps before sending: **Atlanta has no agreement with any vendor (39 branches)**; **QXO has none anywhere (59 branches)**; KC + Wichita run on lapsed-but-extended ABC lists.
 
-**If the nightly sync failed:** check `/opt/openbrain/a-roofers-open-brain/.env` still has 10 keys, then run `bash /opt/openbrain/a-roofers-open-brain/scripts/abc-nightly-sync.sh` manually and read the log.
+**If the Builder 500s:** it is the pre-existing `v_negotiable_items` statement timeout (PEC-139), not the coverage section — the page now degrades with a "Partial data" notice instead of dying.
 
-**Prompt to use:** "Read docs/handoffs/current.md and docs/67 §6. Verify last night's ABC sync + Alex tick ran on the agent host, then walk me through the disposition-pass automation decision (67 §6 item 1) and implement my choice."
+**Prompt to use:** "Read docs/handoffs/current.md. Then export the vendor coverage PDFs for ABC, QXO and SRS and draft the rep emails for the Atlanta and QXO agreement gaps."
 
 ## Decisions Made This Session
 
-- **Daily-all processing per docs/63 stands** (Chris confirmed): Alex processes every open invoice daily; the 60-day window is only the "Due now" lens + payment timing. The "weekly compile" framing = the weekly payment package, not the processing cadence.
-- **Scheduler lives on the Hetzner agent host via systemd** (Chris chose; docs/56 design finally installed). The Cowork scheduled task is dead — must be cancelled by a human.
-- **Slack scope = outbound posts only** for now; two-way chat stays parked behind docs/60 confinement layers.
-- **The disposition pass stays human-gated**: named agents deliberately lack `approval.decide`; the deterministic engine + negotiated human gate protect the money boundary. Do not re-litigate by silently granting agents decide rights.
-- **`source='backfill'` is the SOP-pass value** — `invoice_line_audit.source` CHECK allows only `auto_match|manual|backfill`; `approved_by='Alex'` drives agent attribution. (Optional future: additive migration adding `sop-run`.)
-- **Process button counts `payable`, not `toBePaid`** — held (credit-memo do-not-pay) invoices are surfaced as their own count, never silently inflating the export queue.
+- **Generic `vendor_invoices` tables, not per-vendor clones** — both portals emit the same Billtrust CSV shape; one parser, two column maps.
+- **Evergreen price lists** — a lapsed agreement stays in force until the vendor replaces it (ABC agreed; assumed for all vendors). `is_lapsed` means "Extended", never an error.
+- **Competing agreements resolve per item, lowest price wins** ("best-of blend"), with the source branch recorded so a rep can see what to match.
+- **UOM safety (docs/46)** — prices only ever compared within the same unit; OCR rows with no UOM are stored `null`, never guessed.
+- **Routes API, not Distance Matrix** — Distance Matrix is denied on `GOOGLE_MAPS_SERVER_KEY`; `computeRouteMatrix` is enabled. The browser key is referrer-restricted and correctly unusable server-side.
+- **Two-host split restored** — EU box for Coolify/CC, US Ashburn box for US-egress syncs, because ABC's WAF geo-blocks the EU IP.
+- **A branch inside two office rings belongs to both** — both offices genuinely buy there (29 such branches, Euless ∩ Richardson).
 
 ## Blockers Requiring Human Action
 
-1. **Cancel the Cowork nightly-sync scheduled task** — it fails every night by construction (45s cap) and systemd now owns the job. Only Chris can reach the Cowork UI.
-2. **Review the 16 negotiated-gated lines + 5 credit-flag holds** on `/accounting/invoice-audit` — the human half of the SOP; the gated invoices stay out of the payment export until ruled on.
-3. **Pick the disposition-pass automation path** (see Next Task).
+1. **Visual verification of all UI work** — the local dev server never started this session (`preview_start` reported success, nothing listened on 4321). Map markers, drive-time rings, cluster pills and the Territory Coverage section were verified by build + API/data checks only.
+2. **QXO has no negotiated agreement anywhere; Atlanta none with any vendor** — needs the rep conversation (PEC-137/PEC-140).
+3. **Linear MCP connector token expired** — this handoff used the `LINEAR_API_KEY` from CW_Master over GraphQL instead. Re-authorize the connector via `/mcp` in an interactive session if you want MCP access back.
+4. **Hetzner account** — confirm nothing else was lost in the crash; only the two servers were rebuilt.
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz | grep buildCommit` — should show a SHA ≥ `e74705d` (KPI fix + endpoint live).
-2. `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@5.78.146.161 'systemctl list-timers | grep openbrain'` — should list `openbrain-abc-sync.timer` (next 07:30 UTC) and `openbrain-dev-tick@alex.rivers.timer` (next ≤1 min).
-3. `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@5.78.146.161 'journalctl -u "openbrain-dev-tick@alex.rivers.service" -n 3 --no-pager'` — recent ticks should show "Deactivated successfully" (≈2s cycles).
-4. Invoice Audit page: "Invoices To Be Paid" KPI count must equal what Process exports; held count appears in the sub-line when nonzero.
+1. `curl -s -o /dev/null -w "%{http_code}\n" https://cc.proexteriorsus.net/accounting/invoice-audit` — must return **302** (auth enforced). A 200 means the auth regression is back.
+2. `curl -s https://cc.proexteriorsus.net/healthz | jq -r .buildCommit` — should be `e5011fc…` or later.
+3. `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@178.156.203.23 'systemctl list-timers openbrain-abc-sync.timer --no-pager'` — next run 03:30 ET on the **US** host.
+4. Supabase: `select office_name, vendor_slug, branches_in_territory, primary_branches, branches_inheriting, priced_items from v_office_vendor_inheritance order by 1,2;` — 18 rows, 6 offices × 3 vendors.
 
 ## Full Context
 
-### What was built across ALL sessions (complete feature list)
-- Everything in the 2026-06-28 handoff (see `docs/handoffs/archive/2026-07-06-0836-prior-current.md`): invoice-audit dashboard + disposition workflow, two-phase payment flow (process/confirm-paid/return), Register vs Payment CSV split (docs/63), Service/Warranty transfer (docs/61, mig 162), price-agreement builder suite, vendor territory map home, executive pipeline dashboard, AccuLynx multi-account sync + webhooks (migs 165–187), WorkOS auth + agent bearer path, Slack per-agent bots, OKF/roofing-ops runtime workstream (06-29 note).
-- THIS session: invoice-pipeline restoration (docs/67) — systemd scheduler actually installed on the agent host, agent-tick entrypoint fix, nightly sync moved + extended with invoice ingest, payable/held KPI truth, run-disposition endpoint, backlog cleared (62 invoices / 191 decisions), Alex Slack posting proven.
+### What was built across ALL sessions (running list)
+- OB1 memory spine, property-first atom model, MCP containers
+- ABC Supply API mirror (invoices, orders, catalog, pricing) + nightly cycle-count sync
+- UOM pricing normalization (docs/46, migs 119–122) — `price_per_uom` is the canonical effective price
+- Invoice audit + disposition engine (`disposeInvoice`), credit-memo flow, payment/register export
+- AccuLynx mirror + PE job-naming alignment (mig 163); JobTread mirror (34,433 writes)
+- QBO read-only mirror (PEC-98); CenterPoint mirror; Executive pipeline
+- Vendor territory map (Google Maps + drive-time isochrones)
+- `/analytics` Aspose formula workbook packs (GROK, 2026-07-29/30)
+- **This session:** QXO + SRS end-to-end, host rebuild + US host, Atlanta office, full geocoding, price-agreement territory inheritance + rep coverage roster
 
 ### Architecture decisions
-- **The "24/7 agent" is a scheduler + deterministic engine + human gates, not a free-running LLM.** Alex's historical decisions were bulk `backfill` passes + dashboard actions; the Hermes cron job is a thin scaffold (web+file toolsets, empty sandbox, no repo mount) that cannot execute the SOP — do not expect it to. The engine of record is `invoice-audit-disposition.ts`.
-- App runs service-role-only against Supabase — authorization is 100% `access-control.ts`; there is no RLS backstop for the app path.
-- Dev reads prod: local dev server + prod DB is a sanctioned mode; `COMMAND_CENTER_AUTH_MODE=local` yields the full-permission local operator (this is how the backlog pass was triggered).
-- Doc numbers ≥47 collide across two tracks (Roofing-Ops vs Stormwatch) — always reference docs by full filename.
+- ABC keeps its own `abc_*` tables; QXO/SRS use generic `vendor_*` tables; the inheritance views UNION both. ABC was not migrated — too much depends on it.
+- Canonical UOM columns on `abc_invoice_lines` are **generated columns over ABC's exact `raw` JSON shape**. New vendors compute UOM in the **loader** instead, because a CSV vendor would produce NULLs and silently drop out of every audit view.
+- `assign_branch_territories()` never overrides a human-decided territory (`territory_decided_by`).
+- The Agreement Builder loads its two data sources with `Promise.allSettled` — one slow loader must not blank the page.
 
 ### Key invariants (never violate)
-- **Additive migrations only; never destructive SQL** (CLAUDE.md hard rule 1).
-- **Pricing comparisons only via `price_per_uom` / `v_item_uom_map`** (docs/46).
-- **PostgREST reads paginate; `.in()` chunks ≤40–50; bulk upserts partition by column-presence** (docs/42 playbooks 3/9/11).
-- **`gate-negotiated` lines are never auto-dispositioned** — leaving them pending IS the hold (docs/57, LOCKED 2026-06-30).
-- **Never hand-edit `version.ts`** — the pre-commit hook bumps it.
-- **Deploy = explain-then-ship**: state change/impact/rollback, push `origin main`, watch `/healthz` `buildCommit`.
-- **`docker run` against the Kasm Hermes image needs `--entrypoint hermes`** — the default entrypoint boots a desktop and hangs oneshots.
+- **`COMMAND_CENTER_AUTH_MODE` must be `workos` in production.** Anything else disables authentication entirely and makes every dashboard and API publicly readable. This caused a ~3.5h exposure today (PEC-135).
+- Never compare prices across different UOMs (docs/46).
+- QBO production is read-only / mirror-only (PEC-98).
+- No secrets, service-role keys, or raw client PII in committed files.
+- Migrations are additive and idempotent; never destructive.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Command Center | Coolify on `5.78.124.10`, builds `origin/main`, https://cc.proexteriorsus.net, health `/healthz` |
-| Agent host | `5.78.146.161` (root, key `~/.ssh/a_roofers_open_brain_ed25519`); repo `/opt/openbrain/a-roofers-open-brain`; timers `openbrain-abc-sync`, `openbrain-dev-tick@alex.rivers` |
-| Supabase | `rnhmvcpsvtqjlffpsayu` (shared dev+live); schemas through 187 |
-| Slack | Alex bot `A0BD4C9SUPP`, posts to `#accounting-invoice-processing` `C0BDRFACQ4S`; registry in `.claude/skills/slack-agents/` |
-| ABC sync logs | host: `~/.abc-sync/logs/abc-sync.log`; catch-up run summaries in `integrations/bridges/abc-supply/.mirror-runs/` |
+| Command Center | https://cc.proexteriorsus.net — Coolify app `lu5txzhyoza7uuz0scwpobv7` |
+| Coolify | https://coolify.proexteriorsus.net — host `178.105.220.14` (PE.CC.DEV, cpx62, fsn1) |
+| US agent/sync host | `178.156.203.23` (PE-US-AGENTS, cpx21, ash) — ABC nightly sync lives here |
+| Supabase | `rnhmvcpsvtqjlffpsayu` — schemas through **195** |
+| DNS | Cloudflare, zone `proexteriorsus.net` |
+| SSH | key `~/.ssh/a_roofers_open_brain_ed25519`, user `root`, both hosts key-only |
+| Secrets | 1Password **CW_Master** (+ `Hetzner-PE_CC_DEV` in the **Employee** vault: Hetzner API, Coolify root API token, root password) |
+| Linear | Team **PEC** (PE-CC-DevTeam) · project "SESSION 2026-08-04 — QXO+SRS vendors, host rebuild, price inheritance" |
+
+## Linear Accounting
+- **Project:** [SESSION 2026-08-04 · QXO+SRS vendors, host rebuild, price inheritance](https://linear.app/cleverwork/project/session-2026-08-04-qxosrs-vendors-host-rebuild-price-inheritance-95be5c5e76e0)
+- **Done (10):** PEC-127 branch registries · PEC-128 invoice/AR ingest · PEC-129 agreements + OCR · PEC-130 host rebuild · PEC-131 US host / geo-block · PEC-132 Atlanta office · PEC-133 geocoding + territories · PEC-134 inheritance + coverage · **PEC-135 SECURITY auth-disabled** · PEC-136 map work
+- **Todo (5):** **PEC-137 send rep rosters** · PEC-138 docs/27 rebuild checklist · PEC-139 optimize `v_negotiable_items` · PEC-140 load QXO/SRS agreements · PEC-141 visual verification

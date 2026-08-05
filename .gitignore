@@ -92,3 +92,6 @@ integrations/bridges/quickbooks/.mirror-runs/
 
 # CenterPoint mirror run receipts
 integrations/bridges/centerpoint/.mirror-runs/
+
+# Client working files — raw spreadsheets/exports, never committed (hard rule 2)
+raw data/

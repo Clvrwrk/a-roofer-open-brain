@@ -404,9 +404,13 @@ export function compactVendorTerritoryMapPayload(surface: VendorTerritoryMapPayl
       latitude: office.latitude,
       longitude: office.longitude,
       driveTimeMinutes: office.driveTimeMinutes,
-      boundary: null,
-      boundaryMethod: null,
-      boundaryComputedAt: null,
+      // Keep the 2-hour drive-time isochrone in the compact payload. It is the pricing
+      // territory — branches inside one ring are expected to share negotiated pricing — so
+      // dropping it silently removed the rings whenever the map refetched (deferLoad path).
+      // Cost is trivial: 5 offices x ~25 points vs ~1,800 branch records.
+      boundary: office.boundary,
+      boundaryMethod: office.boundaryMethod,
+      boundaryComputedAt: office.boundaryComputedAt,
       activePriceAgreements: [],
       branchCounts: office.branchCounts,
     })),
@@ -489,7 +493,7 @@ const PLANNED_VENDORS: VendorMapVendor[] = [
   {
     id: "planned-srs",
     name: "SRS Distribution",
-    slug: "srs-distribution",
+    slug: "srs",
     color: "#0f766e",
     isActive: false,
     isPlanned: true,

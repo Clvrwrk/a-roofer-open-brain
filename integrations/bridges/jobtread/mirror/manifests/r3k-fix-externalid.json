@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r3k-fix-externalid",
+      "task_type": "code-fix",
+      "spec": "You are a staging repair worker for jt-acculynx-mirror. Single defect: all 20 failed document rows (and likely the 6 still-staged ones) carry payload externalId values over JobTread's 32-character cap — the API error was 'External Id cannot be more than 32 characters'. The values are AccuLynx GUIDs (36 chars with hyphens); stripped of hyphens they are exactly 32 hex chars and remain unique. BOUNDARY: UPDATE only jt_mirror.pending_write rows domain='documents' status in ('failed','staged'); no API calls; one deliverable: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3k-fix-externalid/fix-report.md; no credential values anywhere. SQL access: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. REPAIR: for every documents row in ('failed','staged') with length(payload->>'externalId') > 32: set externalId = replace(externalId, '-', ''); verify the result is <= 32 chars and unique across all 26 rows (the original GUID linkage is preserved in source_ref, so nothing is lost). Reset the 20 failed rows to status='staged', error=null, attempt=0. VERIFY with live SQL: 26 staged documents, zero externalId over 32 chars, zero duplicates, zero failed rows. DELIVERABLE fix-report.md sections: ## Repair SQL, ## Verification (live counts), ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r3k_fix_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3k-fix-externalid/fix-report.md"
+      ],
+      "timeout_s": 900,
+      "verified": "externalIds hyphen-stripped to 32 chars, unique, all 26 documents staged"
+    }
+  ]
+}

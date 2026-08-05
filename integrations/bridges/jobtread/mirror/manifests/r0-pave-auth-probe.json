@@ -1,0 +1,19 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r0-pave-auth",
+      "task_type": "probe",
+      "spec": "You are a one-task Ringer probe worker performing a read-only API smoke test against the JobTread Pave API. Boundary: this is a smoke test, not a code-editing task. Never modify any file except your two deliverables. NEVER write, echo, or log the grant key value anywhere — refer to it only via the environment variable name. You own exactly two files: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r0-pave-auth/r0-probe-output.json and /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r0-pave-auth/r0-probe-transcript.md. GOAL: prove the grant key JT_SUPABASE_MIRROR_GRANT_KEY (stored in /Users/chussey/.config/cleverwork/master.env) authenticates against JobTread Pave and can see organization id 22PazeRM5FCH (Pro Exteriors). HOW TO RUN — execute exactly this sequence: (1) set -a; source /Users/chussey/.config/cleverwork/master.env; set +a. (2) Build a JSON request body FILE (use a heredoc with envsubst or python) with this shape: {\"query\": {\"$\": {\"grantKey\": \"<value of $JT_SUPABASE_MIRROR_GRANT_KEY>\"}, \"currentGrant\": {\"id\": {}, \"user\": {\"id\": {}, \"name\": {}, \"memberships\": {\"nodes\": {\"id\": {}, \"organization\": {\"id\": {}, \"name\": {}}}}}}}. Write this body file to /tmp/r0-pave-body.json (NOT to the out/ directory) so the key never lands in a deliverable. (3) POST it: curl -s -X POST https://api.jobtread.com/pave -H 'Content-Type: application/json' --data @/tmp/r0-pave-body.json. (4) Pipe the response through python3 -m json.tool and save it as r0-probe-output.json. If the response contains the grant key anywhere (it should not), replace the key value with the string REDACTED before saving. (5) rm /tmp/r0-pave-body.json. (6) Write r0-probe-transcript.md with sections: ## Probe Goal, ## Commands Run (with the grantKey value shown as $JT_SUPABASE_MIRROR_GRANT_KEY, never expanded), ## Observed Behavior (HTTP status, response shape), ## Model Response Or API Result (summary: user name, org ids and names seen), ## Verdict (pass only if org 22PazeRM5FCH appeared in the actual response; otherwise fail with the exact error body excerpt). Hard rules: do not write pass unless the org id actually appeared in the live response; if the API returns an auth error, record the full error body excerpt in the transcript and mark the verdict fail — a failed probe honestly reported is a successful task.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r0_pave_auth_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r0-pave-auth/r0-probe-output.json",
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r0-pave-auth/r0-probe-transcript.md"
+      ],
+      "timeout_s": 600,
+      "verified": "the saved Pave response proves currentGrant.user and org 22PazeRM5FCH access, with no grant-key leak in deliverables"
+    }
+  ]
+}

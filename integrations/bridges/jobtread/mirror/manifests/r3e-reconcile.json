@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r3e-reconcile",
+      "task_type": "code-fix",
+      "spec": "You are an identity-reconciliation worker for jt-acculynx-mirror. Three staged writes collided with entities that ALREADY EXIST in JobTread; your job: map them instead of creating duplicates, then unblock the dependent location. BOUNDARY: Pave API READ-ONLY queries (no mutations of any kind in JobTread); Supabase writes only to jt_mirror.pending_write (failed rows only) and jt_mirror.crosswalk (inserts only); one deliverable: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3e-reconcile/reconcile-report.md; no credential values anywhere. CREDS: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a. Pave READ (build bodies with python3 json.dumps, never jq): POST https://api.jobtread.com/pave, body {\"query\": {\"$\": {\"grantKey\": \"<value of $JT_SUPABASE_MIRROR_GRANT_KEY>\"}, \"organization\": {\"$\": {\"id\": \"22PazeRM5FCH\"}, ...connection query...}}}; consult '/Users/chussey/Library/CloudStorage/Dropbox-AIA4/Cleverwork Main/GROK/Tools/catalog/jobtread/api/README.md' for connection/filter syntax (nodes, where, size). Supabase SQL: curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. THE THREE COLLISIONS (status='failed' rows in jt_mirror.pending_write): (1) cost_types 'Labor' and (2) cost_types 'Subcontractor' — JobTread ships these as defaults. Query the organization's cost types via Pave, find the ids whose names match exactly, then: insert jt_mirror.crosswalk rows mapping each failed row's source_ref (split 'table:id' into source_table/source_id; source_system='qbo' if the ref starts with qbo_, else 'acculynx'; jt_type='costType'; jt_id=<existing id>; domain='cost_types'), and update the two rows to status='skipped', error='already-exists in JT; crosswalked to existing id <id>', jt_id=<id>. (3) customer_accounts 'Melissa Kepler' — query accounts (type customer) by name via Pave; THEN VERIFY it is our canary creation: compare against jt_mirror.write_action_log and the executed customer_accounts canary row's jt_id if recorded. Crosswalk this failed row's source_ref (an acculynx_contact id) to that account id; update row to status='skipped', error='already-exists (run-1 canary); crosswalked to <id>', jt_id=<id>. (4) The failed locations row (error mentions acculynx_contact:48bad272-...): once the contact is crosswalked, reset it to status='staged', error=null, attempt=0 — do NOT execute it; the executor will. VERIFY before finishing (live SQL): zero status='failed' rows; every $ref among remaining staged rows resolves via crosswalk or an earlier-band staged row (write and run the query, include it in the report). DELIVERABLE reconcile-report.md sections: ## Existing Entities Found (Pave queries used + ids, WITHOUT grantKey), ## Crosswalk Inserts, ## Rows Updated, ## Ref Resolution Proof, ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r3e_reconcile_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3e-reconcile/reconcile-report.md"
+      ],
+      "timeout_s": 1200,
+      "verified": "collisions mapped to existing JT entities in crosswalk, blocked location unblocked, no failed rows remain"
+    }
+  ]
+}

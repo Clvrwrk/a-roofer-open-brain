@@ -105,11 +105,13 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
     <div class="vendor-map-canvas-column">
       <div id="vendor-territory-google-map" class="vendor-google-map" role="application" aria-label="Google Map of PE offices and vendor branches"></div>
       <div class="vendor-map-legend" aria-label="Marker legend">
-        <span><i style="background:#16a34a"></i>Healthy</span>
-        <span><i style="background:#eab308"></i>Needs attention</span>
-        <span><i style="background:#dc2626"></i>Problem</span>
-        <span><i style="background:#64748b"></i>Out of scope</span>
-        <span><i class="office-legend-mark"></i>PE office</span>
+        <span><i class="legend-ring" style="border-color:#16a34a"></i>Healthy</span>
+        <span><i class="legend-ring" style="border-color:#eab308"></i>Needs attention</span>
+        <span><i class="legend-ring" style="border-color:#dc2626"></i>Problem</span>
+        <span><i class="legend-ring" style="border-color:#64748b"></i>Out of scope</span>
+        <span><img class="legend-badge" src="/vendor-icons/pe-office-badge.png" alt="" width="18" height="18" />PE office</span>
+        <span><i class="legend-territory"></i>2-hr drive time (shared pricing)</span>
+        <span class="legend-note">Branch discs carry the vendor logo; the ring shows status.</span>
       </div>
     </div>
 
@@ -330,26 +332,26 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           .filter(Boolean)
           .join("");
 
-        let contact = "";
-        if (scope) {
-          const rows = [];
-          if (branch.phone) rows.push(`<a href="tel:${escapeHtml(branch.phone)}">Call branch · ${escapeHtml(branch.phone)}</a>`);
-          if (branch.managerName || branch.managerEmail) {
-            const mgr = escapeHtml(branch.managerName || "Branch manager");
-            rows.push(
-              branch.managerEmail
-                ? `<a href="mailto:${escapeHtml(branch.managerEmail)}">Email ${mgr}</a>`
-                : `<span>${mgr}</span>`,
-            );
-          }
+        // Call/email hotlinks render for every branch regardless of drive-time scope —
+        // the scope note stays, but contact data is always one click away.
+        const rows = [];
+        if (branch.phone) rows.push(`<a href="tel:${escapeHtml(branch.phone)}">Call branch · ${escapeHtml(branch.phone)}</a>`);
+        if (branch.managerName || branch.managerEmail) {
+          const mgr = escapeHtml(branch.managerName || "Branch manager");
           rows.push(
-            branch.salesRepName
-              ? `<span>Sales rep · ${escapeHtml(branch.salesRepName)} <small>(email soon)</small></span>`
-              : `<span class="vmpop-muted">Sales rep contact — to be added</span>`,
+            branch.managerEmail
+              ? `<a href="mailto:${escapeHtml(branch.managerEmail)}">Email ${mgr}</a>`
+              : `<span>${mgr}</span>`,
           );
-          contact = `<div class="vmpop-contact"><p class="vmpop-section">Fleet / branch contact</p>${rows.join("")}</div>`;
-        } else {
-          contact = `<p class="vmpop-muted">Outside 2-hour drive time — not in active scope.</p>`;
+        }
+        rows.push(
+          branch.salesRepName
+            ? `<span>Sales rep · ${escapeHtml(branch.salesRepName)} <small>(email soon)</small></span>`
+            : `<span class="vmpop-muted">Sales rep contact — to be added</span>`,
+        );
+        let contact = `<div class="vmpop-contact"><p class="vmpop-section">Fleet / branch contact</p>${rows.join("")}</div>`;
+        if (!scope) {
+          contact = `<p class="vmpop-muted">Outside 2-hour drive time — not in active scope.</p>` + contact;
         }
 
         return `
@@ -451,7 +453,31 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         });
       }
 
+      // Vendor markers are the brand logo on an opaque white disc (self-hosted in
+      // /vendor-icons) — transparent favicons washed out against the basemap. The disc's
+      // ring carries the active colour lens, so vendor identity and status read at once.
+      const VENDOR_ICON_SLUGS = new Set(["abc-supply", "qxo", "srs"]);
+      const RING_BY_COLOR = {
+        [LENS_GREEN]: "green",
+        [LENS_YELLOW]: "yellow",
+        [LENS_RED]: "red",
+        [LENS_GREY]: "grey",
+      };
+      function vendorBadgeIcon(slug, ringKey, px, withCount = false) {
+        const icon = {
+          url: `/vendor-icons/${slug}-badge-${ringKey}.png`,
+          scaledSize: new google.maps.Size(px, px),
+          anchor: new google.maps.Point(px / 2, px / 2),
+        };
+        // Park the cluster count just off the badge's lower-right so it never covers the logo.
+        if (withCount) icon.labelOrigin = new google.maps.Point(px * 0.82, px * 0.88);
+        return icon;
+      }
       function branchIcon(branch, scale = 6) {
+        if (VENDOR_ICON_SLUGS.has(branch.vendorSlug)) {
+          const ring = RING_BY_COLOR[lensColor(branch)] || "brand";
+          return vendorBadgeIcon(branch.vendorSlug, ring, Math.round(scale * 4.2));
+        }
         return {
           path: google.maps.SymbolPath.CIRCLE,
           fillColor: lensColor(branch),
@@ -463,14 +489,13 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         };
       }
 
-      function officeIcon() {
+      // PE offices carry the Pro Exteriors roof badge (lifted from the header logo) so
+      // our own locations read differently from vendor branches at a glance.
+      function officeIcon(px = 46) {
         return {
-          path: "M -7 6 L 0 -8 L 7 6 Z",
-          fillColor: "#11133f",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-          scale: 1.55,
+          url: "/vendor-icons/pe-office-badge.png",
+          scaledSize: new google.maps.Size(px, px),
+          anchor: new google.maps.Point(px / 2, px / 2),
         };
       }
 
@@ -577,14 +602,18 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
 
         visibleOffices().forEach((office) => {
           if (office.boundary?.coordinates?.[0]?.length && (selectedState === "all" || office.state === selectedState)) {
+            // The 2-hour drive-time ring IS the pricing territory: branches inside one ring
+            // are expected to carry the same negotiated pricing, so it needs to read clearly
+            // rather than sit at the edge of visibility.
             const polygon = new google.maps.Polygon({
               paths: office.boundary.coordinates[0].map((point) => ({ lat: point[1], lng: point[0] })),
-              strokeColor: "#11133f",
-              strokeOpacity: 0.58,
-              strokeWeight: 1.4,
+              strokeColor: "#0f766e",
+              strokeOpacity: 0.85,
+              strokeWeight: 2.4,
               fillColor: "#0f766e",
-              fillOpacity: 0.07,
+              fillOpacity: 0.13,
               map: state.map,
+              title: `${office.name} — ${office.driveTimeMinutes ?? 120}-minute drive time`,
             });
             polygon.addListener("click", () => renderOfficeDetail(office));
             state.polygons.push(polygon);
@@ -635,17 +664,35 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           const lat = group.branches.reduce((sum, branch) => sum + branch.latitude, 0) / group.branches.length;
           const lng = group.branches.reduce((sum, branch) => sum + branch.longitude, 0) / group.branches.length;
           const urgentCount = group.branches.filter((branch) => branch.markerPriority !== "vendor_brand").length;
+          // A cluster of one vendor keeps that vendor's badge (with a count pill) — an
+          // anonymous navy dot is why QXO/SRS looked absent at national zoom. Mixed-vendor
+          // clusters stay neutral.
+          const slugs = new Set(group.branches.map((branch) => branch.vendorSlug));
+          const soleSlug = slugs.size === 1 ? [...slugs][0] : null;
+          const single = soleSlug && VENDOR_ICON_SLUGS.has(soleSlug);
           const marker = new google.maps.Marker({
             position: { lat, lng },
             map: state.map,
-            title: `${group.branches.length} vendor branches`,
-            icon: clusterIcon(group.branches.length),
-            label: {
-              text: String(group.branches.length),
-              color: "#ffffff",
-              fontSize: "12px",
-              fontWeight: "800",
-            },
+            title: single
+              ? `${group.branches.length} ${group.branches[0].vendorName} branches`
+              : `${group.branches.length} vendor branches`,
+            icon: single
+              ? vendorBadgeIcon(soleSlug, RING_BY_COLOR[lensColor(group.branches[0])] || "brand", group.branches.length >= 20 ? 48 : 40, true)
+              : clusterIcon(group.branches.length),
+            label: single
+              ? {
+                  text: String(group.branches.length),
+                  color: "#0f172a",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  className: "vendor-cluster-count",
+                }
+              : {
+                  text: String(group.branches.length),
+                  color: "#ffffff",
+                  fontSize: "12px",
+                  fontWeight: "800",
+                },
             zIndex: urgentCount ? 650 : 450,
           });
           marker.addListener("click", () => {

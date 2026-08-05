@@ -1,0 +1,18 @@
+{
+  "run_name": "jt-acculynx-mirror",
+  "workdir": "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror",
+  "max_parallel": 1,
+  "tasks": [
+    {
+      "key": "r3g-fix-documents",
+      "task_type": "code-fix",
+      "spec": "You are a staging-data repair worker for jt-acculynx-mirror, final repair pass. One defect class: createDocument lineItems elements must be a TAGGED UNION — the exact API error was: The value {...} at createDocument.$.lineItems.0 does not resolve to existingCostGroup, existingCostItem, newCostGroup, or newCostItem. Our staged elements are bare objects like {\"name\", \"unitId\", \"quantity\", \"unitPrice\", \"description\"}. BOUNDARY: UPDATE only jt_mirror.pending_write rows with domain='documents' and status in ('failed','staged'); read anything; no API calls; one deliverable: /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3g-fix-documents/fix-report.md; no credential values anywhere. SQL access: set -a; source /Users/chussey/.config/cleverwork/master.env; set +a; curl -s -X POST https://api.supabase.com/v1/projects/rnhmvcpsvtqjlffpsayu/database/query -H \"Authorization: Bearer $SUPABASE_ACCESS_TOKEN\" -H 'Content-Type: application/json' -d '{\"query\":\"<SQL>\"}'. REPAIR (all 26 document rows: 20 failed + 6 staged): transform every element of payload->'lineItems' from <el> to {\"newCostItem\": <el> plus \"costCodeId\" and \"costTypeId\" literal JT ids}. Resolve the ids per element: (1) find the catalog staging row in jt_mirror.pending_write (domain='catalog_items', status='executed') whose payload->>'name' matches the element name (and unit where needed for disambiguation); its payload carries costCodeId/costTypeId refs — resolve those refs to literal jt ids via jt_mirror.crosswalk (jt_type='costCode' / 'costType'; the two skipped default cost types Labor and Subcontractor are ALSO in crosswalk — include them); (2) if no catalog match, choose by the same deterministic semantics rule the catalog pass used (labor-like names to the labor cost code/type, else the material/general ones) and record how many elements needed the fallback. Preserve every existing element field (name, unitId, quantity, unitPrice, description) inside the newCostItem wrapper unchanged. Reset all 26 rows to status='staged', error=null, attempt=0. Do this with a single well-tested SQL transformation (jsonb) or a small number of them — verify on ONE row first, compare before/after payload, then apply to all. VERIFY with live SQL: 26 staged documents; zero bare (untagged) lineItems elements; every newCostItem has costCodeId+costTypeId present in crosswalk; zero failed rows. DELIVERABLE fix-report.md sections: ## Transformation SQL, ## Cost Id Resolution (match rate, fallback count), ## Before/After Sample (one element), ## Verdict.",
+      "check": "python3 /Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/checks/r3g_fix_check.py",
+      "expect_files": [
+        "/Users/chussey/Documents/a-roofers-open-brain/integrations/bridges/jobtread/mirror/r3g-fix-documents/fix-report.md"
+      ],
+      "timeout_s": 1800,
+      "verified": "all 26 documents staged with tagged-union lineItems carrying crosswalk-verified literal cost ids"
+    }
+  ]
+}

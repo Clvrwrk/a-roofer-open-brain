@@ -1,0 +1,174 @@
+[
+  {
+    "variant": "V4",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V4",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": 1,
+                  "unitCost": 8,
+                  "unitPrice": 10,
+                  "description": "probe"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":1,\"unitCost\":8,\"unitPrice\":10,\"description\":\"probe\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": {
+      "createdDocumentId": null,
+      "deleteDocument": "not called: response contained no created document id",
+      "readBack": "not applicable: no document id existed to query",
+      "outstandingTemporaryDocuments": 0
+    }
+  },
+  {
+    "variant": "V5",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V5",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": 1,
+                  "unitCost": 8,
+                  "unitPrice": 10,
+                  "description": "probe",
+                  "costCodeId": "22PbdLkpZX5s",
+                  "costTypeId": "22PazefY5x4j"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":1,\"unitCost\":8,\"unitPrice\":10,\"description\":\"probe\",\"costCodeId\":\"22PbdLkpZX5s\",\"costTypeId\":\"22PazefY5x4j\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": {
+      "createdDocumentId": null,
+      "deleteDocument": "not called: response contained no created document id",
+      "readBack": "not applicable: no document id existed to query",
+      "outstandingTemporaryDocuments": 0
+    }
+  },
+  {
+    "variant": "V6",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V6",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "existingCostItem": {
+                  "costItemId": "22PbdRX5Fnuh",
+                  "quantity": 1
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"existingCostItem\":{\"costItemId\":\"22PbdRX5Fnuh\",\"quantity\":1}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": {
+      "createdDocumentId": null,
+      "deleteDocument": "not called: response contained no created document id",
+      "readBack": "not applicable: no document id existed to query",
+      "outstandingTemporaryDocuments": 0
+    }
+  },
+  {
+    "variant": "V7",
+    "request": {
+      "query": {
+        "$": {
+          "grantKey": "REDACTED"
+        },
+        "createDocument": {
+          "$": {
+            "type": "customerOrder",
+            "name": "PROBE-DELETE-ME-V7",
+            "jobId": "22PbdV2TvzU2",
+            "lineItems": [
+              {
+                "newCostItem": {
+                  "name": "Probe Item",
+                  "unitId": "22PbdLixhBJr",
+                  "quantity": "1",
+                  "unitCost": "8",
+                  "unitPrice": "10",
+                  "description": "probe",
+                  "costCodeId": "22PbdLkpZX5s",
+                  "costTypeId": "22PazefY5x4j"
+                }
+              }
+            ]
+          },
+          "createdDocument": {
+            "id": {},
+            "name": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "httpStatus": 400,
+      "body": "The value {\"newCostItem\":{\"name\":\"Probe Item\",\"unitId\":\"22PbdLixhBJr\",\"quantity\":\"1\",\"unitCost\":\"8\",\"unitPrice\":\"10\",\"description\":\"probe\",\"costCodeId\":\"22PbdLkpZX5s\",\"costTypeId\":\"22PazefY5x4j\"}} at \"createDocument\".\"$\".\"lineItems\".\"0\" does not resolve to \"existingCostGroup\", \"existingCostItem\", \"newCostGroup\", or \"newCostItem\""
+    },
+    "cleanup": {
+      "createdDocumentId": null,
+      "deleteDocument": "not called: response contained no created document id",
+      "readBack": "not applicable: no document id existed to query",
+      "outstandingTemporaryDocuments": 0
+    }
+  }
+]
