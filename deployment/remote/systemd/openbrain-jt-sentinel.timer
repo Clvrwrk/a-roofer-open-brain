@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily JobTread Sync Sentinel at 10:00 America/Los_Angeles (DST-aware)
+
+[Timer]
+OnCalendar=*-*-* 10:00:00 America/Los_Angeles
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
