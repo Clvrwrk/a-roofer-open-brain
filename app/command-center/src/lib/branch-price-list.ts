@@ -30,6 +30,9 @@ export interface BranchPriceList {
   scopedInvoice: string;
   scopedInvoiceDate: string;
   scopedAgreementNumber: string;
+  // R3 (docs/82): when the branch has no direct list, it inherits its PE office's
+  // in-force agreements (2-hour window, docs/81 §4) — this names the office.
+  inheritedOffice: string;
   items: BranchPriceItem[];
   activeItems: number;
   expiredItems: number;
@@ -49,8 +52,38 @@ function formatBranchAddress(br: any): string {
   return [line1, tail].filter(Boolean).join(", ");
 }
 
+// R3 (docs/82): the office-inherited price list — the same agreement set the v2 audit
+// engine prices against (migration 201). branch -> covered vendor_branch -> office ->
+// in-force agreement versions at refDate (newest per agreement_number; evergreen).
+async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string): Promise<{ officeName: string; agreements: { id: number; number: string; effective: string; expiry: string }[] } | null> {
+  const norm = branchNumber.replace(/^0+/, "");
+  const { data: vbRows } = await client
+    .from("vendor_branches")
+    .select("branch_number, pricing_territory_office_id")
+    .eq("pricing_status", "covered")
+    .not("pricing_territory_office_id", "is", null)
+    .limit(2000);
+  const vb = ((vbRows as any[] | null) ?? []).find((v) => String(v.branch_number ?? "").replace(/^0+/, "") === norm);
+  if (!vb) return null;
+  const { data: officeRows } = await client.from("office").select("name").eq("id", vb.pricing_territory_office_id).limit(1);
+  const officeName = (officeRows as any[] | null)?.[0]?.name ?? "";
+  const { data: oavRows } = await client
+    .from("mv_office_agreement_versions")
+    .select("agreement_id, agreement_number, effective_date, expiry_date")
+    .eq("office_id", vb.pricing_territory_office_id);
+  const versions = ((oavRows as any[] | null) ?? []).filter((a) => !a.effective_date || d10(a.effective_date) <= refDate);
+  // newest in-force version per agreement chain (evergreen — expiry never disqualifies)
+  const newest = new Map<string, any>();
+  for (const a of versions) {
+    const cur = newest.get(a.agreement_number);
+    if (!cur || d10(a.effective_date) > d10(cur.effective_date)) newest.set(a.agreement_number, a);
+  }
+  const agreements = [...newest.values()].map((a) => ({ id: a.agreement_id, number: a.agreement_number, effective: d10(a.effective_date), expiry: d10(a.expiry_date) }));
+  return agreements.length ? { officeName, agreements } : null;
+}
+
 export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
-  const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", items: [], activeItems: 0, expiredItems: 0, agreements: [], categories: [] };
+  const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", inheritedOffice: "", items: [], activeItems: 0, expiredItems: 0, agreements: [], categories: [] };
   const { client } = createServerSupabaseClient(env);
   if (!client || !branchNumber) return base;
 
@@ -118,7 +151,7 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
       categoryKey: r.category_key ?? "uncategorized",
     }));
     return {
-      status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber,
+      status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, inheritedOffice: "",
       items, activeItems: items.length, expiredItems: 0,
       agreements: [{ id: scopedAgreementId, number: scopedAgreementNumber, effective: scopedAgreementEffective, expiry: scopedAgreementExpiry, active: true, itemCount: items.length }],
       categories,
@@ -128,7 +161,46 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
   // Unscoped path: all agreements for the branch (v_branch_price_list).
   const { data } = await client.from("v_branch_price_list").select("*").eq("branch_number", branchNumber).order("description");
   const rows = (data as any[] | null) ?? [];
-  if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, categories };
+  if (rows.length === 0) {
+    // R3 fallback: no direct list — inherit the PE office's in-force agreements
+    // (2-hour window, docs/81 §4; same set the audit engine prices against).
+    const refDate = scopedInvoiceDate || new Date().toISOString().slice(0, 10);
+    const inherited = await loadOfficeInheritedList(client, branchNumber, refDate);
+    if (inherited) {
+      const agIds = inherited.agreements.map((a) => a.id);
+      const { data: pliRows } = await client.from("abc_price_list_items")
+        .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id,category_key")
+        .in("agreement_id", agIds).order("description");
+      const agById = new Map(inherited.agreements.map((a) => [a.id, a]));
+      const items: BranchPriceItem[] = (((pliRows as any[] | null) ?? [])).map((r) => {
+        const ag = agById.get(r.agreement_id);
+        return {
+          itemNumber: r.item_number ?? "",
+          description: r.description ?? "",
+          uom: r.unit ?? "",
+          unitPrice: num(r.unit_price),
+          manufacturer: r.manufacturer ?? "",
+          category: r.product_category ?? "",
+          agreementId: r.agreement_id ?? null,
+          agreementNumber: ag?.number ?? "",
+          effective: ag?.effective ?? "",
+          expiry: ag?.expiry ?? "",
+          active: true, // in force at refDate by construction (evergreen)
+          categoryKey: r.category_key ?? "uncategorized",
+        };
+      });
+      if (items.length) {
+        return {
+          status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber,
+          inheritedOffice: inherited.officeName,
+          items, activeItems: items.length, expiredItems: 0,
+          agreements: inherited.agreements.map((a) => ({ ...a, active: true, itemCount: items.filter((i) => i.agreementId === a.id).length })),
+          categories,
+        };
+      }
+    }
+    return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, categories };
+  }
 
   const items: BranchPriceItem[] = rows.map((r) => ({
     itemNumber: r.item_number ?? "",
@@ -161,6 +233,7 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     scopedInvoice,
     scopedInvoiceDate,
     scopedAgreementNumber,
+    inheritedOffice: "",
     items,
     activeItems: items.filter((i) => i.active).length,
     expiredItems: items.filter((i) => !i.active).length,

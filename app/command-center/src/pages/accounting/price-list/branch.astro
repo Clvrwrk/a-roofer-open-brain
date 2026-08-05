@@ -40,6 +40,10 @@ const sections = [
       </div>
     </header>
 
+    {pl.status === "live" && pl.inheritedOffice && (
+      <p class="pl-inherited">This branch has no direct price list — showing the <b>{pl.inheritedOffice}</b> office agreement(s) it inherits under the two-hour-window rule (docs/81 §4). These are the prices the invoice audit compares against.</p>
+    )}
+
     {pl.status === "live" && (
       <>
         <section class="pl-agreements">
@@ -122,6 +126,7 @@ const sections = [
       .pl-table td.num{text-align:right;font-variant-numeric:tabular-nums}
       .pl-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
       .pl-empty{color:var(--muted);padding:30px 4px}
+      .pl-inherited{background:#efecfd;border:1px solid #5b46d8;color:#3d2f96;border-radius:10px;padding:10px 14px;font-size:13px;margin:0 0 14px}
     </style>
     <script>
       const s = document.getElementById("pl-search") as HTMLInputElement | null;

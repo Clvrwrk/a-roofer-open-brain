@@ -1000,7 +1000,27 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
   const registerExportedByInvoice = new Map<string, string>(
     (registerRows ?? []).map((r) => [String(r.invoice_number), r.register_exported_at ? String(r.register_exported_at) : "1"]),
   );
-  return summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice);
+  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice);
+  // R3 honest gate (docs/82): hasPriceList was hardcoded true, so the 📋 Price List button
+  // never greyed. True value = the invoice's PE office holds at least one agreement
+  // (office-inherited pricing, migration 201) — offices without agreements grey the button.
+  try {
+    const [{ data: oav }, { data: officeRows }] = await Promise.all([
+      client.from("mv_office_agreement_versions").select("office_id"),
+      client.from("office").select("id,name"),
+    ]);
+    const officeIdsWithAgreements = new Set(((oav as any[] | null) ?? []).map((r) => r.office_id));
+    const officeNamesWithAgreements = new Set(
+      (((officeRows as any[] | null) ?? []).filter((o) => officeIdsWithAgreements.has(o.id))).map((o) => String(o.name)),
+    );
+    for (const office of summary.offices) {
+      const covered = officeNamesWithAgreements.has(office.office);
+      for (const branch of office.branches) for (const invoice of branch.invoices) (invoice as any).hasPriceList = covered;
+    }
+  } catch {
+    // leave hasPriceList as summarized on any failure — button stays enabled
+  }
+  return summary;
 }
 
 export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), options: InvoiceAuditSummaryOptions = {}): Promise<InvoiceAuditData> {
