@@ -29,15 +29,24 @@ const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 // status axes come straight from the v2 tables.
 let auditPendingCount = 0;
 let pendingVerificationCount = 0;
+let cmApprovedTotal = 0;
+let cmDraftTotal = 0;
+let cmApprovedCount = 0;
+let cmDraftCount = 0;
 {
   const { client } = createServerSupabaseClient();
   if (client) {
-    const [pipe, pay] = await Promise.all([
+    const [pipe, pay, cms] = await Promise.all([
       client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
       client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
+      client.from("credit_memo_requests").select("status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
     ]);
     auditPendingCount = pipe.count ?? 0;
     pendingVerificationCount = pay.count ?? 0;
+    for (const r of cms.data ?? []) {
+      if (r.status === "approved") { cmApprovedTotal += Number(r.expected_credit ?? 0); cmApprovedCount += 1; }
+      else { cmDraftTotal += Number(r.expected_credit ?? 0); cmDraftCount += 1; }
+    }
   }
 }
 
@@ -89,7 +98,12 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi"><span class="iv-kpi-lab">Due Now</span><span class="iv-kpi-val">{data.totals.dueNow.toLocaleString()}</span><span class="iv-kpi-sub">payment due · invoice + 60 days</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">To Audit</span><span class="iv-kpi-val">{data.totals.pending.toLocaleString()}</span><span class="iv-kpi-sub">lines pending review</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">un-audited overcharge vs negotiated</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memo Requested</span><span class="iv-kpi-val">{money(data.totals.creditMemoRequested)}</span><span class="iv-kpi-sub">audited → credit-memo disposition</span></div>
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">Credit Memo Requested</span>
+        <span class="iv-kpi-val">{money(cmApprovedTotal + cmDraftTotal)}</span>
+        <span class="iv-kpi-sub">{cmApprovedCount} approved ({money(cmApprovedTotal)}) · {cmDraftCount} draft</span>
+        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly">View request</a>
+      </div>
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">open · unapplied</span></div>
       <div class="iv-kpi">

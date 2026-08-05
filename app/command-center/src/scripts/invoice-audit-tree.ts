@@ -49,6 +49,24 @@ if (root && dataEl && mount) {
     return b ? ` <span class="pill ${b.cls}" title="${esc(b.tip)}">${b.lab}</span>` : "";
   }
 
+  /* ---- credit memo requests (v2 R2, docs/82): Approve-into-weekly-email flow ---- */
+  const cmByInvoice = new Map<string, { status: string; expectedCredit: number }>();
+  async function loadCreditMemoRequests() {
+    try {
+      const res = await fetch("/api/credit-memos/pending", { credentials: "same-origin", cache: "no-store" });
+      const payload = await res.json();
+      if (!payload?.requests) return;
+      cmByInvoice.clear();
+      for (const r of payload.requests) cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit });
+      mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
+        const inv = invByNumber.get(node.dataset.inv || "");
+        const det = node.closest("details.iv-inv") as HTMLElement | null;
+        if (inv && det) refreshInvoiceTags(det, inv);
+      });
+      if (filtersReady) applyFilter();
+    } catch {}
+  }
+
   /* ---- discrepancy lines (lazy; docs/81 v2 — no dispositions) ---- */
   // v2 classification is binary vs the matched agreement price: over price, No-Price,
   // or UOM mismatch = discrepancy (shown); everything else is valid (hidden).
@@ -149,8 +167,9 @@ if (root && dataEl && mount) {
 
     const totalCredit = inv.lines.reduce((s, l) => s + lineCredit(l), 0);
     const discCount = inv.lines.filter(isDiscrepancy).length;
+    const hasCm = cmByInvoice.has(inv.invoiceNumber);
     const cmLead = discCount
-      ? `<div class="iv-disp-lead">Credit memo candidate: <b>${money2(totalCredit)}</b> across ${discCount} discrepancy line(s) — approved via the weekly credit memo request. <a href="/accounting/credit-memos/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener">View credit memo request →</a></div>`
+      ? `<div class="iv-disp-lead">Credit memo candidate: <b>${money2(totalCredit)}</b> across ${discCount} discrepancy line(s)${hasCm ? ` — <a href="/accounting/credit-memos/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener">view credit memo request →</a>` : " — no credit memo request on file yet (created by the audit run)"}.</div>`
       : "";
     return `
       ${cmLead}
@@ -239,6 +258,23 @@ if (root && dataEl && mount) {
   // discrepancy detail. Kept as the single post-render hook for future bindings.
   function bindInvoice(_det: HTMLDetailsElement, _inv: Invoice) {}
 
+  // v2 R2: credit-memo pill + the human Approve action (draft -> approved -> weekly email).
+  function cmTag(invoiceNumber: string): string {
+    const cm = cmByInvoice.get(invoiceNumber);
+    if (!cm) return "";
+    const amt = money2(cm.expectedCredit);
+    if (cm.status === "approved") {
+      return `<span class="pill pill-green" title="Approved into this week's credit memo request">CM approved · ${amt}</span>` +
+        `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="0" title="Remove from this week's email (back to draft)" onclick="event.stopPropagation()">Un-approve</button>`;
+    }
+    if (cm.expectedCredit < 0.05) {
+      // legacy/zero-credit draft — nothing claimable; no approve action
+      return `<span class="pill pill-grey" title="Credit memo request on file with no recoverable credit">CM draft · ${amt}</span>`;
+    }
+    return `<span class="pill pill-orange" title="Credit memo request drafted — approve to add it to this week's vendor email">CM draft · ${amt}</span>` +
+      `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="1" title="Approve into this week's credit memo request email" onclick="event.stopPropagation()">Approve</button>`;
+  }
+
   /* ---- tree render ---- */
   function invoiceTags(inv: Invoice): string {
     refreshToBePaid(inv);
@@ -251,6 +287,7 @@ if (root && dataEl && mount) {
       inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
       inv.namingStatus === "needs_link" || inv.needsAcculynxLink ? '<span class="pill pill-red">Needs AccuLynx link</span>' : "",
       inv.namingStatus === "temp_job" ? '<span class="pill pill-grey">TEMP job</span>' : "",
+      cmTag(inv.invoiceNumber),
     ].filter(Boolean).join("");
   }
   function invoiceNode(inv: Invoice, hasPriceList: boolean): string {
@@ -480,6 +517,27 @@ if (root && dataEl && mount) {
   });
 
   prefetchInvoiceDetails(Array.from(invByNumber.values()), 3);
+
+  // Approve / Un-approve clicks (delegated — tags re-render often)
+  mount.addEventListener("click", async (ev) => {
+    const btn = (ev.target as HTMLElement)?.closest?.("[data-cm-approve]") as HTMLButtonElement | null;
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const invoiceNumber = btn.dataset.cmApprove || "";
+    const approve = btn.dataset.approve === "1";
+    btn.disabled = true;
+    const { ok, data } = await postJson("/api/credit-memos/approve", { invoiceNumber, approve });
+    if (!ok) { toast((approve ? "Approve" : "Un-approve") + " failed: " + (data?.error_description || data?.error || "error")); btn.disabled = false; return; }
+    const cm = cmByInvoice.get(invoiceNumber);
+    if (cm) cm.status = data.status;
+    const body = mount.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`);
+    const det = body?.closest("details.iv-inv") as HTMLElement | null;
+    const inv = invByNumber.get(invoiceNumber);
+    if (det && inv) refreshInvoiceTags(det, inv);
+    toast(approve ? `${invoiceNumber} approved into this week's credit memo request` : `${invoiceNumber} returned to draft`);
+  });
+  void loadCreditMemoRequests();
 
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;

@@ -1,0 +1,179 @@
+---
+// Weekly credit memo request view — Invoice Audit v2 R2 (docs/82, Chris's decisions
+// 2026-08-05): the repurposed "Credit Memo Requested" KPI card lands here. Renders the
+// vendor-specific HTML request email(s) (approved invoices only; drafts listed but
+// excluded from the email) with downloads for the reconciliation spreadsheet + tracker.
+import AppShell from "../../../layouts/AppShell.astro";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+
+interface CmLine {
+  invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
+  office_price: number; variance_ext: number; office_name: string; agreement_number: string | null;
+  agreement_effective: string | null; agreement_expiry: string | null; match_method: string; paexp_tag: string | null;
+  run_label: string; created_at: string;
+}
+
+const { client } = createServerSupabaseClient();
+let requests: { invoice_number: string; status: string; expected_credit: number; vendor: string; invoice_date?: string }[] = [];
+const linesByInvoice = new Map<string, CmLine[]>();
+if (client) {
+  const { data: reqRows } = await client
+    .from("credit_memo_requests")
+    .select("invoice_number, status, expected_credit, packet")
+    .eq("request_kind", "requested")
+    .in("status", ["draft", "approved"])
+    .order("invoice_number")
+    .limit(1000);
+  requests = (reqRows ?? []).map((r) => ({
+    invoice_number: r.invoice_number,
+    status: r.status,
+    expected_credit: Number(r.expected_credit ?? 0),
+    vendor: ((r.packet as Record<string, unknown> | null)?.vendor as string) ?? "ABC Supply",
+  }));
+  const invoiceNumbers = requests.map((r) => r.invoice_number);
+  if (invoiceNumbers.length) {
+    const { data: lineRows } = await client
+      .from("invoice_line_reaudit")
+      .select("run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at")
+      .in("invoice_number", invoiceNumbers)
+      .eq("classification", "discrepancy")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    const latestRun = new Map<string, string>();
+    for (const l of (lineRows ?? []) as CmLine[]) {
+      if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
+    }
+    for (const l of (lineRows ?? []) as CmLine[]) {
+      if (latestRun.get(l.invoice_number) !== l.run_label) continue;
+      if (Number(l.variance_ext ?? 0) < 0.05) continue;
+      (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
+    }
+  }
+}
+
+const vendors = [...new Set(requests.map((r) => r.vendor))].sort();
+const money = (n: number) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const approvedFor = (vendor: string) => requests.filter((r) => r.vendor === vendor && r.status === "approved");
+const draftFor = (vendor: string) => requests.filter((r) => r.vendor === vendor && r.status === "draft");
+const vendorTotal = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
+const vendorLineCount = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+const reasonFor = (l: CmLine) => {
+  const eff = `${l.agreement_effective ?? "?"}${l.agreement_expiry ? ` to ${l.agreement_expiry}` : ""}`;
+  const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
+  let r = `Billed ${money(Number(l.invoiced_price))} against ${money(Number(l.office_price))} on the ${l.office_name} office agreement ${l.agreement_number ?? ""} (eff. ${eff}) - overcharge ${pct}%.`;
+  if (l.paexp_tag) r += ` The agreement had lapsed without a successor and remains in force (${l.paexp_tag}).`;
+  return r;
+};
+---
+
+<AppShell title="Weekly Credit Memo Request" eyebrow="Accounting" activePage="accounting">
+  <section class="cmw">
+    <div class="cmw-bar">
+      <h1>Weekly Credit Memo Request</h1>
+      <div class="cmw-actions">
+        <a class="cmw-btn" href="/api/credit-memos/weekly-csv?kind=detail" download>⬇ Reconciliation spreadsheet</a>
+        <a class="cmw-btn" href="/api/credit-memos/weekly-csv?kind=tracker" download>⬇ Tracker CSV</a>
+        <a class="cmw-btn cmw-secondary" href="/accounting/invoice-audit">← Invoice Audit</a>
+      </div>
+    </div>
+    <p class="cmw-note">Vendor-specific request emails build from <b>approved</b> invoices only (docs/81 decision 8). Approve or un-approve invoices from the Invoice Audit dashboard. Drafts below are awaiting approval and are excluded from the email.</p>
+
+    {requests.length === 0 && <p class="cmw-empty">No draft or approved credit memo requests.</p>}
+
+    {vendors.map((vendor) => (
+      <details class="cmw-vendor" open>
+        <summary>
+          <b>{vendor}</b>
+          <span class="cmw-sum">
+            {approvedFor(vendor).length} approved invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
+            {draftFor(vendor).length > 0 && <span class="cmw-draft-pill">{draftFor(vendor).length} draft awaiting approval</span>}
+          </span>
+        </summary>
+        {approvedFor(vendor).length === 0 ? (
+          <p class="cmw-empty">Nothing approved for {vendor} yet.</p>
+        ) : (
+          <div class="cmw-email">
+            <p class="cmw-email-meta">Subject: Credit memo request - Pro Exteriors LLC - {approvedFor(vendor).length} invoices, {money(vendorTotal(vendor))}</p>
+            <p>We are requesting credit memos on {vendorLineCount(vendor)} lines across {approvedFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
+            <p>Total credit requested: <b>{money(vendorTotal(vendor))}</b>.</p>
+            <p>Where an agreement lapsed with no successor in place we have priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
+            <p>Please issue the credits against the original invoice numbers and confirm.</p>
+            {approvedFor(vendor).map((r) => (
+              <div class="cmw-invoice">
+                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a></p>
+                <table>
+                  <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
+                  <tbody>
+                    {(linesByInvoice.get(r.invoice_number) ?? []).map((l) => (
+                      <tr>
+                        <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
+                        <td class="num">{Number(l.quantity)}</td>
+                        <td class="num">{money(Number(l.invoiced_price))}</td>
+                        <td class="num">{money(Number(l.office_price))}</td>
+                        <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+        {draftFor(vendor).length > 0 && (
+          <div class="cmw-drafts">
+            <p class="cmw-drafts-title">Awaiting approval ({vendor}) — Approve adds the invoice to this vendor's email:</p>
+            {draftFor(vendor).map((r) => (
+              <span class="cmw-draft">
+                <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>{r.invoice_number}</a> · {money(r.expected_credit)}
+                {r.expected_credit >= 0.05 && <button class="cmw-approve" data-cm-approve={r.invoice_number} type="button">Approve</button>}
+              </span>
+            ))}
+          </div>
+        )}
+      </details>
+    ))}
+  </section>
+</AppShell>
+
+<style>
+  .cmw{padding:8px 4px 40px;max-width:900px}
+  .cmw-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .cmw-bar h1{font-size:22px;margin:0}
+  .cmw-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .cmw-btn{border:1px solid #5b46d8;background:#5b46d8;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;text-decoration:none}
+  .cmw-btn.cmw-secondary{background:transparent;color:#5b46d8}
+  .cmw-note{font-size:13px;color:#6b7886;margin:10px 0 18px}
+  .cmw-empty{color:#6b7886;font-size:13px;padding:10px 2px}
+  .cmw-vendor{border:1px solid #e3e8ef;border-radius:12px;margin-bottom:14px;background:#fff}
+  .cmw-vendor>summary{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;font-size:15px;flex-wrap:wrap}
+  .cmw-sum{color:#6b7886;font-size:13px;display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cmw-draft-pill{background:#fbf0d4;color:#946400;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700}
+  .cmw-email{padding:6px 16px 16px;font-size:14px;line-height:1.5}
+  .cmw-email-meta{color:#888;font-size:12.5px}
+  .cmw-invoice{margin:18px 0 6px}
+  .cmw-inv-head{margin:0 0 6px;font-size:14px}
+  .cmw-invoice table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #d0d0d0}
+  .cmw-invoice th,.cmw-invoice td{border:1px solid #d0d0d0;padding:6px;text-align:left}
+  .cmw-invoice th.num,.cmw-invoice td.num{text-align:right}
+  .cmw-reason{color:#666;font-size:12px}
+  .cmw-drafts{border-top:1px dashed #e3e8ef;padding:10px 16px 14px}
+  .cmw-drafts-title{font-size:12px;color:#6b7886;font-weight:700;margin:0 0 6px}
+  .cmw-draft{display:inline-flex;align-items:center;gap:6px;background:#eceff4;border-radius:8px;padding:4px 9px;font-size:12px;margin:0 6px 6px 0}
+  .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
+</style>
+
+<script>
+  document.addEventListener("click", async (ev) => {
+    const btn = (ev.target as HTMLElement)?.closest?.("[data-cm-approve]") as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.disabled = true;
+    const res = await fetch("/api/credit-memos/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ invoiceNumber: btn.dataset.cmApprove, approve: true }),
+    }).then((r) => r.json()).catch(() => null);
+    if (res?.status === "approved") window.location.reload();
+    else { btn.disabled = false; window.alert("Approve failed: " + (res?.error_description || res?.error || "network error")); }
+  });
+</script>

@@ -98,13 +98,29 @@ async function loadRequestedCreditMemo(client: any, invoiceNumber: string): Prom
   if (!reqRow) return null;
   const req = reqRow as any;
 
-  // The disputed lines = this invoice's lines currently dispositioned to a credit memo.
-  const { data: flagged } = await client.from("v_invoice_line_audit_current").select("invoice_line_id").eq("invoice_number", invoiceNumber).in("decision", ["credit-flag", "credit-noflag"]);
-  const ids = ((flagged as any[] | null) ?? []).map((r) => r.invoice_line_id);
+  // v2 (docs/82): disputed lines come from the invoice's LATEST re-audit run
+  // (invoice_line_reaudit) — the disposition decisions that used to feed this are gone.
+  // Legacy credit-flag decisions remain as a fallback for pre-v2 requests.
   let lineRows: any[] = [];
-  if (ids.length) {
-    const { data } = await client.from("v_invoice_audit_line").select("item_number,item_description,quantity,uom,unit_price,negotiated_price").in("line_id", ids);
-    lineRows = (data as any[] | null) ?? [];
+  const { data: reauditRows } = await client
+    .from("invoice_line_reaudit")
+    .select("run_label,item_number,item_description,quantity,uom,invoiced_price,office_price,variance_ext,created_at")
+    .eq("invoice_number", invoiceNumber)
+    .eq("classification", "discrepancy")
+    .order("created_at", { ascending: false });
+  const reaudit = (reauditRows as any[] | null) ?? [];
+  if (reaudit.length) {
+    const latestRun = reaudit[0].run_label;
+    lineRows = reaudit
+      .filter((r) => r.run_label === latestRun && num(r.variance_ext) >= 0.05)
+      .map((r) => ({ item_number: r.item_number, item_description: r.item_description, quantity: r.quantity, uom: r.uom, unit_price: r.invoiced_price, negotiated_price: r.office_price }));
+  } else {
+    const { data: flagged } = await client.from("v_invoice_line_audit_current").select("invoice_line_id").eq("invoice_number", invoiceNumber).in("decision", ["credit-flag", "credit-noflag"]);
+    const ids = ((flagged as any[] | null) ?? []).map((r) => r.invoice_line_id);
+    if (ids.length) {
+      const { data } = await client.from("v_invoice_audit_line").select("item_number,item_description,quantity,uom,unit_price,negotiated_price").in("line_id", ids);
+      lineRows = (data as any[] | null) ?? [];
+    }
   }
   const lines: CreditMemoLine[] = lineRows.map((l) => ({
     itemNumber: l.item_number ?? "",
