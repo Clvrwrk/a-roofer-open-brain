@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Compute a drive-time isochrone for a PE office and store it on public.office.
-// Reproduces the `google_distance_matrix_bearing_v1` method the original five offices
-// used: cast N bearings from the office, binary-search along each for the point whose
+// Reproduces the bearing method the original five offices used (recorded as
+// google_routes_bearing_v1 — Routes API is the current API and the one enabled): cast N bearings from the office, binary-search along each for the point whose
 // DRIVING duration equals the target (default 120 min), and close the ring.
 //
 // Usage:
@@ -47,21 +47,35 @@ function destination(lat, lng, bearingDeg, distKm) {
   return [(la2 * 180) / Math.PI, (((lo2 * 180) / Math.PI + 540) % 360) - 180];
 }
 
-// Distance Matrix in one call per batch of destinations (max 25 per request).
+// Routes API (computeRouteMatrix) — the current replacement for Distance Matrix, and the
+// one actually enabled on GOOGLE_MAPS_SERVER_KEY. Matches the schema's anticipated
+// 'google_routes_bearing_v1'. Element order is not guaranteed, so results are placed by
+// destinationIndex rather than by arrival order.
 async function driveMinutes(origin, dests) {
-  const out = [];
+  const out = new Array(dests.length).fill(null);
   for (let i = 0; i < dests.length; i += 25) {
     const chunk = dests.slice(i, i + 25);
-    const q = new URLSearchParams({
-      origins: `${origin[0]},${origin[1]}`,
-      destinations: chunk.map(([a, b]) => `${a},${b}`).join("|"),
-      mode: "driving", units: "imperial", key: GKEY,
+    const body = {
+      origins: [{ waypoint: { location: { latLng: { latitude: origin[0], longitude: origin[1] } } } }],
+      destinations: chunk.map(([a, b]) => ({ waypoint: { location: { latLng: { latitude: a, longitude: b } } } })),
+      travelMode: "DRIVE",
+    };
+    const res = await fetch("https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GKEY,
+        "X-Goog-FieldMask": "originIndex,destinationIndex,duration,condition",
+      },
+      body: JSON.stringify(body),
     });
-    const res = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${q}`);
-    const d = await res.json();
-    if (d.status !== "OK") throw new Error(`distancematrix: ${d.status} ${d.error_message || ""}`);
-    for (const el of d.rows[0].elements) {
-      out.push(el.status === "OK" ? el.duration.value / 60 : null);
+    if (!res.ok) throw new Error(`routes: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    for (const el of await res.json()) {
+      const idx = i + (el.destinationIndex ?? 0);
+      // ROUTE_NOT_FOUND (water, no road) stays null and is treated as "too far".
+      out[idx] = el.condition === "ROUTE_EXISTS" && el.duration
+        ? Number(String(el.duration).replace("s", "")) / 60
+        : null;
     }
     await new Promise((r) => setTimeout(r, 120));
   }
@@ -105,7 +119,7 @@ async function main() {
 
   await rest(`rpc/set_office_boundary`, {
     method: "POST",
-    body: JSON.stringify({ p_office_id: officeId, p_geojson: JSON.stringify(geo), p_method: "google_distance_matrix_bearing_v1", p_minutes: targetMin }),
+    body: JSON.stringify({ p_office_id: officeId, p_geojson: JSON.stringify(geo), p_method: "google_routes_bearing_v1", p_minutes: targetMin }),
   });
   console.log("  boundary stored");
 }
