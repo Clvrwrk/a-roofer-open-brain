@@ -415,6 +415,13 @@ async function main() {
     return;
   }
 
+  if (!DRY_RUN) {
+    // A crashed run can leave status='running' forever; sweep them to failed.
+    await sql(`
+UPDATE jt_mirror.sync_runs SET status = 'failed', finished_at = now(),
+  error = coalesce(error, 'stale: never finished')
+WHERE status = 'running' AND started_at < now() - interval '6 hours';`).catch(() => {});
+  }
   const runRow = DRY_RUN
     ? [{ id: 0 }]
     : await sql(`
