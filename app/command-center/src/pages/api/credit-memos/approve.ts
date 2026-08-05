@@ -26,6 +26,36 @@ export const POST: APIRoute = async ({ locals, request }) => {
   const approve = body.approve !== false;
   if (!invoiceNumber) return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber is required." }, { status: 400 });
 
+  // Hard gate (Chris 2026-08-05): every claim line of the invoice's latest re-audit run
+  // must carry a human review acknowledgment before approval.
+  if (approve) {
+    const { data: lines, error: lineError } = await client
+      .from("invoice_line_reaudit")
+      .select("run_label, variance_ext, reviewed_at, created_at")
+      .eq("invoice_number", invoiceNumber)
+      .eq("classification", "discrepancy")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (lineError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: lineError.message }, { status: 409 });
+    const latestRun = lines?.[0]?.run_label;
+    const claims = (lines ?? []).filter((l) => l.run_label === latestRun && Number(l.variance_ext ?? 0) >= 0.05);
+    if (claims.length === 0) {
+      return jsonApiResponse({
+        error: "no_claim_lines",
+        error_description: "No claim lines on file under the current pricing engine — a re-audit run must back this request before it can be approved.",
+      }, { status: 409 });
+    }
+    const unreviewed = claims.filter((l) => !l.reviewed_at).length;
+    if (unreviewed > 0) {
+      return jsonApiResponse({
+        error: "lines_not_reviewed",
+        error_description: `${unreviewed} of ${claims.length} claim line(s) have not been reviewed yet. Check every line to activate Approve.`,
+        claimLines: claims.length,
+        reviewedLines: claims.length - unreviewed,
+      }, { status: 409 });
+    }
+  }
+
   const nowIso = new Date().toISOString();
   const { data, error } = await client
     .from("credit_memo_requests")

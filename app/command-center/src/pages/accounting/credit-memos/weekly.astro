@@ -7,10 +7,10 @@ import AppShell from "../../../layouts/AppShell.astro";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 interface CmLine {
-  invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
+  id: number; invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
   office_price: number; variance_ext: number; office_name: string; agreement_number: string | null;
   agreement_effective: string | null; agreement_expiry: string | null; match_method: string; paexp_tag: string | null;
-  run_label: string; created_at: string;
+  run_label: string; created_at: string; reviewed_by: string | null; reviewed_at: string | null;
 }
 
 const { client } = createServerSupabaseClient();
@@ -34,7 +34,7 @@ if (client) {
   if (invoiceNumbers.length) {
     const { data: lineRows } = await client
       .from("invoice_line_reaudit")
-      .select("run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at")
+      .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
       .in("invoice_number", invoiceNumbers)
       .eq("classification", "discrepancy")
       .order("created_at", { ascending: false })
@@ -121,13 +121,42 @@ const reasonFor = (l: CmLine) => {
         )}
         {draftFor(vendor).length > 0 && (
           <div class="cmw-drafts">
-            <p class="cmw-drafts-title">Awaiting approval ({vendor}) — Approve adds the invoice to this vendor's email:</p>
-            {draftFor(vendor).map((r) => (
-              <span class="cmw-draft">
-                <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>{r.invoice_number}</a> · {money(r.expected_credit)}
-                {r.expected_credit >= 0.05 && <button class="cmw-approve" data-cm-approve={r.invoice_number} type="button">Approve</button>}
-              </span>
-            ))}
+            <p class="cmw-drafts-title">Awaiting approval ({vendor}) — check every claim line to activate Approve; Approve adds the invoice to this vendor's email:</p>
+            {draftFor(vendor).map((r) => {
+              const claimLines = linesByInvoice.get(r.invoice_number) ?? [];
+              const reviewed = claimLines.filter((l) => l.reviewed_at).length;
+              const allReviewed = claimLines.length > 0 && reviewed === claimLines.length;
+              return (
+                <details class="cmw-draft-block" data-invoice={r.invoice_number}>
+                  <summary>
+                    <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`} onclick="event.stopPropagation()">{r.invoice_number}</a>
+                    <span>· {money(r.expected_credit)} · <span data-review-count>{reviewed}</span>/{claimLines.length} lines reviewed</span>
+                    {claimLines.length > 0 && (
+                      <button class="cmw-approve" data-cm-approve={r.invoice_number} disabled={!allReviewed}
+                        title={allReviewed ? "Add this invoice to the vendor email" : "Review (check) every claim line first"} type="button">Approve</button>
+                    )}
+                    {claimLines.length === 0 && <span class="cmw-noclaims">no claim lines</span>}
+                  </summary>
+                  {claimLines.length > 0 && (
+                    <table>
+                      <thead><tr><th>Reviewed</th><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement</th><th class="num">Credit</th></tr></thead>
+                      <tbody>
+                        {claimLines.map((l) => (
+                          <tr>
+                            <td class="chk"><input type="checkbox" data-review-line={l.id} checked={!!l.reviewed_at} title={l.reviewed_at ? `Reviewed by ${l.reviewed_by} ${String(l.reviewed_at).slice(0, 10)}` : "Mark this claim line as reviewed"} /></td>
+                            <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
+                            <td class="num">{Number(l.quantity)}</td>
+                            <td class="num">{money(Number(l.invoiced_price))}</td>
+                            <td class="num">{money(Number(l.office_price))}</td>
+                            <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </details>
+              );
+            })}
           </div>
         )}
       </details>
@@ -158,11 +187,47 @@ const reasonFor = (l: CmLine) => {
   .cmw-reason{color:#666;font-size:12px}
   .cmw-drafts{border-top:1px dashed #e3e8ef;padding:10px 16px 14px}
   .cmw-drafts-title{font-size:12px;color:#6b7886;font-weight:700;margin:0 0 6px}
-  .cmw-draft{display:inline-flex;align-items:center;gap:6px;background:#eceff4;border-radius:8px;padding:4px 9px;font-size:12px;margin:0 6px 6px 0}
+  .cmw-draft-block{border:1px solid #e3e8ef;border-radius:9px;margin:0 0 8px;background:#f7f8fb}
+  .cmw-draft-block>summary{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;cursor:pointer;flex-wrap:wrap}
+  .cmw-draft-block table{width:100%;border-collapse:collapse;font-size:12.5px;border-top:1px solid #e3e8ef}
+  .cmw-draft-block th,.cmw-draft-block td{border-bottom:1px solid #e3e8ef;padding:6px 8px;text-align:left}
+  .cmw-draft-block th.num,.cmw-draft-block td.num{text-align:right}
+  .cmw-draft-block td.chk{text-align:center;width:64px}
+  .cmw-draft-block td.chk input{width:16px;height:16px;accent-color:#137a4d;cursor:pointer}
+  .cmw-noclaims{color:#6b7886;font-size:12px}
+  .cmw-approve:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
   .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
 </style>
 
 <script>
+  // Per-line review acknowledgment (Chris 2026-08-05): checking a line stamps
+  // reviewed_by/at; the Approve button stays greyed until every line is checked.
+  document.addEventListener("change", async (ev) => {
+    const box = ev.target as HTMLInputElement;
+    if (!box?.matches?.("[data-review-line]")) return;
+    const reviewed = box.checked;
+    box.disabled = true;
+    const res = await fetch("/api/credit-memos/review-line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ lineId: Number(box.dataset.reviewLine), reviewed }),
+    }).then((r) => r.json()).catch(() => null);
+    box.disabled = false;
+    if (!res?.lineId) { box.checked = !reviewed; window.alert("Saving the review failed: " + (res?.error_description || res?.error || "network error")); return; }
+    const block = box.closest(".cmw-draft-block") as HTMLElement;
+    const boxes = [...block.querySelectorAll<HTMLInputElement>("[data-review-line]")];
+    const done = boxes.filter((b) => b.checked).length;
+    const counter = block.querySelector("[data-review-count]");
+    if (counter) counter.textContent = String(done);
+    const approveBtn = block.querySelector("[data-cm-approve]") as HTMLButtonElement | null;
+    if (approveBtn) {
+      const all = done === boxes.length;
+      approveBtn.disabled = !all;
+      approveBtn.title = all ? "Add this invoice to the vendor email" : "Review (check) every claim line first";
+    }
+  });
+
   document.addEventListener("click", async (ev) => {
     const btn = (ev.target as HTMLElement)?.closest?.("[data-cm-approve]") as HTMLButtonElement | null;
     if (!btn) return;

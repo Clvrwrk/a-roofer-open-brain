@@ -50,14 +50,14 @@ if (root && dataEl && mount) {
   }
 
   /* ---- credit memo requests (v2 R2, docs/82): Approve-into-weekly-email flow ---- */
-  const cmByInvoice = new Map<string, { status: string; expectedCredit: number }>();
+  const cmByInvoice = new Map<string, { status: string; expectedCredit: number; claimLines: number; reviewedLines: number }>();
   async function loadCreditMemoRequests() {
     try {
       const res = await fetch("/api/credit-memos/pending", { credentials: "same-origin", cache: "no-store" });
       const payload = await res.json();
       if (!payload?.requests) return;
       cmByInvoice.clear();
-      for (const r of payload.requests) cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit });
+      for (const r of payload.requests) cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
         const det = node.closest("details.iv-inv") as HTMLElement | null;
@@ -271,7 +271,15 @@ if (root && dataEl && mount) {
       // legacy/zero-credit draft — nothing claimable; no approve action
       return `<span class="pill pill-grey" title="Credit memo request on file with no recoverable credit">CM draft · ${amt}</span>`;
     }
-    return `<span class="pill pill-orange" title="Credit memo request drafted — approve to add it to this week's vendor email">CM draft · ${amt}</span>` +
+    // Chris 2026-08-05: every claim line must carry a human review acknowledgment
+    // (checkboxes on the Weekly Credit Memo Request page) before Approve activates.
+    const allReviewed = cm.claimLines > 0 && cm.reviewedLines >= cm.claimLines;
+    const reviewBadge = cm.claimLines > 0 ? ` · ${cm.reviewedLines}/${cm.claimLines} reviewed` : "";
+    if (!allReviewed) {
+      return `<span class="pill pill-orange" title="Credit memo request drafted — review every claim line to activate Approve">CM draft · ${amt}${reviewBadge}</span>` +
+        `<button class="iv-mark" disabled title="Greyed until all ${cm.claimLines} claim line(s) are checked as reviewed — open the Weekly Credit Memo Request page" onclick="event.stopPropagation()">Approve</button>`;
+    }
+    return `<span class="pill pill-orange" title="All claim lines reviewed — approve to add to this week's vendor email">CM draft · ${amt}${reviewBadge}</span>` +
       `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="1" title="Approve into this week's credit memo request email" onclick="event.stopPropagation()">Approve</button>`;
   }
 
