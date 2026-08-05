@@ -735,10 +735,12 @@ function emptyInvoiceAuditData(): InvoiceAuditData {
       openInvoices: 0,
       paidInvoices: 0,
       actionableInvoices: 0,
+      dueNow: 0,
       toBePaid: 0,
       payable: 0,
       held: 0,
       awaitingPayment: 0,
+      transferred: 0,
     },
   };
 }
@@ -1016,7 +1018,10 @@ export async function loadInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(),
         }
         return data;
       })
-      .catch(() => {
+      .catch((error) => {
+        // Surface the real failure — silently returning the empty summary made a DB-side
+        // regression look like "Supabase pending" with no trace (2026-08-05).
+        console.error("[invoice-audit] summary load failed:", error instanceof Error ? error.message : error);
         if (invoiceAuditSummaryCache && isUsefulInvoiceAuditSummary(invoiceAuditSummaryCache.data)) {
           return invoiceAuditSummaryCache.data;
         }

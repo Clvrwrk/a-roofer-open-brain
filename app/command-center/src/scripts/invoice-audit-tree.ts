@@ -7,35 +7,13 @@ interface Category { key: string; label: string; sortOrder: number; }
 interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
-interface Action { id: string; group: string; label: string; hint: string; }
-interface CommunicationMessagePreview {
-  id: string;
-  channel_type: "slack" | "email";
-  subject: string;
-  body_html: string;
-  body_text: string;
-  recipients: string[];
-  attachments: Array<{ label: string; href: string }>;
-  validation_state: "pending" | "ready" | "failed";
-  validation_errors: string[];
-}
-interface CommunicationPreviewPayload {
-  threadId: string;
-  status: string;
-  subject: string;
-  validationState: "pending" | "ready" | "failed";
-  validationErrors: string[];
-  messages: CommunicationMessagePreview[];
-}
-
 const root = document.querySelector(".iv") as HTMLElement | null;
 const dataEl = document.getElementById("iv-data");
 const mount = document.getElementById("iv-tree");
 
 if (root && dataEl && mount) {
-  const payload = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; actions: Action[]; categories: Category[] };
+  const payload = JSON.parse(dataEl.textContent || "{}") as { offices: Office[]; categories: Category[] };
   const offices = payload.offices ?? [];
-  const actions = payload.actions ?? [];
   const categories = payload.categories ?? [];
   const catList: Category[] = (categories ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
   const catLabel = new Map(catList.map((c) => [c.key, c.label]));
@@ -55,7 +33,7 @@ if (root && dataEl && mount) {
   const refreshToBePaid = (inv: Invoice) => { inv.toBePaid = isToBePaid(inv); return inv.toBePaid; };
 
   function syncPayloadSnapshot() {
-    dataEl.textContent = JSON.stringify({ offices, actions, categories }).replace(/</g, "\\u003c");
+    dataEl.textContent = JSON.stringify({ offices, categories }).replace(/</g, "\\u003c");
   }
 
   /* ---- actor attribution badge (docs/59 Task 5) ---- */
@@ -71,13 +49,22 @@ if (root && dataEl && mount) {
     return b ? ` <span class="pill ${b.cls}" title="${esc(b.tip)}">${b.lab}</span>` : "";
   }
 
-  /* ---- line + disposition (lazy) ---- */
+  /* ---- discrepancy lines (lazy; docs/81 v2 — no dispositions) ---- */
+  // v2 classification is binary vs the matched agreement price: over price, No-Price,
+  // or UOM mismatch = discrepancy (shown); everything else is valid (hidden).
+  const isDiscrepancy = (l: InvLine) =>
+    l.uomMismatch || l.negotiatedPrice == null || (l.qty > 0 && l.unitPrice > l.negotiatedPrice);
+  const lineCredit = (l: InvLine) =>
+    !l.uomMismatch && l.negotiatedPrice != null && l.qty > 0 && l.unitPrice > l.negotiatedPrice
+      ? (l.unitPrice - l.negotiatedPrice) * l.qty
+      : 0;
   function auditCell(l: InvLine): string {
     if (l.audited) {
       const meta = [l.auditNote, l.agreementId ? `Agreement #${l.agreementId}${l.agreementCurrent === false ? " (expired " + l.agreementExpiry + ")" : ""}` : "", l.auditedAt].filter(Boolean).join(" · ");
       return `<span class="iv-audited" title="${esc(meta)}">✓ ${esc(l.actorLabel || l.auditedBy || "Passed")}</span>${actorBadge(l.actorKind)}`;
     }
-    return `<button class="iv-mark" data-mark data-line="LIDX">Mark passed</button>`;
+    const credit = lineCredit(l);
+    return credit > 0 ? `<span class="pill pill-red" title="Credit memo candidate">CM ${money2(credit)}</span>` : '<span class="pill pill-grey">Review</span>';
   }
   // The 3rd price column is contextual (docs/59 D5/D7): newest prior invoice for normal
   // invoices, the referenced original-invoice price for credit memos.
@@ -100,13 +87,14 @@ if (root && dataEl && mount) {
     const negCell = l.uomMismatch
       ? `<span class="pill pill-orange" title="Agreement priced per ${esc(l.negotiatedUom || "?")} but invoiced per ${esc(l.uom)} — review">UOM mismatch</span>`
       : (l.negotiatedPrice == null ? '<span class="pill pill-red">No Price</span>' : `${money2(l.negotiatedPrice)} <span class="pill pill-green">Negotiated</span>`);
-    // Var%/$ + tolerance reflect the benchmark cascade (negotiated → API → recent/org-inv).
-    // UOM-mismatched lines have no meaningful price comparison → keep them in manual review.
+    // v2: Var%/$ compare to the matched agreement (negotiated) price ONLY — the
+    // benchmark cascade no longer drives classification (docs/81 decision 5).
+    // UOM-mismatched lines have no meaningful price comparison → manual review.
     const tolCell = l.uomMismatch
       ? '<span class="pill pill-grey">Review (UOM)</span>'
-      : `<span class="pill ${tolCls(l.cascadeVariancePct)}">${tolLab(l.cascadeVariancePct)}</span>`;
-    const varPctCell = l.uomMismatch || l.cascadeVariancePct == null ? "—" : pct(l.cascadeVariancePct) + benchBadge(l.benchmarkSource, l.benchmarkPrice);
-    const varExtCell = l.uomMismatch || l.cascadeVarianceExt == null ? "—" : money2(l.cascadeVarianceExt);
+      : `<span class="pill ${tolCls(l.variancePct)}">${tolLab(l.variancePct)}</span>`;
+    const varPctCell = l.uomMismatch || l.variancePct == null ? "—" : pct(l.variancePct);
+    const varExtCell = l.uomMismatch || l.varianceExt == null ? "—" : money2(l.varianceExt);
     return `
       <tr class="iv-ln${l.audited ? " is-audited" : ""}" data-line="${li}">
         <td class="iv-sku">${esc(l.itemNumber)}</td>
@@ -121,14 +109,16 @@ if (root && dataEl && mount) {
         <td class="num">${varPctCell}</td>
         <td class="num">${varExtCell}</td>
         <td>${tolCell}</td>
-        <td class="iv-audit-cell">${auditCell(l).replace("LIDX", String(li))}</td>
+        <td class="iv-audit-cell">${auditCell(l)}</td>
       </tr>`;
   }
-  // Group lines into collapsible roof-system category sections (preserving each line's
-  // original index so disposition still maps to inv.lines[idx]). Default-collapsed.
+  // v2 audit view (docs/81 decision 6): show ONLY discrepancy lines — over agreement
+  // price, No-Price, or UOM mismatch — grouped into roof-system category sections.
+  // Valid lines are hidden entirely; the human's only decision is the credit memo.
   function invoiceBody(inv: Invoice): string {
     const groups = new Map<string, number[]>();
     inv.lines.forEach((l, li) => {
+      if (!isDiscrepancy(l)) return;
       const k = l.categoryKey || "uncategorized";
       (groups.get(k) ?? (groups.set(k, []), groups.get(k)!)).push(li);
     });
@@ -157,39 +147,14 @@ if (root && dataEl && mount) {
         </details>`;
     }).join("");
 
+    const totalCredit = inv.lines.reduce((s, l) => s + lineCredit(l), 0);
+    const discCount = inv.lines.filter(isDiscrepancy).length;
+    const cmLead = discCount
+      ? `<div class="iv-disp-lead">Credit memo candidate: <b>${money2(totalCredit)}</b> across ${discCount} discrepancy line(s) — approved via the weekly credit memo request. <a href="/accounting/credit-memos/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener">View credit memo request →</a></div>`
+      : "";
     return `
-      <div class="iv-cats">${sections || '<p class="iv-disp-lead">No lines.</p>'}</div>
-      <div class="iv-disp"><div class="iv-disp-lead">Select a line item above to disposition it, or use “Mark passed”.</div></div>`;
-  }
-
-  async function recordAudit(inv: Invoice, l: InvLine, body: { status?: string; decision?: string; note: string }) {
-    try {
-      const res = await fetch("/api/invoice-audit/mark", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ invoiceLineId: l.lineId, invoiceNumber: inv.invoiceNumber, itemNumber: l.itemNumber, status: body.status ?? "passed", decision: body.decision, note: body.note }) });
-      const r = await res.json();
-      if (!r.ok) { toast("Save failed: " + (r.error_description || r.error || "error")); return; }
-      l.audited = (body.status ?? "passed") === "passed";
-      l.auditStatus = body.status ?? "passed";
-      l.auditedBy = r.record?.approved_by || "operator";
-      l.auditNote = r.record?.approval_note || body.note;
-      l.auditSource = "manual";
-      l.auditedAt = (r.record?.decided_at || "").slice(0, 10);
-      // Manual mark from the dashboard = a human operator (docs/59 Task 5).
-      l.actorLabel = l.auditedBy;
-      l.actorKind = "human";
-      l.actorPersona = null;
-      inv.auditedLines = inv.lines.filter((x) => x.audited).length;
-      inv.pendingLines = inv.lines.length - inv.auditedLines;
-      // A credit-flag disposition puts the WHOLE invoice on a do-not-pay hold
-      // (docs/63 Change 1b) — reflect it immediately so the pills/roll-ups
-      // match what the server will report on the next load.
-      if (body.decision === "credit-flag") { inv.held = true; inv.approvedToPay = false; }
-      refreshToBePaid(inv);
-      syncPayloadSnapshot();
-      reRenderInvoice(inv);
-      toast("Audit recorded: " + body.note);
-    } catch (e) {
-      toast("Save failed — network error");
-    }
+      ${cmLead}
+      <div class="iv-cats">${sections || '<p class="iv-disp-lead">No discrepancies — every line is within agreement pricing (or no agreement applies → valid as billed).</p>'}</div>`;
   }
 
   // docs/59 Task 6 — per-invoice "Go back". Confirms, calls the WorkOS-gated reset
@@ -238,137 +203,6 @@ if (root && dataEl && mount) {
     }
   }
 
-  function parsePreview(raw: any): CommunicationPreviewPayload {
-    const messages = Array.isArray(raw?.messages) ? raw.messages : [];
-    return {
-      threadId: String(raw?.threadId ?? ""),
-      status: String(raw?.status ?? "draft"),
-      subject: String(raw?.subject ?? ""),
-      validationState: raw?.validationState === "failed" ? "failed" : raw?.validationState === "ready" ? "ready" : "pending",
-      validationErrors: Array.isArray(raw?.validationErrors) ? raw.validationErrors.map((v: unknown) => String(v)) : [],
-      messages: messages.map((msg: any) => ({
-        id: String(msg.id ?? ""),
-        channel_type: msg.channel_type === "email" ? "email" : "slack",
-        subject: String(msg.subject ?? ""),
-        body_html: String(msg.body_html ?? ""),
-        body_text: String(msg.body_text ?? ""),
-        recipients: Array.isArray(msg.recipients) ? msg.recipients.map((v: unknown) => String(v)) : [],
-        attachments: Array.isArray(msg.attachments) ? msg.attachments.map((a: any) => ({ label: String(a?.label ?? "Attachment"), href: String(a?.href ?? "#") })) : [],
-        validation_state: msg.validation_state === "failed" ? "failed" : msg.validation_state === "ready" ? "ready" : "pending",
-        validation_errors: Array.isArray(msg.validation_errors) ? msg.validation_errors.map((v: unknown) => String(v)) : [],
-      })),
-    };
-  }
-
-  function sanitizeClientHtml(input: string) {
-    return String(input ?? "")
-      .replace(/<\s*(script|style|iframe|object|embed|link|meta)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
-      .replace(/\son\w+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, "")
-      .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, " $1=\"#\"");
-  }
-
-  async function createPreview(inv: Invoice, l: InvLine, action: Action): Promise<CommunicationPreviewPayload | null> {
-    try {
-      const status = action.group === "credit" ? "disputed" : "passed";
-      const res = await fetch("/api/invoice-audit/communications/preview", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          invoiceLineId: l.lineId,
-          invoiceNumber: inv.invoiceNumber,
-          itemNumber: l.itemNumber,
-          itemDescription: l.itemDescription,
-          triggerAction: action.id,
-          auditStatus: status,
-          note: action.label,
-          unitPrice: l.unitPrice,
-          negotiatedPrice: l.negotiatedPrice,
-          variancePct: l.variancePct,
-          varianceExt: l.varianceExt,
-        }),
-      });
-      const payload = await res.json();
-      if (!payload?.ok) {
-        toast("Preview failed: " + (payload?.error_description || payload?.error || "error"));
-        return null;
-      }
-      return parsePreview(payload.preview);
-    } catch {
-      toast("Preview failed - network error");
-      return null;
-    }
-  }
-
-  async function runCommunicationAction(threadId: string, action: string, payload: Record<string, unknown> = {}) {
-    const res = await fetch("/api/invoice-audit/communications/action", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ threadId, action, ...payload }),
-    });
-    return res.json();
-  }
-
-  function openWysiwygModal(title: string, initialHtml: string, onSubmit: (html: string, text: string) => Promise<void>) {
-    const overlay = document.createElement("div");
-    overlay.className = "iv-modal";
-    overlay.innerHTML = `
-      <div class="iv-modal-card">
-        <div class="iv-modal-head">
-          <strong>${esc(title)}</strong>
-          <button class="iv-modal-close" type="button" aria-label="Close">×</button>
-        </div>
-        <div class="iv-wysiwyg-tools">
-          <button type="button" data-cmd="bold"><b>B</b></button>
-          <button type="button" data-cmd="italic"><i>I</i></button>
-          <button type="button" data-cmd="insertUnorderedList">• List</button>
-          <button type="button" data-cmd="createLink">Link</button>
-        </div>
-        <div class="iv-wysiwyg" contenteditable="true"></div>
-        <div class="iv-modal-actions">
-          <button type="button" class="iv-modal-btn" data-role="cancel">Cancel</button>
-          <button type="button" class="iv-modal-btn iv-modal-btn-primary" data-role="save">Save</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const editor = overlay.querySelector(".iv-wysiwyg") as HTMLElement;
-    editor.innerHTML = initialHtml;
-    const close = () => overlay.remove();
-    overlay.querySelector(".iv-modal-close")?.addEventListener("click", close);
-    overlay.querySelector('[data-role="cancel"]')?.addEventListener("click", close);
-    overlay.addEventListener("click", (ev) => {
-      if (ev.target === overlay) close();
-    });
-    overlay.querySelectorAll<HTMLButtonElement>(".iv-wysiwyg-tools [data-cmd]").forEach((button) =>
-      button.addEventListener("click", () => {
-        const cmd = button.dataset.cmd || "";
-        if (cmd === "createLink") {
-          const href = window.prompt("Link URL");
-          if (!href) return;
-          const trimmed = href.trim();
-          const isRelative = trimmed.startsWith("/");
-          const isHttp = /^https?:\/\/[^\s]+$/i.test(trimmed);
-          if (!isRelative && !isHttp) {
-            toast("Links must be http(s) or relative URLs");
-            return;
-          }
-          document.execCommand(cmd, false, trimmed);
-          return;
-        }
-        document.execCommand(cmd, false);
-      }),
-    );
-    overlay.querySelector('[data-role="save"]')?.addEventListener("click", async () => {
-      const html = editor.innerHTML.trim();
-      const text = (editor.textContent || "").trim();
-      if (!html) {
-        toast("Content is required");
-        return;
-      }
-      await onSubmit(html, text);
-      close();
-    });
-  }
-
   function reRenderInvoice(inv: Invoice) {
     const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(inv.invoiceNumber)}"]`) as HTMLElement | null;
     const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
@@ -401,211 +235,9 @@ if (root && dataEl && mount) {
     if (filtersReady) applyFilter();
   }
 
-  function bindInvoice(det: HTMLDetailsElement, inv: Invoice) {
-    const disp = det.querySelector(".iv-disp") as HTMLElement;
-    det.querySelectorAll<HTMLButtonElement>("[data-mark]").forEach((b) =>
-      b.addEventListener("click", (ev) => { ev.stopPropagation(); recordAudit(inv, inv.lines[+b.dataset.line!], { status: "passed", note: "Manually passed" }); }));
-    const dispReset = '<div class="iv-disp-lead">Select a line item above to disposition it, or use “Mark passed”.</div>';
-    let selectedLine: InvLine | null = null;
-    let selectedAction: Action | null = null;
-    let previewState: CommunicationPreviewPayload | null = null;
-
-    // Clear any selected line + collapse the disposition panel back to its prompt.
-    const clearSelection = () => {
-      det.querySelectorAll(".iv-ln").forEach((r) => r.classList.remove("sel"));
-      disp.innerHTML = dispReset;
-      selectedLine = null;
-      selectedAction = null;
-      previewState = null;
-    };
-    // Collapsing a category section nests its lines away → universal deselect, so the
-    // disposition panel never lingers under a collapsed line (client request 2026-06-28).
-    det.querySelectorAll<HTMLDetailsElement>(".iv-cat").forEach((cat) =>
-      cat.addEventListener("toggle", () => { if (!cat.open) clearSelection(); }));
-
-    const drawPreview = () => {
-      if (!selectedLine || !selectedAction) {
-        disp.querySelector<HTMLElement>('[data-panel="preview"]')!.innerHTML = '<div class="iv-disp-lead">Choose an action in the Actions tab to generate a communication preview.</div>';
-        return;
-      }
-      const panel = disp.querySelector<HTMLElement>('[data-panel="preview"]')!;
-      if (!previewState) {
-        panel.innerHTML = '<div class="iv-disp-lead">Generating preview…</div>';
-        return;
-      }
-      const msgs = previewState.messages
-        .map((msg) => {
-          const recipientLabel = msg.channel_type === "slack" ? "Channel" : "Recipients";
-          const recipientValue = msg.recipients.length ? msg.recipients.join(", ") : "Not resolved";
-          const attachments = msg.attachments.length
-            ? `<ul class="iv-attachments">${msg.attachments.map((a) => `<li><a href="${esc(a.href)}" target="_blank" rel="noopener">${esc(a.label)}</a></li>`).join("")}</ul>`
-            : '<p class="iv-msg-muted">No attachments</p>';
-          const valClass = msg.validation_state === "ready" ? "pill-green" : msg.validation_state === "failed" ? "pill-red" : "pill-yellow";
-          const valErrors = msg.validation_errors.length
-            ? `<div class="iv-msg-errors">${msg.validation_errors.map((err) => `<span class="pill pill-red">${esc(err)}</span>`).join("")}</div>`
-            : "";
-          return `
-            <article class="iv-msg-card" data-channel="${msg.channel_type}">
-              <header><span class="pill ${valClass}">${esc(msg.channel_type.toUpperCase())}</span> <strong>${esc(msg.subject)}</strong></header>
-              <div class="iv-msg-row"><b>${recipientLabel}:</b> ${esc(recipientValue)}</div>
-              <div class="iv-msg-body">${sanitizeClientHtml(msg.body_html)}</div>
-              <div class="iv-msg-row"><b>Attachments:</b>${attachments}</div>
-              ${valErrors}
-            </article>`;
-        })
-        .join("");
-      const validationPills = previewState.validationErrors.length
-        ? previewState.validationErrors.map((err) => `<span class="pill pill-red">${esc(err)}</span>`).join("")
-        : '<span class="pill pill-green">All validation checks passed</span>';
-      panel.innerHTML = `
-        <div class="iv-preview-head">
-          <div><strong>${esc(previewState.subject)}</strong></div>
-          <div class="iv-msg-muted">Thread ${esc(previewState.threadId.slice(0, 8))} · ${esc(previewState.status)}</div>
-        </div>
-        <div class="iv-preview-validation">${validationPills}</div>
-        <div class="iv-msg-grid">${msgs || '<div class="iv-disp-lead">No channel drafts returned.</div>'}</div>
-        <div class="iv-exec-row">
-          <button class="iv-exec approve" data-exec="approve">Approved</button>
-          <button class="iv-exec edit" data-exec="edit">Edit (WYSIWYG)</button>
-          <button class="iv-exec reject" data-exec="reject">Rejected (reason)</button>
-          <button class="iv-exec delete" data-exec="delete">Delete</button>
-        </div>`;
-      panel.querySelectorAll<HTMLButtonElement>(".iv-exec").forEach((button) =>
-        button.addEventListener("click", async () => {
-          if (!previewState || !selectedLine || !selectedAction) return;
-          const mode = button.dataset.exec || "";
-          if (mode === "approve") {
-            const response = await runCommunicationAction(previewState.threadId, "approve");
-            if (!response?.ok) {
-              toast("Approve failed: " + (response?.error_description || response?.error || "error"));
-              return;
-            }
-            const status = selectedAction.group === "credit" ? "disputed" : "passed";
-            selectedLine.audited = status === "passed";
-            selectedLine.auditStatus = status;
-            selectedLine.auditedBy = response?.result?.auditRecord?.approved_by || "operator";
-            selectedLine.auditNote = selectedAction.label;
-            selectedLine.auditSource = "manual";
-            selectedLine.auditedAt = String(response?.result?.auditRecord?.decided_at || "").slice(0, 10);
-            // Disposition applied from the dashboard = a human operator (docs/59 Task 5).
-            selectedLine.actorLabel = selectedLine.auditedBy;
-            selectedLine.actorKind = "human";
-            selectedLine.actorPersona = null;
-            inv.auditedLines = inv.lines.filter((x) => x.audited).length;
-            inv.pendingLines = inv.lines.length - inv.auditedLines;
-            refreshToBePaid(inv);
-            reRenderInvoice(inv);
-            toast("Communication approved and queued for release");
-            return;
-          }
-          if (mode === "delete") {
-            const response = await runCommunicationAction(previewState.threadId, "delete");
-            if (!response?.ok) {
-              toast("Delete failed: " + (response?.error_description || response?.error || "error"));
-              return;
-            }
-            previewState = null;
-            drawPreview();
-            toast("Draft deleted");
-            return;
-          }
-          if (mode === "reject") {
-            openWysiwygModal("Reject reason", "<p>Reason required…</p>", async (html, text) => {
-              const response = await runCommunicationAction(previewState!.threadId, "reject", {
-                reasonHtml: html,
-                reasonText: text,
-              });
-              if (!response?.ok) {
-                toast("Reject failed: " + (response?.error_description || response?.error || "error"));
-                return;
-              }
-              previewState = null;
-              drawPreview();
-              toast("Draft rejected");
-            });
-            return;
-          }
-          if (mode === "edit") {
-            const editable = previewState.messages.find((m) => m.channel_type === "email") || previewState.messages[0];
-            if (!editable) {
-              toast("No draft available to edit");
-              return;
-            }
-            openWysiwygModal(`Edit ${editable.channel_type.toUpperCase()} draft`, editable.body_html, async (html, text) => {
-              const response = await runCommunicationAction(previewState!.threadId, "edit", {
-                channelType: editable.channel_type,
-                subject: editable.subject,
-                bodyHtml: html,
-                bodyText: text,
-              });
-              if (!response?.ok) {
-                toast("Edit failed: " + (response?.error_description || response?.error || "error"));
-                return;
-              }
-              const valid = await runCommunicationAction(previewState!.threadId, "validate");
-              if (!valid?.ok) {
-                toast("Validation failed: " + (valid?.error_description || valid?.error || "error"));
-              }
-              const refreshed = await createPreview(inv, selectedLine!, selectedAction!);
-              if (refreshed) {
-                previewState = refreshed;
-                drawPreview();
-              }
-              toast("Draft updated");
-            });
-          }
-        }));
-    };
-
-    det.querySelectorAll<HTMLElement>(".iv-ln").forEach((row) =>
-      row.addEventListener("click", () => {
-        // Click an already-active line to deselect + collapse the disposition
-        // panel (keeps long invoices from running off-screen).
-        const wasSel = row.classList.contains("sel");
-        clearSelection();
-        if (wasSel) return;
-        row.classList.add("sel");
-        const l = inv.lines[+row.dataset.line!];
-        selectedLine = l;
-        selectedAction = null;
-        previewState = null;
-        const accepts = actions.filter((a) => a.group === "accept");
-        const credits = actions.filter((a) => a.group === "credit");
-        const btn = (a: Action) => `<button class="iv-act ${a.group}" data-action="${a.id}" data-group="${a.group}" data-label="${esc(a.label)}"><span class="t">${esc(a.label)}</span><span class="h">${esc(a.hint)}</span></button>`;
-        disp.innerHTML = `
-          <div class="iv-disp-lead">Disposition <b>${esc(l.itemNumber)}</b> — ${esc(l.itemDescription)} · Inv ${money2(l.unitPrice)} vs ${l.benchmarkPrice != null ? money2(l.benchmarkPrice) : (l.negotiatedPrice == null ? "No benchmark" : money2(l.negotiatedPrice))}${(!l.uomMismatch && l.cascadeVariancePct != null) ? ` · <span class="pill ${tolCls(l.cascadeVariancePct)}">${pct(l.cascadeVariancePct)} ${tolLab(l.cascadeVariancePct)}</span>${benchBadge(l.benchmarkSource, l.benchmarkPrice)}` : ""}${l.audited ? ` · <span class="pill pill-green">Audited · ${esc(l.actorLabel || l.auditedBy)}</span>${actorBadge(l.actorKind)}` : ""}</div>
-          <div class="iv-disp-tabs">
-            <button type="button" data-tab="actions" class="is-active">Actions</button>
-            <button type="button" data-tab="preview">Communications Preview</button>
-          </div>
-          <div class="iv-disp-panel" data-panel="actions">
-            <div class="iv-grid2"><div class="iv-grp">Accept pricing</div>${accepts.map(btn).join("")}<div class="iv-grp">Dispute — generate credit memo</div>${credits.map(btn).join("")}</div>
-          </div>
-          <div class="iv-disp-panel is-hidden" data-panel="preview"></div>`;
-        const setTab = (tab: "actions" | "preview") => {
-          disp.querySelectorAll<HTMLButtonElement>(".iv-disp-tabs [data-tab]").forEach((button) =>
-            button.classList.toggle("is-active", button.dataset.tab === tab));
-          disp.querySelectorAll<HTMLElement>(".iv-disp-panel").forEach((panel) =>
-            panel.classList.toggle("is-hidden", panel.dataset.panel !== tab));
-        };
-        disp.querySelectorAll<HTMLButtonElement>(".iv-disp-tabs [data-tab]").forEach((button) =>
-          button.addEventListener("click", () => setTab((button.dataset.tab as "actions" | "preview") || "actions")));
-        disp.querySelectorAll<HTMLButtonElement>(".iv-act").forEach((b) =>
-          b.addEventListener("click", async () => {
-            disp.querySelectorAll(".iv-act").forEach((x) => x.classList.remove("chosen"));
-            b.classList.add("chosen");
-            selectedAction = actions.find((a) => a.id === b.dataset.action) || null;
-            if (!selectedAction) return;
-            setTab("preview");
-            previewState = null;
-            drawPreview();
-            const preview = await createPreview(inv, l, selectedAction);
-            if (!preview) return;
-            previewState = preview;
-            drawPreview();
-          }));
-      }));
-  }
+  // v2 (docs/81): no dispositions, no comms preview — the invoice body is read-only
+  // discrepancy detail. Kept as the single post-render hook for future bindings.
+  function bindInvoice(_det: HTMLDetailsElement, _inv: Invoice) {}
 
   /* ---- tree render ---- */
   function invoiceTags(inv: Invoice): string {
@@ -614,9 +246,6 @@ if (root && dataEl && mount) {
       inv.pendingLines > 0 ? `<span class="pill pill-brand">${inv.pendingLines}/${inv.lineCount} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
       inv.isCreditMemo ? '<span class="pill pill-grey">Credit Memo</span>' : "",
       inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
-      inv.toBePaid && isPayable(inv) ? '<span class="pill pill-pay"><input type="checkbox" checked disabled aria-label="To Be Paid" /> To Be Paid</span>' : "",
-      inv.toBePaid && !isPayable(inv) ? '<span class="pill pill-yellow" title="Fully reviewed but on a do-not-pay hold until its credit memo arrives — excluded from Process; still loads via Register CSV">Held — credit memo</span>' : "",
-      inv.awaitingPayment ? '<span class="pill pill-brand" title="Exported for payment; not yet confirmed paid">Awaiting Payment</span>' : "",
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
       inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
@@ -684,7 +313,6 @@ if (root && dataEl && mount) {
   function branchTags(r: Roll): string {
     return [
       `<span class="pill pill-grey">${r.invoiceCount} invoices</span>`,
-      r.toBePaid ? `<span class="pill pill-pay">${r.toBePaid} to be paid</span>` : "",
       r.pending ? `<span class="pill pill-brand">${r.pending} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
       r.atRisk > 0 ? `<span class="pill pill-red">${money(r.atRisk)} at risk</span>` : "",
       r.noPrice ? `<span class="pill pill-yellow">${r.noPrice} no-price</span>` : "",
@@ -693,7 +321,6 @@ if (root && dataEl && mount) {
   function officeMini(r: Roll): string {
     return [
       `<div><strong>${r.pending}</strong><span>To Audit</span></div>`,
-      `<div><strong>${r.toBePaid}</strong><span>To Pay</span></div>`,
       `<div><strong>${r.invoiceCount}</strong><span>Invoices</span></div>`,
       `<div><strong>${money(r.atRisk)}</strong><span>At Risk</span></div>`,
       `<div><strong>${r.noPrice}</strong><span>No-Price</span></div>`,
@@ -1030,112 +657,56 @@ if (root && dataEl && mount) {
     document.body.appendChild(a); a.click(); a.remove();
   }
 
+  // v2 Process (docs/81 decision 9): pure status stamp — every Invoice Audit Pending
+  // invoice flips to Invoice Audit Complete with a completion date. No export.
   const processBtn = document.getElementById("iv-process") as HTMLButtonElement | null;
   processBtn?.addEventListener("click", async () => {
     const count = parseInt(processBtn.dataset.count || "0", 10);
     if (!count) return;
-    if (!window.confirm(`Export ${count} fully-reviewed invoice(s) for payment and download the QuickBooks CSV?\n\nThey move to Awaiting Payment — this does NOT mark them paid.`)) return;
+    if (!window.confirm(`Stamp ${count} audited invoice(s) INVOICE AUDIT COMPLETE with today's date?\n\nThis records completion only — no files are exported and payment is unaffected.`)) return;
     processBtn.disabled = true;
-    const { ok, data } = await postJson("/api/invoice-audit/process-batch");
-    if (!ok) { toast("Export failed: " + (data?.error_description || data?.error || "error")); processBtn.disabled = false; return; }
-    const files: any[] = data.files ?? [];
-    files.forEach((f, i) => window.setTimeout(() => triggerDownload(f.downloadUrl), i * 500));
-    toast(`Exported ${data.count} invoice(s) — ${files.length} vendor file(s)`);
-    window.setTimeout(() => window.location.reload(), 1700 + files.length * 500);
+    const { ok, data } = await postJson("/api/invoice-audit/process-stamp");
+    if (!ok) { toast("Process failed: " + (data?.error_description || data?.error || "error")); processBtn.disabled = false; return; }
+    toast(`Stamped ${data.stamped} invoice(s) Invoice Audit Complete`);
+    window.setTimeout(() => window.location.reload(), 1400);
   });
 
-  // Register CSV (docs/63 Change 1b): load every processed invoice (incl. held + transferred)
-  // to the QuickBooks register, once each, with Approved-to-Pay + Disposition columns.
-  const registerBtn = document.getElementById("iv-register");
-  registerBtn?.addEventListener("click", async () => {
-    if (!window.confirm("Load every processed invoice (including do-not-pay holds and Service/Warranty transfers) to the QuickBooks register and download the CSV?\n\nEach invoice loads once; already-loaded invoices are skipped.")) return;
-    (registerBtn as HTMLButtonElement).disabled = true;
-    const { ok, data } = await postJson("/api/invoice-audit/register-batch");
-    if (!ok) {
-      toast(data?.error === "nothing_to_register" ? "Nothing new to load to the register." : "Register export failed: " + (data?.error_description || data?.error || "error"));
-      (registerBtn as HTMLButtonElement).disabled = false;
-      return;
-    }
-    const files: any[] = data.files ?? [];
-    files.forEach((f, i) => window.setTimeout(() => triggerDownload(f.downloadUrl), i * 500));
-    toast(`Loaded ${data.count} invoice(s) to the register — ${files.length} file(s)`);
-    window.setTimeout(() => window.location.reload(), 1700 + files.length * 500);
-  });
-
+  // v2 Manage (docs/81 §2): the Awaiting Payment pill is gone. Manage lists every
+  // invoice in Paid-pending verification (60+ days past invoice date, swept server-side)
+  // with a one-click Paid-Verified toggle. Invoice-level only — no line detail.
   const payBtn = document.getElementById("iv-payments");
   let payDirty = false;
-  let pendingManageBatch: string | null = null;
+  let pendingManageBatch: string | null = null; // legacy #manage-<batchId> links still open the panel
   function closePay(overlay: HTMLElement) { overlay.remove(); if (payDirty) window.location.reload(); }
   async function renderPay(body: HTMLElement) {
     body.innerHTML = '<p class="iv-pay-empty">Loading…</p>';
-    const [batchesRes, recRes] = await Promise.all([
-      fetch("/api/invoice-audit/batches", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
-      fetch("/api/invoice-audit/reconcile", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
-    ]);
-    const batches: any[] = batchesRes?.batches ?? [];
-    const exceptions: any[] = recRes?.exceptions ?? [];
+    pendingManageBatch = null;
+    const res = await fetch("/api/invoice-audit/pending-verification", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
+    const invoices: any[] = res?.invoices ?? [];
     const parts: string[] = [];
-    parts.push(`<div class="iv-pay-row"><button class="iv-process-btn iv-secondary" data-pay="reconcile">Reconcile with ABC AR</button><span class="iv-msg-muted">Auto-confirms exported invoices ABC now reports paid.</span></div>`);
-    parts.push(`<div class="iv-pay-row"><button class="iv-process-btn iv-secondary" data-pay="release-holds">Release credit-memo holds</button><span class="iv-msg-muted">Frees held invoices whose matching credit memo has arrived → back to payable.</span></div>`);
-    parts.push(`<div class="iv-pay-sec-title">Exceptions${exceptions.length ? ` (${exceptions.length})` : ""}</div>`);
-    if (!exceptions.length) parts.push('<p class="iv-pay-empty">No reconciliation exceptions.</p>');
-    for (const e of exceptions) {
-      const lab = e.driftFlag === "exported_uncleared" ? "Exported &gt;14d, ABC still open" : "Marked paid here, ABC shows open";
-      parts.push(`<div class="iv-pay-exc"><strong>${esc(e.invoiceNumber)}</strong> — ${lab} · ${fmtMoney(e.totalDue)} <span class="iv-msg-muted">(${esc(e.ledgerStatus)} / ABC ${esc(e.abcArStatus || "—")})</span></div>`);
-    }
-    parts.push(`<div class="iv-pay-sec-title">Export batches</div>`);
-    if (!batches.length) parts.push('<p class="iv-pay-empty">No export batches yet.</p>');
-    for (const b of batches) {
-      const stamp = b.processedAt ? new Date(b.processedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-      const tags = [b.counts.exported ? `<span class="pill pill-brand">${b.counts.exported} awaiting</span>` : "", b.counts.paid ? `<span class="pill pill-green">${b.counts.paid} paid</span>` : "", b.counts.returned ? `<span class="pill pill-grey">${b.counts.returned} returned</span>` : ""].filter(Boolean).join(" ");
-      const confirmBtn = b.counts.exported > 0 ? `<button class="is-paid" data-pay="confirm" data-batch="${esc(b.batchId)}">Confirm Paid</button>` : "";
-      const returnBtn = (b.counts.exported > 0 || b.counts.paid > 0) ? `<button class="is-return" data-pay="return" data-batch="${esc(b.batchId)}">Return</button>` : "";
-      const files: any[] = b.files ?? [];
-      const title = files.length === 1 ? esc(files[0].fileName || files[0].vendor) : `${files.length} vendor files`;
-      const dl = files.map((f) => `<a href="${esc(f.downloadUrl)}" download>⬇ ${esc(f.fileName || f.vendor)} (pay file)</a>`).join("");
-      // Deliverable 2 (docs/57 §3c): decision-detail / explainability CSV for the batch.
-      const detailDl = b.detailUrl ? `<a href="${esc(b.detailUrl)}" download>⬇ Decision detail (CSV)</a>` : "";
-      parts.push(`<div class="iv-pay-batch" data-batch="${esc(b.batchId)}"><div class="iv-pay-row"><strong>${title}</strong> ${tags}</div><div class="iv-msg-muted">${stamp} · ${b.invoices.length} invoice(s) · ${fmtMoney(b.totalDue)}</div><div class="iv-pay-actions">${dl}${detailDl}${confirmBtn}${returnBtn}</div></div>`);
+    parts.push('<p class="iv-msg-muted">Invoices exported for payment whose invoice date is 60+ days old. Confirm each one actually paid — one click marks it <b>Paid-Verified</b>.</p>');
+    if (res?.swept) parts.push(`<p class="iv-msg-muted">${res.swept} invoice(s) newly moved to Paid-pending verification by the 60-day sweep.</p>`);
+    if (!invoices.length) parts.push('<p class="iv-pay-empty">Nothing pending verification.</p>');
+    for (const inv of invoices) {
+      parts.push(
+        `<div class="iv-pay-batch"><div class="iv-pay-row"><strong>${esc(inv.invoiceNumber)}</strong>` +
+        `<span class="iv-msg-muted">${esc(inv.invoiceDate || "")} · ${esc(inv.vendor || "")} · ${fmtMoney(inv.totalDue)}${inv.fileName ? " · " + esc(inv.fileName) : ""}</span>` +
+        `<span class="iv-spacer"></span>` +
+        `<button class="is-paid" data-verify="${esc(inv.invoiceNumber)}">Mark Paid-Verified</button></div></div>`,
+      );
     }
     body.innerHTML = parts.join("");
-    // Deep-link target (#manage-<batchId>): scroll to and flash the batch a
-    // Slack/email "weekly package" link pointed at (see manageDeepLink()).
-    if (pendingManageBatch) {
-      const target = body.querySelector<HTMLElement>(`.iv-pay-batch[data-batch="${CSS.escape(pendingManageBatch)}"]`);
-      pendingManageBatch = null;
-      if (target) {
-        target.scrollIntoView({ block: "center" });
-        target.style.outline = "2px solid var(--brand, #2f6fed)";
-        window.setTimeout(() => { target.style.outline = ""; }, 2400);
-      }
-    }
-    body.querySelectorAll<HTMLElement>("[data-pay]").forEach((el) => el.addEventListener("click", async () => {
-      const kind = el.dataset.pay;
-      const batchId = el.dataset.batch;
-      if (kind === "reconcile") {
-        const { ok, data } = await postJson("/api/invoice-audit/reconcile");
-        if (!ok) { toast("Reconcile failed: " + (data?.error_description || "error")); return; }
-        payDirty = true; toast(`Reconciled ${data.reconciled} · ${data.counts?.exportedUncleared || 0} uncleared, ${data.counts?.paidButArOpen || 0} drift`); renderPay(body); return;
-      }
-      if (kind === "release-holds") {
-        const { ok, data } = await postJson("/api/invoice-audit/release-credit-holds");
-        if (!ok) { toast("Release failed: " + (data?.error_description || "error")); return; }
-        payDirty = true; toast(data.count ? `Released ${data.count} credit-memo hold(s) → payable` : "No matching credit memos arrived yet."); renderPay(body); return;
-      }
-      if (kind === "confirm") {
-        if (!window.confirm("Confirm this batch actually paid? Invoices will be marked Paid.")) return;
-        const { ok, data } = await postJson("/api/invoice-audit/confirm-paid", { batchId });
-        if (!ok) { toast("Confirm failed: " + (data?.error_description || "error")); return; }
-        payDirty = true; toast(`Confirmed ${data.confirmed} invoice(s) paid`); renderPay(body); return;
-      }
-      if (kind === "return") {
-        const reason = window.prompt("Return this batch to the To-Be-Paid queue. Reason (optional):", "");
-        if (reason === null) return;
-        const { ok, data } = await postJson("/api/invoice-audit/return-batch", { batchId, reason });
-        if (!ok) { toast("Return failed: " + (data?.error_description || "error")); return; }
-        payDirty = true; toast(`Returned ${data.returned} invoice(s)`); renderPay(body); return;
-      }
-    }));
+    body.querySelectorAll<HTMLButtonElement>("[data-verify]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        const { ok, data } = await postJson("/api/invoice-audit/verify-paid", { invoiceNumber: btn.dataset.verify });
+        if (!ok) { toast("Verify failed: " + (data?.error_description || data?.error || "error")); btn.disabled = false; return; }
+        payDirty = true;
+        const row = btn.closest(".iv-pay-batch");
+        if (row) row.remove();
+        toast(`${data.invoiceNumber} marked Paid-Verified`);
+        if (!body.querySelector("[data-verify]")) body.insertAdjacentHTML("beforeend", '<p class="iv-pay-empty">Nothing pending verification.</p>');
+      }));
   }
   payBtn?.addEventListener("click", () => {
     payDirty = false;
@@ -1144,7 +715,7 @@ if (root && dataEl && mount) {
     // Self-styled + attached inside `.iv` so the theme CSS variables resolve and
     // the modal is readable regardless of stylesheet scoping.
     overlay.style.cssText = "position:fixed;inset:0;z-index:120;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;background:rgba(11,17,25,.55);overflow:auto";
-    overlay.innerHTML = `<div class="iv-modal-card" style="background:var(--panel,#fff);color:var(--ink,#1c2733);border:1px solid var(--line,#e3e8ef);max-width:780px;width:100%;max-height:85vh;overflow:auto;border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.4)"><div class="iv-modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>Invoice Payments</strong><button class="iv-modal-close" aria-label="Close" style="cursor:pointer;background:transparent;border:1px solid var(--line,#e3e8ef);border-radius:8px;padding:2px 9px;font-size:18px;line-height:1;color:inherit">×</button></div><div class="iv-pay-body"></div></div>`;
+    overlay.innerHTML = `<div class="iv-modal-card" style="background:var(--panel,#fff);color:var(--ink,#1c2733);border:1px solid var(--line,#e3e8ef);max-width:780px;width:100%;max-height:85vh;overflow:auto;border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.4)"><div class="iv-modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>Payment Verification</strong><button class="iv-modal-close" aria-label="Close" style="cursor:pointer;background:transparent;border:1px solid var(--line,#e3e8ef);border-radius:8px;padding:2px 9px;font-size:18px;line-height:1;color:inherit">×</button></div><div class="iv-pay-body"></div></div>`;
     (root || document.body).appendChild(overlay);
     const panelBody = overlay.querySelector(".iv-pay-body") as HTMLElement;
     overlay.querySelector(".iv-modal-close")?.addEventListener("click", () => closePay(overlay));

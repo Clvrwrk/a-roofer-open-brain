@@ -2,6 +2,7 @@
 import AppShell from "../../layouts/AppShell.astro";
 import { loadInvoiceAuditSummary, loadServiceWarrantyAuditSummary } from "@lib/invoice-audit";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
+import { createServerSupabaseClient } from "@lib/supabase.server";
 
 // Same surface, two audits (docs/61): ?audit=service_warranty shows ONLY the transferred
 // Commercial-ship-to invoices (the mirrored Service/Warranty Audit, human-in-loop = Chris);
@@ -23,17 +24,24 @@ const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pendin
 const offices = data.offices.map((o) => o.office);
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
-// Disposition actions (unchanged from the prior invoice-audit spec).
-const ACTIONS = [
-  { id: "accept-neg", group: "accept", label: "Accept — Single Negotiated Terms", hint: "Add this price to observations as negotiated terms for this invoice only." },
-  { id: "accept-tbn", group: "accept", label: 'Accept — Add to "To Be Negotiated"', hint: "Accept now; queue the item for the next vendor negotiation cycle." },
-  { id: "accept-30d", group: "accept", label: "Accept — 30-Day Weekly Review", hint: "Accept now; re-surface in the weekly review queue for 30 days." },
-  { id: "accept-nochallenge", group: "accept", label: 'Accept — "No Challenge" (always)', hint: "Whitelist this item price; stop flagging it going forward." },
-  { id: "credit-flag", group: "credit", label: "Credit Memo + Flag Non-Payment", hint: "Generate credit-memo request AND hold the invoice from payment until resolved." },
-  { id: "credit-noflag", group: "credit", label: "Credit Memo — Do Not Flag", hint: "Generate credit-memo request; invoice remains payable." },
-];
+// Invoice Audit v2 (docs/81): dispositions are gone — classification is binary
+// (billed > agreement price = credit-memo candidate, else valid). The two new
+// status axes come straight from the v2 tables.
+let auditPendingCount = 0;
+let pendingVerificationCount = 0;
+{
+  const { client } = createServerSupabaseClient();
+  if (client) {
+    const [pipe, pay] = await Promise.all([
+      client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
+      client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
+    ]);
+    auditPendingCount = pipe.count ?? 0;
+    pendingVerificationCount = pay.count ?? 0;
+  }
+}
 
-const initialPayload = { offices: data.offices, actions: ACTIONS, categories: data.categories };
+const initialPayload = { offices: data.offices, categories: data.categories };
 const initialPayloadBytes = payloadBytes(initialPayload);
 perfMetrics.push({ name: "invoice_audit.initial_payload", durationMs: 0, description: `${initialPayloadBytes} bytes` });
 Astro.response.headers.set("server-timing", serverTiming(perfMetrics));
@@ -65,7 +73,6 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       </select>
       <label class="iv-toggle"><input type="checkbox" id="iv-pending" checked /> To-audit only</label>
       <label class="iv-toggle"><input type="checkbox" id="iv-duenow" /> Due now</label>
-      <button type="button" class="iv-process-btn iv-secondary" id="iv-register" title="Load every processed invoice (incl. do-not-pay holds + Service/Warranty transfers) to the QuickBooks register — once each">Register CSV</button>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="iv-count">{generatedAt}</span>
@@ -86,15 +93,15 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
       <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">open · unapplied</span></div>
       <div class="iv-kpi">
-        <span class="iv-kpi-lab">Invoices To Be Paid</span>
-        <span class="iv-kpi-val">{data.totals.payable.toLocaleString()}</span>
-        <span class="iv-kpi-sub">{data.totals.held > 0 ? `ready to export · ${data.totals.held} on credit-memo hold` : "fully reviewed · ready to export"}</span>
-        <button type="button" class:list={["iv-process-btn", data.totals.payable === 0 && "is-disabled"]} id="iv-process" data-count={data.totals.payable} disabled={data.totals.payable === 0}>Process</button>
+        <span class="iv-kpi-lab">Invoice Audit Pending</span>
+        <span class="iv-kpi-val">{auditPendingCount.toLocaleString()}</span>
+        <span class="iv-kpi-sub">credit memos approved → stamp complete</span>
+        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}>Process</button>
       </div>
       <div class="iv-kpi">
-        <span class="iv-kpi-lab">Awaiting Payment</span>
-        <span class="iv-kpi-val">{data.totals.awaitingPayment.toLocaleString()}</span>
-        <span class="iv-kpi-sub">exported · not yet paid</span>
+        <span class="iv-kpi-lab">Paid — Pending Verification</span>
+        <span class="iv-kpi-val">{pendingVerificationCount.toLocaleString()}</span>
+        <span class="iv-kpi-sub">60+ days past invoice date · verify paid</span>
         <button type="button" class="iv-process-btn iv-secondary" id="iv-payments">Manage</button>
       </div>
     </div>
