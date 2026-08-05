@@ -60,6 +60,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
   }
 
+  // Agent guard (docs/83 decision 4): agents may only classify a line as VALID when it
+  // is at-or-under the matched agreement price. Positive-variance and UOM-mismatch lines
+  // require a human — the agent must classify them 'discrepancy' or leave them alone.
+  const isAgent = actor.type === "named_agent" || actor.type === "service_agent" || actor.type === "runtime_named_agent";
+  const validLineIds = lines.filter((l) => l.classification === "valid").map((l) => l.invoiceLineId);
+  if (isAgent && validLineIds.length) {
+    const { data: auditRows, error: auditError } = await client
+      .from("v_invoice_audit_line")
+      .select("line_id, negotiated_price, variance_ext, uom_mismatch")
+      .in("line_id", validLineIds);
+    if (auditError) {
+      return jsonApiResponse({ error: "variance_check_failed", error_description: auditError.message }, { status: 500 });
+    }
+    const blocked = (auditRows ?? []).filter(
+      (r: any) => r.uom_mismatch === true || (r.negotiated_price != null && Number(r.variance_ext ?? 0) > 0.05),
+    );
+    if (blocked.length) {
+      return jsonApiResponse(
+        {
+          error: "agent_variance_review_required",
+          error_description: `${blocked.length} line(s) are over the agreement price or UOM-mismatched — an agent cannot pass them; a human must review.`,
+          blockedLineIds: blocked.map((r: any) => r.line_id),
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const who = actor.displayName || actor.id || "agent";
   const { data, error } = await client
     .from("invoice_line_audit")

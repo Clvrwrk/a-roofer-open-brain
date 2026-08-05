@@ -51,13 +51,20 @@ if (root && dataEl && mount) {
 
   /* ---- credit memo requests (v2 R2, docs/82): Approve-into-weekly-email flow ---- */
   const cmByInvoice = new Map<string, { status: string; expectedCredit: number; claimLines: number; reviewedLines: number }>();
+  // Per-line claim review state (Chris 2026-08-05: the check-off lives on the audit
+  // lines too, synced with the Weekly CM page). Key = abc invoice line uuid.
+  const claimByLineId = new Map<string, { reauditId: number; reviewed: boolean }>();
   async function loadCreditMemoRequests() {
     try {
       const res = await fetch("/api/credit-memos/pending", { credentials: "same-origin", cache: "no-store" });
       const payload = await res.json();
       if (!payload?.requests) return;
       cmByInvoice.clear();
-      for (const r of payload.requests) cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
+      claimByLineId.clear();
+      for (const r of payload.requests) {
+        cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
+        for (const c of r.claims ?? []) if (c.lineId) claimByLineId.set(String(c.lineId), { reauditId: Number(c.id), reviewed: Boolean(c.reviewed) });
+      }
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
         const det = node.closest("details.iv-inv") as HTMLElement | null;
@@ -76,13 +83,20 @@ if (root && dataEl && mount) {
     !l.uomMismatch && l.negotiatedPrice != null && l.qty > 0 && l.unitPrice > l.negotiatedPrice
       ? (l.unitPrice - l.negotiatedPrice) * l.qty
       : 0;
-  function auditCell(l: InvLine): string {
+  function auditCell(inv: Invoice, l: InvLine): string {
     if (l.audited) {
       const meta = [l.auditNote, l.agreementId ? `Agreement #${l.agreementId}${l.agreementCurrent === false ? " (expired " + l.agreementExpiry + ")" : ""}` : "", l.auditedAt].filter(Boolean).join(" · ");
       return `<span class="iv-audited" title="${esc(meta)}">✓ ${esc(l.actorLabel || l.auditedBy || "Passed")}</span>${actorBadge(l.actorKind)}`;
     }
     const credit = lineCredit(l);
-    return credit > 0 ? `<span class="pill pill-red" title="Credit memo candidate">CM ${money2(credit)}</span>` : '<span class="pill pill-grey">Review</span>';
+    const chip = credit > 0 ? `<span class="pill pill-red" title="Credit memo candidate">CM ${money2(credit)}</span>` : '<span class="pill pill-grey">Review</span>';
+    // Human line check-off (Chris 2026-08-05): claim lines sync with the Weekly CM page
+    // review stamps; No-Price / UOM / non-claim lines record a human audit decision.
+    const claim = claimByLineId.get(l.lineId);
+    const box = claim
+      ? `<input type="checkbox" class="iv-ln-review" data-review-claim="${claim.reauditId}"${claim.reviewed ? " checked" : ""} title="Mark this claim line reviewed — all claim lines checked activates the CM Approve button" onclick="event.stopPropagation()">`
+      : `<input type="checkbox" class="iv-ln-review" data-review-ack="${esc(l.lineId)}" data-inv="${esc(inv.invoiceNumber)}" data-item="${esc(l.itemNumber)}" data-kind="${l.uomMismatch ? "uom" : l.negotiatedPrice == null ? "noprice" : "var"}" title="Mark this line reviewed — records your audit decision on this line" onclick="event.stopPropagation()">`;
+    return `${chip} ${box}`;
   }
   // The 3rd price column is contextual (docs/59 D5/D7): newest prior invoice for normal
   // invoices, the referenced original-invoice price for credit memos.
@@ -99,7 +113,7 @@ if (root && dataEl && mount) {
     const tip = price == null ? `Variance vs ${lab}` : `Variance vs ${lab} (${money2(price)})`;
     return ` <span class="pill ${BENCH_CLS[src]}" title="${esc(tip)}">${lab}</span>`;
   }
-  function lineRow(l: InvLine, li: number): string {
+  function lineRow(inv: Invoice, l: InvLine, li: number): string {
     // UOM mismatch: the agreement is priced in a different unit than the invoice line,
     // so a variance would be meaningless — surface it for manual review instead (schema 120).
     const negCell = l.uomMismatch
@@ -127,7 +141,7 @@ if (root && dataEl && mount) {
         <td class="num">${varPctCell}</td>
         <td class="num">${varExtCell}</td>
         <td>${tolCell}</td>
-        <td class="iv-audit-cell">${auditCell(l)}</td>
+        <td class="iv-audit-cell">${auditCell(inv, l)}</td>
       </tr>`;
   }
   // v2 audit view (docs/81 decision 6): show ONLY discrepancy lines — over agreement
@@ -161,7 +175,7 @@ if (root && dataEl && mount) {
       return `
         <details class="iv-cat" data-cat="${esc(k)}" data-pend="${pend}">
           <summary><span class="iv-chev" aria-hidden="true">›</span><b>${esc(catLabel.get(k) || k)}</b><span class="iv-cat-tags">${tags}</span>${catBar}</summary>
-          <div class="iv-tablewrap"><table class="iv-table">${thead(inv)}<tbody>${idxs.map((li) => lineRow(inv.lines[li], li)).join("")}</tbody></table></div>
+          <div class="iv-tablewrap"><table class="iv-table">${thead(inv)}<tbody>${idxs.map((li) => lineRow(inv, inv.lines[li], li)).join("")}</tbody></table></div>
         </details>`;
     }).join("");
 
@@ -548,6 +562,59 @@ if (root && dataEl && mount) {
     toast(approve ? `${invoiceNumber} approved into this week's credit memo request` : `${invoiceNumber} returned to draft`);
   });
   void loadCreditMemoRequests();
+
+  // Per-line review check-off (delegated — line tables re-render on expand).
+  // Claim lines toggle the same invoice_line_reaudit stamp as the Weekly CM page;
+  // non-claim discrepancy lines (No-Price / UOM / variance without a CM) record a
+  // human 'valid' classification via the v2 classify endpoint (one-way).
+  mount.addEventListener("change", async (ev) => {
+    const box = ev.target as HTMLInputElement | null;
+    if (!box?.classList?.contains("iv-ln-review")) return;
+    ev.stopPropagation();
+    box.disabled = true;
+
+    if (box.dataset.reviewClaim) {
+      const reauditId = Number(box.dataset.reviewClaim);
+      const { ok, data } = await postJson("/api/credit-memos/review-line", { lineId: reauditId, reviewed: box.checked });
+      if (!ok) { toast("Review failed: " + (data?.error_description || data?.error || "error")); box.checked = !box.checked; box.disabled = false; return; }
+      const claim = claimByLineId.get([...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "");
+      if (claim) claim.reviewed = box.checked;
+      box.disabled = false;
+      await loadCreditMemoRequests(); // r/N + Approve gating changed
+      return;
+    }
+
+    const lineId = box.dataset.reviewAck || "";
+    const invoiceNumber = box.dataset.inv || "";
+    if (!box.checked || !lineId || !invoiceNumber) { box.disabled = false; return; }
+    const kind = box.dataset.kind || "var";
+    const note =
+      kind === "uom" ? "Reviewed — UOM mismatch acknowledged by operator"
+      : kind === "noprice" ? "Reviewed — no agreement price (valid per docs/81)"
+      : "Reviewed — variance accepted by operator";
+    const { ok, data } = await postJson("/api/invoice-audit/classify", {
+      invoiceNumber,
+      lines: [{ invoiceLineId: lineId, itemNumber: box.dataset.item || null, classification: "valid", note }],
+    });
+    if (!ok) { toast("Review failed: " + (data?.error_description || data?.error || "error")); box.checked = false; box.disabled = false; return; }
+    const invObj = invByNumber.get(invoiceNumber);
+    const line = invObj?.lines.find((l) => l.lineId === lineId);
+    if (invObj && line) {
+      line.audited = true;
+      line.auditedBy = "You";
+      line.actorLabel = "You";
+      line.actorKind = "human";
+      line.auditNote = note;
+      invObj.pendingLines = Math.max(0, invObj.pendingLines - 1);
+      if ((line.varianceExt || 0) > 0) invObj.atRisk = Math.max(0, invObj.atRisk - (line.varianceExt || 0));
+      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
+      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
+      if (body) body.innerHTML = invoiceBody(invObj);
+      if (det) refreshInvoiceTags(det, invObj);
+      if (filtersReady) applyFilter();
+    }
+    toast(`Line marked reviewed (${invoiceNumber})`);
+  });
 
   /* ---- filters ---- */
   const search = document.getElementById("iv-search") as HTMLInputElement;

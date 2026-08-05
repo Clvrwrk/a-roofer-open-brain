@@ -33,10 +33,11 @@ export const GET: APIRoute = async ({ locals }) => {
   // every claim line of the invoice's LATEST re-audit run is acknowledged.
   const invoiceNumbers = (data ?? []).map((r) => r.invoice_number);
   const claimTotals = new Map<string, { total: number; reviewed: number }>();
+  const claimsByInvoice = new Map<string, { id: number; lineId: string | null; reviewed: boolean }[]>();
   if (invoiceNumbers.length) {
     const { data: lines, error: lineError } = await client
       .from("invoice_line_reaudit")
-      .select("run_label, invoice_number, variance_ext, reviewed_at, created_at")
+      .select("id, line_id, run_label, invoice_number, variance_ext, reviewed_at, created_at")
       .in("invoice_number", invoiceNumbers)
       .eq("classification", "discrepancy")
       .order("created_at", { ascending: false })
@@ -51,6 +52,11 @@ export const GET: APIRoute = async ({ locals }) => {
       agg.total += 1;
       if (l.reviewed_at) agg.reviewed += 1;
       claimTotals.set(l.invoice_number, agg);
+      // Per-line claim detail so the invoice-audit tree can render its own review
+      // checkboxes (Chris 2026-08-05: the check-off must live on the audit lines too).
+      const list = claimsByInvoice.get(l.invoice_number) ?? [];
+      list.push({ id: l.id, lineId: l.line_id ?? null, reviewed: Boolean(l.reviewed_at) });
+      claimsByInvoice.set(l.invoice_number, list);
     }
   }
 
@@ -62,6 +68,7 @@ export const GET: APIRoute = async ({ locals }) => {
       lineCount: Number(r.line_count ?? 0),
       claimLines: claimTotals.get(r.invoice_number)?.total ?? 0,
       reviewedLines: claimTotals.get(r.invoice_number)?.reviewed ?? 0,
+      claims: claimsByInvoice.get(r.invoice_number) ?? [],
       vendor: (r.packet as Record<string, unknown> | null)?.vendor ?? "ABC Supply",
       approvedBy: r.approved_by,
       approvedAt: r.approved_at,
