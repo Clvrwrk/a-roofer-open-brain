@@ -355,7 +355,7 @@ export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymen
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
-  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, toBePaid: 0, payable: 0, held: 0, awaitingPayment: 0, transferred: 0 } };
+  const empty: InvoiceAuditData = { status: "unconfigured", generatedAt: new Date().toISOString(), scope: emptyScope(), offices: [], categories: [], totals: { invoices: 0, creditMemos: 0, atRisk: 0, creditMemoRequested: 0, noPrice: 0, flagged: 0, audited: 0, pending: 0, openInvoices: 0, paidInvoices: 0, actionableInvoices: 0, dueNow: 0, toBePaid: 0, payable: 0, held: 0, awaitingPayment: 0, transferred: 0 } };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 

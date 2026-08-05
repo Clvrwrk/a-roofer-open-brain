@@ -65,6 +65,19 @@ if (root && dataEl && mount) {
         cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
         for (const c of r.claims ?? []) if (c.lineId) claimByLineId.set(String(c.lineId), { reauditId: Number(c.id), reviewed: Boolean(c.reviewed) });
       }
+      // Keep the server-rendered "Credit Memo Requested" KPI card honest without a reload.
+      let apprTotal = 0, apprN = 0, draftTotal = 0, draftN = 0;
+      for (const r of payload.requests) {
+        if (r.status === "approved") { apprTotal += r.expectedCredit || 0; apprN += 1; }
+        else { draftTotal += r.expectedCredit || 0; draftN += 1; }
+      }
+      document.querySelectorAll<HTMLElement>(".iv-kpi").forEach((card) => {
+        if (card.querySelector(".iv-kpi-lab")?.textContent !== "Credit Memo Requested") return;
+        const val = card.querySelector(".iv-kpi-val");
+        const sub = card.querySelector(".iv-kpi-sub");
+        if (val) val.textContent = "$" + Math.round(apprTotal + draftTotal).toLocaleString("en-US");
+        if (sub) sub.textContent = `${apprN} approved ($${Math.round(apprTotal).toLocaleString("en-US")}) · ${draftN} draft`;
+      });
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
         const det = node.closest("details.iv-inv") as HTMLElement | null;
@@ -90,12 +103,19 @@ if (root && dataEl && mount) {
     }
     const credit = lineCredit(l);
     const chip = credit > 0 ? `<span class="pill pill-red" title="Credit memo candidate">CM ${money2(credit)}</span>` : '<span class="pill pill-grey">Review</span>';
-    // Human line check-off (Chris 2026-08-05): claim lines sync with the Weekly CM page
-    // review stamps; No-Price / UOM / non-claim lines record a human audit decision.
+    // Human line check-off (Chris 2026-08-05, corrected same day): a checked
+    // negotiated-VARIANCE line JOINS the credit-memo claim set (it never accepts the
+    // price); claim lines sync the Weekly CM review stamps; only No-Price / UOM lines
+    // record a reviewed-valid audit decision.
     const claim = claimByLineId.get(l.lineId);
-    const box = claim
-      ? `<input type="checkbox" class="iv-ln-review" data-review-claim="${claim.reauditId}"${claim.reviewed ? " checked" : ""} title="Mark this claim line reviewed — all claim lines checked activates the CM Approve button" onclick="event.stopPropagation()">`
-      : `<input type="checkbox" class="iv-ln-review" data-review-ack="${esc(l.lineId)}" data-inv="${esc(inv.invoiceNumber)}" data-item="${esc(l.itemNumber)}" data-kind="${l.uomMismatch ? "uom" : l.negotiatedPrice == null ? "noprice" : "var"}" title="Mark this line reviewed — records your audit decision on this line" onclick="event.stopPropagation()">`;
+    let box: string;
+    if (claim) {
+      box = `<input type="checkbox" class="iv-ln-review" data-review-claim="${claim.reauditId}"${claim.reviewed ? " checked" : ""} title="Mark this claim line reviewed — all claim lines checked activates the CM Approve button" onclick="event.stopPropagation()">`;
+    } else if (credit > 0) {
+      box = `<input type="checkbox" class="iv-ln-review" data-cm-add="${esc(l.lineId)}" data-inv="${esc(inv.invoiceNumber)}" title="Add this overcharged line to the credit memo request (marks it reviewed)" onclick="event.stopPropagation()">`;
+    } else {
+      box = `<input type="checkbox" class="iv-ln-review" data-review-ack="${esc(l.lineId)}" data-inv="${esc(inv.invoiceNumber)}" data-item="${esc(l.itemNumber)}" data-kind="${l.uomMismatch ? "uom" : "noprice"}" title="Mark this line reviewed — records your audit decision on this line" onclick="event.stopPropagation()">`;
+    }
     return `${chip} ${box}`;
   }
   // The 3rd price column is contextual (docs/59 D5/D7): newest prior invoice for normal
@@ -281,7 +301,7 @@ if (root && dataEl && mount) {
     const amt = money2(cm.expectedCredit);
     if (cm.status === "approved") {
       return `<span class="pill pill-green" title="Approved into this week's credit memo request">CM approved · ${amt}</span>` +
-        `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="0" title="Remove from this week's email (back to draft)" onclick="event.stopPropagation()">Un-approve</button>`;
+        `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="0" title="Remove from this week's email (back to draft)">Un-approve</button>`;
     }
     if (cm.expectedCredit < 0.05) {
       // legacy/zero-credit draft — nothing claimable; no approve action
@@ -293,10 +313,10 @@ if (root && dataEl && mount) {
     const reviewBadge = cm.claimLines > 0 ? ` · ${cm.reviewedLines}/${cm.claimLines} reviewed` : "";
     if (!allReviewed) {
       return `<span class="pill pill-orange" title="Credit memo request drafted — review every claim line to activate Approve">CM draft · ${amt}${reviewBadge}</span>` +
-        `<button class="iv-mark" disabled title="Greyed until all ${cm.claimLines} claim line(s) are checked as reviewed — open the Weekly Credit Memo Request page" onclick="event.stopPropagation()">Approve</button>`;
+        `<button class="iv-mark" disabled title="Greyed until all ${cm.claimLines} claim line(s) are checked as reviewed — use the checkboxes on the discrepancy lines below">Approve</button>`;
     }
     return `<span class="pill pill-orange" title="All claim lines reviewed — approve to add to this week's vendor email">CM draft · ${amt}${reviewBadge}</span>` +
-      `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="1" title="Approve into this week's credit memo request email" onclick="event.stopPropagation()">Approve</button>`;
+      `<button class="iv-mark" data-cm-approve="${esc(invoiceNumber)}" data-approve="1" title="Approve into this week's credit memo request email">Approve</button>`;
   }
 
   /* ---- tree render ---- */
@@ -559,6 +579,7 @@ if (root && dataEl && mount) {
     const det = body?.closest("details.iv-inv") as HTMLElement | null;
     const inv = invByNumber.get(invoiceNumber);
     if (det && inv) refreshInvoiceTags(det, inv);
+    await loadCreditMemoRequests(); // flips the Credit Memo Requested KPI card (N approved)
     toast(approve ? `${invoiceNumber} approved into this week's credit memo request` : `${invoiceNumber} returned to draft`);
   });
   void loadCreditMemoRequests();
@@ -581,6 +602,23 @@ if (root && dataEl && mount) {
       if (claim) claim.reviewed = box.checked;
       box.disabled = false;
       await loadCreditMemoRequests(); // r/N + Approve gating changed
+      return;
+    }
+
+    if (box.dataset.cmAdd) {
+      // Corrected semantics (Chris 2026-08-05): checking a negotiated-variance line
+      // ADDS it to the invoice's credit-memo claim set and stamps it reviewed.
+      const invoiceNumber = box.dataset.inv || "";
+      if (!box.checked) { box.disabled = false; return; }
+      const { ok, data } = await postJson("/api/credit-memos/add-line", { invoiceNumber, lineId: box.dataset.cmAdd });
+      if (!ok) { toast("Add to credit memo failed: " + (data?.error_description || data?.error || "error")); box.checked = false; box.disabled = false; return; }
+      await loadCreditMemoRequests(); // claim set + totals changed
+      const invObj = invByNumber.get(invoiceNumber);
+      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
+      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
+      if (invObj && body) body.innerHTML = invoiceBody(invObj); // checkbox re-renders as a checked claim box
+      if (invObj && det) refreshInvoiceTags(det, invObj);
+      toast(`Line added to credit memo — ${invoiceNumber} now claims ${money2(data.expectedCredit)} across ${data.lineCount} line(s)`);
       return;
     }
 

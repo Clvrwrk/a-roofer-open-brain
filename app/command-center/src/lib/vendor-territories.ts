@@ -1138,7 +1138,8 @@ function findCurrentAgreement(
 // Display-only: the best CEO-verified agreement on file, INCLUDING lapsed ones, so the map
 // can show the PA number and (expired) date. Unlike findCurrentAgreement it ignores expiry.
 function isAgreementOnFile(agreement: PriceAgreementRow) {
-  return agreement.ceo_verified === true && agreement.is_active !== false;
+  // v2: ceo_verified is a display badge, never a gate (docs/82 §6 decision 3).
+  return agreement.is_active !== false;
 }
 
 function findAgreementOnFile(
