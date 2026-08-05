@@ -1,0 +1,17 @@
+[Unit]
+Description=Open Brain daily JobTread Sync Sentinel (docs/80)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Repo clone + master.env live on the US agent host (178.156.203.23, PE-US-AGENTS).
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/jt-sync-sentinel.sh
+User=root
+# Full sweep of ~28k JT nodes at <=4 req/s stays well under an hour; hard stop at 2h.
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
