@@ -165,6 +165,9 @@ test("clear actionable mail creates Linear, notifies Slack, stars it, and archiv
   const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   assert.equal(result.processed, 1);
+  const gmailQuery = calls.find((call) => call.slug === "GMAIL_FETCH_EMAILS").input.arguments.query;
+  assert.match(gmailQuery, /-in:sent/u);
+  assert.match(gmailQuery, /-from:maya\.chen@cc\.proexteriorsus\.net/u);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 1);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_GET_LINEAR_ISSUE").length, 1);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
@@ -315,6 +318,18 @@ test("Slack login notices never become invented deactivation or recovery work", 
   assert.doesNotMatch(`${enforced.reason} ${enforced.options.join(" ")}`, /reactivat|contact support/iu);
 });
 
+test("Maya's own sent mail cannot create accounting work or receipt loops", () => {
+  const message = normalizeMailboxMessage(providerMessage({
+    sender: "Maya Chen <maya.chen@cc.proexteriorsus.net>",
+    subject: "Fwd: Vendor price update",
+    messageText: "[MAYA]\n\nReceived — thank you. I have received your email and added it to Maya's accounting intake queue.",
+  }));
+  const enforced = enforceMailboxPolicy(message, decision("track"));
+  assert.equal(enforced.action, "ignore");
+  assert.match(enforced.reason, /prevent receipt and task loops/u);
+  assert.equal(senderCanReceiveAcknowledgement(message.senderEmail), false);
+});
+
 test("every legacy accounting alias is a deterministic review route", () => {
   for (const alias of ["invoices", "ap", "creditmemos", "priceagreement", "ar"]) {
     const message = normalizeMailboxMessage(providerMessage({
@@ -341,6 +356,7 @@ test("automatic receipts are limited to approved domains and always include both
   assert.equal(senderCanReceiveAcknowledgement("person@sub.cc.proexteriorsus.net"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@example.com"), false);
+  assert.equal(senderCanReceiveAcknowledgement("maya.chen@cc.proexteriorsus.net"), false);
 
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-"));
   const state = new MailboxState(directory);
