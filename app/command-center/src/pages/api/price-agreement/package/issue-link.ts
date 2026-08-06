@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { businessDaysExpiry } from "@lib/agreement-submission";
 
@@ -16,16 +15,16 @@ const publicBase = () =>
 // URL and sends it from Hermes / Google Workspace. Idempotent: returns the active
 // link if one is already outstanding for the package.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
+  const who = actorDisplayName(actor);
 
   const body = await request.json().catch(() => ({}));
   const branchNumber = String(body.branchNumber ?? "").trim();
   if (!branchNumber) return jsonApiResponse({ error: "invalid_request", error_description: "branchNumber is required." }, { status: 400 });
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data: pkg } = await client
     .from("agreement_packages")

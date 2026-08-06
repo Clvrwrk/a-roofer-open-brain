@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -12,9 +11,9 @@ export const prerender = false;
 // The client sends the estimate's FULL current line set; the server diffs against
 // the source view to record deletes, then replaces this estimate's overlay rows.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
+  const who = actorDisplayName(actor);
 
   const body = await request.json().catch(() => ({}));
   const estimateId = String(body.estimateId ?? "").trim();
@@ -22,8 +21,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!estimateId) return jsonApiResponse({ error: "invalid_request", error_description: "estimateId is required." }, { status: 400 });
   const lines = Array.isArray(body.lines) ? body.lines.slice(0, 500) : [];
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const clampNum = (v: unknown) => {
     if (v === null || v === undefined || v === "") return null;

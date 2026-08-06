@@ -1,42 +1,25 @@
 import type { APIRoute } from "astro";
-import {
-  actorCanAccessDepartment,
-  buildUnauthorizedResponse,
-  hasPermission,
-  serializeActor,
-} from "@lib/access-control";
+import { actorCanAccessDepartment, hasPermission, serializeActor } from "@lib/access-control";
+import { isUuid, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { recordLiveWorkDecision, type LiveWorkItem } from "@lib/live-work";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import { loadVendorTerritoryMapPayload } from "@lib/vendor-territories";
 
 export const prerender = false;
 
 function cleanId(value: unknown) {
   const text = String(value ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
-    ? text
-    : null;
+  return isUuid(text) ? text : null;
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-
-  const canAssignTerritory =
-    hasPermission(actor, "approval.decide") &&
-    (actorCanAccessDepartment(actor, "accounting") || actorCanAccessDepartment(actor, "operations"));
-
-  if (!canAssignTerritory) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot assign vendor branches to PE offices.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    department: ["accounting", "operations"],
+    permission: "approval.decide",
+    forbiddenMessage: "This actor cannot assign vendor branches to PE offices.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
   const vendorBranchId = cleanId(body.vendorBranchId ?? body.vendor_branch_id);
@@ -52,16 +35,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse(
-      {
-        error: "supabase_unconfigured",
-        error_description: config.missing.join(", "),
-      },
-      { status: 503 },
-    );
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const now = new Date().toISOString();
   const { error } = await client

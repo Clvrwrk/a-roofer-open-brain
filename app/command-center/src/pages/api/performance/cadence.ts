@@ -1,23 +1,18 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse, hasPermission, serializeActor } from "@lib/access-control";
+import { hasPermission, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { getCommandCenterWarmCadenceState } from "@lib/prewarm.server";
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!hasPermission(actor, "command_center.read")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot inspect Command Center performance cadence.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    permission: "command_center.read",
+    forbiddenMessage: "This actor cannot inspect Command Center performance cadence.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   return jsonApiResponse({
     ok: true,

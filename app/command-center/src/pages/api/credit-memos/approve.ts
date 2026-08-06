@@ -4,22 +4,18 @@
 // approved -> draft (approve=false). Once a request is 'sent' it is immutable here.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { logDashboardAction, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot approve credit memos." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot approve credit memos." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const body = (await request.json().catch(() => ({}))) as { invoiceNumber?: string; approve?: boolean };
   const invoiceNumber = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
@@ -71,11 +67,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "not_actionable", error_description: approve ? "No draft credit memo request for this invoice." : "No approved (un-sent) credit memo request for this invoice." }, { status: 409 });
   }
 
-  await client.from("dashboard_action_log").insert({
+  await logDashboardAction(client, actor, {
     action_type: approve ? "credit_memo_approved" : "credit_memo_unapproved",
-    actor_display_name: actor.displayName,
-    actor_id: actor.id,
-    actor_type: actor.type,
     decision: approve ? "approve" : "return",
     department: "accounting",
     payload: { invoiceNumber },

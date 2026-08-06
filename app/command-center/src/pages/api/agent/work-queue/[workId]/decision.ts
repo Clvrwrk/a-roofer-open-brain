@@ -1,11 +1,11 @@
 import type { APIRoute } from "astro";
 import {
   actorCanAccessDepartment,
-  buildUnauthorizedResponse,
   hasPermission,
   serializeActor,
   type WorkQueueDecision,
 } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { formatCurrency, loadAgreementGapSurface, type AgreementGapRow } from "@lib/abc-price-gaps";
 import { jsonApiResponse } from "@lib/agent-api";
 import {
@@ -193,8 +193,8 @@ async function invokeAcculynxWriteActionEdge(
 }
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const surface = await loadCommandCenterSurface();
   const decodedWorkId = params.workId ? decodeURIComponent(params.workId) : "";

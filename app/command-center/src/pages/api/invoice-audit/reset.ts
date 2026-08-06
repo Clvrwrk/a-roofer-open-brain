@@ -1,8 +1,7 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -22,8 +21,8 @@ const RESET_ERRORS: Record<string, { status: number; message: string }> = {
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
   const invoiceNumber = String(body.invoiceNumber ?? body.invoice_number ?? "").trim();
@@ -31,10 +30,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber is required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data, error } = await client.rpc("invoice_audit_reset", {
     p_invoice_number: invoiceNumber,

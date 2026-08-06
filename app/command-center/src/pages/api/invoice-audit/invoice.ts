@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import * as Sentry from "@sentry/astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, serializeActor } from "@lib/access-control";
+import { actorCanAccessDepartment, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadInvoiceAuditInvoiceDetail } from "@lib/invoice-audit";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
@@ -8,18 +9,12 @@ import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ locals, url }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot access invoice audit data.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    department: "accounting",
+    forbiddenMessage: "This actor cannot access invoice audit data.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const invoiceNumber = url.searchParams.get("invoiceNumber") ?? "";
   const metrics: PerfMetric[] = [];

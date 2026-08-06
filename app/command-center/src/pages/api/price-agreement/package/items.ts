@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -10,9 +9,9 @@ export const prerender = false;
 // schema 110). Get-or-create the draft package for the branch, then upsert the
 // changed items. INTERNAL only — this writes drafts; nothing is sent anywhere.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
+  const who = actorDisplayName(actor);
 
   const body = await request.json().catch(() => ({}));
   const branchNumber = String(body.branchNumber ?? "").trim();
@@ -21,8 +20,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (items.length === 0) return jsonApiResponse({ error: "invalid_request", error_description: "no items to save." }, { status: 400 });
   if (items.length > 2000) return jsonApiResponse({ error: "too_many_items", error_description: "max 2000 items per save." }, { status: 400 });
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // Get-or-create the draft package for this branch (vendor-scoped, latest version).
   const { data: existing } = await client

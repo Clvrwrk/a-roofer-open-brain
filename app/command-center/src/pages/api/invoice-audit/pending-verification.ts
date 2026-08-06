@@ -5,21 +5,17 @@
 // only — no line detail by design.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot view payment verification." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", forbiddenMessage: "This actor cannot view payment verification." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data: swept, error: sweepError } = await client.rpc("invoice_payment_verification_sweep");
   if (sweepError) return jsonApiResponse({ error: "verification_sweep", error_description: sweepError.message }, { status: 409 });

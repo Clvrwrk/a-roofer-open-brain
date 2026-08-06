@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import { buildAgreementExport } from "@lib/agreement-export";
 import { classifyRecipients } from "@lib/outbound-guard";
 import { getRuntimeEnv } from "@lib/runtime-env";
@@ -26,16 +25,16 @@ export const POST: APIRoute = async (ctx) => {
 };
 
 const handle: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
+  const who = actorDisplayName(actor);
 
   const body = await request.json().catch(() => ({}));
   const branchNumber = String(body.branchNumber ?? "").trim();
   if (!branchNumber) return jsonApiResponse({ error: "invalid_request", error_description: "branchNumber is required." }, { status: 400 });
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const exp = await buildAgreementExport(branchNumber);
   if (!exp.ok || !exp.branch) return jsonApiResponse({ error: "no_data", error_description: "No branch / negotiable items found." }, { status: 404 });

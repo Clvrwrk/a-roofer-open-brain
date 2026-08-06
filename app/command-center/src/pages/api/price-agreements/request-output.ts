@@ -3,7 +3,8 @@
 // (The HTML rendering lives on /accounting/price-agreements/request.)
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -16,8 +17,8 @@ const csvCell = (v: unknown) => {
 const m2 = (v: unknown) => (v == null || v === "" ? "" : Number(v).toFixed(2));
 
 export const GET: APIRoute = async ({ locals, url }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
   if (!actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden" }, { status: 403 });
   }
