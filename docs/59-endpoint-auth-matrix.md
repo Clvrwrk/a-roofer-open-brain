@@ -14,9 +14,10 @@
 | **Magic** | Single-use or scoped magic link token |
 | **Dev** | DevTeam service token (`dev-conductor`) only |
 
-Authentication alone is never authorization: every write route also checks the actor's
-department (and `approval.decide` where a human gate is documented), so a department-scoped
-service token cannot mutate another department's data. The unauthenticated Local Operator is
+Authentication alone is never authorization: every write route also checks that the actor is
+write-capable (`actorCanWrite` — viewers hold `departmentAccess: "all"` but are read-only) and
+that it owns the department (plus `approval.decide` where a human gate is documented), so
+neither a viewer nor a department-scoped service token can mutate another department's data. The unauthenticated Local Operator is
 dev-only and refuses to engage on a production runtime — see `isLocalOperatorFallbackAllowed`.
 
 ## API routes
