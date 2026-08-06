@@ -3,20 +3,30 @@ import { classifyMailboxMessage } from "./mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "./mailbox-state.mjs";
 import {
   APPROVED,
+  ACKNOWLEDGEMENT_DOMAINS,
   GMAIL_TOOL_VERSION,
   LINEAR_TOOL_VERSION,
+  MAILBOX_CLEANUP_MAX_PAGES,
   MAILBOX_MAX_PAGES,
   MAILBOX_PAGE_SIZE,
   MAYA_MAILBOX_STATE_DIR,
+  REQUIRED_EMAIL_CC,
 } from "./policy.mjs";
 import { TOOL_SLUG, TOOL_VERSION, classifyError, isSlackTimestamp } from "./core.mjs";
-import { runCapabilityAgent } from "./capability-agent.mjs";
 
 const GMAIL_FETCH = "GMAIL_FETCH_EMAILS";
 const GMAIL_FETCH_MESSAGE = "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID";
 const GMAIL_MODIFY_LABELS = "GMAIL_ADD_LABEL_TO_EMAIL";
+const GMAIL_REPLY = "GMAIL_REPLY_TO_THREAD";
 const LINEAR_CREATE = "LINEAR_CREATE_LINEAR_ISSUE";
 const LINEAR_LIST = "LINEAR_LIST_LINEAR_ISSUES";
+
+const ACCOUNTING_SIGNAL = /\b(?:accounting|accounts? payable|accounts? receivable|a\/?p|a\/?r|invoice|bill|statement|credit memo|remittance|job cost|change order|draw request|insurance supplement|depreciation|price list|pricing|price agreement|vendor price|supplier price|purchase order|quote|estimate)\b/iu;
+const PROTECTED_SIGNAL = /\b(?:payroll|human resources|social security|ssn|bank account|routing number|wire transfer|payment authorization|pay this|release payment|credential|password|mfa|legal notice|subpoena)\b/iu;
+const ACCOUNTING_ALIAS = /(?:^|[,;\s<])(?:invoices|ap|creditmemos|priceagreement|ar)@cc\.proexteriorsus\.net\b/iu;
+const PROTECTED_ALIAS = /(?:^|[,;\s<])(?:hr|payroll)@cc\.proexteriorsus\.net\b/iu;
+const DOCUMENT_FILENAME = /\.(?:pdf|csv|xlsx?|docx?|zip|txt|rtf|ods|odt)$/iu;
+const DOCUMENT_MIME = /(?:pdf|spreadsheet|excel|csv|wordprocessingml|msword|zip|plain|rtf|opendocument)/iu;
 
 function hash(value) {
   return createHash("sha256").update(String(value)).digest("hex");
@@ -97,6 +107,62 @@ function extractEmailAddress(value) {
   return String(bracketed ?? plain ?? "").toLowerCase().slice(0, 320);
 }
 
+export function senderCanReceiveAcknowledgement(senderEmail, domains = ACKNOWLEDGEMENT_DOMAINS) {
+  const address = String(senderEmail ?? "").trim().toLowerCase();
+  const at = address.lastIndexOf("@");
+  if (at <= 0 || at === address.length - 1) return false;
+  const senderDomain = address.slice(at + 1);
+  return domains.some((domain) => senderDomain === domain || senderDomain.endsWith(`.${domain}`));
+}
+
+export function enforceMailboxPolicy(message, decision) {
+  const content = `${message.recipients}\n${message.subject}\n${message.body}`;
+  const protectedReview = PROTECTED_SIGNAL.test(content) || PROTECTED_ALIAS.test(message.recipients);
+  const documentReview = message.attachments.some(
+    (item) => DOCUMENT_FILENAME.test(item.filename) || DOCUMENT_MIME.test(item.mimeType),
+  );
+  const accountingReview = ACCOUNTING_SIGNAL.test(content) || ACCOUNTING_ALIAS.test(message.recipients);
+  if (protectedReview && decision.action !== "block") {
+    return Object.freeze({
+      ...decision,
+      action: "block",
+      priority: Math.min(decision.priority, 2),
+      title: decision.title || `[MAYA] Protected accounting intake: ${message.subject}`.slice(0, 140),
+      reason: "Protected, payment, payroll, HR, credential, or legal content requires human review.",
+      question: "Which approved owner should review this protected intake?",
+      options: ["Review in the pinned admin Slack route", "Route to the authorized functional owner"],
+    });
+  }
+  if ((documentReview || accountingReview) && decision.action === "ignore") {
+    return Object.freeze({
+      ...decision,
+      action: "track",
+      priority: 3,
+      title: `[MAYA] Accounting intake: ${message.subject}`.slice(0, 140),
+      reason: documentReview
+        ? "The message contains a document that requires accounting intake review."
+        : "The message contains an accounting, price, or vendor-pricing request that requires review.",
+      question: "",
+      options: [],
+    });
+  }
+  return decision;
+}
+
+export function buildAcknowledgementArguments(message) {
+  if (!senderCanReceiveAcknowledgement(message.senderEmail)) {
+    throw new Error("Sender is not eligible for an automatic acknowledgement");
+  }
+  if (!/^[0-9a-fA-F]+$/u.test(message.threadId)) throw new Error("Gmail thread ID is invalid");
+  return {
+    user_id: "me",
+    thread_id: message.threadId,
+    message_body: "[MAYA]\n\nReceived — thank you. I have received your email and added it to Maya's accounting intake queue.",
+    is_html: false,
+    cc: [...REQUIRED_EMAIL_CC],
+  };
+}
+
 export function buildLinearIssueArguments(message, decision, expected = APPROVED) {
   if (!expected.linearTeamId) throw new Error("Linear team is not pinned");
   const attachmentSummary = message.attachments.length
@@ -104,6 +170,8 @@ export function buildLinearIssueArguments(message, decision, expected = APPROVED
     : "- None reported";
   return {
     team_id: expected.linearTeamId,
+    state_id: expected.linearReviewStateId,
+    assignee_id: expected.linearReviewerId,
     title: decision.title,
     priority: decision.priority,
     description: [
@@ -123,7 +191,7 @@ export function buildLinearIssueArguments(message, decision, expected = APPROVED
       "## Attachments",
       attachmentSummary,
       "",
-      "The mailbox executor did not reply to the original sender. Any external commitment still requires Christopher's approval.",
+      "Maya may send only the standard receipt acknowledgement to an approved internal sender domain. No substantive sender commitment was made. Any payment, approval, access, or irreversible action still requires Christopher's approval.",
     ].join("\n").slice(0, 8_000),
   };
 }
@@ -132,7 +200,21 @@ export function buildOwnerSlackArguments(message, decision, linearReference, exp
   if (!expected.ownerSlackChannelId || !expected.ownerSlackUserId) {
     throw new Error("Owner Slack destination is not pinned");
   }
-  const options = decision.options.map((item, index) => `${index + 1}. ${item}`).join(" ");
+  const blocked = decision.action === "block" || !decision.action;
+  const options = (decision.options ?? []).map((item, index) => `${index + 1}. ${item}`).join(" ");
+  if (!blocked) {
+    return {
+      channel: expected.ownerSlackChannelId,
+      markdown_text: [
+        `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [REVIEW] New accounting email submitted to PE_CC_DEV (PE-CC-DevTeam)${linearReference ? ` as ${linearReference}` : ""}.`,
+        `Source: ${message.subject} from ${message.sender}.`,
+        "Status: assigned to Christopher in Agent Review; the Gmail source is preserved in the issue.",
+      ].join(" ").replace(/<@(?!U0B8SGJJZLJ)[^>]+>/gu, "[reference removed]").slice(0, 1_500),
+      reply_broadcast: false,
+      unfurl_links: false,
+      unfurl_media: false,
+    };
+  }
   const text = [
     `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [BLOCKED] Mailbox task needs context and routing.`,
     `Source: ${message.subject} from ${message.sender}.`,
@@ -183,6 +265,42 @@ async function listCandidateMessages(composio, cursorEpochSeconds, signal, expec
   return messages
     .filter((message) => parseMessageEpochMs(message) > cursorEpochSeconds * 1_000)
     .sort((left, right) => parseMessageEpochMs(left) - parseMessageEpochMs(right));
+}
+
+async function listInboxCleanupCandidates(composio, signal, expected) {
+  const messages = [];
+  let pageToken;
+  let truncated = false;
+  for (let page = 0; page < MAILBOX_CLEANUP_MAX_PAGES; page += 1) {
+    const result = await composio.tools.execute(
+      GMAIL_FETCH,
+      {
+        userId: expected.composioUserId,
+        connectedAccountId: expected.gmailConnectedAccountId,
+        version: GMAIL_TOOL_VERSION,
+        arguments: {
+          user_id: "me",
+          query: "in:inbox -in:spam -in:trash",
+          max_results: MAILBOX_PAGE_SIZE,
+          ids_only: false,
+          verbose: false,
+          include_payload: false,
+          include_spam_trash: false,
+          ...(pageToken ? { page_token: pageToken } : {}),
+        },
+      },
+      requestOptions(signal),
+    );
+    const data = requiredSuccessful(result, "Gmail cleanup list");
+    messages.push(...extractMessages(data));
+    pageToken = firstDefined(data, ["nextPageToken", "next_page_token"]);
+    if (!pageToken) break;
+    if (page === MAILBOX_CLEANUP_MAX_PAGES - 1) truncated = true;
+  }
+  return {
+    candidates: messages.sort((left, right) => parseMessageEpochMs(left) - parseMessageEpochMs(right)),
+    truncated,
+  };
 }
 
 async function hydrateMessage(composio, messageId, signal, expected) {
@@ -242,7 +360,7 @@ async function createLinearIssue(composio, message, decision, signal, expected) 
   const data = requiredSuccessful(result, "Linear create");
   const id = String(data.id ?? "");
   if (!id) throw new Error("Linear create omitted the issue ID");
-  return { id, reference: String(data.identifier ?? data.issueIdentifier ?? id) };
+  return { id, reference: String(data.identifier ?? data.issueIdentifier ?? id), created: true };
 }
 
 async function sendOwnerSlack(composio, arguments_, signal, expected) {
@@ -261,23 +379,51 @@ async function sendOwnerSlack(composio, arguments_, signal, expected) {
   return data.ts;
 }
 
-async function markRead(composio, message, signal, expected) {
-  if (!message.labelIds.includes("UNREAD")) return "already_read";
+async function sendAcknowledgement(composio, message, signal, expected) {
+  const result = await composio.tools.execute(
+    GMAIL_REPLY,
+    {
+      userId: expected.composioUserId,
+      connectedAccountId: expected.gmailConnectedAccountId,
+      version: GMAIL_TOOL_VERSION,
+      arguments: buildAcknowledgementArguments(message),
+    },
+    requestOptions(signal),
+  );
+  const data = requiredSuccessful(result, "Gmail acknowledgement");
+  return String(data.messageId ?? data.message_id ?? data.id ?? message.threadId);
+}
+
+export function mailboxLabelPlan(action) {
+  if (action === "block") {
+    return Object.freeze({ add: ["STARRED", "IMPORTANT"], remove: ["UNREAD"] });
+  }
+  if (action === "track") {
+    return Object.freeze({ add: ["STARRED"], remove: ["UNREAD", "INBOX"] });
+  }
+  return Object.freeze({ add: [], remove: ["UNREAD", "INBOX"] });
+}
+
+async function fileMailboxMessage(composio, message, action, signal, expected) {
+  const plan = mailboxLabelPlan(action);
+  const add = plan.add.filter((label) => !message.labelIds.includes(label));
+  const remove = plan.remove.filter((label) => message.labelIds.includes(label));
+  if (add.length === 0 && remove.length === 0) return "labels_already_applied";
   const result = await composio.tools.execute(
     GMAIL_MODIFY_LABELS,
     {
       userId: expected.composioUserId,
       connectedAccountId: expected.gmailConnectedAccountId,
       version: GMAIL_TOOL_VERSION,
-      arguments: { user_id: "me", message_id: message.messageId, add_label_ids: [], remove_label_ids: ["UNREAD"] },
+      arguments: { user_id: "me", message_id: message.messageId, add_label_ids: add, remove_label_ids: remove },
     },
     requestOptions(signal),
   );
-  requiredSuccessful(result, "Gmail mark read");
-  return "marked_read";
+  requiredSuccessful(result, "Gmail file message");
+  return `labels:${add.join(",")}:${remove.join(",")}`;
 }
 
-async function processMessage({ composio, classifier, capabilityAgent, state, listMessage, occurrenceId, signal, expected, onEvent, linearSourceIds }) {
+async function processMessage({ composio, classifier, capabilityAgent, state, listMessage, occurrenceId, signal, expected, onEvent, linearSourceIds, allowAcknowledgement = true }) {
   const messageId = String(firstDefined(listMessage, ["messageId", "message_id", "id"]) ?? "");
   if (!/^[0-9a-fA-F]+$/u.test(messageId)) throw new Error("Gmail list returned an invalid message ID");
   const claim = await state.claim(messageId, occurrenceId);
@@ -319,7 +465,7 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
         claimName: claim.name,
         onEvent,
       });
-      const readState = await markRead(composio, message, signal, expected);
+      const readState = await fileMailboxMessage(composio, message, "track", signal, expected);
       await state.confirm(claim.name, {
         action: "capability_work",
         confirmedWrites: result.confirmedWrites,
@@ -329,17 +475,18 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
       onEvent("mailbox_message_confirmed", { message_hash: claim.messageDigest, action: "capability_work" });
       return { state: "confirmed", action: "capability_work" };
     }
-    decision = await classifier(message, signal);
+    decision = enforceMailboxPolicy(message, await classifier(message, signal));
     let linearIssue;
     if (decision.action !== "ignore") {
       const existing = linearSourceIds.get(message.messageId);
       linearIssue = existing
-        ? { id: existing, reference: existing }
+        ? { id: existing, reference: existing, created: false }
         : await createLinearIssue(composio, message, decision, signal, expected);
       linearSourceIds.set(message.messageId, linearIssue.reference);
+      if (linearIssue.created !== false) await state.recordAction(claim.name, "linear_create", linearIssue.id);
     }
     let slackTimestamp;
-    if (decision.action === "block") {
+    if (decision.action !== "ignore") {
       slackAttempted = true;
       slackTimestamp = await sendOwnerSlack(
         composio,
@@ -347,13 +494,23 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
         signal,
         expected,
       );
+      await state.recordAction(claim.name, "slack_send", slackTimestamp);
     }
-    const readState = await markRead(composio, message, signal, expected);
+    let acknowledgementReference;
+    if (allowAcknowledgement && senderCanReceiveAcknowledgement(message.senderEmail)) {
+      acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
+      await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
+    }
+    const readState = await fileMailboxMessage(composio, message, decision.action, signal, expected);
+    if (readState !== "labels_already_applied") {
+      await state.recordAction(claim.name, "gmail_file", `${message.messageId}:${decision.action}`);
+    }
     await state.confirm(claim.name, {
       action: decision.action,
       priority: decision.priority,
       linearIssueHash: linearIssue ? hash(linearIssue.id) : null,
       slackMessageHash: slackTimestamp ? hash(slackTimestamp) : null,
+      acknowledgementHash: acknowledgementReference ? hash(acknowledgementReference) : null,
       readState,
     });
     onEvent("mailbox_message_confirmed", { message_hash: claim.messageDigest, action: decision.action });
@@ -422,7 +579,56 @@ export async function runMailboxOccurrence({
   return { state: "complete", processed, candidates: candidates.length };
 }
 
-export async function startMailboxExecutor({ composio, expected = APPROVED, onEvent = () => {}, stateDirectory = MAYA_MAILBOX_STATE_DIR, capabilityAgent = runCapabilityAgent }) {
+export async function runInboxCleanup({
+  composio,
+  classifier = classifyMailboxMessage,
+  state,
+  signal,
+  expected = APPROVED,
+  onEvent = () => {},
+  allowAcknowledgement = false,
+  now = new Date(),
+}) {
+  await state.initialize(Math.floor(now.getTime() / 1_000));
+  const occurrenceId = `maya-chen:mailbox-cleanup:${now.toISOString()}`;
+  const { candidates, truncated } = await listInboxCleanupCandidates(composio, signal, expected);
+  const linearSourceIds = candidates.length
+    ? await listKnownLinearSourceIds(composio, signal, expected)
+    : new Map();
+  let processed = 0;
+  let duplicates = 0;
+  let ambiguous = 0;
+  for (const candidate of candidates) {
+    if (signal.aborted) throw new Error("Mailbox cleanup aborted");
+    const result = await processMessage({
+      composio,
+      classifier,
+      state,
+      listMessage: candidate,
+      occurrenceId,
+      signal,
+      expected,
+      onEvent,
+      linearSourceIds,
+      allowAcknowledgement,
+    });
+    if (result.state === "duplicate") duplicates += 1;
+    else {
+      processed += 1;
+      if (result.state === "ambiguous") ambiguous += 1;
+    }
+  }
+  onEvent("mailbox_cleanup_complete", {
+    candidate_count: candidates.length,
+    processed_count: processed,
+    duplicate_count: duplicates,
+    ambiguous_count: ambiguous,
+    truncated,
+  });
+  return { state: "complete", candidates: candidates.length, processed, duplicates, ambiguous, truncated };
+}
+
+export async function startMailboxExecutor({ composio, expected = APPROVED, onEvent = () => {}, stateDirectory = MAYA_MAILBOX_STATE_DIR, capabilityAgent }) {
   const controller = new AbortController();
   const state = new MailboxState(stateDirectory);
   let timer;

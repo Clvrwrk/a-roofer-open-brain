@@ -83,14 +83,15 @@ test("Hermes turns a blocker into an honest in-thread owner escalation", () => {
   assert.match(prompt, /never claim that you sent Christopher a separate message or DM/u);
 });
 
-test("Maya retains the fleet-to-WEX relationship and mandatory email CC", async () => {
+test("Maya retains the fleet-to-WEX relationship and both mandatory email CCs", async () => {
   const soul = await readFile(new URL("../SOUL.md", import.meta.url), "utf8");
 
   assert.match(soul, /Vehicle Master List is the canonical fleet record/u);
   assert.match(soul, /WEX is the fuel-card system attached to each vehicle record/u);
   assert.match(soul, /VIN, unit number, or\s+license plate/u);
   assert.match(soul, /admin@cc\.proexteriorsus\.net/u);
-  assert.match(soul, /email missing that CC must not be sent/u);
+  assert.match(soul, /chussey@aia4\.io/u);
+  assert.match(soul, /email\s+missing either CC must not be sent or drafted/u);
 });
 
 test("Maya asks Christopher in Slack with a complete context-and-routing escalation", async () => {

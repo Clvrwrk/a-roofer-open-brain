@@ -6,8 +6,12 @@ import test from "node:test";
 import {
   buildLinearIssueArguments,
   buildOwnerSlackArguments,
+  enforceMailboxPolicy,
+  mailboxLabelPlan,
   normalizeMailboxMessage,
+  runInboxCleanup,
   runMailboxOccurrence,
+  senderCanReceiveAcknowledgement,
   startMailboxExecutor,
 } from "../mailbox-executor.mjs";
 import { buildMailboxPrompt, parseMailboxDecision } from "../mailbox-hermes.mjs";
@@ -18,7 +22,7 @@ const messageId = "19fabcdef1234567";
 const now = new Date("2026-07-28T10:30:00.000Z");
 const receivedMs = now.getTime() - 60_000;
 
-function providerMessage() {
+function providerMessage(overrides = {}) {
   return {
     messageId,
     threadId: "19fabcdef7654321",
@@ -30,6 +34,7 @@ function providerMessage() {
     labelIds: ["INBOX", "UNREAD"],
     displayUrl: `https://mail.google.test/${messageId}`,
     attachmentList: [{ filename: "prices.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }],
+    ...overrides,
   };
 }
 
@@ -46,7 +51,7 @@ function decision(action = "track") {
   };
 }
 
-function fakeComposio({ action = "track", existing = false } = {}) {
+function fakeComposio({ action = "track", existing = false, sender, messageOverrides = {} } = {}) {
   const calls = [];
   const tools = {
     async execute(slug, input) {
@@ -63,9 +68,12 @@ function fakeComposio({ action = "track", existing = false } = {}) {
           },
         };
       }
-      if (slug === "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID") return { successful: true, data: providerMessage() };
+      if (slug === "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID") {
+        return { successful: true, data: providerMessage({ ...messageOverrides, ...(sender ? { sender } : {}) }) };
+      }
       if (slug === "LINEAR_CREATE_LINEAR_ISSUE") return { successful: true, data: { id: "issue-new", identifier: "PEC-901" } };
       if (slug === "SLACKBOT_SEND_MESSAGE") return { successful: true, data: { ok: true, ts: "1785234600.000001" } };
+      if (slug === "GMAIL_REPLY_TO_THREAD") return { successful: true, data: { messageId: "19facknowledged1234" } };
       if (slug === "GMAIL_ADD_LABEL_TO_EMAIL") return { successful: true, data: { id: messageId } };
       throw new Error(`unexpected tool ${slug}`);
     },
@@ -96,13 +104,14 @@ test("normalizes a hydrated Gmail message and pins source provenance", () => {
   assert.throws(() => normalizeMailboxMessage({ messageId: "not-a-gmail-id" }), /invalid message ID/u);
 });
 
-test("builds a source-linked Linear issue without authorizing an email reply", () => {
+test("builds a source-linked Linear issue assigned to the pinned Agent Review owner", () => {
   const args = buildLinearIssueArguments(normalizeMailboxMessage(providerMessage()), decision("track"));
   assert.equal(args.team_id, APPROVED.linearTeamId);
   assert.equal(args.title, "[MAYA] Review vendor price update");
   assert.match(args.description, new RegExp(`Gmail message ID: ${messageId}`, "u"));
-  assert.match(args.description, /did not reply to the original sender/u);
-  assert.equal(Object.hasOwn(args, "assignee_id"), false);
+  assert.match(args.description, /standard receipt acknowledgement/u);
+  assert.equal(args.assignee_id, APPROVED.linearReviewerId);
+  assert.equal(args.state_id, APPROVED.linearReviewStateId);
 });
 
 test("builds a fixed-owner blocked Slack packet", () => {
@@ -136,7 +145,7 @@ test("executor startup schedules the next boundary without an immediate provider
   assert.equal(calls.length, 0);
 });
 
-test("clear actionable mail creates one Linear issue and is marked read", async () => {
+test("clear actionable mail creates Linear, notifies Slack, stars it, and archives it", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-track-"));
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
@@ -145,10 +154,16 @@ test("clear actionable mail creates one Linear issue and is marked read", async 
   assert.equal(result.state, "complete");
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 1);
-  assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 0);
+  assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
+  assert.match(
+    calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text,
+    /\[REVIEW\].*PE_CC_DEV/u,
+  );
+  const labelCall = calls.find((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL");
+  assert.deepEqual(labelCall.input.arguments.add_label_ids, ["STARRED"]);
   assert.deepEqual(
-    calls.find((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").input.arguments.remove_label_ids,
-    ["UNREAD"],
+    labelCall.input.arguments.remove_label_ids,
+    ["UNREAD", "INBOX"],
   );
 });
 
@@ -204,12 +219,78 @@ test("ignored mail creates no external task or Slack effect and is marked read",
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ignore-"));
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
-  const { composio, calls, classifier } = fakeComposio({ action: "ignore" });
+  const { composio, calls, classifier } = fakeComposio({
+    action: "ignore",
+    messageOverrides: {
+      subject: "Newsletter",
+      messageText: "A general non-actionable update.",
+      attachmentList: [],
+    },
+  });
   const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 0);
   assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 1);
+});
+
+test("deterministic policy prevents a classifier from ignoring accounting documents", () => {
+  const message = normalizeMailboxMessage(providerMessage());
+  const enforced = enforceMailboxPolicy(message, decision("ignore"));
+  assert.equal(enforced.action, "track");
+  assert.match(enforced.reason, /document/u);
+});
+
+test("every legacy accounting alias is a deterministic review route", () => {
+  for (const alias of ["invoices", "ap", "creditmemos", "priceagreement", "ar"]) {
+    const message = normalizeMailboxMessage(providerMessage({
+      to: `${alias}@cc.proexteriorsus.net`,
+      subject: "Hello",
+      messageText: "See note.",
+      attachmentList: [],
+    }));
+    assert.equal(enforceMailboxPolicy(message, decision("ignore")).action, "track");
+  }
+  for (const alias of ["hr", "payroll"]) {
+    const message = normalizeMailboxMessage(providerMessage({
+      to: `${alias}@cc.proexteriorsus.net`,
+      subject: "Hello",
+      messageText: "See note.",
+      attachmentList: [],
+    }));
+    assert.equal(enforceMailboxPolicy(message, decision("ignore")).action, "block");
+  }
+});
+
+test("automatic receipts are limited to approved domains and always include both CCs", async () => {
+  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@sub.cc.proexteriorsus.net"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@example.com"), false);
+
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda <lucinda@sub.aia4.io>" });
+  await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
+  assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
+  assert.match(reply.input.arguments.message_body, /Received — thank you/u);
+});
+
+test("historical cleanup never sends late acknowledgements", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-cleanup-"));
+  const state = new MailboxState(directory);
+  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda <lucinda@aia4.io>" });
+  const result = await runInboxCleanup({
+    composio,
+    classifier,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 0);
 });
 
 test("blocked mail creates Linear, alerts the fixed owner, and is marked read", async () => {
@@ -223,6 +304,9 @@ test("blocked mail creates Linear, alerts the fixed owner, and is marked read", 
   assert.equal(slack.input.connectedAccountId, APPROVED.sendConnectedAccountId);
   assert.equal(slack.input.arguments.channel, APPROVED.ownerSlackChannelId);
   assert.match(slack.input.arguments.markdown_text, /\[NA-5\]\[MAYA\].*\[BLOCKED\]/u);
+  const labels = calls.find((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").input.arguments;
+  assert.deepEqual(labels.add_label_ids, ["STARRED", "IMPORTANT"]);
+  assert.deepEqual(labels.remove_label_ids, ["UNREAD"]);
 });
 
 test("a blocked Slack failure is terminally ambiguous and never triggers a second Slack send", async () => {
@@ -276,4 +360,10 @@ test("half-hour schedule keys and delays are deterministic", () => {
   assert.equal(mailboxOccurrenceId(new Date("2026-07-28T10:44:59.000Z")), "maya-chen:mailbox:2026-07-28T10:30:00.000Z");
   assert.equal(millisecondsUntilNextHalfHour(Date.parse("2026-07-28T10:44:59.000Z")), 901_000);
   assert.equal(millisecondsUntilNextHalfHour(Date.parse("2026-07-28T11:00:00.000Z")), 1_800_000);
+});
+
+test("mailbox label plans preserve blocked mail for owner visibility", () => {
+  assert.deepEqual(mailboxLabelPlan("ignore"), { add: [], remove: ["UNREAD", "INBOX"] });
+  assert.deepEqual(mailboxLabelPlan("track"), { add: ["STARRED"], remove: ["UNREAD", "INBOX"] });
+  assert.deepEqual(mailboxLabelPlan("block"), { add: ["STARRED", "IMPORTANT"], remove: ["UNREAD"] });
 });

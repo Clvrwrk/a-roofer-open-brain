@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCapabilityPrompt, parseCapabilityTurn, runCapabilityAgent } from "../capability-agent.mjs";
-import { OWNER_EMAIL, executeCapabilityAction, normalizeCapabilityAction } from "../capability-executor.mjs";
+import { OWNER_EMAILS, executeCapabilityAction, normalizeCapabilityAction } from "../capability-executor.mjs";
 import { PREFIX, buildReply } from "../core.mjs";
 import { APPROVED } from "../policy.mjs";
 
 const signal = new AbortController().signal;
 
-test("Gmail sends and replies always add the owner CC and Maya attribution", () => {
+test("Gmail sends and replies always add both oversight CCs and Maya attribution", () => {
   const send = normalizeCapabilityAction({
     name: "gmail_send",
     arguments: { recipientEmail: "lucinda@example.test", cc: ["ops@example.test"], subject: "WEX received", body: "I received the files." },
   });
   assert.equal(send.slug, "GMAIL_SEND_EMAIL");
   assert.equal(send.input.connectedAccountId, APPROVED.gmailConnectedAccountId);
-  assert.deepEqual(send.input.arguments.cc, ["ops@example.test", OWNER_EMAIL]);
+  assert.deepEqual(send.input.arguments.cc, ["ops@example.test", ...OWNER_EMAILS]);
   assert.equal(send.input.arguments.subject, "[MAYA] WEX received");
   assert.match(send.input.arguments.body, /^\[MAYA\]/u);
 
@@ -22,13 +22,15 @@ test("Gmail sends and replies always add the owner CC and Maya attribution", () 
     name: "gmail_reply",
     arguments: { threadId: "19f473a646ed499c", body: "Got it." },
   });
-  assert.deepEqual(reply.input.arguments.cc, [OWNER_EMAIL]);
+  assert.deepEqual(reply.input.arguments.cc, OWNER_EMAILS);
   assert.equal(reply.input.arguments.thread_id, "19f473a646ed499c");
 });
 
 test("Linear is pinned to PE-CC-Dev and Slack may use any accessible safe channel", () => {
   const issue = normalizeCapabilityAction({ name: "linear_create", arguments: { title: "Track WEX", description: "Link cards to vehicles.", priority: 2 } });
   assert.equal(issue.input.arguments.team_id, APPROVED.linearTeamId);
+  assert.equal(issue.input.arguments.state_id, APPROVED.linearReviewStateId);
+  assert.equal(issue.input.arguments.assignee_id, APPROVED.linearReviewerId);
   assert.match(issue.input.arguments.title, /^\[MAYA\]/u);
   assert.match(issue.input.arguments.description, /^\[MAYA\]/u);
 
@@ -112,7 +114,7 @@ test("planner contract and prompt expose work tools without exposing credentials
   assert.match(prompt, /gmail_reply/u);
   assert.match(prompt, /linear_update/u);
   assert.match(prompt, /slack_send/u);
-  assert.match(prompt, /automatically CC'd to admin@cc\.proexteriorsus\.net/u);
+  assert.match(prompt, /admin@cc\.proexteriorsus\.net and chussey@aia4\.io/u);
   assert.doesNotMatch(prompt, /sk_live|xoxb-|lin_api_/u);
   assert.equal(parseCapabilityTurn('{"version":1,"type":"final","message":"Done."}').message, "Done.");
   assert.throws(() => parseCapabilityTurn("not json"), /invalid JSON/u);
