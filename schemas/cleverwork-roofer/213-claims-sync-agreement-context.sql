@@ -11,3 +11,10 @@
 -- claims_sync_agreement_context_213b (2026-08-05); it supersedes migration
 -- 212's definition of credit_memo_claims_sync only in these added columns.
 SELECT 1; -- marker file; see migration history for the applied function body
+
+-- 213b (2026-08-05, same day): the reviewed-claims audit-stamp backfill initially
+-- INNER-joined v_invoice_line_audit_current, silently skipping claim lines with
+-- no audit history at all. Corrected pass (LEFT JOIN, COALESCE 'pending') stamped
+-- 41 further lines ('backfill 2026-08-05b') — e.g. all 6 on 2012329979-001, which
+-- then read 0/17 to audit. The live review-line path inserts unconditionally and
+-- was never affected.
