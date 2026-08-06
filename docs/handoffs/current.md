@@ -1,84 +1,113 @@
-# Project Handoff — JT Sync Sentinel (a-roofers-open-brain)
-**Project:** JobTread ⇄ Supabase 24/7 alignment agent (JT Sync Sentinel) + MCP fleet health
-**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain (branch `main`)
-**Production URL:** https://cc.proexteriorsus.net · JobTread org Pro Exteriors `22PazeRM5FCH` · Supabase `rnhmvcpsvtqjlffpsayu`
-**Date:** 2026-08-05 07:26
-**Agent:** Claude Code (Fable 5)
-**Reason:** User-requested full handoff + wrapup + Linear documentation
+# Project Handoff — Pro Exteriors Open Brain / Command Center
+**Project:** a-roofers-open-brain (Command Center app + brain schemas)
+**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
+**Production URL:** https://cc.proexteriorsus.net (Coolify, deploys from `main`; verify via `/healthz` `buildCommit`)
+**Date:** 2026-08-05 22:15
+**Agent:** Lead Orchestrator (Claude Code, Fable 5)
+**Reason:** User-requested wrapup (end of session)
 
-> Prior handoff (QXO+SRS vendors / host rebuild, 2026-08-04) archived at `docs/handoffs/archive/2026-08-05-0726.md`.
+> Prior handoff (JT Sync Sentinel, 2026-08-05 07:26) archived under `docs/handoffs/archive/`.
 
 ---
 
 ## Accomplished This Session
 
-### 1. JobTread connection fully mapped
-- The `integrations/bridges/jobtread/` tree = a **one-time AccuLynx→JobTread outbound migration** (2026-07-28, 34,433 writes, 0 failed) via the Pave API — NOT a sync. Supabase is SoT; JT is the agent action plane (r4 scorecard 28/40 vs 20/40).
-- **Convex is unrelated to JobTread**: it backs the external Decision Cockpit (`~/Projects/PE-CC-Executive`, project `cockpit-proexteriors`, chandler.proexteriorsus.net) mirroring QBO only. Convex stays `defer` for the brain (docs/70 §11.4).
-- JT objects have **no `updatedAt`** → delta polling impossible; fingerprint sweeps + webhooks are the only alignment mechanisms.
+### Invoice Audit v2 — R5 cleanup + docs/82 close-out
+- `schemas/cleverwork-roofer/204-archive-euless-office.sql`: Euless, TX office archived (`is_active=false`; boundary/rings kept as history); its 2 Wichita Falls branches + 42 stale suggestions repointed to Richardson.
+- 12 orphaned invoice-audit API routes + 4 orphaned libs + 4 test files deleted; dead code removed; `POST /api/invoice-audit/classify` added (v2 agent write path; agents blocked from passing variance/UOM lines); Service/Warranty page variant retired; "To Audit" KPI → "Claims To Review".
 
-### 2. JT Sync Sentinel built, deployed, first run green (A3 approved; docs/80)
-- Schema 196 applied to prod: `jt_mirror.{sync_runs, sync_watermarks, conflict_review, webhook_events, daily_logs}` + `content_hash`/`first_seen_at` on all echo tables.
-- `integrations/bridges/jobtread/sync-sentinel/`: `pave-client.mjs` (≤4 req/s), `sentinel.mjs` (sweep + drift + gated outbound staging + Slack), `executor.mjs` (**the B3 driver finally committed** — plays `status='approved'` pending_write rows only), `supabase-sql.mjs` (Mgmt-API throttle/backoff).
-- First full run (run 3, OK): 7,899 accounts / 6,561 locations / 6,575 jobs / 213 docs / 6,467 daily logs / 4,887 cost items baselined. Findings: **48 AccuLynx jobs missing from JT** (`sot_only` queue), 12 JT-born cost codes, JT sample records flagged `jt_only`.
-- Live-run bug fixes: Supabase Mgmt API 429 (1.2s throttle + backoff + 250-row flushes), Pave 413 (jobs page size 25), stale-run cleanup.
-- **Timer live on US host `178.156.203.23`**: `openbrain-jt-sentinel.timer`, daily **10:00 America/Los_Angeles** (next fire 17:00 UTC today).
-- Deploy verified: `main` pushed (`b4aff9a`), Coolify `buildCommit` flipped.
+### Territory map v2 cutover + vendor silo
+- `schemas/.../205-office-vendor-agreements.sql`: all-vendor office coverage (`v_office_vendor_agreements`); SRS's 3 agreements (Melissa L4→Richardson, 0049828559→Wichita, 0049345641→Denver) join the office-inherited model; duplicate SRS rows archived.
+- Ring semantics (Chris): green=in-date in-force, yellow=expired-evergreen(PAEXP)/unrouted, red=no agreement (incl. QXO), grey=out-of-scope; `ceo_verified` demoted to display badge.
+- `schemas/.../207-resolve-tx-overlap-pending.sql`: all 29 stranded overlap_pending branches (Euless two-ring artifacts, 15 SRS + 14 QXO) resolved to Richardson.
+- `schemas/.../208-vendor-silo-office-views.sql` + app fixes: branch-number collisions (QXO 113/249/… vs ABC) sealed in the views, in the map's ABC-API evidence, and in `/accounting/price-list/branch` (now vendor-scoped via `&vendor=`).
+- `/accounting/vendor-regions` rebuilt on the interactive map (rotted static-SVG page + demo "Price List Requests" panel removed); office cards list all vendors' chains; `?office=` honored.
 
-### 3. Conflict policy (APPROVED by Chris)
-Operational fields (milestones, daily logs, documents, tasks) flow **JT → Supabase**; identity/catalog/pricing flow **Supabase → JT** via human-gated `pending_write`; disagreements land in `jt_mirror.conflict_review`, never auto-overwritten.
+### CM review flow (three QA rounds with Chris)
+- Per-line review checkboxes in the audit tree: claim lines sync the Weekly CM stamps; a checked negotiated-variance line JOINS the CM claim set via `POST /api/credit-memos/add-line` (never "accepts" the price); No-Price/UOM lines record reviewed-valid via classify.
+- Approve/Un-approve dead-click fixed (inline stopPropagation swallowed the delegated handler); Credit Memo Requested KPI card updates live.
+- `schemas/.../212-credit-memo-claims-sync.sql`: claim-set ↔ live-engine sync, running in the 15-min matview cron — claim sets can never drift from the engine (first run: 44 synced, 16 phantom drafts cancelled).
+- `schemas/.../213-claims-sync-agreement-context.sql` (+213b backfill): every claim line carries office + agreement (number/eff/expiry) — the weekly email cites the agreement per line; 89+41 already-reviewed claims stamped as decided.
+- Reviewing a claim = the line's audit decision ('disputed' appended; un-review re-pends); "N to audit" counts only visible discrepancy lines (summary + detail + lazy paths); checkbox clicks no longer collapse categories; sub-nickel variance = In Tolerance (0.05 floor).
+- `schemas/.../214-at-risk-excludes-decided.sql`: `$ At Risk` excludes passed AND disputed — no longer mirrors the CM total; CM card shows draft dollars ("69 approved ($4,629) · 2 draft ($504)" = $5,132 headline).
 
-### 4. JT webhook/workflow review (docs/80)
-Pave `createWebhook` is self-serve, 43 event types, **zero registered today**, no signing secret → Phase 2 receiver = secret-in-URL + re-read-from-Pave into `jt_mirror.webhook_events`. Native JT Workflows are API-visible (`workflows`, `workflowRuns`); Zapier rejected. Bonus: JT grant keys expire after ~3 months of inactivity — the daily sentinel keeps the key alive.
+### docs/84 full-GUI audit + W1–W3 remediation
+- Three parallel audit agents traced every pill/table/link to its data source → `docs/84-gui-surface-audit.md` (findings in waves W1–W4).
+- `schemas/.../209-order-estimate-office-pricing.sql`: Order Audit + Estimate Audit cut over to office-inherited evergreen pricing (ship-to fallback arm kept); new `v_ship_to_pricing_office`; office resolvers ABC-siloed.
+- W2 (delegated subagent): 14 sample/dead files deleted (5 fabricated audit queue pages, dashboard.astro mock, frozen-clock price-list-coverage chain, orphan components/route); /agents Open-Items fixed + auth panel honesty; sales call-priority dead branch removed; catalog fixes.
+- W3: map "Expired (evergreen)" filter, in-force isNegotiated, dead counters removed; `request_kind` guards in credit-memo lookup/disposition; dead disposition/comms CSS purged.
 
-### 5. MCP fleet test (36 servers)
-31 pass. Fixed: **Excalidraw** (started canvas server on :3000 — non-persistent). Diagnosed 4 credential failures (site-copy-writer exa/tavily/firecrawl + local dataforseo): they expand `${EXA_API_KEY}`-style vars absent from the app launch env; **all values already in master.env** (`DATAFORSEO_LOGIN` needs mapping to `DATAFORSEO_USERNAME`). Classifier blocked agent-side secret copy — Chris has the one-command fix (writes them into `~/.claude/settings.json` `env`); takes effect next session. Bindings discovered: Slack MCP = **HWAOS workspace** (not pe-command-center); Notion MCP = **ZEA Main** workspace.
+### Price Agreement Management (docs/83, P1–P3 core)
+- `schemas/.../210` (vendor_office_item_history_210): `mv_vendor_office_item_history` (purchase count, qty, lifetime value, min/max/avg/latest per office+vendor+item; 15-min refresh) + `price_agreement_proposals`.
+- NEW `/accounting/price-agreements`: coverage chips (PAEXP-aware) + Gap Worksheet (≥2 lifetime buys, no in-force price — **535 items / $1.47M lifetime spend un-negotiated**) + Renewal Worksheet (678 items, avg-paid variance) + persisted proposed-price inputs (`/api/price-agreements/propose`).
+- `schemas/.../211-price-agreement-requests.sql` + generator + request page: monthly per-vendor packet (frozen snapshot, forwardable HTML + CSV/MD, month tracker). **SRS 2026-08 request generated (39 renewals incl. the expired KS/CO quotes).**
+- P3 partial: `/abc-price-agreement-gaps` + `/accounting/price-list/review` 301→ `/accounting/price-agreements`; their libs/scripts deleted; nav, precache, and map links updated (Price Agreements link now all-vendor).
 
 ## Git State
-- **Branch:** `main` == `origin/main` after this wrap-up's push
-- **Key commits:** `908ced9` sentinel feat · `6f45bb7` v1.2 fixes · `b4aff9a` merge (deployed) · wrap-up commit (analytics stragglers + handoff + daily log)
-- Contrib branch `contrib/cleverwork/jt-sync-sentinel` merged + pushed.
+- **Branch:** `main` (canonical; Coolify auto-deploys on push)
+- **Last commit:** `1707986` — "fix(invoice-audit): $ At Risk excludes decided lines (mig 214); CM card shows draft dollars" — **deployed & verified** via healthz
+- **Uncommitted changes:** only this handoff (committed as part of wrapup)
+- Migrations **204–214** applied to prod Supabase (`rnhmvcpsvtqjlffpsayu`); schema files mirror them. Note: another session's Maya inbox-triage commits merged into `main` mid-evening (rebased cleanly).
 
 ## Task Cut Off
-None — clean boundary.
+None — session ended at a clean boundary after QA round 3 (KPI reconciliation) deployed and verified.
 
 ## Next Task — Start Here
 
-**Task:** JT key rotation + sentinel verification (PEC-144), then Phase 2.
-1. **Chris (human):** rotate the `SUPABASE_MIRROR` grant key (JT Settings → Integrations → API → Grants) → update `JT_SUPABASE_MIRROR_GRANT_KEY` in `~/.config/cleverwork/master.env` (mac-mini) **and** `/opt/openbrain/a-roofers-open-brain/.env` (US host). Until then the 10:00 PT timer fails with an explicit missing-key log, then self-heals.
-2. Verify: `ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@178.156.203.23 'bash /opt/openbrain/a-roofers-open-brain/scripts/jt-sync-sentinel.sh smoke'` then `select * from jt_mirror.sync_runs order by id desc limit 3;`
-3. Review drift: `select * from jt_mirror.conflict_review where status='open';` — decide on the 48 unmirrored AccuLynx jobs (approve Phase 3 staging or dismiss).
-4. Then: PEC-145 webhook receiver (Command Center route → `jt_mirror.webhook_events`).
+**Task:** Task #9 — PAM remainder (AgentMail auto-draft + ingest absorb + final retirements)
+**What to check / do:**
+1. Build the AgentMail send/draft client (`lib/agentmail.ts` is config-only today) so the monthly price-agreement packet auto-drafts via Maya.Chen to Chris & Lucinda on the 1st; wire the weekly CM email through the same plumbing (shared with Phase 6 Tuesday automation).
+2. Port `api/price-agreement/review/promote.ts` off the legacy ABC tables (it still writes `abc_price_agreements` + branch matches with `ceo_verified:false`) to `price_agreements`/generic model; absorb the staged-list QA into a PAM "Request & Ingest" section.
+3. Then retire `/accounting/price-agreement/builder` + `/accounting/price-agreement/review` with redirects; decide the 12 `[slug]` dashboards' `abc-price-gaps` engine (docs/84 W1 item 3).
+4. Separate builds still open: Phase 4 OCR verifier (Unstructured), Phase 5 SRS/QXO invoice ingestion (QXO source files with Chris), Phase 6 Tuesday INV-PROCESSED producer, W4 vendor-hardcode sweep.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Verify the JT grant key was rotated and the sentinel timer ran green, then start PEC-145 (webhook receiver)."
+**If a Coolify manual redeploy is needed:** the API token in root `.env` is DEAD (401) — Chris must mint a new one in the Coolify dashboard; webhook deploys on push to `main` still work fine.
 
-## Decisions Made This Session
-- Conflict policy per above (approved).
-- Sentinel cron runs **without** `--stage-outbound` until the first conflict-queue review.
-- Webhooks (Phase 2) over polling; Zapier rejected; JT native Workflows = ops-only, not sync.
-- 1Password unnecessary for MCP fixes — keys were already in master.env; classifier-blocked secret copying stays a human action.
+**Prompt to use:** "Read docs/handoffs/current.md and docs/83-price-agreement-management.md. Then start task #9: build the AgentMail draft client + monthly auto-draft cron for the price-agreement request packets, then port promote.ts off the legacy ABC tables and absorb the staged-list QA into /accounting/price-agreements."
+
+## Decisions Made This Session (do not re-litigate)
+- **Ring/status semantics:** Healthy = in-date in-force agreement (direct or office-inherited); Needs Attention = expired-evergreen (PAEXP) or unrouted; Problem = no agreement at all (QXO = red); `ceo_verified` is display-only, never a gate.
+- **Full union:** office inheritance covers ALL vendors via `v_office_vendor_agreements`; the audit engine's generic arm lands with Phase 5 ingestion (verifiable against real rows).
+- **Vendor silo:** branch-number joins must always be vendor-scoped — no vendor's pricing may ever surface on another vendor's status, price list, or agreements.
+- **Gap rule:** ≥2 purchases lifetime per vendor+office with no in-force negotiated price ⇒ Gap Worksheet auto-enrollment.
+- **Monthly requests:** auto-draft on the 1st via Maya.Chen AgentMail (generate-and-forward until the mail client exists).
+- **Line review contract:** checking a variance line JOINS the CM (never accepts the price); No-Price/UOM check = reviewed-valid; a review IS the line's audit decision; agents may not pass variance/UOM lines.
+- **At-risk:** overcharge NOT yet decided (excludes passed + disputed) — disjoint from the CM total by definition.
+- **Claim sets:** must always match the live engine — the 15-min `credit_memo_claims_sync_all()` enforces it; sent/received CMs are never touched.
 
 ## Blockers Requiring Human Action
-1. **Rotate JT grant key + add to US host** (PEC-144) — sentinel timer waits on it.
-2. **Run the settings-env command** (in session transcript) + restart to activate the 4 fixed MCP servers; Linear MCP also activates next session (OAuth done).
-3. Optional: install Xcode for the iOS simulator MCP; make Excalidraw canvas persistent.
+1. **Coolify API token** — mint a new token in the Coolify dashboard (stored one 401s); update root `.env`.
+2. **QXO invoice source files** — needed before Phase 5 QXO ingestion.
+3. **Ready to send (human forward):** 69 approved CMs on `/accounting/credit-memos/weekly`; SRS 2026-08 renewal request on `/accounting/price-agreements`.
 
 ## Verification Commands
-1. `systemctl list-timers openbrain-jt-sentinel.timer` on 178.156.203.23 — next fire 10:00 PT.
-2. `select id,status,entities,drift from jt_mirror.sync_runs order by id desc limit 3;` — run 3 = ok with full entity stats.
-3. `python3 integrations/bridges/jobtread/mirror/checks/r3b_exec_check.py` — still PASS (migration intact).
-4. `curl -s https://cc.proexteriorsus.net/healthz | jq -r .buildCommit` — `b4aff9a…` or later.
+1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` should equal `origin/main` HEAD (`1707986…` at handoff time).
+2. `cd app/command-center && npm run build && npx vitest run` — build Complete!, 286/286 tests.
+3. SQL (prod): `SELECT public.credit_memo_claims_sync_all();` — returns ok; cancelled count settles at 0 once stable.
 
-## Linear Accounting
-- **Project:** [SESSION 2026-08-04 · QXO+SRS vendors, host rebuild, price inheritance](https://linear.app/cleverwork/project/session-2026-08-04-qxosrs-vendors-host-rebuild-price-inheritance-95be5c5e76e0) — continued per Chris, new milestone added.
-- **Milestone:** JT Sync Sentinel (JobTread ⇄ Supabase alignment)
-- **Done:** PEC-142 (build + first run) · PEC-143 (US-host timer deploy)
-- **Todo:** PEC-144 (key rotation, human) · PEC-145 (Phase 2 webhooks) · PEC-146 (Phase 3 outbound compiler)
-- Access note: Linear MCP unauthenticated in this session; all Linear writes went through the `LINEAR_API_KEY` GraphQL fallback (per 2026-08-04 precedent).
+## Full Context
 
-## Service / deployment map (unchanged from 2026-08-04 except:)
+### What was built across ALL sessions (running list — never delete)
+- OB1 memory spine (Supabase + pgvector, containerized MCPs); property-first schemas; UOM pricing contract (docs/46, migs 119–122); ABC invoice/order/estimate audit surfaces; territory map + WorkOS gating + agent service tokens (workos-agent-auth skill); AccuLynx→JobTread migration via gated write queue (2026-07-27/28); QuickBooks read-only mirror (docs/74); Slack agent identities (slack-agents skill); AgentMail webhook plumbing; Maya accounting inbox triage (activated 2026-08-05, separate session); Invoice Audit v2 (docs/81: two-axis status model, migs 197–203); docs/82 remediation R1–R6 (office-inherited engine cutover mig 201, CM review gates mig 202, reset v2 mig 203, map cutover, vendor silo); docs/83 Price Agreement Management P1–P3 core (migs 210–211); docs/84 full-GUI audit + W1–W3 fixes (migs 209, 212–214); migrations 204–214 all applied 2026-08-05.
+
+### Architecture decisions
+- Office-inherited, invoice-date-effective, evergreen (PAEXP), lowest-price-wins pricing is THE model everywhere; ship-to matches survive only as a no-regression fallback arm.
+- Matviews (`mv_office_agreement_versions`, `mv_invoice_pricing_office`, `mv_vendor_office_item_history`) refresh on a 15-min pg_cron job that also runs `credit_memo_claims_sync_all()`.
+- Append-only audit ledger (`invoice_line_audit`; current-state via `v_invoice_line_audit_current`); `invoice_line_reaudit` is the claim store — `classification='engine_resolved'` removes a row from gates without deleting history.
+- Astro SSR + vanilla client scripts; dev server reads prod Supabase; `.claude/launch.json` (gitignored) strips inherited SUPABASE env vars.
+
+### Key invariants (never violate)
+- Additive/idempotent migrations only; archive, never delete (hard rule 1).
+- Vendor silo: never key pricing across vendors by bare branch number.
+- Compare prices only in the pricing UOM via `price_per_uom` (docs/46).
+- Sent/received CMs are history — only draft/approved rows may change.
+- `main` is the only deploy branch; verify `/healthz` `buildCommit` after every push.
+
+### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| JT Sync Sentinel | `openbrain-jt-sentinel.timer` on US host `178.156.203.23`, 10:00 America/Los_Angeles daily |
-| JobTread | org `22PazeRM5FCH`, grant `SUPABASE_MIRROR` (`JT_SUPABASE_MIRROR_GRANT_KEY`), Pave API |
-| Supabase | `rnhmvcpsvtqjlffpsayu` — schemas through **196** |
+| Prod app | https://cc.proexteriorsus.net — Coolify app uuid `og0rmt02rff8qti9nlfk3nr7`, builds `app/command-center/Dockerfile` from `main` |
+| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` (one DB for dev + live) |
+| Deploy check | `GET /healthz` → `buildCommit` (≈30–90s after push, ~300s cold) |
+| Coolify API | token in root `.env` DEAD (401) — needs re-mint; push-webhook deploys unaffected |
+| Linear | team **PE-CC-DevTeam** (PEC-…) |

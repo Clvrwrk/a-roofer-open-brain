@@ -1,0 +1,10 @@
+[Unit]
+Description=Thursday AR/WIP pack at 06:00 America/Chicago (after Thu 05:30 week-roll pg_cron; docs/85)
+
+[Timer]
+OnCalendar=Thu *-*-* 06:00:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

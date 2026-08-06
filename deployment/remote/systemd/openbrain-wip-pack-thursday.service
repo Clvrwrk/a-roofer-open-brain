@@ -1,0 +1,15 @@
+[Unit]
+Description=Open Brain Thursday AR/WIP pack build + publish to wip-packs bucket (docs/85)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/wip-pack-thursday.sh
+User=root
+TimeoutStartSec=3600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
