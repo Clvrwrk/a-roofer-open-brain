@@ -121,7 +121,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Credit Memo Requested</span>
         <span class="iv-kpi-val">{money(cmApprovedTotal + cmDraftTotal)}</span>
-        <span class="iv-kpi-sub">{cmApprovedCount} approved ({money(cmApprovedTotal)}) · {cmDraftCount} draft</span>
+        <span class="iv-kpi-sub">{cmApprovedCount} approved ({money(cmApprovedTotal)}) · {cmDraftCount} draft ({money(cmDraftTotal)})</span>
         <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly">View request</a>
       </div>
       <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
