@@ -10,6 +10,7 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } fr
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -74,9 +75,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .single();
   if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
 
+  // The snapshot is already committed, so failing the request here would make a retry
+  // supersede a request the caller never learned about. Report it instead.
   const { error: includeError } = await client.from("price_agreement_proposals").update({ status: "included", month_label: monthLabel, updated_at: nowIso })
     .eq("vendor_id", vendorId).eq("status", "draft");
-  if (includeError) return jsonApiResponse({ error: "proposals_update_failed", error_description: includeError.message }, { status: 500 });
+  reportWriteFailure("price-agreements/generate-request price_agreement_proposals", includeError);
 
-  return jsonApiResponse({ ok: true, requestId: (inserted as any).id, monthLabel, gapCount, renewalCount });
+  return jsonApiResponse({ ok: true, requestId: (inserted as any).id, monthLabel, gapCount, renewalCount, proposalsMarkedIncluded: !includeError });
 };

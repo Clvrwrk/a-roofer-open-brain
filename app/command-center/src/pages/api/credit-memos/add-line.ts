@@ -77,17 +77,18 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // engine's numbers and make it a reviewed claim. (Wave runs can predate the
   // migration-205 office pricing — a line the wave saw as no_price may now carry a
   // real negotiated variance; the human's add wins with current data.)
-  const { data: existingRows } = await client
+  const { data: existingRows, error: existingRowsError } = await client
     .from("invoice_line_reaudit")
     .select("id")
     .eq("invoice_number", invoiceNumber)
     .eq("run_label", runLabel)
     .eq("line_id", lineId)
     .limit(1);
+  if (existingRowsError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: existingRowsError.message }, { status: 500 });
   let claimId: number;
   if ((existingRows as any[] | null)?.length) {
     claimId = (existingRows as any[])[0].id;
-    await client
+    const { error: claimUpdateError } = await client
       .from("invoice_line_reaudit")
       .update({
         classification: "discrepancy",
@@ -98,6 +99,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
         reviewed_at: nowIso,
       })
       .eq("id", claimId);
+    // A stale claim would retotal the memo wrong and read as unreviewed at approval.
+    if (claimUpdateError) return jsonApiResponse({ error: "claim_update_failed", error_description: claimUpdateError.message }, { status: 500 });
   } else {
     const { data: inserted, error: insertError } = await client
       .from("invoice_line_reaudit")
