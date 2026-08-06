@@ -7,7 +7,7 @@ identity:
   id: "maya-chen"
   display_name: "Maya Chen"
   role: "document-intake"
-  persona_description: "Maya is the Accounting Assistant and front door for finance email and supplier documents. She triages the Google Workspace inbox, files mail, creates review-ready PE-CC-DevTeam issues, and ensures invoices, credit memos, price lists, pricing conversations, and orders become structured evidence in the brain."
+  persona_description: "Maya is the Accounting Assistant and front door for finance work. She triages communication channels, roots every task in CODEX AGENT TEAM, works explicitly authorized accounting children, and ensures invoices, credit memos, price lists, WIP/AR questions, and orders become structured evidence in the brain."
 
 platform:
   client_id: "pro-exteriors"
@@ -81,7 +81,7 @@ google_workspace:
     historical_cleanup_reply: false
     other_sender_behavior: "triage_without_reply"
   inbox_triage:
-    actionable_behavior: "create_linear_issue_assign_agent_review_notify_admin_slack"
+    actionable_behavior: "create_cat_source_then_link_accounting_child_assign_agent_review_notify_admin_slack"
     forced_review_content:
       - "business documents and attachments"
       - "accounting requests"
@@ -92,10 +92,18 @@ google_workspace:
     review_filing: "star_mark_read_and_archive_after_linear_and_slack_receipts"
     blocked_filing: "star_mark_important_mark_read_keep_in_inbox"
   linear_review_routing:
-    team: "PE-CC-DevTeam"
-    team_id: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a"
-    state: "Agent Review"
-    state_id: "3e03cd48-d3c8-4e63-867c-734387f39efb"
+    source_team: "CODEX AGENT TEAM"
+    source_team_id: "fca0aed7-1eac-43ea-aa9b-280d487fcc86"
+    source_project: "CODEX Agent Fleet — Day-0 Bootstrap"
+    source_project_id: "9b8ce36d-bb1c-444f-84ea-fa2c785b84ce"
+    source_parent: "CAT-20"
+    source_state: "Agent Review"
+    source_state_id: "721fd015-d82a-4ae2-b5d8-a34c1fb76c05"
+    downstream_team: "PE-CC-DevTeam"
+    downstream_team_id: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a"
+    downstream_state: "Agent Review"
+    downstream_state_id: "3e03cd48-d3c8-4e63-867c-734387f39efb"
+    execution_gate: "Only linked [MAYA] issues explicitly moved to Agent Todo may be claimed. Maya leaves completed analysis in Agent Review."
     assignee: "Christopher Hussey"
     assignee_id: "002bc1e6-c102-42f7-86cc-45b7c499dae3"
 
@@ -161,6 +169,7 @@ slack:
 
 command_center:
   service_agent_id: "ob-accounting"
+  runtime_bearer_identity: "maya-chen"
   departments:
     - "accounting"
     - "system"
@@ -175,6 +184,12 @@ command_center:
     - "agent.resume"
     - "desktop.command_center_ui"
   approval_decide: false
+  accounting_reads:
+    - "work_queue"
+    - "price_agreements"
+    - "credit_memos"
+    - "wip_ar"
+  accounting_writes: "human_effect_gate_only"
 
 hermes:
   model: "google/gemini-3.1-flash-lite"
@@ -195,6 +210,14 @@ integrations:
     - "Price Agreements"
     - "Open Invoice Reports"
     - "Credit Memo Packets"
+  channel_contract:
+    active:
+      - "gmail_via_composio"
+      - "slack_via_composio"
+      - "authenticated_generic_webhook_via_command_center"
+    gated:
+      signal: "Requires third-party-agent-tool-gate approval, signed ingress, stable delivery IDs, dedupe, and rollback before activation."
+    future: "Every added channel must emit a stable source key and create or resolve the CAT source before downstream work."
 
 domain_memory:
   fleet_fuel_card_relationship:
@@ -216,6 +239,9 @@ guardrails:
     - "cleverwork.io"
   no_approval_decide: true  # Payments, access-control changes, and irreversible deletion remain separate owner decisions.
   no_supabase_service_role: true
+  qbo_production: "read_only_mirror_only"
+  pricing_uom_rule: "Use priceQty.uom, abc_invoice_lines.price_per_uom, and v_item_uom_map; never compare raw quantity/uom/unit_price/pricePerUnitAmount."
+  wip_ar_rule: "Keep billed AR separate from unbilled work; preserve rows, source freshness, and human edit history."
   no_public_internet: false  # needs browser for vendor portal downloads
   escalation_triggers:
     - "Document is unreadable, malformed, password-protected, or not classifiable"

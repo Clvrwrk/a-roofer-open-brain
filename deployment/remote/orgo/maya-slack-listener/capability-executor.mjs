@@ -19,9 +19,13 @@ export const CAPABILITY_CATALOG = Object.freeze([
   ["linear_search", "Search PE-CC-Dev Linear issues."],
   ["linear_get_issue", "Read one Linear issue by identifier or UUID."],
   ["linear_list", "List PE-CC-Dev Linear issues."],
-  ["linear_create", "Create a PE-CC-Dev Linear issue."],
+  ["linear_create", "Create a CODEX AGENT TEAM source issue. A stable sourceKey is required; downstream work is created by the orchestration layer."],
   ["linear_update", "Update a PE-CC-Dev Linear issue."],
   ["linear_comment", "Add a comment to a PE-CC-Dev Linear issue."],
+  ["command_center_work_queue", "Read Maya's accounting work queue from Command Center."],
+  ["command_center_wip_ar", "Read the live Friday WIP/AR board; billed AR and unbilled work remain separate."],
+  ["command_center_credit_memos", "Read pending credit-memo requests and line-review progress."],
+  ["command_center_price_branch", "Read one branch's negotiated price-agreement detail by exact branch name."],
   ["slack_search", "Search Slack messages accessible to Maya."],
   ["slack_history", "Read accessible Slack channel history by channel ID."],
   ["slack_thread", "Read an accessible Slack thread by channel ID and parent timestamp."],
@@ -40,6 +44,18 @@ const WRITE_ACTIONS = new Set([
   "gmail_reply", "gmail_send", "gmail_draft", "gmail_label", "gmail_trash",
   "linear_create", "linear_update", "linear_comment",
   "slack_send", "slack_update", "slack_upload_content",
+]);
+const LINEAR_WORK_ALLOWED = new Set([
+  "gmail_search", "gmail_get_message", "gmail_get_thread", "gmail_get_attachment",
+  "linear_search", "linear_get_issue", "linear_list", "linear_comment",
+  "slack_search", "slack_history", "slack_thread", "slack_channels",
+  "command_center_work_queue", "command_center_wip_ar", "command_center_credit_memos", "command_center_price_branch",
+]);
+const MAILBOX_ALLOWED = new Set([
+  "gmail_search", "gmail_get_message", "gmail_get_thread", "gmail_get_attachment",
+  "linear_search", "linear_get_issue", "linear_list", "linear_comment",
+  "slack_search", "slack_history", "slack_thread", "slack_channels", "slack_send",
+  "command_center_work_queue", "command_center_wip_ar", "command_center_credit_memos", "command_center_price_branch",
 ]);
 
 function cleanString(value, name, limit = 8_000) {
@@ -115,6 +131,12 @@ export function normalizeCapabilityAction(value, expected = APPROVED) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("capability action must be an object");
   const name = cleanString(value.name, "action name", 80);
   if (!CAPABILITY_CATALOG.some(([candidate]) => candidate === name)) throw new Error("unknown capability action");
+  if (expected.capabilityMode === "linear_work" && !LINEAR_WORK_ALLOWED.has(name)) {
+    throw new Error("linear work mode forbids this capability");
+  }
+  if (expected.capabilityMode === "mailbox" && !MAILBOX_ALLOWED.has(name)) {
+    throw new Error("mailbox work mode forbids this capability");
+  }
   const args = value.arguments && typeof value.arguments === "object" && !Array.isArray(value.arguments)
     ? value.arguments
     : {};
@@ -151,26 +173,54 @@ export function normalizeCapabilityAction(value, expected = APPROVED) {
     arguments_ = { query: cleanString(args.query, "query", 500), first: integer(args.first, 25, 1, 50), include_archived: Boolean(args.includeArchived) };
   } else if (name === "linear_get_issue") {
     slug = "LINEAR_GET_LINEAR_ISSUE"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
-    arguments_ = { issue_id: id(args.issueId, "issueId", LINEAR_ISSUE) };
+    const issueId = id(args.issueId, "issueId", LINEAR_ISSUE);
+    enforceAllowedLinearIssue(issueId, expected);
+    arguments_ = { issue_id: issueId };
   } else if (name === "linear_list") {
     slug = "LINEAR_LIST_LINEAR_ISSUES"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
     arguments_ = { first: integer(args.first, 100, 1, 250), include_transitions: Boolean(args.includeTransitions) };
   } else if (name === "linear_create") {
     slug = "LINEAR_CREATE_LINEAR_ISSUE"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
     arguments_ = {
-      team_id: expected.linearTeamId,
-      state_id: expected.linearReviewStateId,
+      team_id: expected.linearSourceTeamId,
+      project_id: expected.linearSourceProjectId,
+      parent_id: expected.linearSourceParentId,
+      state_id: expected.linearSourceReviewStateId,
       assignee_id: expected.linearReviewerId,
       title: attributedLinear(args.title, "title", 140),
-      description: attributedLinear(args.description, "description", 12_000),
+      description: [
+        "Maya CAT source: true",
+        `Maya source key: ${cleanString(args.sourceKey, "sourceKey", 500)}`,
+        "Source channel: capability",
+        "",
+        attributedLinear(args.description, "description", 12_000),
+      ].join("\n"),
       priority: integer(args.priority, 3, 1, 4),
     };
   } else if (name === "linear_update") {
     slug = "LINEAR_UPDATE_ISSUE"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
-    arguments_ = { issueId: id(args.issueId, "issueId", LINEAR_ISSUE), ...(args.title ? { title: attributedLinear(args.title, "title", 140) } : {}), ...(args.description ? { description: attributedLinear(args.description, "description", 12_000) } : {}), ...(args.priority !== undefined ? { priority: integer(args.priority, 3, 0, 4) } : {}), ...(args.stateId ? { stateId: id(args.stateId, "stateId", /^[0-9a-fA-F-]{36}$/u) } : {}) };
+    const issueId = id(args.issueId, "issueId", LINEAR_ISSUE);
+    enforceAllowedLinearIssue(issueId, expected);
+    arguments_ = { issueId, ...(args.title ? { title: attributedLinear(args.title, "title", 140) } : {}), ...(args.description ? { description: attributedLinear(args.description, "description", 12_000) } : {}), ...(args.priority !== undefined ? { priority: integer(args.priority, 3, 0, 4) } : {}), ...(args.stateId ? { stateId: id(args.stateId, "stateId", /^[0-9a-fA-F-]{36}$/u) } : {}) };
   } else if (name === "linear_comment") {
     slug = "LINEAR_CREATE_LINEAR_COMMENT"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
-    arguments_ = { issueId: id(args.issueId, "issueId", LINEAR_ISSUE), body: attributedLinear(args.body, "body", 8_000) };
+    const issueId = id(args.issueId, "issueId", LINEAR_ISSUE);
+    enforceAllowedLinearIssue(issueId, expected);
+    arguments_ = { issueId, body: attributedLinear(args.body, "body", 8_000) };
+  } else if (name.startsWith("command_center_")) {
+    const query = name === "command_center_work_queue"
+      ? "/api/agent/work-queue?department=accounting"
+      : name === "command_center_wip_ar"
+        ? "/api/accounting/friday-wip.json"
+        : name === "command_center_credit_memos"
+          ? "/api/credit-memos/pending"
+          : `/api/price-agreement/branch-detail?branch=${encodeURIComponent(cleanString(args.branch, "branch", 160))}`;
+    return Object.freeze({
+      name,
+      slug: "COMMAND_CENTER_GET",
+      write: false,
+      commandCenterPath: query,
+    });
   } else if (name === "slack_search") {
     slug = "SLACKBOT_SEARCH_MESSAGES"; connection = expected.sendConnectedAccountId; version = TOOL_VERSION;
     arguments_ = { query: cleanString(args.query, "query", 500), count: integer(args.count, 50, 1, 100), sort: "timestamp", sort_dir: args.sortDirection === "asc" ? "asc" : "desc", highlight: false };
@@ -185,7 +235,11 @@ export function normalizeCapabilityAction(value, expected = APPROVED) {
     arguments_ = { limit: integer(args.limit, 200, 1, 500), types: "public_channel,private_channel", exclude_archived: true };
   } else if (name === "slack_send") {
     slug = "SLACKBOT_SEND_MESSAGE"; connection = expected.sendConnectedAccountId; version = TOOL_VERSION;
-    arguments_ = { channel: id(args.channel, "channel"), markdown_text: attributedSlack(args.markdownText), ...(args.threadTs ? { thread_ts: slackTs(args.threadTs) } : {}), reply_broadcast: false, unfurl_links: false, unfurl_media: false };
+    const channel = id(args.channel, "channel");
+    if (expected.capabilityMode === "mailbox" && channel !== expected.ownerSlackChannelId) {
+      throw new Error("mailbox work mode restricts Slack sends to the pinned owner channel");
+    }
+    arguments_ = { channel, markdown_text: attributedSlack(args.markdownText), ...(args.threadTs ? { thread_ts: slackTs(args.threadTs) } : {}), reply_broadcast: false, unfurl_links: false, unfurl_media: false };
   } else if (name === "slack_update") {
     slug = "SLACKBOT_UPDATES_A_MESSAGE"; connection = expected.sendConnectedAccountId; version = TOOL_VERSION;
     arguments_ = { channel: id(args.channel, "channel"), ts: slackTs(args.ts), markdown_text: attributedSlack(args.markdownText), reply_broadcast: false };
@@ -194,6 +248,13 @@ export function normalizeCapabilityAction(value, expected = APPROVED) {
     arguments_ = { channels: id(args.channel, "channel"), filename: cleanString(args.filename, "filename", 255), title: optionalString(args.title, "title", 255), content: attributedBody(args.content), initial_comment: args.initialComment ? attributedSlack(args.initialComment) : `${PREFIX} Shared working file.` };
   }
   return Object.freeze({ name, slug, write: WRITE_ACTIONS.has(name), input: executeInput(expected, connection, version, arguments_) });
+}
+
+function enforceAllowedLinearIssue(issueId, expected) {
+  if (!Array.isArray(expected.allowedLinearIssueIds)) return;
+  if (!expected.allowedLinearIssueIds.includes(issueId)) {
+    throw new Error("capability mode restricts Linear actions to the CAT source and linked work issue");
+  }
 }
 
 function boundedStrings(value, name, maxItems, maxLength) {
@@ -210,6 +271,9 @@ function slackTs(value) {
 
 export async function executeCapabilityAction({ composio, action, signal, expected = APPROVED }) {
   const normalized = normalizeCapabilityAction(action, expected);
+  if (normalized.slug === "COMMAND_CENTER_GET") {
+    return executeCommandCenterRead(normalized, signal, expected);
+  }
   const result = await composio.tools.execute(
     normalized.slug,
     normalized.input,
@@ -228,6 +292,33 @@ export async function executeCapabilityAction({ composio, action, signal, expect
     slug: normalized.slug,
     write: normalized.write,
     providerReference: findProviderReference(data),
+    modelResult: redactAndBound(data),
+  });
+}
+
+async function executeCommandCenterRead(normalized, signal, expected) {
+  const token = process.env.MAYA_COMMAND_CENTER_TOKEN;
+  if (!token) throw new Error("Maya Command Center token is not configured");
+  const base = new URL(expected.commandCenterUrl);
+  const target = new URL(normalized.commandCenterPath, base);
+  if (target.origin !== base.origin || target.protocol !== "https:") {
+    throw new Error("Command Center destination is not pinned");
+  }
+  const response = await fetch(target, {
+    method: "GET",
+    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    redirect: "error",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`Command Center read failed with HTTP ${response.status}`);
+  let data;
+  try { data = JSON.parse(body); } catch { throw new Error("Command Center returned invalid JSON"); }
+  return Object.freeze({
+    name: normalized.name,
+    slug: normalized.slug,
+    write: false,
+    providerReference: `${target.pathname}:${response.status}`,
     modelResult: redactAndBound(data),
   });
 }

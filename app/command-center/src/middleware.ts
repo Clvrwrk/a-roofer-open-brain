@@ -7,6 +7,7 @@ import {
   resolveActorFromSessionUser,
   resolveServiceActorFromBearer,
 } from "@lib/access-control";
+import { resolveRegistryServiceActorFromBearer } from "@lib/agent-service-token.server";
 
 // Attach the resolved actor to the current request's Sentry scope so each error names the
 // account that hit it (id + email per the alpha decision). No-ops when Sentry isn't initialized.
@@ -124,7 +125,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // 2. Service agents: bearer token, API routes only.
   if (isApiRequest(pathname)) {
-    const serviceActor = resolveServiceActorFromBearer(request, env);
+    const serviceActor =
+      resolveServiceActorFromBearer(request, env) ??
+      await resolveRegistryServiceActorFromBearer(request, env);
     if (serviceActor) {
       locals.actor = serviceActor;
       applySentryUser(serviceActor);

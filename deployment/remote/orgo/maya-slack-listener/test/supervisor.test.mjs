@@ -11,7 +11,10 @@ import {
   HERMES_PATH,
   GMAIL_TOOL_VERSION,
   LINEAR_TOOL_VERSION,
+  LINEAR_WORK_INTERVAL_MS,
   MAILBOX_INTERVAL_MS,
+  MAYA_CADENCE_STATE_DIR,
+  MAYA_LINEAR_STATE_DIR,
   MAYA_MAILBOX_STATE_DIR,
   MAYA_RECEIPT_DIR,
   MAYA_RUNTIME_DIR,
@@ -105,7 +108,7 @@ test("rollback is trigger-first, fences the database, and remotely revokes the i
   assert.doesNotMatch(rollback, /(?:xapp-|xox[bp]-|sk_live_|ak_)/);
 });
 
-test("launcher strictly reads only two credentials and execs the pinned open listener", async () => {
+test("launcher strictly reads three scoped credentials and execs the pinned open listener", async () => {
   const launcher = await readFile(new URL("start-listener.sh", root), "utf8");
   assert.match(launcher, /^set -euo pipefail$/m);
   assert.match(launcher, /^umask 077$/m);
@@ -120,12 +123,14 @@ test("launcher strictly reads only two credentials and execs the pinned open lis
   assert.match(launcher, /^while IFS= read -r line \|\| \[\[ -n "\$line" \]\]; do$/m);
   assert.match(launcher, /^    COMPOSIO_API_KEY=\*\)$/m);
   assert.match(launcher, /^    OPENROUTER_API_KEY=\*\)$/m);
+  assert.match(launcher, /^    MAYA_COMMAND_CENTER_TOKEN=\*\)$/m);
   assert.match(launcher, /^    \*\) exit 1 ;;$/m);
   assert.match(launcher, /^done < "\$env_file"$/m);
   assert.doesNotMatch(launcher, /(?:source|^\.) .*listener\.env/m);
   assert.match(launcher, /^exec \/usr\/bin\/env -i \\/m);
   assert.match(launcher, /^  COMPOSIO_API_KEY="\$COMPOSIO_API_KEY" \\/m);
   assert.match(launcher, /^  OPENROUTER_API_KEY="\$OPENROUTER_API_KEY" \\/m);
+  assert.match(launcher, /^  MAYA_COMMAND_CENTER_TOKEN="\$MAYA_COMMAND_CENTER_TOKEN" \\/m);
   assert.match(
     launcher,
     /^  \/usr\/bin\/node \/opt\/pe-cc-agents\/maya-slack-listener\/listener\.mjs$/m,
@@ -151,9 +156,19 @@ test("authorization identities and runtime choices are immutable reviewed litera
     mayaBotUserId: "U0BD0Q0H55G",
     ownerSlackUserId: "U0B8SGJJZLJ",
     ownerSlackChannelId: "C0BD7L43PC2",
-    linearTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
-    linearReviewStateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
+    linearSourceTeamId: "fca0aed7-1eac-43ea-aa9b-280d487fcc86",
+    linearSourceProjectId: "9b8ce36d-bb1c-444f-84ea-fa2c785b84ce",
+    linearSourceReviewStateId: "721fd015-d82a-4ae2-b5d8-a34c1fb76c05",
+    linearSourceTodoStateId: "e06d64d3-1786-400a-ba82-a3ae92b23080",
+    linearSourceWorkingStateId: "17a4ad78-a2cb-4c80-8b07-052d962562eb",
+    linearSourceParentId: "16ac625e-9f89-4622-80f8-ea36f20bf72f",
+    linearWorkTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
+    linearWorkReviewStateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
+    linearWorkTodoStateId: "286ecb7c-e682-4c67-884e-88d620036e02",
+    linearWorkWorkingStateId: "3fb1725c-3e0a-43f5-8dc4-6a0455fff657",
+    linearWorkNeedsInputStateId: "c548790b-a977-477a-8fa4-493c2f74af26",
     linearReviewerId: "002bc1e6-c102-42f7-86cc-45b7c499dae3",
+    commandCenterUrl: "https://cc.proexteriorsus.net",
   });
   assert.equal(Object.isFrozen(APPROVED), true);
   assert.equal(AGENT_HOME, "/home/orgo/maya-agent");
@@ -165,19 +180,23 @@ test("authorization identities and runtime choices are immutable reviewed litera
   assert.equal(MAYA_RUNTIME_DIR, "/home/orgo/maya-agent/runtime");
   assert.equal(MAYA_RECEIPT_DIR, "/home/orgo/maya-agent/state/receipts");
   assert.equal(MAYA_MAILBOX_STATE_DIR, "/home/orgo/maya-agent/state/mailbox");
+  assert.equal(MAYA_LINEAR_STATE_DIR, "/home/orgo/maya-agent/state/linear-work");
+  assert.equal(MAYA_CADENCE_STATE_DIR, "/home/orgo/maya-agent/state/cadence");
   assert.equal(MAILBOX_INTERVAL_MS, 1_800_000);
+  assert.equal(LINEAR_WORK_INTERVAL_MS, 300_000);
   assert.equal(GMAIL_TOOL_VERSION, "20260721_00");
   assert.equal(LINEAR_TOOL_VERSION, "20260724_00");
   assert.equal(RELEASE_DIR, "/opt/pe-cc-agents/maya-slack-listener");
 });
 
-test("open listener accepts only its two provider credentials", async () => {
+test("open listener accepts only its three scoped provider credentials", async () => {
   const listener = await readFile(new URL("listener.mjs", root), "utf8");
   const hermesRunner = await readFile(new URL("hermes-runner.mjs", root), "utf8");
-  const references = [...`${listener}\n${hermesRunner}`.matchAll(/process\.env\.([A-Z0-9_]+)/g)]
+  const capabilityExecutor = await readFile(new URL("capability-executor.mjs", root), "utf8");
+  const references = [...`${listener}\n${hermesRunner}\n${capabilityExecutor}`.matchAll(/process\.env\.([A-Z0-9_]+)/g)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(references, ["COMPOSIO_API_KEY", "OPENROUTER_API_KEY"]);
+  assert.deepEqual(references, ["COMPOSIO_API_KEY", "MAYA_COMMAND_CENTER_TOKEN", "OPENROUTER_API_KEY"]);
   assert.doesNotMatch(
     listener,
     /process\.env\.(?:COMPOSIO_USER_ID|COMPOSIO_CONNECTED_ACCOUNT_ID|COMPOSIO_TRIGGER_ID|SLACK_TEAM_ID|SLACK_CHANNEL_ID|SLACK_MAYA_BOT_USER_ID|SLACK_OWNER_USER_ID|HERMES_BIN|HERMES_MODEL|MAYA_RUNTIME_DIR|MAYA_RECEIPT_DIR)/,

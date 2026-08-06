@@ -26,13 +26,15 @@ test("Gmail sends and replies always add both oversight CCs and Maya attribution
   assert.equal(reply.input.arguments.thread_id, "19f473a646ed499c");
 });
 
-test("Linear is pinned to PE-CC-Dev and Slack may use any accessible safe channel", () => {
-  const issue = normalizeCapabilityAction({ name: "linear_create", arguments: { title: "Track WEX", description: "Link cards to vehicles.", priority: 2 } });
-  assert.equal(issue.input.arguments.team_id, APPROVED.linearTeamId);
-  assert.equal(issue.input.arguments.state_id, APPROVED.linearReviewStateId);
+test("Linear creation is pinned to a CAT source and Slack may use any accessible safe channel", () => {
+  const issue = normalizeCapabilityAction({ name: "linear_create", arguments: { sourceKey: "slack-thread:T:C:1", title: "Track WEX", description: "Link cards to vehicles.", priority: 2 } });
+  assert.equal(issue.input.arguments.team_id, APPROVED.linearSourceTeamId);
+  assert.equal(issue.input.arguments.project_id, APPROVED.linearSourceProjectId);
+  assert.equal(issue.input.arguments.state_id, APPROVED.linearSourceReviewStateId);
   assert.equal(issue.input.arguments.assignee_id, APPROVED.linearReviewerId);
   assert.match(issue.input.arguments.title, /^\[MAYA\]/u);
-  assert.match(issue.input.arguments.description, /^\[MAYA\]/u);
+  assert.match(issue.input.arguments.description, /Maya CAT source: true/u);
+  assert.match(issue.input.arguments.description, /Maya source key: slack-thread:T:C:1/u);
 
   const slack = normalizeCapabilityAction({ name: "slack_send", arguments: { channel: "C0999999999", markdownText: "WEX intake is complete." } });
   assert.equal(slack.input.arguments.channel, "C0999999999");
@@ -53,7 +55,7 @@ test("provider execution uses the pinned account and returns a bounded confirmat
   const composio = { tools: { async execute(...args) { call = args; return { successful: true, data: { id: "PEC-901", title: "Created" } }; } } };
   const result = await executeCapabilityAction({
     composio,
-    action: { name: "linear_create", arguments: { title: "SRS escalation", description: "Work immediately.", priority: 1 } },
+    action: { name: "linear_create", arguments: { sourceKey: "slack-thread:T:C:1", title: "SRS escalation", description: "Work immediately.", priority: 1 } },
     signal,
     expected: APPROVED,
   });

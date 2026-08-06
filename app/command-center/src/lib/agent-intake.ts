@@ -4,10 +4,21 @@
  * Used by POST /api/agent/intake and by the Gmail polling worker.
  */
 import type { CommandCenterActor } from "@lib/access-control";
+import { createHash } from "node:crypto";
 
 export interface AgentIntakeMessage {
   /** Gmail message ID or AgentMail message ID — used as source_pk. */
   messageId: string;
+  /** Channel-neutral provider event ID. Defaults to messageId for Gmail compatibility. */
+  externalEventId: string;
+  sourceChannel: "gmail" | "slack" | "signal" | "webhook" | "linear" | "recurring";
+  sourceThreadId: string;
+  /** Stable conversation/content key used to converge duplicate forwards and deliveries. */
+  orchestrationKey: string;
+  /** Required CODEX AGENT TEAM audit root. */
+  catSourceIssue: string;
+  /** Optional downstream accounting issue. */
+  downstreamIssue: string;
   /** The alias address the email was sent to, e.g. invoices@cc.proexteriorsus.net */
   alias: string;
   /** Classification derived from the alias + content: invoice | credit_memo | price_agreement | ap_order_or_bill | ar_remittance | hr_sensitive_escalate | payroll_sensitive_escalate | unknown */
@@ -54,7 +65,7 @@ export function buildAgentIntakeRows(
   msg: AgentIntakeMessage,
   actor: CommandCenterActor,
 ): AgentIntakeRows {
-  const workKey = `accounting:email-intake:${msg.messageId}`;
+  const workKey = `accounting:intake:${msg.sourceChannel}:${msg.orchestrationKey}`;
   const priority = ALIAS_PRIORITY[msg.classification] ?? "normal";
   const titlePrefix = ALIAS_TITLE_PREFIX[msg.classification] ?? "Document intake";
   const spamFlag = msg.gmailLabels.includes("SPAM");
@@ -63,6 +74,7 @@ export function buildAgentIntakeRows(
     { text: `From: ${msg.from}` },
     { text: `Alias: ${msg.alias}` },
     { text: `Received: ${msg.receivedAt}` },
+    { text: `CAT source: ${msg.catSourceIssue}` },
     ...msg.attachments.map((fn) => ({ text: `Attachment: ${fn}` })),
   ];
   if (spamFlag) {
@@ -75,10 +87,10 @@ export function buildAgentIntakeRows(
   const workItem: Record<string, unknown> = {
     work_key: workKey,
     department: "accounting",
-    workflow: "email-intake",
-    source_system: "gmail",
-    source_table: "gmail_messages",
-    source_pk: msg.messageId,
+    workflow: "agent-intake",
+    source_system: msg.sourceChannel,
+    source_table: `${msg.sourceChannel}_events`,
+    source_pk: msg.externalEventId,
     title: `${titlePrefix} / ${msg.subject}`,
     summary: `${msg.classification} document received via ${msg.alias} from ${msg.from}. ${msg.attachments.length} attachment(s). Requires extraction and human verification.`,
     priority,
@@ -93,10 +105,16 @@ export function buildAgentIntakeRows(
     evidence,
     source_data: {
       alias: msg.alias,
+      catSourceIssue: msg.catSourceIssue,
       classification: msg.classification,
+      downstreamIssue: msg.downstreamIssue || null,
+      externalEventId: msg.externalEventId,
       from: msg.from,
       gmailLabels: msg.gmailLabels,
       receivedAt: msg.receivedAt,
+      orchestrationKey: msg.orchestrationKey,
+      sourceChannel: msg.sourceChannel,
+      sourceThreadId: msg.sourceThreadId || null,
       spamFlag,
       subject: msg.subject,
     },
@@ -105,7 +123,7 @@ export function buildAgentIntakeRows(
   const actionLog: Record<string, unknown> = {
     work_key: workKey,
     department: "accounting",
-    workflow: "email-intake",
+    workflow: "agent-intake",
     action_type: "agent_intake",
     decision: null,
     actor_id: actor.id,
@@ -119,17 +137,26 @@ export function buildAgentIntakeRows(
       from: msg.from,
       gmailLabels: msg.gmailLabels,
       messageId: msg.messageId,
+      externalEventId: msg.externalEventId,
+      orchestrationKey: msg.orchestrationKey,
+      sourceChannel: msg.sourceChannel,
+      sourceThreadId: msg.sourceThreadId,
+      catSourceIssue: msg.catSourceIssue,
+      downstreamIssue: msg.downstreamIssue,
       receivedAt: msg.receivedAt,
       slackChannelId: msg.slackChannelId,
       slackThreadTs: msg.slackThreadTs,
       spamFlag,
       subject: msg.subject,
     },
-    source_table: "gmail_messages",
-    source_pk: msg.messageId,
+    source_table: `${msg.sourceChannel}_events`,
+    source_pk: msg.externalEventId,
     slack_channel_id: msg.slackChannelId || null,
     slack_thread_ts: msg.slackThreadTs || null,
   };
+  actionLog.idempotency_key = createHash("sha256")
+    .update(`${actor.id}|${msg.sourceChannel}|${msg.externalEventId}|${msg.orchestrationKey}`)
+    .digest("hex");
 
   return { workItem, actionLog };
 }

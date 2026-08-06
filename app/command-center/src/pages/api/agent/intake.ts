@@ -13,10 +13,10 @@ export const prerender = false;
 
 /** POST /api/agent/intake
  *
- * Maya (ob-accounting service agent) posts here after classifying a Gmail
- * message.  We upsert a dashboard_work_items row and append a
- * dashboard_action_log row.  Returns the work item id so the agent can
- * thread later evidence attachments.
+ * Maya posts here only after a CODEX AGENT TEAM source issue exists. The route
+ * accepts channel-neutral events, converges them by orchestrationKey, and
+ * idempotently records one dashboard work item plus one action receipt per
+ * provider delivery.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
@@ -64,6 +64,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     "subject",
     "from",
     "receivedAt",
+    "orchestrationKey",
+    "catSourceIssue",
   ];
   for (const key of required) {
     if (!payload[key]) {
@@ -74,8 +76,68 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
+  const sourceChannel = String(payload.sourceChannel ?? "gmail");
+  if (!["gmail", "slack", "signal", "webhook", "linear", "recurring"].includes(sourceChannel)) {
+    return jsonApiResponse(
+      { error: "invalid_body", error_description: "Unsupported sourceChannel." },
+      { status: 400 },
+    );
+  }
+  if (!/^CAT-[0-9]+$/u.test(String(payload.catSourceIssue))) {
+    return jsonApiResponse(
+      { error: "invalid_body", error_description: "catSourceIssue must identify the CODEX AGENT TEAM source issue." },
+      { status: 400 },
+    );
+  }
+  const boundedFields: Array<[string, number]> = [
+    ["messageId", 500],
+    ["externalEventId", 500],
+    ["sourceThreadId", 500],
+    ["orchestrationKey", 500],
+    ["downstreamIssue", 32],
+    ["alias", 320],
+    ["classification", 80],
+    ["subject", 500],
+    ["from", 500],
+  ];
+  for (const [key, maxLength] of boundedFields) {
+    if (payload[key] !== undefined && String(payload[key]).length > maxLength) {
+      return jsonApiResponse(
+        { error: "invalid_body", error_description: `${key} is too long.` },
+        { status: 400 },
+      );
+    }
+  }
+  if (payload.downstreamIssue && !/^PEC-[0-9]+$/u.test(String(payload.downstreamIssue))) {
+    return jsonApiResponse(
+      { error: "invalid_body", error_description: "downstreamIssue must identify the linked PE-CC-DevTeam issue." },
+      { status: 400 },
+    );
+  }
+  if (!Number.isFinite(Date.parse(String(payload.receivedAt)))) {
+    return jsonApiResponse(
+      { error: "invalid_body", error_description: "receivedAt must be a valid timestamp." },
+      { status: 400 },
+    );
+  }
+  if (
+    (payload.attachments !== undefined && (!Array.isArray(payload.attachments) || payload.attachments.length > 25)) ||
+    (payload.gmailLabels !== undefined && (!Array.isArray(payload.gmailLabels) || payload.gmailLabels.length > 50))
+  ) {
+    return jsonApiResponse(
+      { error: "invalid_body", error_description: "attachments or gmailLabels exceeds the bounded intake contract." },
+      { status: 400 },
+    );
+  }
+
   const msg: AgentIntakeMessage = {
     messageId: String(payload.messageId),
+    externalEventId: String(payload.externalEventId ?? payload.messageId),
+    sourceChannel: sourceChannel as AgentIntakeMessage["sourceChannel"],
+    sourceThreadId: String(payload.sourceThreadId ?? ""),
+    orchestrationKey: String(payload.orchestrationKey),
+    catSourceIssue: String(payload.catSourceIssue),
+    downstreamIssue: String(payload.downstreamIssue ?? ""),
     alias: String(payload.alias),
     classification: String(payload.classification),
     subject: String(payload.subject),
@@ -116,9 +178,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const actionLogRow = { ...rows.actionLog, work_item_id: workItem?.id ?? null };
   const { data: actionLog, error: alError } = await client
     .from("dashboard_action_log")
-    .insert(actionLogRow)
+    .upsert(actionLogRow, { onConflict: "idempotency_key", ignoreDuplicates: true })
     .select("id, created_at")
-    .single();
+    .maybeSingle();
 
   if (alError) {
     // Non-fatal: work item was created, log failed.
