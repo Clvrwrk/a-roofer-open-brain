@@ -15,4 +15,5 @@ This bundle captures the durable knowledge, SOPs, decisions, lessons, runtime ex
 
 - [Profile](/agents/profiles/maya-chen.yaml)
 - [SOUL](/agents/profiles/maya-chen/SOUL.md)
+- [Accounting Assistant Email Triage](accounting-assistant-email-triage.md)
 - [Shared Roofing Agents Knowledge](../_shared/index.md)

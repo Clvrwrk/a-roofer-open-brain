@@ -44,7 +44,7 @@ test("installer converges only to a stopped Supervisor program", async () => {
   assert.match(installer, /rollback_dir="\$\{release_parent\}\/rollback"/);
   assert.match(installer, /log_file="\$\{log_dir\}\/maya-slack-listener\.log"/);
   assert.match(installer, /npm ci --omit=dev --ignore-scripts/);
-  assert.match(installer, /chmod 0755 "\$incoming_dir\/start-listener\.sh" "\$incoming_dir\/hermes-no-file-logging\.py"/);
+  assert.match(installer, /chmod 0755[\s\\]+"\$incoming_dir\/start-listener\.sh"[\s\\]+"\$incoming_dir\/run-mailbox-cleanup\.sh"[\s\\]+"\$incoming_dir\/hermes-no-file-logging\.py"/u);
   assert.match(installer, /find "\$incoming_dir" -type l -print -quit/);
   assert.match(installer, /chmod 0644 \/usr\/local\/lib\/hermes-agent\/venv\/\.lock/);
   assert.match(installer, /"\$release_dir\/config\.yaml" "\$hermes_home\/config\.yaml"/);
@@ -152,6 +152,8 @@ test("authorization identities and runtime choices are immutable reviewed litera
     ownerSlackUserId: "U0B8SGJJZLJ",
     ownerSlackChannelId: "C0BD7L43PC2",
     linearTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
+    linearReviewStateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
+    linearReviewerId: "002bc1e6-c102-42f7-86cc-45b7c499dae3",
   });
   assert.equal(Object.isFrozen(APPROVED), true);
   assert.equal(AGENT_HOME, "/home/orgo/maya-agent");
