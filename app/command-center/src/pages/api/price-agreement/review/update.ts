@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -8,7 +8,11 @@ export const prerender = false;
 // Confirm / correct / reject a staged price-list match row (migration 139). Body:
 // { id, itemNumber?, status }  status ∈ confirmed | rejected | review.
 export const POST: APIRoute = async ({ request, locals }) => {
-  if (!locals.actor) return buildUnauthorizedResponse();
+  const actor = locals.actor;
+  if (!actor) return buildUnauthorizedResponse();
+  if (!actorCanAccessDepartment(actor, "accounting")) {
+    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot update price-agreement review rows." }, { status: 403 });
+  }
   let body: any;
   try { body = await request.json(); } catch { return jsonApiResponse({ error: "invalid_request", error_description: "bad json" }, { status: 400 }); }
   const id = String(body?.id ?? "").trim();

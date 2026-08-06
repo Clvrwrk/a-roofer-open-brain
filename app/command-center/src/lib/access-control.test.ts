@@ -1,6 +1,40 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { SERVICE_AGENT_IDENTITIES, actorCanAccessDepartment, resolveServiceActorFromToken } from "@lib/access-control";
+import {
+  SERVICE_AGENT_IDENTITIES,
+  actorCanAccessDepartment,
+  isLocalOperatorFallbackAllowed,
+  resolveServiceActorFromToken,
+} from "@lib/access-control";
+
+describe("isLocalOperatorFallbackAllowed — the unauthenticated dev path fails closed (PEC-135)", () => {
+  it("is denied when COMMAND_CENTER_AUTH_MODE is unset or misspelled", () => {
+    expect(isLocalOperatorFallbackAllowed({})).toBe(false);
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "" })).toBe(false);
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "workis" })).toBe(false);
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "workos" })).toBe(false);
+  });
+
+  it("is denied in a production runtime even with an explicit opt-in mode", () => {
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "disabled", NODE_ENV: "production" })).toBe(false);
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "local", NODE_ENV: "production" })).toBe(false);
+  });
+
+  it("is allowed for explicit local/disabled modes off production", () => {
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "local" })).toBe(true);
+    expect(isLocalOperatorFallbackAllowed({ COMMAND_CENTER_AUTH_MODE: "Disabled", NODE_ENV: "development" })).toBe(true);
+  });
+
+  it("honors the explicit production escape hatch", () => {
+    expect(
+      isLocalOperatorFallbackAllowed({
+        COMMAND_CENTER_AUTH_MODE: "local",
+        NODE_ENV: "production",
+        COMMAND_CENTER_ALLOW_LOCAL_OPERATOR: "true",
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("SERVICE_AGENT_IDENTITIES — ob-acculynx roster entry (REQ-09 / SC2)", () => {
   it("contains exactly one entry with id 'ob-acculynx'", () => {

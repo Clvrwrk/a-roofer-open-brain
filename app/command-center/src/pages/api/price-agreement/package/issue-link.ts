@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv } from "@lib/runtime-env";
@@ -18,6 +18,9 @@ const publicBase = () =>
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
+  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
+    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot issue a vendor magic link." }, { status: 403 });
+  }
   const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
 
   const body = await request.json().catch(() => ({}));

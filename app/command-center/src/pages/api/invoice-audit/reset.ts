@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -24,6 +24,9 @@ const RESET_ERRORS: Record<string, { status: number; message: string }> = {
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
+  if (!actorCanAccessDepartment(actor, "accounting")) {
+    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot reset invoice audit state." }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const invoiceNumber = String(body.invoiceNumber ?? body.invoice_number ?? "").trim();

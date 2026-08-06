@@ -93,6 +93,9 @@ const SERVICE_AGENT_PERMISSIONS: CommandCenterPermission[] = [
 
 const VIEWER_PERMISSIONS: CommandCenterPermission[] = ["command_center.read", "work_queue.read"];
 
+/** Explicit opt-in values for the unauthenticated Local Operator path (dev only). */
+const LOCAL_OPERATOR_MODES = new Set(["local", "disabled"]);
+
 export const NAMED_AGENT_IDENTITIES: NamedAgentIdentity[] = [
   {
     id: "maya-chen",
@@ -371,6 +374,28 @@ function humanActor(
     departmentAccess,
     desktopEnabled: false,
   };
+}
+
+/**
+ * The Local Operator fallback is a DEV-ONLY escape hatch: it grants full human
+ * permissions with no authentication at all. PEC-135 (2026-08-05) showed that
+ * treating "anything that is not workos" as the fallback fails open — a missing or
+ * misspelled COMMAND_CENTER_AUTH_MODE published every dashboard and API publicly for
+ * ~3.5h. The fallback therefore requires BOTH:
+ *   1. an explicit opt-in mode value ("local" or "disabled"), and
+ *   2. a non-production runtime (NODE_ENV !== "production"), unless
+ *      COMMAND_CENTER_ALLOW_LOCAL_OPERATOR is explicitly truthy.
+ * Anything else — unset, typo'd, or a production deploy — falls through to the WorkOS
+ * session check, which fails closed.
+ */
+export function isLocalOperatorFallbackAllowed(env: RuntimeEnv = getRuntimeEnv()) {
+  const mode = String(env.COMMAND_CENTER_AUTH_MODE ?? "").trim().toLowerCase();
+  if (!LOCAL_OPERATOR_MODES.has(mode)) return false;
+
+  const override = String(env.COMMAND_CENTER_ALLOW_LOCAL_OPERATOR ?? "").trim().toLowerCase();
+  if (["true", "1", "on", "yes"].includes(override)) return true;
+
+  return String(env.NODE_ENV ?? "").trim().toLowerCase() !== "production";
 }
 
 export function localActor(): CommandCenterActor {

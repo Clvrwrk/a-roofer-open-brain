@@ -138,7 +138,14 @@ const headCls = !cm ? "grey" : isReq ? "warn" : (headPill[cm.matchStatus] ?? "gr
           const r = await res.json();
           if (!r.ok) { toast("Save failed: " + (r.error_description || r.error || "error")); return; }
           const status = r.record?.status as string;
-          if (stateEl) stateEl.innerHTML = `<p>Disposition: <b>${dispLabel[status] ?? status}</b>${r.record?.approved_by ? " · " + r.record.approved_by : ""}</p>`;
+          if (stateEl) {
+            const p = document.createElement("p");
+            const label = document.createElement("b");
+            label.textContent = dispLabel[status] ?? status;
+            p.append("Disposition: ", label);
+            if (r.record?.approved_by) p.append(` · ${r.record.approved_by}`);
+            stateEl.replaceChildren(p);
+          }
           toast("Disposition saved: " + (dispLabel[status] ?? status));
         } catch {
           toast("Save failed — network error");

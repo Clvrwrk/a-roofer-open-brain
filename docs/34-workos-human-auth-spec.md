@@ -39,7 +39,7 @@ Service agents are untouched: `Authorization: Bearer <token>` against `/api/agen
 | Launch roster | Humans (Chris admin/ceo; Roberto purchasing; Lucinda accounting) **and** the 7 named agents |
 | Role source | Env-based email→role allowlist (phase 1); WorkOS RBAC later |
 | Unknown authenticated email | Allowed as **viewer**, but only if the email domain is on `COMMAND_CENTER_VIEWER_DOMAINS`; otherwise 403. Open Google OAuth + open viewer would otherwise admit any Google account |
-| Local dev | `COMMAND_CENTER_AUTH_MODE=disabled` keeps the Local Operator path; production pins `workos` |
+| Local dev | `COMMAND_CENTER_AUTH_MODE=disabled` (or `local`) keeps the Local Operator path **off production only** — the runtime refuses it when `NODE_ENV=production` unless `COMMAND_CENTER_ALLOW_LOCAL_OPERATOR` is truthy; production pins `workos` |
 | agent-auth OAuth runtime (`auth.md` POSTs, JWKS, assertions) | **Out of scope.** Discovery placeholders stay `not_implemented` |
 
 ## 3. Current state (what this build replaces)
@@ -122,7 +122,7 @@ Order of checks per request:
 
 1. **Public paths** — always pass: `/auth/*`, `/healthz`, `/auth.md`, `/.well-known/*`, `/agent/*`, `/oauth2/*`, `/api/agentmail/webhook` (svix-verified), and `/_astro/*` + static assets.
 2. **Bearer token** — if `Authorization: Bearer` resolves a service agent, set `locals.actor` and pass (API routes only).
-3. **Mode check** — if `COMMAND_CENTER_AUTH_MODE !== "workos"`, set `locals.actor = localActor()` and pass (dev fallback).
+3. **Mode check** — dev fallback only when `isLocalOperatorFallbackAllowed(env)`: the mode is explicitly `local`/`disabled` **and** `NODE_ENV !== "production"` (or `COMMAND_CENTER_ALLOW_LOCAL_OPERATOR` is truthy). An unset or misspelled mode falls through to the session check and fails closed — it no longer publishes the app (PEC-135).
 4. **Session** — `authenticateOrRefresh`. Valid: map email→actor (§6.6), re-set cookie if refreshed, set `locals.actor`, pass. Authenticated but domain-rejected: 302 `/auth/denied` (403 JSON for `/api/*`). Invalid/missing: pages → 302 `/auth/login?returnTo=<path>`; `/api/*` → existing `buildUnauthorizedResponse()`.
 
 Type `locals.actor` in `src/env.d.ts` (`App.Locals`).
@@ -206,7 +206,7 @@ Named-agent mailboxes must be able to receive WorkOS verification email (Magic A
 10. One named agent (Maya) logs in from her Orgo desktop; verify named-agent permission set (no `approval.decide`).
 
 ### Rollback
-Set `COMMAND_CENTER_AUTH_MODE=disabled` in Coolify and redeploy — instant return to current behavior. No data migrations involved.
+Set `COMMAND_CENTER_AUTH_MODE=disabled` **plus** `COMMAND_CENTER_ALLOW_LOCAL_OPERATOR=true` in Coolify and redeploy — the mode alone no longer opens a production deploy. No data migrations involved.
 
 ## 10. Out of scope (explicit)
 
