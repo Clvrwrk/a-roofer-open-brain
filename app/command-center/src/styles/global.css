@@ -118,6 +118,46 @@ a {
   min-height: 100vh;
 }
 
+/* Sidebar collapse (rail-toggle in AppShell): full-width work surface for
+   wide boards like Friday WIP/AR. Class lives on <body>; persists via
+   localStorage "cc-rail-collapsed". */
+body.rail-collapsed .app-frame {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.rail-collapsed .side-rail {
+  display: none;
+}
+
+.top-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rail-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail-toggle:hover {
+  border-color: #98a2b3;
+}
+
 .side-rail {
   display: flex;
   flex-direction: column;
