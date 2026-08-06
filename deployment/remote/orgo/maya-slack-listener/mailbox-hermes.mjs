@@ -35,6 +35,7 @@ export function buildMailboxPrompt(message) {
     "Choose ignore for non-actionable marketing, automatic noise, duplicates, or information requiring no work.",
     "Choose track for any actionable message and for every accounting request, invoice, statement, credit memo, remittance, job-cost item, change order, draw, insurance supplement, price list, pricing conversation, price agreement, vendor-price update, order, quote, estimate, or attached business document. It becomes a PE-CC-DevTeam Linear issue assigned for Agent Review.",
     "Choose block when context, routing, access, authorization, or human judgment is required, or for HR, payroll, legal, security, payment, credential, or approval matters.",
+    "Treat account-security notifications as authorization checks. Ask whether the reported event was authorized; never infer deactivation, lockout, recovery work, or support intervention unless the email explicitly states it.",
     "Track and block both become Linear issues and send Christopher a Slack review notice. A block asks a specific routing question.",
     "The deterministic executor—not you—may send a standard received acknowledgement only to senders at cc.proexteriorsus.net, proexteriorsus.com, aia4.io, cleverwork.io, or their subdomains. No other sender receives an automatic reply.",
     "Never claim an action was completed. Summaries must be factual, concise, and avoid unnecessary sensitive content.",
