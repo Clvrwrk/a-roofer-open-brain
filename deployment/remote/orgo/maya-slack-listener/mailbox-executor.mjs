@@ -236,6 +236,7 @@ export function buildAcknowledgementArguments(message) {
   return {
     user_id: "me",
     thread_id: message.threadId,
+    recipient_email: message.senderEmail,
     message_body: [
       "[MAYA]",
       "",

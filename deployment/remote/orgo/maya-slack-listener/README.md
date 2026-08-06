@@ -18,7 +18,7 @@ CODEX AGENT TEAM source and one linked PE-CC-DevTeam accounting child using its
 server-only Linear credential; assigns both to Christopher in Agent
 Review; records the CAT/PEC lineage idempotently in Command Center/Supabase before
 analysis; sends the pinned admin Slack route a `[REVIEW]` or
-`[BLOCKED]` notice; sends one standard received acknowledgement to an approved
+`[BLOCKED]` notice; sends one standard received acknowledgement explicitly to an approved
 internal-domain sender immediately after the CAT/PEC pair and Command Center intake are
 confirmed; and then applies the reviewed Gmail filing plan. Deeper analysis failures do
 not suppress an already provider-confirmed receipt.
