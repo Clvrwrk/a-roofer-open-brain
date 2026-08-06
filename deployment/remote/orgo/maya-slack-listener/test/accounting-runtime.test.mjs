@@ -42,6 +42,9 @@ test("Linear worker claims only CAT-linked Maya Agent Todo work", () => {
     description: "CAT source issue: CAT-20\nMaya execution gate: Agent Todo\nMaya work type: wip_ar",
   };
   assert.equal(isExecutableMayaIssue(issue), true);
+  assert.equal(isExecutableMayaIssue({ ...issue, state: { name: APPROVED.linearWorkTodoStateName } }), true);
+  assert.equal(isExecutableMayaIssue({ ...issue, state: { name: "Todo" } }), false);
+  assert.equal(isExecutableMayaIssue({ ...issue, state: { name: "Agent Working" } }), false);
   assert.equal(isExecutableMayaIssue({ ...issue, state: { id: APPROVED.linearWorkReviewStateId } }), false);
   assert.equal(isExecutableMayaIssue({ ...issue, description: "Maya execution gate: Agent Todo" }), false);
   assert.equal(isExecutableMayaIssue({ ...issue, title: "Unattributed work" }), false);

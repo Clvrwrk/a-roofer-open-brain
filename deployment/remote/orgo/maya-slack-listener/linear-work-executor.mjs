@@ -29,11 +29,14 @@ export function isExecutableMayaIssue(issue, expected = APPROVED) {
   const title = String(issue?.title ?? "");
   const teamId = nestedId(issue, ["team_id", "teamId", "team"]);
   const stateId = nestedId(issue, ["state_id", "stateId", "state"]);
+  const stateName = String(issue?.state?.name ?? issue?.stateName ?? "");
+  const isTodoState = stateId === expected.linearWorkTodoStateId ||
+    (!stateId && stateName === expected.linearWorkTodoStateName);
   return Boolean(
     issue?.id &&
     /^\[MAYA\]/u.test(title) &&
     teamId === expected.linearWorkTeamId &&
-    stateId === expected.linearWorkTodoStateId &&
+    isTodoState &&
     catSourceIdentifier(description) &&
     /^Maya execution gate:\s*(?:Agent Todo|move this issue to Agent Todo)\s*$/imu.test(description)
   );
