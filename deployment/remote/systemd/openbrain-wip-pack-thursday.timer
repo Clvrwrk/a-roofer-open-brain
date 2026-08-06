@@ -1,8 +1,8 @@
 [Unit]
-Description=Thursday AR/WIP pack at 06:00 America/Chicago (after Thu 05:30 week-roll pg_cron; docs/85)
+Description=Nightly AR/WIP pack at 06:00 America/Chicago (after the 04:45 CT wip_ar_master refresh; Thu run follows the 05:30 week-roll; docs/85 round 3 — unit name kept for continuity)
 
 [Timer]
-OnCalendar=Thu *-*-* 06:00:00 America/Chicago
+OnCalendar=*-*-* 06:00:00 America/Chicago
 AccuracySec=5min
 Persistent=true
 

@@ -24,6 +24,16 @@ export const prerender = false;
 const AGENTMAIL_API_BASE = "https://api.agentmail.to/v0";
 const DEFAULT_SENDER_INBOX = "ob-accounting@agentmail.proexteriorsus.net";
 
+// Default distribution (Chris, 2026-08-06). FRIDAY_WIP_RECIPIENTS env
+// overrides. Business contact addresses, all inside the outbound guard's
+// internal domains — never external parties.
+const DEFAULT_RECIPIENTS = [
+  "chussey@aia4.io", // Chris Hussey
+  "accounting@proexteriorsus.com", // Lucinda Dunn
+  "invoices@proexteriorsus.com", // Tabatha Milliken
+  "chandler@proexteriorsus.com", // Chandler Milliken
+];
+
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
 export const POST: APIRoute = async ({ locals }) => {
@@ -42,20 +52,11 @@ export const POST: APIRoute = async ({ locals }) => {
     );
   }
 
-  const recipients = String(env.FRIDAY_WIP_RECIPIENTS ?? "")
+  const configured = String(env.FRIDAY_WIP_RECIPIENTS ?? "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
-  if (recipients.length === 0) {
-    return jsonApiResponse(
-      {
-        error: "no_recipients",
-        error_description:
-          "FRIDAY_WIP_RECIPIENTS is empty. Set it to the comma-separated internal addresses for Lucinda, Chandler, Tabitha, and Chris.",
-      },
-      { status: 400 },
-    );
-  }
+  const recipients = configured.length > 0 ? configured : DEFAULT_RECIPIENTS;
   // Code-enforced: agents never email outside the company. Humans forward.
   try {
     assertAgentSendAllowed(recipients);

@@ -12,6 +12,7 @@ export const prerender = false;
 const EDITABLE_FIELDS = new Set([
   "expected_invoice_cash_date",
   "expected_paid_full_date",
+  "expected_cash_amount",
   "collected_since",
   "notes",
 ]);
@@ -28,6 +29,13 @@ function sanitizeValue(field: string, raw: unknown): { ok: boolean; value: strin
   }
   if (field === "notes") {
     return { ok: true, value: value.slice(0, 1000) };
+  }
+  if (field === "expected_cash_amount") {
+    const amount = Number(value.replace(/[$,\s]/g, ""));
+    if (!Number.isFinite(amount) || amount < 0 || amount > 100_000_000) {
+      return { ok: false, value: null, reason: "expected_cash_amount must be a dollar amount between 0 and 100,000,000" };
+    }
+    return { ok: true, value: String(Math.round(amount * 100) / 100) };
   }
   // date fields
   if (!DATE_PATTERN.test(value)) return { ok: false, value: null, reason: `${field} must be YYYY-MM-DD` };

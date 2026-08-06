@@ -2,10 +2,12 @@
 import AppShell from "../../layouts/AppShell.astro";
 import { loadFridayWipBoard } from "@lib/friday-wip";
 
-// Friday WIP/AR live board (docs/85) — the workbook's 11_Friday_Meeting sheet
-// as a living surface. Data: wip_ar_master (mig 215), rebuilt nightly from the
-// AccuLynx mirror + QBO job costs; the yellow columns (expected dates,
-// collected?, notes) save inline and survive every refresh.
+// Friday WIP/AR live board (docs/85, round 3 2026-08-06) — the workbook's
+// 11_Friday_Meeting sheet as a living surface. Data: wip_ar_master (migs
+// 215/216), rebuilt nightly from the AccuLynx mirror + QBO job costs; the
+// yellow columns (expected dates, Estimated $, collected?, notes) save inline
+// and survive every refresh. Theming shares the `ivTheme` preference with the
+// other audit tabs (System/Light/Dark), zebra rows use the brand navy/gold.
 const board = await loadFridayWipBoard();
 const k = board.kpis;
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
@@ -16,19 +18,52 @@ const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "num
 const today = new Date().toISOString().slice(0, 10);
 const statusClass = (s: string) =>
   s === "Critical AR" ? "fw-status-critical" : s === "Collected in Full" ? "fw-status-full" : s === "Invoiced" ? "fw-status-invoiced" : "fw-status-pending";
+
+// Status column = [AccuLynx status] · our reference bucket.
+const MILESTONE_LABELS: Record<string, string> = {
+  unassigned_lead: "Lead",
+  assigned_lead: "Lead",
+  lead: "Lead",
+  prospect: "Prospect",
+  approved: "Approved",
+  completed: "Completed",
+  invoiced: "Invoiced",
+  closed: "Closed",
+};
+const milestoneLabel = (m: string) => MILESTONE_LABELS[m] ?? (m ? m[0].toUpperCase() + m.slice(1) : "—");
+
+// Days-in-status chip: green (0d) → red (365d+), clamped.
+const daysChipStyle = (days: number) => {
+  const t = Math.min(Math.max(days, 0), 365) / 365;
+  const hue = Math.round(120 * (1 - t));
+  return `background:hsl(${hue} 72% 38%);color:#fff`;
+};
+
+const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salesperson)))].sort((a, b) => a.localeCompare(b));
 ---
 
 <AppShell title="Friday WIP/AR" eyebrow="Accounting" activePage="accounting">
-  <section class="fw">
+  <section class="fw" id="fw" data-theme="light" data-pref="system">
     <div class="fw-toolbar">
       <h2 class="fw-title">Friday AR Meeting board</h2>
-      <span class="fw-sub">Set expected cash dates · review hit/miss next week · 3-week cash map</span>
+      <span class="fw-sub">Set expected cash dates · 3-week cash map</span>
       <span class="fw-spacer"></span>
-      <a class="fw-btn" href="/api/accounting/friday-wip/pack" title="Latest Thursday Excel pack (built Thursday mornings)">Download Thursday pack</a>
+      <label class="fw-filter">Rep
+        <select id="fw-rep" class="fw-select">
+          <option value="">All reps</option>
+          {reps.map((r) => <option value={r}>{r}</option>)}
+        </select>
+      </label>
+      <a class="fw-btn" href="/api/accounting/friday-wip/pack" title="Latest Excel pack (published nightly to the wip-packs bucket)">Download pack</a>
       <a class="fw-btn" href={`/api/accounting/friday-wip/accrual.csv?cutoff=${today}`} title="Per-job billed-to-date + costs-incurred-to-date at a cutoff, for the CPA's earned-revenue calc">Accrual snapshot CSV</a>
-      <button class="fw-btn fw-btn-primary" id="fw-send" type="button" title="Maya emails the summary + pack link to the internal distribution (Lucinda / Chandler / Tabitha / Chris)">Email via Maya</button>
+      <button class="fw-btn fw-btn-primary" id="fw-send" type="button" title="Maya emails the summary + pack link to the internal distribution (Lucinda / Chandler / Tabatha / Chris)">Email via Maya</button>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="fw-count">{generatedAt}</span>
+      <div class="fw-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
     </div>
 
     {board.error && <p class="fw-error">{board.error}</p>}
@@ -39,11 +74,11 @@ const statusClass = (s: string) =>
       <div class="fw-kpi"><span class="fw-kpi-lab">Total job balance</span><span class="fw-kpi-val">{money(k.totalBalance)}</span><span class="fw-kpi-sub">{k.ledgerJobs} jobs on the ledger</span></div>
       <div class="fw-kpi"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></div>
       <div class="fw-kpi"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Costs incurred (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></div>
+      <div class="fw-kpi"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></div>
     </div>
 
     <div class="fw-cashmap">
-      <span class="fw-cashmap-title">3-week cash map — billed AR only. You cannot collect what was never invoiced.</span>
+      <span class="fw-cashmap-title">3-week cash map — billed AR only. Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.</span>
       <div class="fw-cashmap-cells">
         <div class="fw-week"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></div>
         <div class="fw-week"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></div>
@@ -65,32 +100,43 @@ const statusClass = (s: string) =>
           <table class="fw-table">
             <thead>
               <tr>
-                <th>Job #</th><th>Client</th><th>Bucket</th><th>Rep</th>
-                <th class="fw-num">Billed AR $</th><th class="fw-num">Unbilled $</th><th class="fw-num">Costs to date $</th>
-                <th>Action</th><th>Status</th>
+                <th>Job #</th><th>Client</th><th>Status (AccuLynx · ref)</th><th>Rep</th>
+                <th class="fw-num" title="AccuLynx approved job value (L)">Contract Total</th>
+                <th class="fw-num" title="Σ non-void invoices issued (P)">Invoiced Total</th>
+                <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
+                <th class="fw-num" title="AccuLynx job balance due (N)">Balance Due</th>
+                <th class="fw-num" title="QBO job-tagged bills + purchases to date">Expense Realized</th>
+                <th class="fw-num" title="Estimated total costs − expense realized (needs AccuLynx worksheet costs — docs/85 gap)">Expense Outstanding</th>
+                <th title="Days in current AccuLynx status (green 0 → red 365+)">Days in Status</th>
+                <th>Action</th>
                 <th class="fw-fill">Expected invoice/cash</th>
+                <th class="fw-fill" title="Cash the team expects to collect at that date">Estimated $</th>
                 <th class="fw-fill">Expected paid-in-full</th>
-                <th>Prior (last wk)</th><th>Hit/Miss</th>
                 <th class="fw-fill">Collected?</th>
                 <th class="fw-fill">Notes</th>
               </tr>
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId}>
+                <tr data-job={j.jobId} data-rep={j.salesperson}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
                   <td class="fw-client" title={j.client}>{j.client}</td>
-                  <td class="fw-bucket" title={j.bucket}>{j.bucket}</td>
+                  <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}`}>
+                    <strong>{milestoneLabel(j.milestone)}</strong>
+                    <span class={"fw-ref " + statusClass(j.collectionStatus)}> · {j.bucket}</span>
+                  </td>
                   <td>{j.salesperson}</td>
-                  <td class="fw-num">{money(j.billedAr)}</td>
-                  <td class="fw-num">{money(j.unbilled)}</td>
+                  <td class="fw-num">{money(j.contractAmount)}</td>
+                  <td class="fw-num">{money(j.billedTotal)}</td>
+                  <td class="fw-num">{money(j.collectedRevenue)}</td>
+                  <td class="fw-num">{money(j.outstandingAr)}</td>
                   <td class="fw-num">{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
+                  <td class="fw-num">{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-days">{j.daysInStatus == null ? "—" : <span class="fw-days-chip" style={daysChipStyle(j.daysInStatus)}>{j.daysInStatus}d</span>}</td>
                   <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")}>{j.action}</td>
-                  <td class={statusClass(j.collectionStatus)}>{j.collectionStatus}</td>
                   <td><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
+                  <td><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
                   <td><input class="fw-edit" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
-                  <td>{j.priorExpectedPaidDate ?? "—"}</td>
-                  <td class={j.hitMiss === "HIT" ? "fw-hit" : j.hitMiss === "MISS" ? "fw-miss" : ""}>{j.hitMiss ?? ""}</td>
                   <td>
                     <select class="fw-edit" data-field="collected_since">
                       <option value="" selected={!j.collectedSince}></option>
@@ -109,68 +155,119 @@ const statusClass = (s: string) =>
 
     <p class="fw-foot">
       Yellow columns save automatically and survive the nightly rebuild. Nightly: AccuLynx sync (hourly) + ABC (3:30a) +
-      QBO (Thu) → <code>refresh_wip_ar_master()</code> at ~4:45a CT. Thursday: week roll (hit/miss scored), pack build, then this board is the meeting.
+      QBO → <code>refresh_wip_ar_master()</code> at ~4:45a CT, pack publish at 6a CT. Thursday: week roll, then this board is the meeting.
     </p>
   </section>
 
-  <style>
-    .fw { display: grid; gap: 14px; }
-    .fw-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .fw-title { margin: 0; font-size: 18px; }
-    .fw-sub { color: var(--ink-soft, #667085); font-size: 12.5px; }
-    .fw-spacer { flex: 1; }
-    .fw-count { color: var(--ink-soft, #667085); font-size: 12px; }
-    .fw-btn { border: 1px solid var(--line, #d0d5dd); background: var(--surface, #fff); color: inherit; border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; text-decoration: none; }
-    .fw-btn:hover { border-color: #98a2b3; }
-    .fw-btn-primary { background: #0f766e; border-color: #0f766e; color: #fff; }
-    .fw-btn-primary:hover { background: #115e59; }
-    .fw-btn-primary[disabled] { opacity: 0.6; cursor: wait; }
-    .fw-error { color: #b42318; font-size: 13px; }
-    .fw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
-    .fw-kpi { border: 1px solid var(--line, #e4e7ec); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--surface, #fff); }
-    .fw-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft, #667085); }
-    .fw-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .fw-kpi-sub { font-size: 11.5px; color: var(--ink-soft, #667085); }
-    .fw-cashmap { border: 1px solid var(--line, #e4e7ec); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface, #fff); }
-    .fw-cashmap-title { font-size: 12px; color: var(--ink-soft, #667085); }
-    .fw-cashmap-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-    .fw-week { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--surface-2, #f8fafc); }
-    .fw-week-warn { background: #fef3c7; }
-    :global([data-theme="dark"]) .fw-week-warn { background: #4d3800; }
-    .fw-week-lab { font-size: 11px; color: var(--ink-soft, #667085); }
-    .fw-week-val { font-weight: 700; font-variant-numeric: tabular-nums; }
-    .fw-week-sub { font-size: 10.5px; color: var(--ink-soft, #667085); }
-    .fw-group { border: 1px solid var(--line, #e4e7ec); border-radius: 10px; background: var(--surface, #fff); }
-    .fw-group-head { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px; cursor: pointer; list-style: none; }
-    .fw-group-name { font-weight: 700; }
-    .fw-group-count { color: var(--ink-soft, #667085); font-size: 12.5px; }
-    .fw-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft, #475467); }
-    .fw-tablewrap { overflow-x: auto; }
-    .fw-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-    .fw-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft, #667085); padding: 6px 8px; border-top: 1px solid var(--line, #e4e7ec); border-bottom: 1px solid var(--line, #e4e7ec); white-space: nowrap; }
-    .fw-table td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft, #f2f4f7); vertical-align: middle; }
-    .fw-table th.fw-fill { background: #fef9c3; }
-    :global([data-theme="dark"]) .fw-table th.fw-fill { background: #453a00; }
-    .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .fw-client { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fw-bucket { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fw-action-invoice { color: #b42318; font-weight: 600; }
-    .fw-action-collect { color: #0f766e; font-weight: 600; }
-    .fw-status-critical { color: #b42318; font-weight: 600; }
-    .fw-status-full { color: #027a48; font-weight: 600; }
-    .fw-status-invoiced { color: #b54708; }
-    .fw-status-pending { color: #6941c6; }
-    .fw-hit { color: #027a48; font-weight: 700; }
-    .fw-miss { color: #b42318; font-weight: 700; }
-    .fw-edit { border: 1px solid var(--line, #d0d5dd); border-radius: 6px; padding: 3px 6px; font-size: 12px; background: #fffbeb; color: inherit; }
-    :global([data-theme="dark"]) .fw-edit { background: #2a2410; }
-    .fw-edit.fw-saved { border-color: #12b76a; background: #ecfdf3; }
-    .fw-edit.fw-failed { border-color: #f04438; background: #fef3f2; }
-    .fw-notes { min-width: 170px; }
-    .fw-foot { color: var(--ink-soft, #667085); font-size: 12px; }
+  <style is:global>
+    /* Theme variables — brand palette (navy #11133f · gold #eaa221), light
+       defaults with a dark override, same mechanism + `ivTheme` preference as
+       Invoice Audit so the choice carries across tabs. Zebra rows tint with
+       the brand navy in light mode and lift in dark. */
+    .fw {
+      --bg: #f4f6f9; --panel: #ffffff; --ink: #1c2733; --muted: #6b7886; --line: #e3e8ef;
+      --zebra: #f0f1f8; --navy: #11133f; --gold: #eaa221;
+      --fill-bg: #fbedd2; --fill-cell: #fffbeb; --warn-bg: #fbedd2;
+      --green: #137a4d; --green-bg: #e3f5ec; --red: #a51f1f; --orange: #a4480d; --purple: #5b46d8;
+      --teal: #0f766e; --teal-dark: #115e59;
+      --saved-bg: #ecfdf3; --saved-line: #12b76a; --failed-bg: #fef3f2; --failed-line: #f04438;
+      display: grid; gap: 14px;
+      background: var(--bg); color: var(--ink);
+      margin: calc(-1 * var(--space-4, 16px)) -28px calc(-1 * var(--space-6, 24px));
+      padding: 18px 28px 30px; min-height: 70vh;
+      font-family: var(--font-sans, Inter, system-ui, sans-serif);
+      overflow-x: clip;
+    }
+    .fw[data-theme="dark"] {
+      --bg: #0f141b; --panel: #161d27; --ink: #e6edf5; --muted: #8b98a8; --line: #27313e;
+      --zebra: #1a2230; --gold: #f2cf6b;
+      --fill-bg: #3a3115; --fill-cell: #2a2410; --warn-bg: #4d3800;
+      --green: #7ee2ad; --green-bg: #123626; --red: #ff8585; --orange: #f3a766; --purple: #8a7bff;
+      --saved-bg: #123626; --saved-line: #12b76a; --failed-bg: #3d1a1a; --failed-line: #f04438;
+    }
+    .fw .fw-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .fw .fw-title { margin: 0; font-size: 18px; color: var(--ink); }
+    .fw .fw-sub { color: var(--muted); font-size: 12.5px; }
+    .fw .fw-spacer { flex: 1; }
+    .fw .fw-count { color: var(--muted); font-size: 12px; }
+    .fw .fw-theme { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+    .fw .fw-theme button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
+    .fw .fw-theme button.is-active { background: var(--navy); color: #fff; }
+    .fw .fw-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+    .fw .fw-select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; background: var(--panel); color: var(--ink); }
+    .fw .fw-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; text-decoration: none; }
+    .fw .fw-btn:hover { border-color: var(--muted); }
+    .fw .fw-btn-primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+    .fw .fw-btn-primary:hover { background: var(--teal-dark); }
+    .fw .fw-btn-primary[disabled] { opacity: 0.6; cursor: wait; }
+    .fw .fw-error { color: var(--red); font-size: 13px; }
+    .fw .fw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .fw .fw-kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--panel); }
+    .fw .fw-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .fw .fw-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fw .fw-kpi-sub { font-size: 11.5px; color: var(--muted); }
+    .fw .fw-cashmap { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--panel); }
+    .fw .fw-cashmap-title { font-size: 12px; color: var(--muted); }
+    .fw .fw-cashmap-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+    .fw .fw-week { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--zebra); }
+    .fw .fw-week-warn { background: var(--warn-bg); }
+    .fw .fw-week-lab { font-size: 11px; color: var(--muted); }
+    .fw .fw-week-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fw .fw-week-sub { font-size: 10.5px; color: var(--muted); }
+    .fw .fw-group { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    .fw .fw-group-head { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px; cursor: pointer; list-style: none; border-left: 3px solid var(--gold); border-radius: 10px 0 0 10px; }
+    .fw .fw-group-name { font-weight: 700; }
+    .fw .fw-group-count { color: var(--muted); font-size: 12.5px; }
+    .fw .fw-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .fw .fw-tablewrap { overflow-x: auto; }
+    .fw .fw-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+    .fw .fw-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .fw .fw-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .fw .fw-table tbody tr:nth-child(even) { background: var(--zebra); }
+    .fw .fw-table tbody tr:hover { background: var(--fill-bg); }
+    .fw .fw-table th.fw-fill { background: var(--fill-bg); }
+    .fw .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .fw .fw-client { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-bucket { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-ref { font-size: 11.5px; }
+    .fw .fw-days { text-align: center; }
+    .fw .fw-days-chip { display: inline-block; min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .fw .fw-action-invoice { color: var(--red); font-weight: 600; }
+    .fw .fw-action-collect { color: var(--teal); font-weight: 600; }
+    .fw[data-theme="dark"] .fw-action-collect { color: var(--green); }
+    .fw .fw-status-critical { color: var(--red); font-weight: 600; }
+    .fw .fw-status-full { color: var(--green); font-weight: 600; }
+    .fw .fw-status-invoiced { color: var(--orange); }
+    .fw .fw-status-pending { color: var(--purple); }
+    .fw .fw-edit { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 12px; background: var(--fill-cell); color: var(--ink); }
+    .fw .fw-edit.fw-saved { border-color: var(--saved-line); background: var(--saved-bg); }
+    .fw .fw-edit.fw-failed { border-color: var(--failed-line); background: var(--failed-bg); }
+    .fw .fw-money-edit { width: 96px; text-align: right; }
+    .fw .fw-notes { min-width: 150px; }
+    .fw .fw-foot { color: var(--muted); font-size: 12px; }
+    .fw a { color: inherit; text-decoration: underline; text-decoration-color: var(--muted); }
   </style>
 
   <script>
+    // Theme toggle — same mechanism + `ivTheme` localStorage key as Invoice
+    // Audit, so the light/dark preference is shared across tabs.
+    const fwRoot = document.getElementById("fw")!;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    function applyTheme(pref: string) {
+      fwRoot.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
+      fwRoot.dataset.pref = pref;
+      fwRoot.querySelectorAll<HTMLButtonElement>(".fw-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
+    }
+    let themePref = "system";
+    try { themePref = localStorage.getItem("ivTheme") || "system"; } catch { /* private mode */ }
+    applyTheme(themePref);
+    fwRoot.querySelectorAll<HTMLButtonElement>(".fw-theme button").forEach((b) =>
+      b.addEventListener("click", () => {
+        try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch { /* private mode */ }
+        applyTheme(b.dataset.setTheme!);
+      }));
+    mq.addEventListener("change", () => { if (fwRoot.dataset.pref === "system") applyTheme("system"); });
+
     // Inline saves: change → POST /api/accounting/friday-wip/update.
     // Green flash = persisted (survives the nightly rebuild); red = rejected.
     document.querySelectorAll<HTMLElement>(".fw-edit").forEach((el) => {
@@ -195,10 +292,24 @@ const statusClass = (s: string) =>
       });
     });
 
+    // Rep filter: hides non-matching rows and empty location groups so one
+    // rep's book can be processed top to bottom.
+    const repSelect = document.getElementById("fw-rep") as HTMLSelectElement | null;
+    repSelect?.addEventListener("change", () => {
+      const rep = repSelect.value;
+      document.querySelectorAll<HTMLTableRowElement>("tr[data-job]").forEach((row) => {
+        row.style.display = !rep || row.getAttribute("data-rep") === rep ? "" : "none";
+      });
+      document.querySelectorAll<HTMLElement>(".fw-group").forEach((group) => {
+        const visible = group.querySelectorAll<HTMLTableRowElement>('tr[data-job]:not([style*="none"])').length;
+        group.style.display = visible ? "" : "none";
+      });
+    });
+
     // Maya send button — confirms, then POSTs; reports the outcome inline.
     const sendBtn = document.getElementById("fw-send") as HTMLButtonElement | null;
     sendBtn?.addEventListener("click", async () => {
-      if (!confirm("Maya will email the WIP/AR summary + pack link to the internal distribution (Lucinda / Chandler / Tabitha / Chris). Send now?")) return;
+      if (!confirm("Maya will email the WIP/AR summary + pack link to the internal distribution (Lucinda / Chandler / Tabatha / Chris). Send now?")) return;
       sendBtn.disabled = true;
       const original = sendBtn.textContent;
       sendBtn.textContent = "Sending…";
