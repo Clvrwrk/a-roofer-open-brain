@@ -17,8 +17,10 @@ untrusted mail; creates or resolves one CODEX AGENT TEAM source; creates or repa
 one linked PE-CC-DevTeam accounting child; assigns both to Christopher in Agent
 Review; records the CAT/PEC lineage idempotently in Command Center/Supabase before
 analysis; sends the pinned admin Slack route a `[REVIEW]` or
-`[BLOCKED]` notice; optionally sends one standard received acknowledgement to an
-approved internal-domain sender; and then applies the reviewed Gmail filing plan.
+`[BLOCKED]` notice; sends one standard received acknowledgement to an approved
+internal-domain sender immediately after the CAT/PEC pair and Command Center intake are
+confirmed; and then applies the reviewed Gmail filing plan. Deeper analysis failures do
+not suppress an already provider-confirmed receipt.
 Unknown provider outcomes remain ambiguous and are never retried automatically. Known
 Google and Slack account-security notices are deterministically normalized into
 owner-authorization checks, preventing the classifier from inventing account

@@ -17,7 +17,7 @@ import {
 } from "../mailbox-executor.mjs";
 import { buildMailboxPrompt, parseMailboxDecision } from "../mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "../mailbox-state.mjs";
-import { APPROVED } from "../policy.mjs";
+import { ACKNOWLEDGEMENT_DOMAINS, APPROVED } from "../policy.mjs";
 
 const messageId = "19fabcdef1234567";
 const now = new Date("2026-07-28T10:30:00.000Z");
@@ -375,8 +375,21 @@ test("every legacy accounting alias is a deterministic review route", () => {
 });
 
 test("automatic receipts are limited to approved domains and always include both CCs", async () => {
-  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
+  assert.deepEqual(ACKNOWLEDGEMENT_DOMAINS, [
+    "cc.proexteriorsus.net",
+    "proexteriorsus.com",
+    "aia4.io",
+  ]);
+  assert.equal(senderCanReceiveAcknowledgement("person@cc.proexteriorsus.net"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@sub.cc.proexteriorsus.net"), true);
+  assert.equal(senderCanReceiveAcknowledgement("accounting@proexteriorsus.com"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.com"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@ops.aia4.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.net"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@cleverwork.io"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@proexteriorsus.com.example"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@example.com"), false);
   assert.equal(senderCanReceiveAcknowledgement("maya.chen@cc.proexteriorsus.net"), false);
@@ -388,7 +401,97 @@ test("automatic receipts are limited to approved domains and always include both
   await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
   assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
-  assert.match(reply.input.arguments.message_body, /Received — thank you/u);
+  assert.match(reply.input.arguments.message_body, /I've received your email, and I'm working on it now/u);
+  assert.match(reply.input.arguments.message_body, /Maya Chen\nAccounting Assistant \| Pro Exteriors/u);
+});
+
+test("approved internal mail is tracked and acknowledged when classification fails", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-internal-fallback-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const result = await runMailboxOccurrence({
+    composio,
+    classifier: async () => { throw new Error("classifier unavailable"); },
+    recordIntake: fakeRecordIntake,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  const slugs = calls.map((call) => call.slug);
+  const replyIndex = slugs.indexOf("GMAIL_REPLY_TO_THREAD");
+  assert.ok(replyIndex > slugs.lastIndexOf("LINEAR_CREATE_LINEAR_ISSUE"));
+  assert.ok(replyIndex < slugs.indexOf("SLACKBOT_SEND_MESSAGE"));
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.ok(receipt.acknowledgementHash);
+});
+
+test("approved internal mail is tracked and acknowledged when classification says ignore", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-internal-ignore-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const result = await runMailboxOccurrence({
+    composio,
+    classifier: async () => decision("ignore"),
+    recordIntake: fakeRecordIntake,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 2);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.ok(receipt.acknowledgementHash);
+});
+
+test("a downstream accounting failure does not suppress a confirmed internal receipt", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-before-work-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  await runMailboxOccurrence({
+    composio,
+    capabilityAgent: async () => { throw new Error("downstream accounting blocker"); },
+    classifier: async () => decision("track"),
+    recordIntake: fakeRecordIntake,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "ambiguous");
+  assert.equal(receipt.actions.length, 4);
+});
+
+test("an unknown internal acknowledgement outcome is fenced and never retried", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-ambiguous-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const execute = composio.tools.execute;
+  composio.tools.execute = async (slug, input) => {
+    if (slug === "GMAIL_REPLY_TO_THREAD") {
+      calls.push({ slug, input });
+      return { successful: false, error: "unknown provider outcome" };
+    }
+    return execute(slug, input);
+  };
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now: new Date(now.getTime() + 1_800_000) });
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 0);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "ambiguous");
 });
 
 test("historical cleanup never sends late acknowledgements", async () => {
