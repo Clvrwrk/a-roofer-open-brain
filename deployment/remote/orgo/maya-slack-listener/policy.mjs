@@ -20,6 +20,8 @@ export const REQUIRED_EMAIL_CC = Object.freeze([
   "chussey@aia4.io",
 ]);
 
+export const MAYA_EMAIL_ADDRESS = "maya.chen@cc.proexteriorsus.net";
+
 export const ACKNOWLEDGEMENT_DOMAINS = Object.freeze([
   "cc.proexteriorsus.net",
   "proexteriorsus.com",

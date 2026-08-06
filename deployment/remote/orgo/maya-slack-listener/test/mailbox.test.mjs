@@ -71,7 +71,12 @@ function fakeComposio({ action = "track", existing = false, sender, messageOverr
       if (slug === "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID") {
         return { successful: true, data: providerMessage({ ...messageOverrides, ...(sender ? { sender } : {}) }) };
       }
-      if (slug === "LINEAR_CREATE_LINEAR_ISSUE") return { successful: true, data: { id: "issue-new", identifier: "PEC-901" } };
+      if (slug === "LINEAR_CREATE_LINEAR_ISSUE") {
+        return { successful: true, data: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c" } };
+      }
+      if (slug === "LINEAR_GET_LINEAR_ISSUE") {
+        return { successful: true, data: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", identifier: "PEC-901" } };
+      }
       if (slug === "SLACKBOT_SEND_MESSAGE") return { successful: true, data: { ok: true, ts: "1785234600.000001" } };
       if (slug === "GMAIL_REPLY_TO_THREAD") return { successful: true, data: { messageId: "19facknowledged1234" } };
       if (slug === "GMAIL_ADD_LABEL_TO_EMAIL") return { successful: true, data: { id: messageId } };
@@ -123,6 +128,13 @@ test("builds a fixed-owner blocked Slack packet", () => {
   assert.equal(Object.hasOwn(args, "thread_ts"), false);
 });
 
+test("never exposes a raw Linear UUID in a Slack packet", () => {
+  const uuid = "58961032-e114-47f0-b5ff-de3ce8591c3c";
+  const args = buildOwnerSlackArguments(normalizeMailboxMessage(providerMessage()), decision("block"), uuid);
+  assert.doesNotMatch(args.markdown_text, new RegExp(uuid, "u"));
+  assert.match(args.markdown_text, /tracked as the new PE_CC_DEV Agent Review issue/u);
+});
+
 test("first mailbox occurrence bootstraps without reading historical mail", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-bootstrap-"));
   const state = new MailboxState(directory);
@@ -153,18 +165,41 @@ test("clear actionable mail creates Linear, notifies Slack, stars it, and archiv
   const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   assert.equal(result.processed, 1);
+  const gmailQuery = calls.find((call) => call.slug === "GMAIL_FETCH_EMAILS").input.arguments.query;
+  assert.match(gmailQuery, /-in:sent/u);
+  assert.match(gmailQuery, /-from:maya\.chen@cc\.proexteriorsus\.net/u);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_GET_LINEAR_ISSUE").length, 1);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
-  assert.match(
-    calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text,
-    /\[REVIEW\].*PE_CC_DEV/u,
-  );
+  const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
+  assert.match(slackText, /\[REVIEW\].*PE_CC_DEV.*PEC-901/u);
+  assert.doesNotMatch(slackText, /58961032-e114-47f0-b5ff-de3ce8591c3c/u);
   const labelCall = calls.find((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL");
   assert.deepEqual(labelCall.input.arguments.add_label_ids, ["STARRED"]);
   assert.deepEqual(
     labelCall.input.arguments.remove_label_ids,
     ["UNREAD", "INBOX"],
   );
+});
+
+test("a failed Linear display lookup still notifies Slack without exposing the UUID", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-linear-display-fallback-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls, classifier } = fakeComposio({ action: "track" });
+  const execute = composio.tools.execute;
+  composio.tools.execute = async (slug, input) => {
+    if (slug === "LINEAR_GET_LINEAR_ISSUE") {
+      calls.push({ slug, input });
+      return { successful: false, error: "display lookup unavailable" };
+    }
+    return execute(slug, input);
+  };
+  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  assert.equal(result.state, "complete");
+  const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
+  assert.match(slackText, /as the new PE_CC_DEV Agent Review issue/u);
+  assert.doesNotMatch(slackText, /58961032-e114-47f0-b5ff-de3ce8591c3c/u);
 });
 
 test("an empty mailbox completes without depending on Linear", async () => {
@@ -241,6 +276,60 @@ test("deterministic policy prevents a classifier from ignoring accounting docume
   assert.match(enforced.reason, /document/u);
 });
 
+test("Google security alerts become exact owner-authorization checks", () => {
+  const message = normalizeMailboxMessage(providerMessage({
+    sender: "Google <no-reply@accounts.google.com>",
+    subject: "Security alert",
+    messageText: "A new security key was added to maya.chen@cc.proexteriorsus.net.",
+    attachmentList: [],
+  }));
+  const enforced = enforceMailboxPolicy(message, {
+    ...decision("block"),
+    title: "[MAYA] Generic security alert",
+    summary: "Generic summary.",
+    reason: "Generic reason.",
+    question: "Who should handle this?",
+    options: ["Start recovery"],
+  });
+  assert.equal(enforced.action, "block");
+  assert.equal(enforced.title, "[MAYA] Google security-key authorization check");
+  assert.match(enforced.question, /Did you authorize.*security key/iu);
+  assert.doesNotMatch(enforced.reason, /reactivat/iu);
+});
+
+test("Slack login notices never become invented deactivation or recovery work", () => {
+  const message = normalizeMailboxMessage(providerMessage({
+    sender: "Slack <feedback@slack.com>",
+    subject: "Your recent login attempt on pe-command-center's team",
+    messageText: "We noticed a recent login attempt.",
+    attachmentList: [],
+  }));
+  const enforced = enforceMailboxPolicy(message, {
+    ...decision("block"),
+    title: "[MAYA] Slack account deactivation notice",
+    summary: "The account was deactivated.",
+    reason: "Contact support for account recovery.",
+    question: "Who should reactivate the account?",
+    options: ["Contact Slack support"],
+  });
+  assert.equal(enforced.title, "[MAYA] Slack login authorization check");
+  assert.match(enforced.summary, /does not say.*deactivated/iu);
+  assert.equal(enforced.question, "Did you authorize the reported Slack login attempt?");
+  assert.doesNotMatch(`${enforced.reason} ${enforced.options.join(" ")}`, /reactivat|contact support/iu);
+});
+
+test("Maya's own sent mail cannot create accounting work or receipt loops", () => {
+  const message = normalizeMailboxMessage(providerMessage({
+    sender: "Maya Chen <maya.chen@cc.proexteriorsus.net>",
+    subject: "Fwd: Vendor price update",
+    messageText: "[MAYA]\n\nReceived — thank you. I have received your email and added it to Maya's accounting intake queue.",
+  }));
+  const enforced = enforceMailboxPolicy(message, decision("track"));
+  assert.equal(enforced.action, "ignore");
+  assert.match(enforced.reason, /prevent receipt and task loops/u);
+  assert.equal(senderCanReceiveAcknowledgement(message.senderEmail), false);
+});
+
 test("every legacy accounting alias is a deterministic review route", () => {
   for (const alias of ["invoices", "ap", "creditmemos", "priceagreement", "ar"]) {
     const message = normalizeMailboxMessage(providerMessage({
@@ -267,6 +356,7 @@ test("automatic receipts are limited to approved domains and always include both
   assert.equal(senderCanReceiveAcknowledgement("person@sub.cc.proexteriorsus.net"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@example.com"), false);
+  assert.equal(senderCanReceiveAcknowledgement("maya.chen@cc.proexteriorsus.net"), false);
 
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-"));
   const state = new MailboxState(directory);

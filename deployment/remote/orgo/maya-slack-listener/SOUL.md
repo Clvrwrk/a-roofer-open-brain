@@ -31,7 +31,14 @@ agreement, pricing conversation, vendor-price update, order, quote, or estimate 
 a PE-CC-DevTeam Linear issue assigned to Christopher in `Agent Review`. After the issue
 is confirmed, notify the pinned pe-command-center admin/owner Slack route that a new
 issue was submitted to `PE_CC_DEV`. Protected, sensitive, ambiguous, or authorization-
-dependent work uses a complete `[BLOCKED]` routing packet.
+dependent work uses a complete `[BLOCKED]` routing packet. Account-security
+notifications are authorization checks: state only the event the provider actually
+reported and ask Christopher whether it was authorized. Never infer account
+deactivation, lockout, recovery work, or support intervention from a login or security
+alert unless the source explicitly says so. Slack notices must cite the human Linear
+identifier (for example `PEC-123`), never an internal UUID.
+Maya's own sent messages and receipt acknowledgements are never new mailbox intake:
+do not classify, acknowledge, or create Linear work from them.
 
 Non-actionable mail is marked read and archived. Review mail is starred, marked read,
 and archived only after Linear and Slack provider receipts. Blocked mail is starred,

@@ -9,6 +9,7 @@ import {
   MAILBOX_CLEANUP_MAX_PAGES,
   MAILBOX_MAX_PAGES,
   MAILBOX_PAGE_SIZE,
+  MAYA_EMAIL_ADDRESS,
   MAYA_MAILBOX_STATE_DIR,
   REQUIRED_EMAIL_CC,
 } from "./policy.mjs";
@@ -19,14 +20,16 @@ const GMAIL_FETCH_MESSAGE = "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID";
 const GMAIL_MODIFY_LABELS = "GMAIL_ADD_LABEL_TO_EMAIL";
 const GMAIL_REPLY = "GMAIL_REPLY_TO_THREAD";
 const LINEAR_CREATE = "LINEAR_CREATE_LINEAR_ISSUE";
+const LINEAR_GET = "LINEAR_GET_LINEAR_ISSUE";
 const LINEAR_LIST = "LINEAR_LIST_LINEAR_ISSUES";
 
 const ACCOUNTING_SIGNAL = /\b(?:accounting|accounts? payable|accounts? receivable|a\/?p|a\/?r|invoice|bill|statement|credit memo|remittance|job cost|change order|draw request|insurance supplement|depreciation|price list|pricing|price agreement|vendor price|supplier price|purchase order|quote|estimate)\b/iu;
-const PROTECTED_SIGNAL = /\b(?:payroll|human resources|social security|ssn|bank account|routing number|wire transfer|payment authorization|pay this|release payment|credential|password|mfa|legal notice|subpoena)\b/iu;
+const PROTECTED_SIGNAL = /\b(?:payroll|human resources|social security|ssn|bank account|routing number|wire transfer|payment authorization|pay this|release payment|credential|password|mfa|security key|login attempt|sign-in|legal notice|subpoena)\b/iu;
 const ACCOUNTING_ALIAS = /(?:^|[,;\s<])(?:invoices|ap|creditmemos|priceagreement|ar)@cc\.proexteriorsus\.net\b/iu;
 const PROTECTED_ALIAS = /(?:^|[,;\s<])(?:hr|payroll)@cc\.proexteriorsus\.net\b/iu;
 const DOCUMENT_FILENAME = /\.(?:pdf|csv|xlsx?|docx?|zip|txt|rtf|ods|odt)$/iu;
 const DOCUMENT_MIME = /(?:pdf|spreadsheet|excel|csv|wordprocessingml|msword|zip|plain|rtf|opendocument)/iu;
+const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9]*-\d+$/u;
 
 function hash(value) {
   return createHash("sha256").update(String(value)).digest("hex");
@@ -109,13 +112,70 @@ function extractEmailAddress(value) {
 
 export function senderCanReceiveAcknowledgement(senderEmail, domains = ACKNOWLEDGEMENT_DOMAINS) {
   const address = String(senderEmail ?? "").trim().toLowerCase();
+  if (address === MAYA_EMAIL_ADDRESS) return false;
   const at = address.lastIndexOf("@");
   if (at <= 0 || at === address.length - 1) return false;
   const senderDomain = address.slice(at + 1);
   return domains.some((domain) => senderDomain === domain || senderDomain.endsWith(`.${domain}`));
 }
 
+function securityAuthorizationDecision(message) {
+  const content = `${message.subject}\n${message.body}`;
+  if (message.senderEmail === "no-reply@accounts.google.com" && /\b(?:security alert|security key|new sign-in|login attempt)\b/iu.test(content)) {
+    const securityKey = /\bsecurity key\b/iu.test(content);
+    return Object.freeze({
+      version: 1,
+      action: "block",
+      priority: 1,
+      title: securityKey
+        ? "[MAYA] Google security-key authorization check"
+        : "[MAYA] Google account-security authorization check",
+      summary: securityKey
+        ? "Google reported that a new security key was added to Maya's Google account."
+        : "Google reported an account-security event for Maya's Google account.",
+      reason: "This is an owner-authorization check. The notification alone does not identify who performed the change or prove that account recovery is required.",
+      question: securityKey
+        ? "Did you authorize the reported addition of a security key to Maya's Google account?"
+        : "Did you authorize the reported Google account-security event?",
+      options: [
+        "Yes — mark the alert reviewed and retain it as evidence",
+        "No or unsure — secure the account and review recent activity",
+      ],
+    });
+  }
+  if (message.senderEmail === "feedback@slack.com" && /\b(?:login attempt|new sign-in|security alert)\b/iu.test(content)) {
+    return Object.freeze({
+      version: 1,
+      action: "block",
+      priority: 1,
+      title: "[MAYA] Slack login authorization check",
+      summary: "Slack reported a recent login attempt for the pe-command-center workspace. The notification does not say that Maya's account was deactivated.",
+      reason: "This is an owner-authorization check. The notification reports only a login attempt and does not establish the account's broader status.",
+      question: "Did you authorize the reported Slack login attempt?",
+      options: [
+        "Yes — mark the alert reviewed and retain it as evidence",
+        "No or unsure — review Slack sessions and secure the account",
+      ],
+    });
+  }
+  return null;
+}
+
 export function enforceMailboxPolicy(message, decision) {
+  if (message.senderEmail === MAYA_EMAIL_ADDRESS) {
+    return Object.freeze({
+      ...decision,
+      action: "ignore",
+      priority: 3,
+      title: "",
+      summary: "Maya's own sent message is not new inbound accounting work.",
+      reason: "Self-authored and Sent mail is excluded to prevent receipt and task loops.",
+      question: "",
+      options: [],
+    });
+  }
+  const securityDecision = securityAuthorizationDecision(message);
+  if (securityDecision) return securityDecision;
   const content = `${message.recipients}\n${message.subject}\n${message.body}`;
   const protectedReview = PROTECTED_SIGNAL.test(content) || PROTECTED_ALIAS.test(message.recipients);
   const documentReview = message.attachments.some(
@@ -202,11 +262,16 @@ export function buildOwnerSlackArguments(message, decision, linearReference, exp
   }
   const blocked = decision.action === "block" || !decision.action;
   const options = (decision.options ?? []).map((item, index) => `${index + 1}. ${item}`).join(" ");
+  const safeLinearReference = LINEAR_IDENTIFIER.test(String(linearReference ?? ""))
+    ? String(linearReference)
+    : linearReference
+      ? "the new PE_CC_DEV Agent Review issue"
+      : "";
   if (!blocked) {
     return {
       channel: expected.ownerSlackChannelId,
       markdown_text: [
-        `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [REVIEW] New accounting email submitted to PE_CC_DEV (PE-CC-DevTeam)${linearReference ? ` as ${linearReference}` : ""}.`,
+        `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [REVIEW] New accounting email submitted to PE_CC_DEV (PE-CC-DevTeam)${safeLinearReference ? ` as ${safeLinearReference}` : ""}.`,
         `Source: ${message.subject} from ${message.sender}.`,
         "Status: assigned to Christopher in Agent Review; the Gmail source is preserved in the issue.",
       ].join(" ").replace(/<@(?!U0B8SGJJZLJ)[^>]+>/gu, "[reference removed]").slice(0, 1_500),
@@ -218,7 +283,7 @@ export function buildOwnerSlackArguments(message, decision, linearReference, exp
   const text = [
     `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [BLOCKED] Mailbox task needs context and routing.`,
     `Source: ${message.subject} from ${message.sender}.`,
-    `Completed: reviewed and classified${linearReference ? `; tracked as ${linearReference}` : ""}.`,
+    `Completed: reviewed and classified${safeLinearReference ? `; tracked as ${safeLinearReference}` : ""}.`,
     `Blocker: ${decision.reason}`,
     `Recommended routes: ${options}`,
     `Decision needed: ${decision.question}`,
@@ -245,7 +310,7 @@ async function listCandidateMessages(composio, cursorEpochSeconds, signal, expec
         version: GMAIL_TOOL_VERSION,
         arguments: {
           user_id: "me",
-          query: `after:${cursorDate} -in:spam -in:trash`,
+          query: `after:${cursorDate} -in:sent -from:${MAYA_EMAIL_ADDRESS} -in:spam -in:trash`,
           max_results: MAILBOX_PAGE_SIZE,
           ids_only: false,
           verbose: false,
@@ -280,7 +345,7 @@ async function listInboxCleanupCandidates(composio, signal, expected) {
         version: GMAIL_TOOL_VERSION,
         arguments: {
           user_id: "me",
-          query: "in:inbox -in:spam -in:trash",
+          query: `in:inbox -in:sent -from:${MAYA_EMAIL_ADDRESS} -in:spam -in:trash`,
           max_results: MAILBOX_PAGE_SIZE,
           ids_only: false,
           verbose: false,
@@ -360,7 +425,29 @@ async function createLinearIssue(composio, message, decision, signal, expected) 
   const data = requiredSuccessful(result, "Linear create");
   const id = String(data.id ?? "");
   if (!id) throw new Error("Linear create omitted the issue ID");
-  return { id, reference: String(data.identifier ?? data.issueIdentifier ?? id), created: true };
+  let reference = String(data.identifier ?? data.issueIdentifier ?? "");
+  if (!LINEAR_IDENTIFIER.test(reference)) {
+    try {
+      const lookup = await composio.tools.execute(
+        LINEAR_GET,
+        {
+          userId: expected.composioUserId,
+          connectedAccountId: expected.linearConnectedAccountId,
+          version: LINEAR_TOOL_VERSION,
+          arguments: { issue_id: id },
+        },
+        requestOptions(signal),
+      );
+      if (lookup?.successful) {
+        const issue = lookup.data?.issue ?? lookup.data?.data ?? lookup.data ?? {};
+        const candidate = String(issue.identifier ?? issue.issueIdentifier ?? "");
+        if (LINEAR_IDENTIFIER.test(candidate)) reference = candidate;
+      }
+    } catch {
+      // Creation is already provider-confirmed. Slack uses a non-UUID fallback label.
+    }
+  }
+  return { id, reference: LINEAR_IDENTIFIER.test(reference) ? reference : id, created: true };
 }
 
 async function sendOwnerSlack(composio, arguments_, signal, expected) {
@@ -482,7 +569,7 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
       linearIssue = existing
         ? { id: existing, reference: existing, created: false }
         : await createLinearIssue(composio, message, decision, signal, expected);
-      linearSourceIds.set(message.messageId, linearIssue.reference);
+      linearSourceIds.set(message.messageId, linearIssue.reference ?? linearIssue.id);
       if (linearIssue.created !== false) await state.recordAction(claim.name, "linear_create", linearIssue.id);
     }
     let slackTimestamp;
