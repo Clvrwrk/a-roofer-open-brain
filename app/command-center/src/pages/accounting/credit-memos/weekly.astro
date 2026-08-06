@@ -58,9 +58,15 @@ const draftFor = (vendor: string) => requests.filter((r) => r.vendor === vendor 
 const vendorTotal = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
 const vendorLineCount = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
 const reasonFor = (l: CmLine) => {
-  const eff = `${l.agreement_effective ?? "?"}${l.agreement_expiry ? ` to ${l.agreement_expiry}` : ""}`;
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
-  let r = `Billed ${money(Number(l.invoiced_price))} against ${money(Number(l.office_price))} on the ${l.office_name} office agreement ${l.agreement_number ?? ""} (eff. ${eff}) - overcharge ${pct}%.`;
+  // Every claim names the agreement it challenges the billed amount against
+  // (Chris 2026-08-05). When the agreement metadata is missing, say so honestly
+  // instead of rendering "null ... (eff. ?)".
+  const agreement = l.agreement_number
+    ? `agreement ${l.agreement_number}${l.agreement_effective ? ` (eff. ${l.agreement_effective}${l.agreement_expiry ? ` to ${l.agreement_expiry}` : ""})` : ""}`
+    : "negotiated price list on file";
+  const office = l.office_name ? `the ${l.office_name} office ` : "our ";
+  let r = `Billed ${money(Number(l.invoiced_price))} against ${money(Number(l.office_price))} on ${office}${agreement} - overcharge ${pct}%.`;
   if (l.paexp_tag) r += ` The agreement had lapsed without a successor and remains in force (${l.paexp_tag}).`;
   return r;
 };
