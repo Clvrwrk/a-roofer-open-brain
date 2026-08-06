@@ -548,9 +548,17 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;
-    // Only auditable lines (resolvable qty + price) can be "pending review" — a line
-    // with no qty/price must never surface to audit (Item 6 guard).
-    inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
+    // v2 "to audit" (Chris 2026-08-05 QA): only DISCREPANCY lines (over agreement /
+    // No-Price / UOM) can be pending — valid lines are hidden by the audit view and
+    // must never be counted where the human cannot see them. A claim-reviewed line
+    // (auditStatus 'disputed') is decided work, not pending.
+    inv.pendingLines = inv.lines.filter(
+      (l) =>
+        l.auditable &&
+        !l.audited &&
+        l.auditStatus !== "disputed" &&
+        (l.uomMismatch || l.negotiatedPrice == null || (l.qty > 0 && l.unitPrice > l.negotiatedPrice)),
+    ).length;
     // Transferred (Commercial) invoices are auto-approved → no pending review (docs/63 Change 2).
     if (inv.transferred) inv.pendingLines = 0;
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
@@ -736,9 +744,16 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
     const lineId = String(line.line_id ?? "");
     if (!invoiceNumber || !lineId) continue;
     const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0, worked: 0, held: false };
+    // v2 (Chris 2026-08-05 QA): pending counts only VISIBLE discrepancy lines the
+    // human can act on — a decided line (passed or claim-reviewed/disputed) is done,
+    // and hidden valid lines never count.
+    const isDiscrepancy =
+      line.uom_mismatch === true ||
+      line.negotiated_price == null ||
+      (num(line.quantity) > 0 && num(line.unit_price) > num(line.negotiated_price));
     if (passedLineIds.has(lineId)) {
       progress.audited++;
-    } else if (line.is_auditable !== false) {
+    } else if (line.is_auditable !== false && isDiscrepancy && !workedLineIds.has(lineId)) {
       progress.pending++;
     }
     if (workedLineIds.has(lineId)) progress.worked++;
@@ -955,7 +970,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
     // Progress bars need real audit rollups, but not full line detail. Fetch only the
     // invoice/line identity and auditable flag, then join to current audit status in memory.
-    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable,uom_mismatch,negotiated_price,unit_price,quantity")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,decision")),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
     // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
@@ -1134,7 +1149,13 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     creditMemoRequested: num(i.credit_memo_amount),
     worstPct: num(i.worst_pct),
     auditedLines: lines.filter((line) => line.audited).length,
-    pendingLines: lines.filter((line) => line.auditable && !line.audited).length,
+    pendingLines: lines.filter(
+      (line) =>
+        line.auditable &&
+        !line.audited &&
+        line.auditStatus !== "disputed" &&
+        (line.uomMismatch || line.negotiatedPrice == null || (line.qty > 0 && line.unitPrice > line.negotiatedPrice)),
+    ).length,
     hasWork: lines.some((line) => line.auditStatus === "passed" || line.auditStatus === "disputed"),
     paid,
     paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",

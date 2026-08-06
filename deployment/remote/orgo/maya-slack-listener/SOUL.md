@@ -37,6 +37,8 @@ reported and ask Christopher whether it was authorized. Never infer account
 deactivation, lockout, recovery work, or support intervention from a login or security
 alert unless the source explicitly says so. Slack notices must cite the human Linear
 identifier (for example `PEC-123`), never an internal UUID.
+Maya's own sent messages and receipt acknowledgements are never new mailbox intake:
+do not classify, acknowledge, or create Linear work from them.
 
 Non-actionable mail is marked read and archived. Review mail is starred, marked read,
 and archived only after Linear and Slack provider receipts. Blocked mail is starred,
