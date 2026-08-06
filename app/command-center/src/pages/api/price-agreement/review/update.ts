@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, actorCanWrite, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -10,7 +10,7 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
+  if (!actorCanWrite(actor) || !actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot update price-agreement review rows." }, { status: 403 });
   }
   let body: any;

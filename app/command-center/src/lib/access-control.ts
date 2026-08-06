@@ -590,6 +590,17 @@ export function actorCanAccessDepartment(actor: CommandCenterActor, department: 
   return actor.departmentAccess === "all" || actor.departmentAccess.includes(department);
 }
 
+/**
+ * Whether an actor may mutate anything at all. Department access is NOT enough on its own:
+ * viewers carry `departmentAccess: "all"` with read-only VIEWER_PERMISSIONS, so a write route
+ * gated only by department would let a viewer mutate every department. `evidence.attach` is the
+ * marker every write-capable identity holds (humans, named agents, service agents) and viewers
+ * do not. Routes with a documented human gate check `approval.decide` on top of this.
+ */
+export function actorCanWrite(actor: CommandCenterActor) {
+  return hasPermission(actor, "evidence.attach");
+}
+
 export function actorCanAccessWork(actor: CommandCenterActor, work: WorkDefinition) {
   return hasPermission(actor, "work_queue.read") && actorCanAccessDepartment(actor, work.department);
 }

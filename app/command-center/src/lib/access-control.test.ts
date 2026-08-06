@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   SERVICE_AGENT_IDENTITIES,
   actorCanAccessDepartment,
+  actorCanWrite,
   isLocalOperatorFallbackAllowed,
+  localActor,
+  resolveActorFromSessionUser,
   resolveServiceActorFromToken,
 } from "@lib/access-control";
 
@@ -33,6 +36,38 @@ describe("isLocalOperatorFallbackAllowed — the unauthenticated dev path fails 
         COMMAND_CENTER_ALLOW_LOCAL_OPERATOR: "true",
       }),
     ).toBe(true);
+  });
+});
+
+describe("actorCanWrite — department access alone must not admit read-only viewers", () => {
+  // Viewers only exist when open access is off; otherwise every authenticated human is a member.
+  const viewer = resolveActorFromSessionUser(
+    { email: "outsider@proexteriorsus.com", firstName: "Read", lastName: "Only" },
+    { COMMAND_CENTER_OPEN_ACCESS: "false", COMMAND_CENTER_VIEWER_DOMAINS: "proexteriorsus.com" },
+  );
+
+  it("gives a viewer access to every department but no write capability", () => {
+    expect(viewer).not.toBeNull();
+    expect(viewer!.roles).toContain("viewer");
+    expect(actorCanAccessDepartment(viewer!, "accounting")).toBe(true);
+    expect(actorCanWrite(viewer!)).toBe(false);
+  });
+
+  it("admits the identities that legitimately write", () => {
+    expect(actorCanWrite(localActor())).toBe(true);
+    const admin = resolveActorFromSessionUser(
+      { email: "chussey@cleverwork.io" },
+      { COMMAND_CENTER_OPEN_ACCESS: "false", COMMAND_CENTER_HUMAN_ADMIN_EMAILS: "chussey@cleverwork.io" },
+    );
+    expect(actorCanWrite(admin!)).toBe(true);
+
+    const token = "test-service-agent-token";
+    const hash = createHash("sha256").update(token).digest("hex");
+    const serviceActor = resolveServiceActorFromToken(token, {
+      AGENT_SERVICE_TOKEN_SHA256_OB_ACCOUNTING: hash,
+    } as never);
+    expect(serviceActor).not.toBeNull();
+    expect(actorCanWrite(serviceActor!)).toBe(true);
   });
 });
 

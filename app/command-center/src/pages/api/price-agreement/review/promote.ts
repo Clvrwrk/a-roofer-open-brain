@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, actorCanWrite, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -16,7 +16,7 @@ const META: Record<string, { agreement_number: string; branch: string; effective
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
+  if (!actorCanWrite(actor) || !actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot promote price-agreement review rows." }, { status: 403 });
   }
   let body: any;
