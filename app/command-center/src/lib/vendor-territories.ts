@@ -1692,8 +1692,12 @@ export async function loadVendorTerritoryMapPayload(
         const currentAgreementStats = legacyCurrent
           ? (priceAgreementItemStatsById.get(legacyCurrent.id) ?? emptyItemStats())
           : emptyItemStats();
+        // Vendor silo (Chris 2026-08-05): ABC API price lists and ABC invoice history are
+        // keyed by bare branch number, and QXO's numeric branch numbers collide with
+        // ABC's — never attach ABC evidence to another vendor's branch.
+        const isAbcBranch = isAbcVendor(vendorName, vendorSlug);
         const apiStats = aggregateApiAgreementStats(
-          branchNumberKey ? (abcAgreementsByBranchNumber.get(branchNumberKey) ?? []) : [],
+          isAbcBranch && branchNumberKey ? (abcAgreementsByBranchNumber.get(branchNumberKey) ?? []) : [],
           abcPriceListStatsByAgreementId,
         );
         let pricingWaterfall = buildWaterfallSummary({
@@ -1701,7 +1705,7 @@ export async function loadVendorTerritoryMapPayload(
           currentAgreementStats,
           apiStats,
           branchNumber,
-          invoiceHistoryCount: branchNumberKey ? (recentObservationCountByBranch.get(branchNumberKey) ?? 0) : 0,
+          invoiceHistoryCount: isAbcBranch && branchNumberKey ? (recentObservationCountByBranch.get(branchNumberKey) ?? 0) : 0,
         });
         // Office-inherited coverage is authoritative (it is what the audit engine prices
         // against — evergreen, so even an expired PAEXP agreement keeps the gate open).

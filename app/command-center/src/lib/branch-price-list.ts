@@ -57,13 +57,17 @@ function formatBranchAddress(br: any): string {
 // versions at refDate (newest per agreement_number; evergreen). Migration 205: reads the
 // all-vendor v_office_vendor_agreements, scoped to the branch's own vendor, so SRS (and
 // any future vendor) branches inherit exactly like ABC ones.
-async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string): Promise<{ officeName: string; agreements: { key: string; source: string; number: string; effective: string; expiry: string }[] } | null> {
+async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string, vendorId = ""): Promise<{ officeName: string; agreements: { key: string; source: string; number: string; effective: string; expiry: string }[] } | null> {
   const norm = branchNumber.replace(/^0+/, "");
-  const { data: vbRows } = await client
+  let vbQuery = client
     .from("vendor_branches")
     .select("branch_number, vendor_id, pricing_territory_office_id")
     .not("pricing_territory_office_id", "is", null)
     .limit(2000);
+  // Vendor silo: branch numbers collide across vendors (QXO 113 vs ABC 0113) —
+  // when the caller knows the vendor, never resolve into another vendor's branch.
+  if (vendorId) vbQuery = vbQuery.eq("vendor_id", vendorId);
+  const { data: vbRows } = await vbQuery;
   const vb = ((vbRows as any[] | null) ?? []).find((v) => String(v.branch_number ?? "").replace(/^0+/, "") === norm);
   if (!vb) return null;
   const { data: officeRows } = await client.from("office").select("name").eq("id", vb.pricing_territory_office_id).limit(1);
@@ -90,22 +94,34 @@ async function loadOfficeInheritedList(client: any, branchNumber: string, refDat
   return agreements.length ? { officeName, agreements } : null;
 }
 
-export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
+export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", vendorSlug = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
   const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", inheritedOffice: "", items: [], activeItems: 0, expiredItems: 0, agreements: [], categories: [] };
   const { client } = createServerSupabaseClient(env);
   if (!client || !branchNumber) return base;
 
+  // Vendor silo (Chris 2026-08-05): branch numbers collide across vendors. When the
+  // caller names a non-ABC vendor, every ABC-keyed path (name lookup, ship-to scoping,
+  // v_branch_price_list) is skipped — only that vendor's office-inherited list renders.
+  const nonAbcVendor = Boolean(vendorSlug) && vendorSlug !== "abc-supply";
+  let vendorId = "";
+  if (vendorSlug) {
+    const { data: venRows } = await client.from("vendors").select("id").eq("slug", vendorSlug).limit(1);
+    vendorId = (venRows as any[] | null)?.[0]?.id ?? "";
+  }
+
   const { data: catData } = await client.from("roof_system_category").select("key,label,sort_order").order("sort_order");
   const categories = ((catData as any[] | null) ?? []).map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
 
-  // Branch name + address (lives in abc_vendor_branches for ABC; fall back to
-  // vendor_branches for non-ABC vendors like SRS/QXO).
-  const { data: brRows } = await client.from("abc_vendor_branches").select("branch_name,address_json,city,state,postal").eq("branch_number", branchNumber).limit(1);
-  const br = (brRows as any[] | null)?.[0] ?? null;
+  // Branch name + address (abc_vendor_branches for ABC; vendor_branches otherwise).
+  const br = nonAbcVendor
+    ? null
+    : ((await client.from("abc_vendor_branches").select("branch_name,address_json,city,state,postal").eq("branch_number", branchNumber).limit(1)).data as any[] | null)?.[0] ?? null;
   let branchName = br?.branch_name ?? "";
   let branchAddress = formatBranchAddress(br);
   if (!br) {
-    const { data: vbRows } = await client.from("vendor_branches").select("branch_name,address,city,state").eq("branch_number", branchNumber).limit(1);
+    let vbQuery = client.from("vendor_branches").select("branch_name,address,city,state").eq("branch_number", branchNumber).limit(1);
+    if (vendorId) vbQuery = client.from("vendor_branches").select("branch_name,address,city,state").eq("branch_number", branchNumber).eq("vendor_id", vendorId).limit(1);
+    const { data: vbRows } = await vbQuery;
     const vb = (vbRows as any[] | null)?.[0] ?? null;
     branchName = vb?.branch_name ?? "";
     branchAddress = [vb?.address, [vb?.city, vb?.state].filter(Boolean).join(", ")].filter(Boolean).join(", ");
@@ -118,7 +134,7 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
   let scopedAgreementNumber = "";
   let scopedAgreementEffective = "";
   let scopedAgreementExpiry = "";
-  if (invoiceNumber) {
+  if (invoiceNumber && !nonAbcVendor) {
     const { data: invRows } = await client.from("abc_invoices").select("invoice_date,ship_to_number").eq("invoice_number", invoiceNumber).limit(1);
     const inv = (invRows as any[] | null)?.[0] ?? null;
     const invDate = d10(inv?.invoice_date);
@@ -173,14 +189,16 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     };
   }
 
-  // Unscoped path: all agreements for the branch (v_branch_price_list).
-  const { data } = await client.from("v_branch_price_list").select("*").eq("branch_number", branchNumber).order("description");
-  const rows = (data as any[] | null) ?? [];
+  // Unscoped path: all agreements for the branch (v_branch_price_list — ABC-keyed,
+  // so non-ABC vendors go straight to their own office-inherited list).
+  const rows: any[] = nonAbcVendor
+    ? []
+    : (((await client.from("v_branch_price_list").select("*").eq("branch_number", branchNumber).order("description")).data as any[] | null) ?? []);
   if (rows.length === 0) {
     // R3 fallback: no direct list — inherit the PE office's in-force agreements
     // (2-hour window, docs/81 §4; same set the audit engine prices against).
     const refDate = scopedInvoiceDate || new Date().toISOString().slice(0, 10);
-    const inherited = await loadOfficeInheritedList(client, branchNumber, refDate);
+    const inherited = await loadOfficeInheritedList(client, branchNumber, refDate, vendorId);
     if (inherited) {
       // Items come from the source each agreement lives in: abc_price_list_items for
       // ABC (int keys) vs price_agreement_items for generic vendors like SRS (uuids).

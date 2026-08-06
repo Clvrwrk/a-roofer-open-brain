@@ -316,7 +316,10 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         } else {
           agreementChips = `<span class="vmpop-chip chip-status">${escapeHtml(statusText(branch.pricingStatus))}</span>`;
         }
-        const branchParam = branch.branchNumber ? `?branch=${encodeURIComponent(branch.branchNumber)}` : "";
+        // Vendor silo: branch numbers collide across vendors — always name the vendor.
+        const branchParam = branch.branchNumber
+          ? `?branch=${encodeURIComponent(branch.branchNumber)}${branch.vendorSlug ? `&vendor=${encodeURIComponent(branch.vendorSlug)}` : ""}`
+          : "";
         const waterfall = branch.pricingWaterfall || { itemCount: 0, uniqueSkuCount: 0 };
 
         const kpis = [

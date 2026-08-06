@@ -3,7 +3,8 @@ import { loadBranchPriceList } from "@lib/branch-price-list";
 
 const branch = Astro.url.searchParams.get("branch") ?? "";
 const invoice = Astro.url.searchParams.get("invoice") ?? "";
-const pl = await loadBranchPriceList(branch, invoice);
+const vendor = Astro.url.searchParams.get("vendor") ?? "";
+const pl = await loadBranchPriceList(branch, invoice, vendor);
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hasActive = pl.agreements.some((a) => a.active);
 const fmtDate = (s: string) => s || "—";

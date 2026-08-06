@@ -353,7 +353,7 @@ if (root && dataEl && mount) {
     // Price List: greyed + non-navigating when this branch has no negotiated price list
     // (otherwise the link lands on a blank price-list screen).
     const priceListBtn = hasPriceList
-      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
+      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}&vendor=abc-supply" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
       : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
     // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
     // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
