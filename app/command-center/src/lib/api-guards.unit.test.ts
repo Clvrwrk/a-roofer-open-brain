@@ -4,10 +4,10 @@ import { actorDisplayName, apiError, isUuid, requireActor } from "@lib/api-guard
 
 function actorOf(overrides: Partial<CommandCenterActor> = {}): CommandCenterActor {
   return {
-    id: "human:lucinda@proexteriorsus.net",
+    id: "human:test-actor@example.test",
     type: "human",
-    displayName: "Lucinda Dunn",
-    email: "lucinda@proexteriorsus.net",
+    displayName: "Test Actor",
+    email: "test-actor@example.test",
     source: "workos",
     roles: ["accounting"],
     permissions: ["command_center.read", "approval.decide"],
@@ -32,7 +32,7 @@ describe("requireActor", () => {
       permission: "approval.decide",
     });
     expect(response).toBeNull();
-    expect(actor!.displayName).toBe("Lucinda Dunn");
+    expect(actor!.displayName).toBe("Test Actor");
   });
 
   it("403s with the caller's message when the department is out of reach", async () => {
@@ -65,7 +65,7 @@ describe("requireActor", () => {
       department: ["operations", "sales"],
       forbiddenExtra: (a) => ({ actor: { id: a.id } }),
     });
-    await expect(denied.response!.json()).resolves.toMatchObject({ actor: { id: "human:lucinda@proexteriorsus.net" } });
+    await expect(denied.response!.json()).resolves.toMatchObject({ actor: { id: "human:test-actor@example.test" } });
   });
 });
 
@@ -82,8 +82,8 @@ describe("apiError / actorDisplayName / isUuid", () => {
   });
 
   it("falls back through displayName → id → 'operator'", () => {
-    expect(actorDisplayName(actorOf())).toBe("Lucinda Dunn");
-    expect(actorDisplayName(actorOf({ displayName: "" }))).toBe("human:lucinda@proexteriorsus.net");
+    expect(actorDisplayName(actorOf())).toBe("Test Actor");
+    expect(actorDisplayName(actorOf({ displayName: "" }))).toBe("human:test-actor@example.test");
     expect(actorDisplayName(null)).toBe("operator");
   });
 
