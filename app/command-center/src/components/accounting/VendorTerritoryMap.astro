@@ -325,7 +325,7 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         const links = [
           branch.branchNumber ? linkRow(`/accounting/price-list/branch${branchParam}`, "Active Price List", false, true) : "",
           linkRow(`/accounting/invoice-audit${branchParam}`, "Invoice Audit"),
-          branch.vendorSlug === "abc-supply" ? linkRow(`/abc-price-agreement-gaps`, "Price Agreement Audit") : "",
+          linkRow(`/accounting/price-agreements`, "Price Agreements"),
           linkRow("", "Proposal / Estimate", true),
         ]
           .filter(Boolean)

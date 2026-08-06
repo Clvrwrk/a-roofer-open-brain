@@ -1,6 +1,7 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
+import { createServerSupabaseClient } from "@lib/supabase.server";
 
 // Price Agreement Management (docs/83) — the consolidated procurement loop:
 // Coverage → Gap Worksheet (bought 2+ times, no negotiated price) → Renewal
@@ -9,6 +10,24 @@ import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
 const data = await loadPriceAgreementManagement();
 const money = (n: number | null) => (n == null ? "—" : "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const money0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+
+// Monthly request tracker (docs/83 P2): distinct vendors across offices +
+// this month's generated snapshots. Forward flow until Phase 6 auto-drafts.
+const monthLabel = new Date().toISOString().slice(0, 7);
+const vendorList = [...new Map(data.offices.flatMap((o) => o.vendors).map((v) => [v.vendorSlug, { slug: v.vendorSlug, name: v.vendorName }])).values()];
+let monthRequests: any[] = [];
+{
+  const { client } = createServerSupabaseClient();
+  if (client) {
+    const { data: reqRows } = await client
+      .from("price_agreement_requests")
+      .select("id, vendor_id, month_label, generated_at, generated_by, gap_count, renewal_count, status, payload")
+      .eq("month_label", monthLabel)
+      .order("generated_at", { ascending: false })
+      .limit(50);
+    monthRequests = ((reqRows as any[] | null) ?? []).filter((r) => r.status === "generated");
+  }
+}
 ---
 
 <AppShell title="Price Agreements" eyebrow="Accounting · Procurement" activePage="accounting">
@@ -26,6 +45,20 @@ const money0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
       </div>
     </header>
 
+    {data.status === "live" && (
+      <div class="pam-requests">
+        <b>Monthly request · {monthLabel}</b>
+        <span class="pam-note">generate a vendor's ask (all gap items + all negotiated items with your proposed prices), then forward the email — auto-draft via Maya.Chen arrives with Phase 6</span>
+        <span class="pam-tags">
+          {vendorList.map((v) => {
+            const existing = monthRequests.find((r) => (r.payload as any)?.vendorSlug === v.slug);
+            return existing
+              ? <a class="pam-reqbtn done" href={`/accounting/price-agreements/request?id=${existing.id}`}>{v.name}: view {monthLabel} request ({existing.gap_count} gaps · {existing.renewal_count} current)</a>
+              : <button class="pam-reqbtn" data-generate={v.slug}>Generate {v.name} request</button>;
+          })}
+        </span>
+      </div>
+    )}
     {data.status !== "live" && <p class="pam-empty">Price agreement data isn't configured for this brain yet.</p>}
     {data.status === "live" && data.offices.map((o) => (
       <details class="pam-office" open={data.offices.length <= 2}>
@@ -111,6 +144,10 @@ const money0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
     .pam-kpi{background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:12px;padding:10px 14px;text-align:center;min-width:96px}
     .pam-kpi b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
     .pam-kpi span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#6b7886)}
+    .pam-requests{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:12px;padding:10px 14px;margin:0 0 12px}
+    .pam-reqbtn{appearance:none;border:1px solid var(--brand,#5b46d8);background:var(--brand,#5b46d8);color:#fff;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:650;cursor:pointer;font-family:inherit;text-decoration:none}
+    .pam-reqbtn.done{background:var(--panel,#fff);color:var(--brand,#5b46d8)}
+    .pam-reqbtn:disabled{opacity:.5;cursor:wait}
     .pam-office{border:1px solid var(--line,#e3e8ef);border-radius:12px;margin:10px 0;background:var(--panel,#fff)}
     .pam-office>summary,.pam-vendor>summary{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;list-style:none;flex-wrap:wrap}
     .pam-office>summary::-webkit-details-marker,.pam-vendor>summary::-webkit-details-marker{display:none}
@@ -151,6 +188,20 @@ const money0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
       window.clearTimeout(toastT);
       toastT = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
     }
+    document.querySelectorAll<HTMLButtonElement>("button[data-generate]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        const res = await fetch("/api/price-agreements/generate-request", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ vendorSlug: btn.dataset.generate }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast("Generate failed: " + (data?.error_description || data?.error || "error")); btn.disabled = false; return; }
+        window.location.href = `/accounting/price-agreements/request?id=${data.requestId}`;
+      });
+    });
     document.querySelectorAll<HTMLInputElement>("input[data-propose]").forEach((input) => {
       input.addEventListener("change", async () => {
         input.classList.remove("saved", "err");

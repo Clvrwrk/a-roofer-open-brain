@@ -1,0 +1,101 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+
+// docs/83 P2: the frozen monthly vendor request, rendered as the forwardable
+// email body + download actions. Auto-draft via Maya.Chen AgentMail lands with
+// the Phase 6 mail plumbing; until then Chris/Lucinda forward this.
+const id = Astro.url.searchParams.get("id") ?? "";
+const { client } = createServerSupabaseClient();
+let req: any = null;
+if (client && id) {
+  const { data } = await client.from("price_agreement_requests").select("*").eq("id", id).limit(1);
+  req = (data as any[] | null)?.[0] ?? null;
+}
+const p = (req?.payload ?? {}) as any;
+const m2 = (v: unknown) => (v == null || v === "" ? "—" : "$" + Number(v).toFixed(2));
+const genDate = req ? String(req.generated_at).slice(0, 10) : "";
+---
+
+<AppShell title="Price Agreement Request" eyebrow="Accounting · Procurement" activePage="accounting">
+  <section class="par">
+    {!req && <p class="par-empty">Request not found. <a href="/accounting/price-agreements">← Price Agreements</a></p>}
+    {req && (
+      <>
+        <header class="par-head">
+          <div>
+            <h1>{p.vendorName} — Price Agreement Request · {req.month_label}</h1>
+            <p class="par-sub">Date generated: {genDate} · by {req.generated_by} · {req.gap_count} new items · {req.renewal_count} current items · status: {req.status}</p>
+          </div>
+          <div class="par-actions">
+            <a class="par-btn" href={`/api/price-agreements/request-output?id=${req.id}&format=csv`}>⬇ CSV</a>
+            <a class="par-btn" href={`/api/price-agreements/request-output?id=${req.id}&format=md`}>⬇ Markdown</a>
+            <a class="par-btn" href="/accounting/price-agreements">← Worksheets</a>
+          </div>
+        </header>
+
+        <article class="par-email">
+          <p>Hello,</p>
+          <p>
+            Please find Pro Exteriors' monthly price agreement request for <b>{p.vendorName}</b> below.
+            It covers (1) repeat-purchase items we'd like added to our negotiated price agreement, with our
+            requested pricing, and (2) our currently negotiated items, including any requested updates.
+            Where an agreement has lapsed, we continue operating under its last pricing (PAEXP) and this
+            request serves as our renewal. All prices are per the item's pricing unit of measure.
+          </p>
+          {(p.offices ?? []).map((o: any) => (
+            <section>
+              <h2>{o.officeName}</h2>
+              {(o.gapItems ?? []).length > 0 && (
+                <>
+                  <h3>New items to add — {o.gapItems.length}</h3>
+                  <table>
+                    <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Annualized buys</th><th class="num">Latest paid</th><th class="num">Requested price</th></tr></thead>
+                    <tbody>
+                      {o.gapItems.map((g: any) => (
+                        <tr><td class="mono">{g.itemNumber}</td><td>{g.description}</td><td>{g.uom}</td><td class="num">{g.purchaseCount}</td><td class="num">{m2(g.latestPaid)}</td><td class="num"><b>{m2(g.proposedPrice ?? g.latestPaid)}</b></td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+              {(o.renewalItems ?? []).length > 0 && (
+                <>
+                  <h3>Current negotiated items — {o.renewalItems.length}</h3>
+                  <table>
+                    <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Current price</th><th class="num">Requested price</th></tr></thead>
+                    <tbody>
+                      {o.renewalItems.map((r: any) => (
+                        <tr><td class="mono">{r.itemNumber}</td><td>{r.description}</td><td>{r.uom}</td><td class="num">{m2(r.negotiatedPrice)}</td><td class="num"><b>{m2(r.proposedPrice ?? r.negotiatedPrice)}</b></td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </section>
+          ))}
+          <p>We appreciate your partnership — please confirm updated pricing at your earliest convenience.</p>
+          <p>Pro Exteriors — Accounting</p>
+        </article>
+      </>
+    )}
+  </section>
+
+  <style is:global>
+    .par{padding:6px 4px 40px;color:var(--ink,#1c2733);font-size:13px}
+    .par-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap}
+    .par-head h1{margin:0;font-size:19px}
+    .par-sub{margin:4px 0 0;color:var(--muted,#6b7886);font-size:12px}
+    .par-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .par-btn{border:1px solid var(--line,#e3e8ef);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:650;color:var(--brand,#5b46d8);text-decoration:none;background:var(--panel,#fff)}
+    .par-empty{color:var(--muted,#6b7886);padding:20px 6px}
+    .par-email{background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:12px;padding:20px 24px;max-width:1000px;line-height:1.55}
+    .par-email h2{font-size:15px;margin:18px 0 4px}
+    .par-email h3{font-size:12.5px;margin:12px 0 6px;color:var(--muted,#6b7886);text-transform:uppercase;letter-spacing:.03em}
+    .par-email table{width:100%;border-collapse:collapse;margin:4px 0 10px}
+    .par-email th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#6b7886);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line,#e3e8ef)}
+    .par-email td{padding:5px 8px;border-bottom:1px solid var(--line,#e3e8ef);font-size:12.5px}
+    .par-email th.num,.par-email td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .par-email .mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+  </style>
+</AppShell>

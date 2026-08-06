@@ -7,7 +7,7 @@ const VERSION = "cc-page-cache-v20260703a";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
-  "/accounting/price-list/review",
+  "/accounting/price-agreements",
   "/operations/order-audit",
   "/operations/estimate-audit",
   "/executive/pipeline",

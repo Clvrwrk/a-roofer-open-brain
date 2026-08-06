@@ -6,7 +6,6 @@ import { loadExecutivePipelineDashboard } from "@lib/executive-pipeline";
 import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
 import { loadCommandCenterSurface } from "@lib/live-work";
 import { loadOrderAudit } from "@lib/order-audit";
-import { loadPriceListReviewHierarchy } from "@lib/price-list-review-hierarchy";
 import { getRuntimeEnv } from "@lib/runtime-env";
 import { loadVendorTerritorySurface } from "@lib/vendor-territories";
 
@@ -44,7 +43,6 @@ const warmTargets: Array<{ name: string; run: () => Promise<unknown> }> = [
   { name: "executive_pipeline", run: () => loadExecutivePipelineDashboard() },
   { name: "agreement_gaps", run: () => loadAgreementGapSurface() },
   { name: "invoice_audit_summary", run: () => loadInvoiceAuditSummary(undefined, { force: true }) },
-  { name: "price_list_review", run: () => loadPriceListReviewHierarchy() },
   { name: "order_audit_active", run: () => loadOrderAudit(undefined, "active") },
   { name: "estimate_audit", run: () => loadEstimateAudit() },
 ];
