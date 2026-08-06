@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   buildLinearIssueArguments,
+  buildLinearSourceIssueArguments,
   buildOwnerSlackArguments,
   enforceMailboxPolicy,
   mailboxLabelPlan,
@@ -21,6 +22,10 @@ import { APPROVED } from "../policy.mjs";
 const messageId = "19fabcdef1234567";
 const now = new Date("2026-07-28T10:30:00.000Z");
 const receivedMs = now.getTime() - 60_000;
+const fakeRecordIntake = async ({ payload }) => ({
+  workKey: `accounting:intake:${payload.sourceChannel}:${payload.orchestrationKey}`,
+  providerReference: "command-center-work-1",
+});
 
 function providerMessage(overrides = {}) {
   return {
@@ -63,7 +68,10 @@ function fakeComposio({ action = "track", existing = false, sender, messageOverr
         return {
           successful: true,
           data: {
-            issues: existing ? [{ id: "issue-existing", identifier: "PEC-900", description: `Gmail message ID: ${messageId}` }] : [],
+            issues: existing ? [
+              { id: "11111111-1111-4111-8111-111111111111", identifier: "CAT-900", description: `Maya CAT source: true\nMaya source key: gmail-thread:19fabcdef7654321` },
+              { id: "22222222-2222-4222-8222-222222222222", identifier: "PEC-900", description: `CAT source issue: CAT-900\nMaya source key: gmail-thread:19fabcdef7654321` },
+            ] : [],
             page_info: { hasNextPage: false },
           },
         };
@@ -72,11 +80,17 @@ function fakeComposio({ action = "track", existing = false, sender, messageOverr
         return { successful: true, data: providerMessage({ ...messageOverrides, ...(sender ? { sender } : {}) }) };
       }
       if (slug === "LINEAR_CREATE_LINEAR_ISSUE") {
-        return { successful: true, data: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c" } };
+        return input.arguments.team_id === APPROVED.linearSourceTeamId
+          ? { successful: true, data: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c" } }
+          : { successful: true, data: { id: "68961032-e114-47f0-b5ff-de3ce8591c3c" } };
       }
       if (slug === "LINEAR_GET_LINEAR_ISSUE") {
-        return { successful: true, data: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", identifier: "PEC-901" } };
+        return input.arguments.issue_id.startsWith("5896")
+          ? { successful: true, data: { id: input.arguments.issue_id, identifier: "CAT-901" } }
+          : { successful: true, data: { id: input.arguments.issue_id, identifier: "PEC-901" } };
       }
+      if (slug === "LINEAR_UPDATE_ISSUE") return { successful: true, data: { id: input.arguments.issueId } };
+      if (slug === "LINEAR_CREATE_LINEAR_COMMENT") return { successful: true, data: { id: "comment-1" } };
       if (slug === "SLACKBOT_SEND_MESSAGE") return { successful: true, data: { ok: true, ts: "1785234600.000001" } };
       if (slug === "GMAIL_REPLY_TO_THREAD") return { successful: true, data: { messageId: "19facknowledged1234" } };
       if (slug === "GMAIL_ADD_LABEL_TO_EMAIL") return { successful: true, data: { id: messageId } };
@@ -109,14 +123,21 @@ test("normalizes a hydrated Gmail message and pins source provenance", () => {
   assert.throws(() => normalizeMailboxMessage({ messageId: "not-a-gmail-id" }), /invalid message ID/u);
 });
 
-test("builds a source-linked Linear issue assigned to the pinned Agent Review owner", () => {
-  const args = buildLinearIssueArguments(normalizeMailboxMessage(providerMessage()), decision("track"));
-  assert.equal(args.team_id, APPROVED.linearTeamId);
+test("builds a CAT source and linked downstream issue assigned to Agent Review", () => {
+  const message = normalizeMailboxMessage(providerMessage());
+  const sourceKeys = [`gmail-thread:${message.threadId}`];
+  const source = buildLinearSourceIssueArguments(message, decision("track"), sourceKeys);
+  const args = buildLinearIssueArguments(message, decision("track"), { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", reference: "CAT-901" }, sourceKeys);
+  assert.equal(source.team_id, APPROVED.linearSourceTeamId);
+  assert.equal(source.project_id, APPROVED.linearSourceProjectId);
+  assert.match(source.description, /Maya CAT source: true/u);
+  assert.equal(args.team_id, APPROVED.linearWorkTeamId);
+  assert.equal(args.parent_id, "58961032-e114-47f0-b5ff-de3ce8591c3c");
   assert.equal(args.title, "[MAYA] Review vendor price update");
   assert.match(args.description, new RegExp(`Gmail message ID: ${messageId}`, "u"));
   assert.match(args.description, /standard receipt acknowledgement/u);
   assert.equal(args.assignee_id, APPROVED.linearReviewerId);
-  assert.equal(args.state_id, APPROVED.linearReviewStateId);
+  assert.equal(args.state_id, APPROVED.linearWorkReviewStateId);
 });
 
 test("builds a fixed-owner blocked Slack packet", () => {
@@ -132,14 +153,14 @@ test("never exposes a raw Linear UUID in a Slack packet", () => {
   const uuid = "58961032-e114-47f0-b5ff-de3ce8591c3c";
   const args = buildOwnerSlackArguments(normalizeMailboxMessage(providerMessage()), decision("block"), uuid);
   assert.doesNotMatch(args.markdown_text, new RegExp(uuid, "u"));
-  assert.match(args.markdown_text, /tracked as the new PE_CC_DEV Agent Review issue/u);
+  assert.match(args.markdown_text, /tracked as the new CAT-first accounting issue pair/u);
 });
 
 test("first mailbox occurrence bootstraps without reading historical mail", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-bootstrap-"));
   const state = new MailboxState(directory);
   const { composio, calls, classifier } = fakeComposio();
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.deepEqual(result, { state: "bootstrapped", processed: 0 });
   assert.equal(calls.length, 0);
   const cursor = JSON.parse(await readFile(path.join(directory, "cursor.json"), "utf8"));
@@ -162,17 +183,17 @@ test("clear actionable mail creates Linear, notifies Slack, stars it, and archiv
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "track" });
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   assert.equal(result.processed, 1);
   const gmailQuery = calls.find((call) => call.slug === "GMAIL_FETCH_EMAILS").input.arguments.query;
   assert.match(gmailQuery, /-in:sent/u);
   assert.match(gmailQuery, /-from:maya\.chen@cc\.proexteriorsus\.net/u);
-  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 1);
-  assert.equal(calls.filter((call) => call.slug === "LINEAR_GET_LINEAR_ISSUE").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 2);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_GET_LINEAR_ISSUE").length, 2);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
   const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
-  assert.match(slackText, /\[REVIEW\].*PE_CC_DEV.*PEC-901/u);
+  assert.match(slackText, /\[REVIEW\].*CODEX AGENT TEAM.*CAT-901/u);
   assert.doesNotMatch(slackText, /58961032-e114-47f0-b5ff-de3ce8591c3c/u);
   const labelCall = calls.find((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL");
   assert.deepEqual(labelCall.input.arguments.add_label_ids, ["STARRED"]);
@@ -195,10 +216,10 @@ test("a failed Linear display lookup still notifies Slack without exposing the U
     }
     return execute(slug, input);
   };
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
-  assert.match(slackText, /as the new PE_CC_DEV Agent Review issue/u);
+  assert.match(slackText, /as the new CAT-first accounting issue pair/u);
   assert.doesNotMatch(slackText, /58961032-e114-47f0-b5ff-de3ce8591c3c/u);
 });
 
@@ -212,7 +233,7 @@ test("an empty mailbox completes without depending on Linear", async () => {
     if (slug === "GMAIL_FETCH_EMAILS") return { successful: true, data: { messages: [] } };
     throw new Error(`unexpected tool ${slug}`);
   };
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.deepEqual(result, { state: "complete", processed: 0, candidates: 0 });
   assert.deepEqual(calls.map((call) => call.slug), ["GMAIL_FETCH_EMAILS"]);
 });
@@ -231,7 +252,8 @@ test("production mailbox mode delegates full work to the capability agent and re
   const result = await runMailboxOccurrence({
     composio,
     capabilityAgent,
-    classifier: async () => { throw new Error("legacy classifier must not run"); },
+    recordIntake: fakeRecordIntake,
+    classifier: async () => decision("track"),
     state,
     signal: new AbortController().signal,
     now,
@@ -240,6 +262,7 @@ test("production mailbox mode delegates full work to the capability agent and re
   assert.equal(packet.source, "email");
   assert.match(packet.request, /Vendor price update/u);
   assert.equal(packet.sourceContext.ownerSlackChannelId, APPROVED.ownerSlackChannelId);
+  assert.equal(packet.sourceContext.catSourceIssue, "CAT-901");
   assert.equal(calls.filter((call) => call.slug === "LINEAR_LIST_LINEAR_ISSUES").length, 1);
   assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 1);
   const receiptName = (await readdir(path.join(directory, "receipts")))[0];
@@ -247,7 +270,7 @@ test("production mailbox mode delegates full work to the capability agent and re
   assert.equal(receipt.state, "confirmed");
   assert.equal(receipt.action, "capability_work");
   assert.equal(receipt.confirmedWrites, 1);
-  assert.equal(receipt.actions.length, 1);
+  assert.ok(receipt.actions.length >= 6);
 });
 
 test("ignored mail creates no external task or Slack effect and is marked read", async () => {
@@ -262,7 +285,7 @@ test("ignored mail creates no external task or Slack effect and is marked read",
       attachmentList: [],
     },
   });
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 0);
@@ -362,7 +385,7 @@ test("automatic receipts are limited to approved domains and always include both
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda <lucinda@sub.aia4.io>" });
-  await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
   assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
   assert.match(reply.input.arguments.message_body, /Received — thank you/u);
@@ -375,6 +398,7 @@ test("historical cleanup never sends late acknowledgements", async () => {
   const result = await runInboxCleanup({
     composio,
     classifier,
+    recordIntake: fakeRecordIntake,
     state,
     signal: new AbortController().signal,
     now,
@@ -388,7 +412,7 @@ test("blocked mail creates Linear, alerts the fixed owner, and is marked read", 
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "block" });
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   const slack = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE");
   assert.equal(slack.input.connectedAccountId, APPROVED.sendConnectedAccountId);
@@ -412,7 +436,7 @@ test("a blocked Slack failure is terminally ambiguous and never triggers a secon
     }
     return execute(slug, input);
   };
-  const result = await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
   assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 0);
@@ -426,7 +450,7 @@ test("a pre-existing source marker prevents duplicate Linear creation", async ()
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "track", existing: true });
-  await runMailboxOccurrence({ composio, classifier, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
 });
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { SERVICE_AGENT_IDENTITIES, actorCanAccessDepartment, resolveServiceActorFromToken } from "@lib/access-control";
+import { NAMED_AGENT_IDENTITIES, SERVICE_AGENT_IDENTITIES, actorCanAccessDepartment, resolveServiceActorFromToken } from "@lib/access-control";
 
 describe("SERVICE_AGENT_IDENTITIES — ob-acculynx roster entry (REQ-09 / SC2)", () => {
   it("contains exactly one entry with id 'ob-acculynx'", () => {
@@ -32,5 +32,26 @@ describe("SERVICE_AGENT_IDENTITIES — ob-acculynx roster entry (REQ-09 / SC2)",
     expect(actorCanAccessDepartment(actor!, "sales")).toBe(true);
     expect(actorCanAccessDepartment(actor!, "accounting")).toBe(true);
     expect(actorCanAccessDepartment(actor!, "operations")).toBe(true);
+  });
+});
+
+describe("named-agent runtime bearer identities", () => {
+  it("resolves Maya's hashed runtime token as Maya with scoped non-approval permissions", () => {
+    expect(NAMED_AGENT_IDENTITIES.some((agent) => agent.id === "maya-chen")).toBe(true);
+    const token = "test-maya-runtime-token";
+    const hash = createHash("sha256").update(token).digest("hex");
+    const actor = resolveServiceActorFromToken(token, {
+      AGENT_SERVICE_TOKEN_SHA256_MAYA_CHEN: hash,
+    } as never);
+
+    expect(actor).toMatchObject({
+      id: "maya-chen",
+      type: "named_agent",
+      source: "service_token",
+      departmentAccess: ["accounting", "system"],
+    });
+    expect(actor!.permissions).toContain("evidence.attach");
+    expect(actor!.permissions).not.toContain("approval.decide");
+    expect(actor!.permissions).not.toContain("approval.decide_prod_write");
   });
 });

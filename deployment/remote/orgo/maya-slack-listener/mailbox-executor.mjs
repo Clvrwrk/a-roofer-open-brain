@@ -2,10 +2,18 @@ import { createHash } from "node:crypto";
 import { classifyMailboxMessage } from "./mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "./mailbox-state.mjs";
 import {
+  commentLinearIssue,
+  ensureCatFirstPair,
+  indexLinearOrchestrations,
+  listLinearIssues,
+  sourceKeysForMessage,
+  updateLinearIssue,
+} from "./linear-orchestration.mjs";
+import { classifyAccountingAlias, recordCommandCenterIntake } from "./command-center-client.mjs";
+import {
   APPROVED,
   ACKNOWLEDGEMENT_DOMAINS,
   GMAIL_TOOL_VERSION,
-  LINEAR_TOOL_VERSION,
   MAILBOX_CLEANUP_MAX_PAGES,
   MAILBOX_MAX_PAGES,
   MAILBOX_PAGE_SIZE,
@@ -19,9 +27,6 @@ const GMAIL_FETCH = "GMAIL_FETCH_EMAILS";
 const GMAIL_FETCH_MESSAGE = "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID";
 const GMAIL_MODIFY_LABELS = "GMAIL_ADD_LABEL_TO_EMAIL";
 const GMAIL_REPLY = "GMAIL_REPLY_TO_THREAD";
-const LINEAR_CREATE = "LINEAR_CREATE_LINEAR_ISSUE";
-const LINEAR_GET = "LINEAR_GET_LINEAR_ISSUE";
-const LINEAR_LIST = "LINEAR_LIST_LINEAR_ISSUES";
 
 const ACCOUNTING_SIGNAL = /\b(?:accounting|accounts? payable|accounts? receivable|a\/?p|a\/?r|invoice|bill|statement|credit memo|remittance|job cost|change order|draw request|insurance supplement|depreciation|price list|pricing|price agreement|vendor price|supplier price|purchase order|quote|estimate)\b/iu;
 const PROTECTED_SIGNAL = /\b(?:payroll|human resources|social security|ssn|bank account|routing number|wire transfer|payment authorization|pay this|release payment|credential|password|mfa|security key|login attempt|sign-in|legal notice|subpoena)\b/iu;
@@ -223,19 +228,53 @@ export function buildAcknowledgementArguments(message) {
   };
 }
 
-export function buildLinearIssueArguments(message, decision, expected = APPROVED) {
-  if (!expected.linearTeamId) throw new Error("Linear team is not pinned");
+export function buildLinearSourceIssueArguments(message, decision, sourceKeys, expected = APPROVED) {
+  if (!expected.linearSourceTeamId || !expected.linearSourceProjectId) {
+    throw new Error("Linear CAT source routing is not pinned");
+  }
+  return {
+    team_id: expected.linearSourceTeamId,
+    project_id: expected.linearSourceProjectId,
+    parent_id: expected.linearSourceParentId,
+    state_id: expected.linearSourceReviewStateId,
+    assignee_id: expected.linearReviewerId,
+    title: `[Maya intake][Accounting] ${decision.title.replace(/^\[MAYA\]\s*/u, "")}`.slice(0, 140),
+    priority: decision.priority,
+    description: [
+      "Maya CAT source: true",
+      ...sourceKeys.map((key) => `Maya source key: ${key}`),
+      "Source channel: gmail",
+      `Source sender: ${message.sender}`,
+      `Received: ${message.receivedAt}`,
+      `Gmail message ID: ${message.messageId}`,
+      `Gmail source: ${message.displayUrl}`,
+      "",
+      "## Intake decision",
+      decision.summary,
+      "",
+      "## Audit contract",
+      "All accounting-team work, Command Center effects, communication receipts, and Fast.io artifacts must link to this CAT source. This source remains open until every child is reviewed or completed.",
+    ].join("\n").slice(0, 8_000),
+  };
+}
+
+export function buildLinearIssueArguments(message, decision, catSource, sourceKeys = sourceKeysForMessage(message), expected = APPROVED) {
+  if (!expected.linearWorkTeamId || !catSource?.id) throw new Error("Linear downstream routing is not pinned");
   const attachmentSummary = message.attachments.length
     ? message.attachments.map((item) => `- ${item.filename} (${item.mimeType})`).join("\n")
     : "- None reported";
   return {
-    team_id: expected.linearTeamId,
-    state_id: expected.linearReviewStateId,
+    team_id: expected.linearWorkTeamId,
+    parent_id: catSource.id,
+    state_id: expected.linearWorkReviewStateId,
     assignee_id: expected.linearReviewerId,
     title: decision.title,
     priority: decision.priority,
     description: [
       "[MAYA] Mailbox intake decision",
+      `CAT source issue: ${catSource.reference}`,
+      ...sourceKeys.map((key) => `Maya source key: ${key}`),
+      "Maya execution gate: move this issue to Agent Todo",
       "",
       `Source sender: ${message.sender}`,
       `Received: ${message.receivedAt}`,
@@ -265,15 +304,15 @@ export function buildOwnerSlackArguments(message, decision, linearReference, exp
   const safeLinearReference = LINEAR_IDENTIFIER.test(String(linearReference ?? ""))
     ? String(linearReference)
     : linearReference
-      ? "the new PE_CC_DEV Agent Review issue"
+      ? "the new CAT-first accounting issue pair"
       : "";
   if (!blocked) {
     return {
       channel: expected.ownerSlackChannelId,
       markdown_text: [
-        `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [REVIEW] New accounting email submitted to PE_CC_DEV (PE-CC-DevTeam)${safeLinearReference ? ` as ${safeLinearReference}` : ""}.`,
+        `[NA-5][MAYA] - <@${expected.ownerSlackUserId}> [REVIEW] New accounting email recorded in CODEX AGENT TEAM with linked PE-CC work${safeLinearReference ? ` as ${safeLinearReference}` : ""}.`,
         `Source: ${message.subject} from ${message.sender}.`,
-        "Status: assigned to Christopher in Agent Review; the Gmail source is preserved in the issue.",
+        "Status: CAT source and accounting child are assigned to Christopher in Agent Review; the Gmail source is preserved.",
       ].join(" ").replace(/<@(?!U0B8SGJJZLJ)[^>]+>/gu, "[reference removed]").slice(0, 1_500),
       reply_broadcast: false,
       unfurl_links: false,
@@ -382,74 +421,6 @@ async function hydrateMessage(composio, messageId, signal, expected) {
   return normalizeMailboxMessage(requiredSuccessful(result, "Gmail hydrate"));
 }
 
-async function listKnownLinearSourceIds(composio, signal, expected) {
-  const sourceIds = new Map();
-  let after;
-  for (let page = 0; page < 10; page += 1) {
-    const result = await composio.tools.execute(
-      LINEAR_LIST,
-      {
-        userId: expected.composioUserId,
-        connectedAccountId: expected.linearConnectedAccountId,
-        version: LINEAR_TOOL_VERSION,
-        arguments: { first: 250, include_transitions: false, ...(after ? { after } : {}) },
-      },
-      requestOptions(signal),
-    );
-    const data = requiredSuccessful(result, "Linear list");
-    const issues = Array.isArray(data.issues) ? data.issues : [];
-    for (const issue of issues) {
-      const description = String(issue.description ?? "");
-      const match = description.match(/Gmail message ID: ([0-9a-fA-F]+)/u);
-      if (match) sourceIds.set(match[1], String(issue.identifier ?? issue.id ?? "existing issue"));
-    }
-    const pageInfo = data.page_info ?? data.pageInfo ?? {};
-    if (!(pageInfo.hasNextPage ?? pageInfo.has_next_page)) break;
-    after = pageInfo.endCursor ?? pageInfo.end_cursor;
-    if (!after) throw new Error("Linear pagination omitted the next cursor");
-  }
-  return sourceIds;
-}
-
-async function createLinearIssue(composio, message, decision, signal, expected) {
-  const result = await composio.tools.execute(
-    LINEAR_CREATE,
-    {
-      userId: expected.composioUserId,
-      connectedAccountId: expected.linearConnectedAccountId,
-      version: LINEAR_TOOL_VERSION,
-      arguments: buildLinearIssueArguments(message, decision, expected),
-    },
-    requestOptions(signal),
-  );
-  const data = requiredSuccessful(result, "Linear create");
-  const id = String(data.id ?? "");
-  if (!id) throw new Error("Linear create omitted the issue ID");
-  let reference = String(data.identifier ?? data.issueIdentifier ?? "");
-  if (!LINEAR_IDENTIFIER.test(reference)) {
-    try {
-      const lookup = await composio.tools.execute(
-        LINEAR_GET,
-        {
-          userId: expected.composioUserId,
-          connectedAccountId: expected.linearConnectedAccountId,
-          version: LINEAR_TOOL_VERSION,
-          arguments: { issue_id: id },
-        },
-        requestOptions(signal),
-      );
-      if (lookup?.successful) {
-        const issue = lookup.data?.issue ?? lookup.data?.data ?? lookup.data ?? {};
-        const candidate = String(issue.identifier ?? issue.issueIdentifier ?? "");
-        if (LINEAR_IDENTIFIER.test(candidate)) reference = candidate;
-      }
-    } catch {
-      // Creation is already provider-confirmed. Slack uses a non-UUID fallback label.
-    }
-  }
-  return { id, reference: LINEAR_IDENTIFIER.test(reference) ? reference : id, created: true };
-}
-
 async function sendOwnerSlack(composio, arguments_, signal, expected) {
   const result = await composio.tools.execute(
     TOOL_SLUG,
@@ -510,7 +481,7 @@ async function fileMailboxMessage(composio, message, action, signal, expected) {
   return `labels:${add.join(",")}:${remove.join(",")}`;
 }
 
-async function processMessage({ composio, classifier, capabilityAgent, state, listMessage, occurrenceId, signal, expected, onEvent, linearSourceIds, allowAcknowledgement = true }) {
+async function processMessage({ composio, classifier, capabilityAgent, recordIntake, state, listMessage, occurrenceId, signal, expected, onEvent, linearOrchestrations, allowAcknowledgement = true }) {
   const messageId = String(firstDefined(listMessage, ["messageId", "message_id", "id"]) ?? "");
   if (!/^[0-9a-fA-F]+$/u.test(messageId)) throw new Error("Gmail list returned an invalid message ID");
   const claim = await state.claim(messageId, occurrenceId);
@@ -520,7 +491,47 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
   let slackAttempted = false;
   try {
     message = await hydrateMessage(composio, messageId, signal, expected);
-    if (capabilityAgent) {
+    decision = enforceMailboxPolicy(message, await classifier(message, signal));
+    let linearPair;
+    let sourceKeys = [];
+    if (decision.action !== "ignore") {
+      sourceKeys = sourceKeysForMessage(message);
+      linearPair = await ensureCatFirstPair({
+        composio,
+        sourceKeys,
+        knownIndex: linearOrchestrations,
+        buildSourceArguments: (keys) => buildLinearSourceIssueArguments(message, decision, keys, expected),
+        buildWorkArguments: ({ source, sourceKeys: keys }) => buildLinearIssueArguments(message, decision, source, keys, expected),
+        signal,
+        expected,
+        onConfirmed: (action, providerReference) => state.recordAction(claim.name, action, providerReference),
+      });
+      const route = classifyAccountingAlias(message.recipients);
+      const intake = await recordIntake({
+        payload: {
+          messageId: message.messageId,
+          externalEventId: message.messageId,
+          sourceChannel: "gmail",
+          sourceThreadId: message.threadId,
+          orchestrationKey: sourceKeys[0],
+          catSourceIssue: linearPair.source.reference,
+          downstreamIssue: linearPair.work.reference,
+          alias: route.alias,
+          classification: route.classification,
+          subject: message.subject,
+          from: message.sender,
+          receivedAt: message.receivedAt,
+          attachments: message.attachments.map((attachment) => attachment.filename),
+          gmailLabels: message.labelIds,
+          slackChannelId: "",
+          slackThreadTs: "",
+        },
+        signal,
+        expected,
+      });
+      await state.recordAction(claim.name, "command_center_intake", intake.providerReference);
+    }
+    if (capabilityAgent && decision.action !== "ignore") {
       // A capability run may perform multiple external writes. Any uncertain failure
       // is terminally ambiguous, so the legacy fallback send must not run afterward.
       slackAttempted = true;
@@ -544,40 +555,59 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
           senderEmail: message.senderEmail,
           ownerSlackChannelId: expected.ownerSlackChannelId,
           ownerSlackUserId: expected.ownerSlackUserId,
+          catSourceIssue: linearPair.source.reference,
+          linearWorkIssue: linearPair.work.reference,
         },
         composio,
         signal,
-        expected,
+        expected: Object.freeze({
+          ...expected,
+          capabilityMode: "mailbox",
+          allowedLinearIssueIds: [linearPair.source.reference, linearPair.source.id, linearPair.work.reference, linearPair.work.id],
+        }),
         store: state,
         claimName: claim.name,
         onEvent,
       });
-      const readState = await fileMailboxMessage(composio, message, "track", signal, expected);
+      const commentId = await commentLinearIssue(
+        composio,
+        linearPair.work.id,
+        `[MAYA] Work result\n\n${result.text.slice(0, 3_000)}\n\nCAT source: ${linearPair.source.reference}`,
+        signal,
+        expected,
+      );
+      await state.recordAction(claim.name, "linear_result_comment", commentId);
+      await updateLinearIssue(composio, linearPair.work.id, { stateId: expected.linearWorkReviewStateId }, signal, expected);
+      await state.recordAction(claim.name, "linear_work_agent_review", linearPair.work.id);
+      await updateLinearIssue(composio, linearPair.source.id, { stateId: expected.linearSourceReviewStateId }, signal, expected);
+      await state.recordAction(claim.name, "linear_source_agent_review", linearPair.source.id);
+      let acknowledgementReference;
+      if (allowAcknowledgement && senderCanReceiveAcknowledgement(message.senderEmail)) {
+        acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
+        await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
+      }
+      const readState = await fileMailboxMessage(composio, message, decision.action, signal, expected);
       await state.confirm(claim.name, {
         action: "capability_work",
         confirmedWrites: result.confirmedWrites,
         finalDigest: hash(result.text),
+        acknowledgementHash: acknowledgementReference ? hash(acknowledgementReference) : null,
         readState,
       });
       onEvent("mailbox_message_confirmed", { message_hash: claim.messageDigest, action: "capability_work" });
       return { state: "confirmed", action: "capability_work" };
-    }
-    decision = enforceMailboxPolicy(message, await classifier(message, signal));
-    let linearIssue;
-    if (decision.action !== "ignore") {
-      const existing = linearSourceIds.get(message.messageId);
-      linearIssue = existing
-        ? { id: existing, reference: existing, created: false }
-        : await createLinearIssue(composio, message, decision, signal, expected);
-      linearSourceIds.set(message.messageId, linearIssue.reference ?? linearIssue.id);
-      if (linearIssue.created !== false) await state.recordAction(claim.name, "linear_create", linearIssue.id);
     }
     let slackTimestamp;
     if (decision.action !== "ignore") {
       slackAttempted = true;
       slackTimestamp = await sendOwnerSlack(
         composio,
-        buildOwnerSlackArguments(message, decision, linearIssue?.reference, expected),
+        buildOwnerSlackArguments(
+          message,
+          decision,
+          linearPair?.source.reference,
+          expected,
+        ),
         signal,
         expected,
       );
@@ -595,7 +625,8 @@ async function processMessage({ composio, classifier, capabilityAgent, state, li
     await state.confirm(claim.name, {
       action: decision.action,
       priority: decision.priority,
-      linearIssueHash: linearIssue ? hash(linearIssue.id) : null,
+      linearSourceIssueHash: linearPair ? hash(linearPair.source.id) : null,
+      linearWorkIssueHash: linearPair ? hash(linearPair.work.id) : null,
       slackMessageHash: slackTimestamp ? hash(slackTimestamp) : null,
       acknowledgementHash: acknowledgementReference ? hash(acknowledgementReference) : null,
       readState,
@@ -633,6 +664,7 @@ export async function runMailboxOccurrence({
   composio,
   classifier = classifyMailboxMessage,
   capabilityAgent,
+  recordIntake = recordCommandCenterIntake,
   state,
   signal,
   expected = APPROVED,
@@ -646,14 +678,14 @@ export async function runMailboxOccurrence({
   }
   const occurrenceId = mailboxOccurrenceId(now);
   const candidates = await listCandidateMessages(composio, cursor.epochSeconds, signal, expected);
-  const linearSourceIds = candidates.length
-    ? await listKnownLinearSourceIds(composio, signal, expected)
+  const linearOrchestrations = candidates.length
+    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
     : new Map();
   let processed = 0;
   for (const candidate of candidates) {
     if (signal.aborted) throw new Error("Mailbox occurrence aborted");
     const result = await processMessage({
-      composio, classifier, capabilityAgent, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearSourceIds,
+      composio, classifier, capabilityAgent, recordIntake, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearOrchestrations,
     });
     if (result.state !== "duplicate") processed += 1;
   }
@@ -674,13 +706,14 @@ export async function runInboxCleanup({
   expected = APPROVED,
   onEvent = () => {},
   allowAcknowledgement = false,
+  recordIntake = recordCommandCenterIntake,
   now = new Date(),
 }) {
   await state.initialize(Math.floor(now.getTime() / 1_000));
   const occurrenceId = `maya-chen:mailbox-cleanup:${now.toISOString()}`;
   const { candidates, truncated } = await listInboxCleanupCandidates(composio, signal, expected);
-  const linearSourceIds = candidates.length
-    ? await listKnownLinearSourceIds(composio, signal, expected)
+  const linearOrchestrations = candidates.length
+    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
     : new Map();
   let processed = 0;
   let duplicates = 0;
@@ -690,13 +723,14 @@ export async function runInboxCleanup({
     const result = await processMessage({
       composio,
       classifier,
+      recordIntake,
       state,
       listMessage: candidate,
       occurrenceId,
       signal,
       expected,
       onEvent,
-      linearSourceIds,
+      linearOrchestrations,
       allowAcknowledgement,
     });
     if (result.state === "duplicate") duplicates += 1;

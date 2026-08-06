@@ -353,6 +353,14 @@ function namedAgentToActor(agent: NamedAgentIdentity): CommandCenterActor {
   };
 }
 
+function namedAgentServiceActor(agent: NamedAgentIdentity): CommandCenterActor {
+  return {
+    ...namedAgentToActor(agent),
+    source: "service_token",
+    roles: ["named-agent", agent.role, "runtime"],
+  };
+}
+
 function humanActor(
   email: string,
   displayName: string,
@@ -464,6 +472,8 @@ export function getAgentAccessRuntimeConfig(env: RuntimeEnv = getRuntimeEnv()) {
   ).length;
   const configuredHashedTokens = SERVICE_AGENT_IDENTITIES.filter(
     (agent) => env[getServiceTokenHashEnvKey(agent.id)],
+  ).length + NAMED_AGENT_IDENTITIES.filter(
+    (agent) => env[getServiceTokenHashEnvKey(agent.id)],
   ).length;
 
   return {
@@ -483,6 +493,8 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
     if (safeEqual(hashToken(token), hashToken(entry.token))) {
       const agent = SERVICE_AGENT_IDENTITIES.find((candidate) => candidate.id === entry.agentId);
       if (agent) return serviceAgentToActor(agent);
+      const namedAgent = NAMED_AGENT_IDENTITIES.find((candidate) => candidate.id === entry.agentId);
+      if (namedAgent) return namedAgentServiceActor(namedAgent);
     }
   }
 
@@ -491,6 +503,12 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
     const configuredHash = env[getServiceTokenHashEnvKey(agent.id)]?.trim();
     if (configuredHash && safeEqual(tokenHash, configuredHash)) {
       return serviceAgentToActor(agent);
+    }
+  }
+  for (const agent of NAMED_AGENT_IDENTITIES) {
+    const configuredHash = env[getServiceTokenHashEnvKey(agent.id)]?.trim();
+    if (configuredHash && safeEqual(tokenHash, configuredHash)) {
+      return namedAgentServiceActor(agent);
     }
   }
 

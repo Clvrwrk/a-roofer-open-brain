@@ -15,8 +15,8 @@
 # - Never "tell" Chris what to do — surface the decision with full context
 # ─────────────────────────────────────────────────────────────────────────────
 
-schema_version: "1.0.0"
-last_updated: "2026-06-25"
+schema_version: "1.1.0"
+last_updated: "2026-08-06"
 applies_to: "pro-exteriors"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -27,16 +27,18 @@ applies_to: "pro-exteriors"
 maya_chen:
   always_on:
     gmail_poll:
-      trigger: "every 60s continuous"
+      trigger: "every 30m through the Orgo Maya runtime"
       scope: "in:anywhere for all 7 aliases"
       action: |
         For each unread message:
         1. Classify by alias (invoices/ap/creditmemos/priceagreement/ar/hr/payroll)
-        2. Extract: vendor, invoice#, date, amount, due_date, line_items
-        3. Check attachment type — PDF, Excel, image scan
-        4. Flag SPAM-labeled messages for human review before processing
-        5. Create dashboard_work_item via POST /api/agent/intake
-        6. Post to appropriate Slack channel
+        2. Resolve or create the CODEX AGENT TEAM source issue
+        3. Resolve or create the linked PE-CC-DevTeam accounting child
+        4. Record the CAT/PEC lineage via POST /api/agent/intake
+        5. Extract evidence; protect HR/Payroll and SPAM-labeled content
+        6. Add the review packet to Linear and notify the governed Slack route
+      runtime_owner: "deployment/remote/orgo/maya-slack-listener"
+      legacy_kasm_cron: "disabled — never run concurrently"
       best_practice: |
         CFMA: "Invoice receipt-to-approval cycle should be under 3 business days.
         Automated capture at receipt point is the first control in a 3-way match."
