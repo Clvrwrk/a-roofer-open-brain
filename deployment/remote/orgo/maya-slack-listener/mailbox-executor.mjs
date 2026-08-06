@@ -9,6 +9,7 @@ import {
   MAILBOX_CLEANUP_MAX_PAGES,
   MAILBOX_MAX_PAGES,
   MAILBOX_PAGE_SIZE,
+  MAYA_EMAIL_ADDRESS,
   MAYA_MAILBOX_STATE_DIR,
   REQUIRED_EMAIL_CC,
 } from "./policy.mjs";
@@ -111,6 +112,7 @@ function extractEmailAddress(value) {
 
 export function senderCanReceiveAcknowledgement(senderEmail, domains = ACKNOWLEDGEMENT_DOMAINS) {
   const address = String(senderEmail ?? "").trim().toLowerCase();
+  if (address === MAYA_EMAIL_ADDRESS) return false;
   const at = address.lastIndexOf("@");
   if (at <= 0 || at === address.length - 1) return false;
   const senderDomain = address.slice(at + 1);
@@ -160,6 +162,18 @@ function securityAuthorizationDecision(message) {
 }
 
 export function enforceMailboxPolicy(message, decision) {
+  if (message.senderEmail === MAYA_EMAIL_ADDRESS) {
+    return Object.freeze({
+      ...decision,
+      action: "ignore",
+      priority: 3,
+      title: "",
+      summary: "Maya's own sent message is not new inbound accounting work.",
+      reason: "Self-authored and Sent mail is excluded to prevent receipt and task loops.",
+      question: "",
+      options: [],
+    });
+  }
   const securityDecision = securityAuthorizationDecision(message);
   if (securityDecision) return securityDecision;
   const content = `${message.recipients}\n${message.subject}\n${message.body}`;
@@ -296,7 +310,7 @@ async function listCandidateMessages(composio, cursorEpochSeconds, signal, expec
         version: GMAIL_TOOL_VERSION,
         arguments: {
           user_id: "me",
-          query: `after:${cursorDate} -in:spam -in:trash`,
+          query: `after:${cursorDate} -in:sent -from:${MAYA_EMAIL_ADDRESS} -in:spam -in:trash`,
           max_results: MAILBOX_PAGE_SIZE,
           ids_only: false,
           verbose: false,
@@ -331,7 +345,7 @@ async function listInboxCleanupCandidates(composio, signal, expected) {
         version: GMAIL_TOOL_VERSION,
         arguments: {
           user_id: "me",
-          query: "in:inbox -in:spam -in:trash",
+          query: `in:inbox -in:sent -from:${MAYA_EMAIL_ADDRESS} -in:spam -in:trash`,
           max_results: MAILBOX_PAGE_SIZE,
           ids_only: false,
           verbose: false,

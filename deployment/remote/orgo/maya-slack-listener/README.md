@@ -22,6 +22,9 @@ owner-authorization checks, preventing the classifier from inventing account
 deactivation or recovery work. Slack notices resolve the created Linear issue to its
 human `PEC-*` identifier and suppress internal UUIDs if that display lookup is
 temporarily unavailable.
+The scan excludes Gmail Sent mail and Maya's own sender address, and the acknowledgement
+gate independently refuses Maya's own address. These layered guards prevent receipt
+messages from becoming recursive accounting issues or replies.
 
 `mailbox-cleanup.mjs` and `run-mailbox-cleanup.sh` provide a bounded one-shot pass over
 the existing inbox. Cleanup deliberately disables sender acknowledgements so old mail
