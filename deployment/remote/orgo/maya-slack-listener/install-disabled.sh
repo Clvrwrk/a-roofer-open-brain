@@ -154,7 +154,10 @@ fi
 /usr/bin/chown -R root:root "$incoming_dir"
 /usr/bin/find "$incoming_dir" -type d -exec /usr/bin/chmod 0755 {} +
 /usr/bin/find "$incoming_dir" -type f -exec /usr/bin/chmod 0644 {} +
-/usr/bin/chmod 0755 "$incoming_dir/start-listener.sh" "$incoming_dir/hermes-no-file-logging.py"
+/usr/bin/chmod 0755 \
+  "$incoming_dir/start-listener.sh" \
+  "$incoming_dir/run-mailbox-cleanup.sh" \
+  "$incoming_dir/hermes-no-file-logging.py"
 
 if [[ -d "$release_dir" ]]; then
   had_release=1

@@ -11,13 +11,28 @@ export const APPROVED = Object.freeze({
   ownerSlackUserId: "U0B8SGJJZLJ",
   ownerSlackChannelId: "C0BD7L43PC2",
   linearTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
+  linearReviewStateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
+  linearReviewerId: "002bc1e6-c102-42f7-86cc-45b7c499dae3",
 });
+
+export const REQUIRED_EMAIL_CC = Object.freeze([
+  "admin@cc.proexteriorsus.net",
+  "chussey@aia4.io",
+]);
+
+export const ACKNOWLEDGEMENT_DOMAINS = Object.freeze([
+  "cc.proexteriorsus.net",
+  "proexteriorsus.com",
+  "aia4.io",
+  "cleverwork.io",
+]);
 
 export const GMAIL_TOOL_VERSION = "20260721_00";
 export const LINEAR_TOOL_VERSION = "20260724_00";
 export const MAILBOX_INTERVAL_MS = 30 * 60 * 1_000;
 export const MAILBOX_PAGE_SIZE = 100;
 export const MAILBOX_MAX_PAGES = 5;
+export const MAILBOX_CLEANUP_MAX_PAGES = 5;
 
 export const AGENT_HOME = "/home/orgo/maya-agent";
 export const RELEASE_DIR = "/opt/pe-cc-agents/maya-slack-listener";

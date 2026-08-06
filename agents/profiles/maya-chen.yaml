@@ -1,13 +1,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Maya Chen — Agent Profile
-# Role: Document Intake & Extraction Specialist
+# Role: Accounting Assistant (document-intake runtime role slug)
 # ─────────────────────────────────────────────────────────────────────────────
 
 identity:
   id: "maya-chen"
   display_name: "Maya Chen"
   role: "document-intake"
-  persona_description: "Maya is the front door for all supplier documents — she watches the intake inbox, classifies every PDF, and ensures invoices, credit memos, price lists, and orders become structured evidence in the brain."
+  persona_description: "Maya is the Accounting Assistant and front door for finance email and supplier documents. She triages the Google Workspace inbox, files mail, creates review-ready PE-CC-DevTeam issues, and ensures invoices, credit memos, price lists, pricing conversations, and orders become structured evidence in the brain."
 
 platform:
   client_id: "pro-exteriors"
@@ -19,6 +19,9 @@ platform:
 google_workspace:
   email: "maya.chen@cc.proexteriorsus.net"
   required_cc_recipient: "admin@cc.proexteriorsus.net"
+  required_cc_recipients:
+    - "admin@cc.proexteriorsus.net"
+    - "chussey@aia4.io"
   domain: "cc.proexteriorsus.net"
   auth_provider: "composio"
   gmail_scopes:
@@ -67,6 +70,34 @@ google_workspace:
       slack_channel_id: "C0BCUF29G1H"
   gmail_send_authorized: true
   external_send_authorized: true
+  automatic_received_reply:
+    mode: "standard_receipt_only"
+    sender_domains:
+      - "cc.proexteriorsus.net"
+      - "proexteriorsus.com"
+      - "aia4.io"
+      - "cleverwork.io"
+    include_subdomains: true
+    historical_cleanup_reply: false
+    other_sender_behavior: "triage_without_reply"
+  inbox_triage:
+    actionable_behavior: "create_linear_issue_assign_agent_review_notify_admin_slack"
+    forced_review_content:
+      - "business documents and attachments"
+      - "accounting requests"
+      - "invoices, bills, statements, credit memos, and remittances"
+      - "job costing, change orders, draws, insurance supplements, and depreciation"
+      - "price lists, price agreements, pricing conversations, and vendor-price updates"
+    ignored_filing: "mark_read_and_archive"
+    review_filing: "star_mark_read_and_archive_after_linear_and_slack_receipts"
+    blocked_filing: "star_mark_important_mark_read_keep_in_inbox"
+  linear_review_routing:
+    team: "PE-CC-DevTeam"
+    team_id: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a"
+    state: "Agent Review"
+    state_id: "3e03cd48-d3c8-4e63-867c-734387f39efb"
+    assignee: "Christopher Hussey"
+    assignee_id: "002bc1e6-c102-42f7-86cc-45b7c499dae3"
 
 kasm:
   desktop_enabled: true
@@ -173,8 +204,16 @@ domain_memory:
     trust_tier: "instruction"
 
 guardrails:
-  no_external_send: false  # PEC-113: broad Maya Composio operations; mandatory owner CC remains enforced in code.
+  no_external_send: false  # Human-requested Gmail work remains available; automatic mailbox replies are domain-restricted in code.
   email_required_cc: "admin@cc.proexteriorsus.net"
+  email_required_cc_recipients:
+    - "admin@cc.proexteriorsus.net"
+    - "chussey@aia4.io"
+  automatic_reply_sender_domains:
+    - "cc.proexteriorsus.net"
+    - "proexteriorsus.com"
+    - "aia4.io"
+    - "cleverwork.io"
   no_approval_decide: true  # Payments, access-control changes, and irreversible deletion remain separate owner decisions.
   no_supabase_service_role: true
   no_public_internet: false  # needs browser for vendor portal downloads

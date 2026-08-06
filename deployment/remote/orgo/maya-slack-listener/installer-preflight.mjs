@@ -117,6 +117,7 @@ export async function verifyInstallerPreflight() {
         gid: 0,
         executableFiles: [
           "/opt/pe-cc-agents/maya-slack-listener/start-listener.sh",
+          "/opt/pe-cc-agents/maya-slack-listener/run-mailbox-cleanup.sh",
           "/opt/pe-cc-agents/maya-slack-listener/hermes-no-file-logging.py",
         ],
       });
