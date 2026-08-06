@@ -621,6 +621,11 @@ OneClickCode 2024: Neighborhood-specific landing pages are top local SEO driver 
     },
 ]
 
-print(f"Total cron jobs to deploy: {len(CRON_JOBS)}")
-for job in CRON_JOBS:
+ACTIVE_CRON_JOBS = [
+    job for job in CRON_JOBS
+    if job["agent"] != "maya.chen@cc.proexteriorsus.net"
+]
+print("Maya cron jobs skipped: the Orgo CAT-first runtime is her sole production schedule owner.")
+print(f"Total cron jobs to deploy: {len(ACTIVE_CRON_JOBS)}")
+for job in ACTIVE_CRON_JOBS:
     print(f"  [{job['cadence_type'].upper():8}] {job['schedule']:20} {job['name']}")

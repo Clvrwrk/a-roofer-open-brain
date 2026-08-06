@@ -2,6 +2,10 @@
 """
 Write Hermes cron jobs.json into each agent's profile on the agent host.
 Format: ~/.hermes/cron/jobs.json
+
+Legacy Kasm bootstrap only. Maya's production schedule owner is the Orgo
+listener plus the runtime_auth recurring-loop registry; do not run this script
+for Maya while that owner is active, or duplicate occurrences will result.
 """
 import json, uuid, subprocess
 from datetime import datetime, timezone
@@ -90,6 +94,15 @@ AGENTS = {
         make_job("maya-vendor-onboarding", "0 9 1 * *",
             "You are Maya Chen. Monthly: check work items for first-time vendors this month. List new vendors. Flag any without price agreements to #ob-agents-internal. Post summary to #ob-agents-internal.",
             ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
+        make_job("maya-extraction-accuracy", "0 10 1 * *",
+            "You are Maya Chen. Monthly: compare Maya-created work against human corrections. Calculate accuracy by document type and submit the evidence packet to Sam Torres. Keep all work rooted in the CAT source issue.",
+            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
+        make_job("maya-vendor-relationship-audit", "0 9 1 1,4,7,10 *",
+            "You are Maya Chen. Quarterly: review the top 20 vendors by invoice volume. Surface extraction failures above 5 percent and recurring pricing discrepancies with source evidence. Route findings to Alex and Jordan; do not alter prices.",
+            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
+        make_job("maya-intake-system-review", "0 9 15 1 *",
+            "You are Maya Chen. Annual: produce extraction accuracy, vendor-count, and document-volume trends. Propose alias or process changes to Dev Conductor; do not apply them. Keep the proposal linked to its CAT source.",
+            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
     ],
 
     "alex.rivers@cc.proexteriorsus.net": [
@@ -176,6 +189,9 @@ print("Deploying cron jobs to agent host...")
 total_deployed = 0
 
 for email, jobs in AGENTS.items():
+    if email == "maya.chen@cc.proexteriorsus.net":
+        print("  ⏭️  Maya skipped: Orgo CAT-first runtime owns mailbox and recurring schedules")
+        continue
     jobs_data = {"jobs": jobs, "_version": 1}
     jobs_json = json.dumps(jobs_data, indent=2)
 
