@@ -2,10 +2,11 @@
 import AppShell from "../../layouts/AppShell.astro";
 import { loadFridayWipBoard } from "@lib/friday-wip";
 
-// Friday WIP/AR live board (docs/85) — the workbook's 11_Friday_Meeting sheet
-// as a living surface. Data: wip_ar_master (mig 215), rebuilt nightly from the
-// AccuLynx mirror + QBO job costs; the yellow columns (expected dates,
-// collected?, notes) save inline and survive every refresh.
+// Friday WIP/AR live board (docs/85, round 2 2026-08-06) — the workbook's
+// 11_Friday_Meeting sheet as a living surface. Data: wip_ar_master (migs
+// 215/216), rebuilt nightly from the AccuLynx mirror + QBO job costs; the
+// yellow columns (expected dates, Estimated $, collected?, notes) save inline
+// and survive every refresh.
 const board = await loadFridayWipBoard();
 const k = board.kpis;
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
@@ -16,6 +17,28 @@ const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "num
 const today = new Date().toISOString().slice(0, 10);
 const statusClass = (s: string) =>
   s === "Critical AR" ? "fw-status-critical" : s === "Collected in Full" ? "fw-status-full" : s === "Invoiced" ? "fw-status-invoiced" : "fw-status-pending";
+
+// Status column = [AccuLynx status] · our reference bucket.
+const MILESTONE_LABELS: Record<string, string> = {
+  unassigned_lead: "Lead",
+  assigned_lead: "Lead",
+  lead: "Lead",
+  prospect: "Prospect",
+  approved: "Approved",
+  completed: "Completed",
+  invoiced: "Invoiced",
+  closed: "Closed",
+};
+const milestoneLabel = (m: string) => MILESTONE_LABELS[m] ?? (m ? m[0].toUpperCase() + m.slice(1) : "—");
+
+// Days-in-status chip: green (0d) → red (365d+), clamped.
+const daysChipStyle = (days: number) => {
+  const t = Math.min(Math.max(days, 0), 365) / 365;
+  const hue = Math.round(120 * (1 - t));
+  return `background:hsl(${hue} 72% 38%);color:#fff`;
+};
+
+const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salesperson)))].sort((a, b) => a.localeCompare(b));
 ---
 
 <AppShell title="Friday WIP/AR" eyebrow="Accounting" activePage="accounting">
@@ -24,6 +47,12 @@ const statusClass = (s: string) =>
       <h2 class="fw-title">Friday AR Meeting board</h2>
       <span class="fw-sub">Set expected cash dates · review hit/miss next week · 3-week cash map</span>
       <span class="fw-spacer"></span>
+      <label class="fw-filter">Rep
+        <select id="fw-rep" class="fw-select">
+          <option value="">All reps</option>
+          {reps.map((r) => <option value={r}>{r}</option>)}
+        </select>
+      </label>
       <a class="fw-btn" href="/api/accounting/friday-wip/pack" title="Latest Thursday Excel pack (built Thursday mornings)">Download Thursday pack</a>
       <a class="fw-btn" href={`/api/accounting/friday-wip/accrual.csv?cutoff=${today}`} title="Per-job billed-to-date + costs-incurred-to-date at a cutoff, for the CPA's earned-revenue calc">Accrual snapshot CSV</a>
       <button class="fw-btn fw-btn-primary" id="fw-send" type="button" title="Maya emails the summary + pack link to the internal distribution (Lucinda / Chandler / Tabitha / Chris)">Email via Maya</button>
@@ -39,11 +68,11 @@ const statusClass = (s: string) =>
       <div class="fw-kpi"><span class="fw-kpi-lab">Total job balance</span><span class="fw-kpi-val">{money(k.totalBalance)}</span><span class="fw-kpi-sub">{k.ledgerJobs} jobs on the ledger</span></div>
       <div class="fw-kpi"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></div>
       <div class="fw-kpi"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Costs incurred (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></div>
+      <div class="fw-kpi"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></div>
     </div>
 
     <div class="fw-cashmap">
-      <span class="fw-cashmap-title">3-week cash map — billed AR only. You cannot collect what was never invoiced.</span>
+      <span class="fw-cashmap-title">3-week cash map — billed AR only. Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.</span>
       <div class="fw-cashmap-cells">
         <div class="fw-week"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></div>
         <div class="fw-week"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></div>
@@ -65,11 +94,19 @@ const statusClass = (s: string) =>
           <table class="fw-table">
             <thead>
               <tr>
-                <th>Job #</th><th>Client</th><th>Bucket</th><th>Rep</th>
-                <th class="fw-num">Billed AR $</th><th class="fw-num">Unbilled $</th><th class="fw-num">Costs to date $</th>
-                <th>Action</th><th>Status</th>
+                <th>Job #</th><th>Client</th><th>Status (AccuLynx · ref)</th><th>Rep</th>
+                <th class="fw-num" title="AccuLynx approved job value (L)">Contract Total</th>
+                <th class="fw-num" title="Σ non-void invoices issued (P)">Invoiced Total</th>
+                <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
+                <th class="fw-num" title="AccuLynx job balance due (N)">Balance Due</th>
+                <th class="fw-num" title="QBO job-tagged bills + purchases to date">Expense Realized</th>
+                <th class="fw-num" title="Estimated total costs − expense realized (needs AccuLynx worksheet costs — docs/85 gap)">Expense Outstanding</th>
+                <th title="Days in current AccuLynx status (green 0 → red 365+)">Days in Status</th>
+                <th>Action</th>
                 <th class="fw-fill">Expected invoice/cash</th>
+                <th class="fw-fill" title="Cash the team expects to collect at that date">Estimated $</th>
                 <th class="fw-fill">Expected paid-in-full</th>
+                <th class="fw-num" title="Balance due − Estimated $ (auto)">PIF remainder $</th>
                 <th>Prior (last wk)</th><th>Hit/Miss</th>
                 <th class="fw-fill">Collected?</th>
                 <th class="fw-fill">Notes</th>
@@ -77,18 +114,26 @@ const statusClass = (s: string) =>
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId}>
+                <tr data-job={j.jobId} data-rep={j.salesperson}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
                   <td class="fw-client" title={j.client}>{j.client}</td>
-                  <td class="fw-bucket" title={j.bucket}>{j.bucket}</td>
+                  <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}`}>
+                    <strong>{milestoneLabel(j.milestone)}</strong>
+                    <span class={"fw-ref " + statusClass(j.collectionStatus)}> · {j.bucket}</span>
+                  </td>
                   <td>{j.salesperson}</td>
-                  <td class="fw-num">{money(j.billedAr)}</td>
-                  <td class="fw-num">{money(j.unbilled)}</td>
+                  <td class="fw-num">{money(j.contractAmount)}</td>
+                  <td class="fw-num">{money(j.billedTotal)}</td>
+                  <td class="fw-num">{money(j.collectedRevenue)}</td>
+                  <td class="fw-num">{money(j.outstandingAr)}</td>
                   <td class="fw-num">{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
+                  <td class="fw-num">{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-days">{j.daysInStatus == null ? "—" : <span class="fw-days-chip" style={daysChipStyle(j.daysInStatus)}>{j.daysInStatus}d</span>}</td>
                   <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")}>{j.action}</td>
-                  <td class={statusClass(j.collectionStatus)}>{j.collectionStatus}</td>
                   <td><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
+                  <td><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
                   <td><input class="fw-edit" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
+                  <td class="fw-num fw-pif" data-balance={j.outstandingAr}>{j.expectedCashAmount == null ? "—" : money(Math.max(j.outstandingAr - j.expectedCashAmount, 0))}</td>
                   <td>{j.priorExpectedPaidDate ?? "—"}</td>
                   <td class={j.hitMiss === "HIT" ? "fw-hit" : j.hitMiss === "MISS" ? "fw-miss" : ""}>{j.hitMiss ?? ""}</td>
                   <td>
@@ -110,6 +155,7 @@ const statusClass = (s: string) =>
     <p class="fw-foot">
       Yellow columns save automatically and survive the nightly rebuild. Nightly: AccuLynx sync (hourly) + ABC (3:30a) +
       QBO (Thu) → <code>refresh_wip_ar_master()</code> at ~4:45a CT. Thursday: week roll (hit/miss scored), pack build, then this board is the meeting.
+      PIF remainder = Balance Due − Estimated $.
     </p>
   </section>
 
@@ -120,6 +166,8 @@ const statusClass = (s: string) =>
     .fw-sub { color: var(--ink-soft, #667085); font-size: 12.5px; }
     .fw-spacer { flex: 1; }
     .fw-count { color: var(--ink-soft, #667085); font-size: 12px; }
+    .fw-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft, #475467); }
+    .fw-select { border: 1px solid var(--line, #d0d5dd); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; background: var(--surface, #fff); color: inherit; }
     .fw-btn { border: 1px solid var(--line, #d0d5dd); background: var(--surface, #fff); color: inherit; border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; text-decoration: none; }
     .fw-btn:hover { border-color: #98a2b3; }
     .fw-btn-primary { background: #0f766e; border-color: #0f766e; color: #fff; }
@@ -152,8 +200,11 @@ const statusClass = (s: string) =>
     .fw-table th.fw-fill { background: #fef9c3; }
     :global([data-theme="dark"]) .fw-table th.fw-fill { background: #453a00; }
     .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .fw-client { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fw-bucket { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw-client { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw-bucket { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw-ref { font-size: 11.5px; }
+    .fw-days { text-align: center; }
+    .fw-days-chip { display: inline-block; min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .fw-action-invoice { color: #b42318; font-weight: 600; }
     .fw-action-collect { color: #0f766e; font-weight: 600; }
     .fw-status-critical { color: #b42318; font-weight: 600; }
@@ -166,13 +217,15 @@ const statusClass = (s: string) =>
     :global([data-theme="dark"]) .fw-edit { background: #2a2410; }
     .fw-edit.fw-saved { border-color: #12b76a; background: #ecfdf3; }
     .fw-edit.fw-failed { border-color: #f04438; background: #fef3f2; }
-    .fw-notes { min-width: 170px; }
+    .fw-money-edit { width: 96px; text-align: right; }
+    .fw-notes { min-width: 150px; }
     .fw-foot { color: var(--ink-soft, #667085); font-size: 12px; }
   </style>
 
   <script>
     // Inline saves: change → POST /api/accounting/friday-wip/update.
     // Green flash = persisted (survives the nightly rebuild); red = rejected.
+    const moneyFmt = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
     document.querySelectorAll<HTMLElement>(".fw-edit").forEach((el) => {
       el.addEventListener("change", async () => {
         const row = el.closest("tr");
@@ -189,9 +242,32 @@ const statusClass = (s: string) =>
           });
           el.classList.add(resp.ok ? "fw-saved" : "fw-failed");
           if (resp.ok) setTimeout(() => el.classList.remove("fw-saved"), 1600);
+          // Estimated $ auto-populates the paid-in-full remainder cell.
+          if (resp.ok && field === "expected_cash_amount" && row) {
+            const pif = row.querySelector<HTMLElement>(".fw-pif");
+            if (pif) {
+              const balance = Number(pif.getAttribute("data-balance") ?? 0);
+              const est = Number(value);
+              pif.textContent = value === "" || !Number.isFinite(est) ? "—" : moneyFmt(Math.max(balance - est, 0));
+            }
+          }
         } catch {
           el.classList.add("fw-failed");
         }
+      });
+    });
+
+    // Rep filter: hides non-matching rows and empty location groups so one
+    // rep's book can be processed top to bottom.
+    const repSelect = document.getElementById("fw-rep") as HTMLSelectElement | null;
+    repSelect?.addEventListener("change", () => {
+      const rep = repSelect.value;
+      document.querySelectorAll<HTMLTableRowElement>("tr[data-job]").forEach((row) => {
+        row.style.display = !rep || row.getAttribute("data-rep") === rep ? "" : "none";
+      });
+      document.querySelectorAll<HTMLElement>(".fw-group").forEach((group) => {
+        const visible = group.querySelectorAll<HTMLTableRowElement>('tr[data-job]:not([style*="none"])').length;
+        group.style.display = visible ? "" : "none";
       });
     });
 

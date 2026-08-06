@@ -12,18 +12,25 @@ export interface FridayWipJob {
   location: string;
   jobNumber: string;
   client: string;
+  milestone: string;
   bucket: string;
   salesperson: string;
   collectionStatus: string;
+  contractAmount: number;
+  billedTotal: number;
+  collectedRevenue: number;
   outstandingAr: number;
   billedAr: number;
   unbilled: number;
+  daysInStatus: number | null;
   action: string;
   acculynxUrl: string | null;
   costsIncurred: number | null;
+  expenseOutstanding: number | null;
   changeOrderTotal: number | null;
   expectedInvoiceCashDate: string | null;
   expectedPaidFullDate: string | null;
+  expectedCashAmount: number | null;
   priorExpectedPaidDate: string | null;
   collectedSince: string | null;
   hitMiss: string | null;
@@ -96,9 +103,10 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
   const { data, error } = await client
     .from("wip_ar_master")
     .select(
-      "acculynx_job_id,location,job_number,client,bucket,salesperson,collection_status," +
-        "outstanding_ar,billed_ar,unbilled,action,acculynx_url,costs_incurred_to_date," +
-        "change_order_total,expected_invoice_cash_date,expected_paid_full_date," +
+      "acculynx_job_id,location,job_number,client,milestone,bucket,salesperson,collection_status," +
+        "contract_amount,billed_total,collected_revenue,outstanding_ar,billed_ar,unbilled," +
+        "days_in_status,action,acculynx_url,costs_incurred_to_date,expense_outstanding," +
+        "change_order_total,expected_invoice_cash_date,expected_paid_full_date,expected_cash_amount," +
         "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at",
     )
     .eq("in_ar_population", true)
@@ -113,18 +121,25 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     location: String(r.location ?? "unknown"),
     jobNumber: String(r.job_number ?? ""),
     client: String(r.client ?? ""),
+    milestone: String(r.milestone ?? ""),
     bucket: String(r.bucket ?? ""),
     salesperson: String(r.salesperson ?? ""),
     collectionStatus: String(r.collection_status ?? ""),
+    contractAmount: num(r.contract_amount),
+    billedTotal: num(r.billed_total),
+    collectedRevenue: num(r.collected_revenue),
     outstandingAr: num(r.outstanding_ar),
     billedAr: num(r.billed_ar),
     unbilled: num(r.unbilled),
+    daysInStatus: r.days_in_status == null ? null : num(r.days_in_status),
     action: String(r.action ?? "-"),
     acculynxUrl: (r.acculynx_url as string) ?? null,
     costsIncurred: r.costs_incurred_to_date == null ? null : num(r.costs_incurred_to_date),
+    expenseOutstanding: r.expense_outstanding == null ? null : num(r.expense_outstanding),
     changeOrderTotal: r.change_order_total == null ? null : num(r.change_order_total),
     expectedInvoiceCashDate: (r.expected_invoice_cash_date as string) ?? null,
     expectedPaidFullDate: (r.expected_paid_full_date as string) ?? null,
+    expectedCashAmount: r.expected_cash_amount == null ? null : num(r.expected_cash_amount),
     priorExpectedPaidDate: (r.prior_expected_paid_date as string) ?? null,
     collectedSince: (r.collected_since as string) ?? null,
     hitMiss: (r.hit_miss as string) ?? null,
@@ -153,15 +168,25 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
       if (j.unbilled > 0) kpis.tier2NeverInvoiced += j.unbilled;
     }
     if (j.billedAr > 0) {
-      const dateStr = j.expectedPaidFullDate;
-      if (!dateStr) {
-        kpis.billedArNoDate += j.billedAr;
-      } else {
+      const addToWeek = (dateStr: string, amount: number) => {
         const days = Math.floor((new Date(dateStr + "T00:00:00").getTime() - today.getTime()) / dayMs);
-        if (days <= 6) kpis.week1 += j.billedAr;
-        else if (days <= 13) kpis.week2 += j.billedAr;
-        else if (days <= 20) kpis.week3 += j.billedAr;
-        else kpis.beyond += j.billedAr;
+        if (days <= 6) kpis.week1 += amount;
+        else if (days <= 13) kpis.week2 += amount;
+        else if (days <= 20) kpis.week3 += amount;
+        else kpis.beyond += amount;
+      };
+      // Estimated $ at the invoice/cash date is near-term cash; the remainder
+      // of the billed balance lands at the paid-in-full date. Undated = the
+      // meeting's job.
+      const estCash =
+        j.expectedInvoiceCashDate && j.expectedCashAmount != null
+          ? Math.min(Math.max(j.expectedCashAmount, 0), j.billedAr)
+          : 0;
+      if (estCash > 0 && j.expectedInvoiceCashDate) addToWeek(j.expectedInvoiceCashDate, estCash);
+      const remainder = j.billedAr - estCash;
+      if (remainder > 0) {
+        if (j.expectedPaidFullDate) addToWeek(j.expectedPaidFullDate, remainder);
+        else kpis.billedArNoDate += remainder;
       }
     }
   }
