@@ -17,7 +17,7 @@ import {
 } from "../mailbox-executor.mjs";
 import { buildMailboxPrompt, parseMailboxDecision } from "../mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "../mailbox-state.mjs";
-import { APPROVED } from "../policy.mjs";
+import { ACKNOWLEDGEMENT_DOMAINS, APPROVED } from "../policy.mjs";
 
 const messageId = "19fabcdef1234567";
 const now = new Date("2026-07-28T10:30:00.000Z");
@@ -25,6 +25,15 @@ const receivedMs = now.getTime() - 60_000;
 const fakeRecordIntake = async ({ payload }) => ({
   workKey: `accounting:intake:${payload.sourceChannel}:${payload.orchestrationKey}`,
   providerReference: "command-center-work-1",
+});
+const fakeRecordLinearPair = async () => ({
+  source: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", reference: "CAT-901", created: true },
+  work: {
+    id: "68961032-e114-47f0-b5ff-de3ce8591c3c",
+    reference: "PEC-901",
+    created: true,
+    parentRepaired: false,
+  },
 });
 
 function providerMessage(overrides = {}) {
@@ -160,7 +169,7 @@ test("first mailbox occurrence bootstraps without reading historical mail", asyn
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-bootstrap-"));
   const state = new MailboxState(directory);
   const { composio, calls, classifier } = fakeComposio();
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.deepEqual(result, { state: "bootstrapped", processed: 0 });
   assert.equal(calls.length, 0);
   const cursor = JSON.parse(await readFile(path.join(directory, "cursor.json"), "utf8"));
@@ -178,19 +187,25 @@ test("executor startup schedules the next boundary without an immediate provider
   assert.equal(calls.length, 0);
 });
 
-test("clear actionable mail creates Linear, notifies Slack, stars it, and archives it", async () => {
+test("clear actionable mail records a Command Center Linear pair, notifies Slack, stars it, and archives it", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-track-"));
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "track" });
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  let pairPayload;
+  const recordLinearPair = async ({ payload }) => {
+    pairPayload = payload;
+    return fakeRecordLinearPair();
+  };
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   assert.equal(result.processed, 1);
   const gmailQuery = calls.find((call) => call.slug === "GMAIL_FETCH_EMAILS").input.arguments.query;
   assert.match(gmailQuery, /-in:sent/u);
   assert.match(gmailQuery, /-from:maya\.chen@cc\.proexteriorsus\.net/u);
-  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 2);
-  assert.equal(calls.filter((call) => call.slug === "LINEAR_GET_LINEAR_ISSUE").length, 2);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
+  assert.deepEqual(pairPayload.sourceKeys.slice(1), ["gmail-thread:19fabcdef7654321", `gmail-message:${messageId}`]);
+  assert.equal(pairPayload.subject, "Vendor price update");
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
   const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
   assert.match(slackText, /\[REVIEW\].*CODEX AGENT TEAM.*CAT-901/u);
@@ -203,20 +218,16 @@ test("clear actionable mail creates Linear, notifies Slack, stars it, and archiv
   );
 });
 
-test("a failed Linear display lookup still notifies Slack without exposing the UUID", async () => {
+test("a Command Center pair with an unresolved display reference never exposes its UUID", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-linear-display-fallback-"));
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "track" });
-  const execute = composio.tools.execute;
-  composio.tools.execute = async (slug, input) => {
-    if (slug === "LINEAR_GET_LINEAR_ISSUE") {
-      calls.push({ slug, input });
-      return { successful: false, error: "display lookup unavailable" };
-    }
-    return execute(slug, input);
-  };
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const recordLinearPair = async () => ({
+    source: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", reference: "58961032-e114-47f0-b5ff-de3ce8591c3c" },
+    work: { id: "68961032-e114-47f0-b5ff-de3ce8591c3c", reference: "68961032-e114-47f0-b5ff-de3ce8591c3c" },
+  });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(result.state, "complete");
   const slackText = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE").input.arguments.markdown_text;
   assert.match(slackText, /as the new CAT-first accounting issue pair/u);
@@ -233,7 +244,7 @@ test("an empty mailbox completes without depending on Linear", async () => {
     if (slug === "GMAIL_FETCH_EMAILS") return { successful: true, data: { messages: [] } };
     throw new Error(`unexpected tool ${slug}`);
   };
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.deepEqual(result, { state: "complete", processed: 0, candidates: 0 });
   assert.deepEqual(calls.map((call) => call.slug), ["GMAIL_FETCH_EMAILS"]);
 });
@@ -253,6 +264,7 @@ test("production mailbox mode delegates full work to the capability agent and re
     composio,
     capabilityAgent,
     recordIntake: fakeRecordIntake,
+    recordLinearPair: fakeRecordLinearPair,
     classifier: async () => decision("track"),
     state,
     signal: new AbortController().signal,
@@ -263,7 +275,7 @@ test("production mailbox mode delegates full work to the capability agent and re
   assert.match(packet.request, /Vendor price update/u);
   assert.equal(packet.sourceContext.ownerSlackChannelId, APPROVED.ownerSlackChannelId);
   assert.equal(packet.sourceContext.catSourceIssue, "CAT-901");
-  assert.equal(calls.filter((call) => call.slug === "LINEAR_LIST_LINEAR_ISSUES").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_LIST_LINEAR_ISSUES").length, 0);
   assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 1);
   const receiptName = (await readdir(path.join(directory, "receipts")))[0];
   const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
@@ -285,7 +297,7 @@ test("ignored mail creates no external task or Slack effect and is marked read",
       attachmentList: [],
     },
   });
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 0);
@@ -375,8 +387,21 @@ test("every legacy accounting alias is a deterministic review route", () => {
 });
 
 test("automatic receipts are limited to approved domains and always include both CCs", async () => {
-  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
+  assert.deepEqual(ACKNOWLEDGEMENT_DOMAINS, [
+    "cc.proexteriorsus.net",
+    "proexteriorsus.com",
+    "aia4.io",
+  ]);
+  assert.equal(senderCanReceiveAcknowledgement("person@cc.proexteriorsus.net"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@sub.cc.proexteriorsus.net"), true);
+  assert.equal(senderCanReceiveAcknowledgement("accounting@proexteriorsus.com"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.com"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@ops.aia4.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.net"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@cleverwork.io"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@proexteriorsus.com.example"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@aia4.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@example.com"), false);
   assert.equal(senderCanReceiveAcknowledgement("maya.chen@cc.proexteriorsus.net"), false);
@@ -385,10 +410,103 @@ test("automatic receipts are limited to approved domains and always include both
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda <lucinda@sub.aia4.io>" });
-  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
   assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
-  assert.match(reply.input.arguments.message_body, /Received — thank you/u);
+  assert.match(reply.input.arguments.message_body, /I've received your email, and I'm working on it now/u);
+  assert.match(reply.input.arguments.message_body, /Maya Chen\nAccounting Assistant \| Pro Exteriors/u);
+});
+
+test("approved internal mail is tracked and acknowledged when classification fails", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-internal-fallback-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const result = await runMailboxOccurrence({
+    composio,
+    classifier: async () => { throw new Error("classifier unavailable"); },
+    recordIntake: fakeRecordIntake,
+    recordLinearPair: fakeRecordLinearPair,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  const slugs = calls.map((call) => call.slug);
+  const replyIndex = slugs.indexOf("GMAIL_REPLY_TO_THREAD");
+  assert.ok(replyIndex > slugs.lastIndexOf("LINEAR_CREATE_LINEAR_ISSUE"));
+  assert.ok(replyIndex < slugs.indexOf("SLACKBOT_SEND_MESSAGE"));
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.ok(receipt.acknowledgementHash);
+});
+
+test("approved internal mail is tracked and acknowledged when classification says ignore", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-internal-ignore-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const result = await runMailboxOccurrence({
+    composio,
+    classifier: async () => decision("ignore"),
+    recordIntake: fakeRecordIntake,
+    recordLinearPair: fakeRecordLinearPair,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(result.processed, 1);
+  assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "confirmed");
+  assert.ok(receipt.acknowledgementHash);
+});
+
+test("a downstream accounting failure does not suppress a confirmed internal receipt", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-before-work-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  await runMailboxOccurrence({
+    composio,
+    capabilityAgent: async () => { throw new Error("downstream accounting blocker"); },
+    classifier: async () => decision("track"),
+    recordIntake: fakeRecordIntake,
+    recordLinearPair: fakeRecordLinearPair,
+    state,
+    signal: new AbortController().signal,
+    now,
+  });
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "ambiguous");
+  assert.equal(receipt.actions.length, 4);
+});
+
+test("an unknown internal acknowledgement outcome is fenced and never retried", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-ambiguous-"));
+  const state = new MailboxState(directory);
+  await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
+  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
+  const execute = composio.tools.execute;
+  composio.tools.execute = async (slug, input) => {
+    if (slug === "GMAIL_REPLY_TO_THREAD") {
+      calls.push({ slug, input });
+      return { successful: false, error: "unknown provider outcome" };
+    }
+    return execute(slug, input);
+  };
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now: new Date(now.getTime() + 1_800_000) });
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_REPLY_TO_THREAD").length, 1);
+  assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 0);
+  const receiptName = (await readdir(path.join(directory, "receipts")))[0];
+  const receipt = JSON.parse(await readFile(path.join(directory, "receipts", receiptName), "utf8"));
+  assert.equal(receipt.state, "ambiguous");
 });
 
 test("historical cleanup never sends late acknowledgements", async () => {
@@ -399,6 +517,7 @@ test("historical cleanup never sends late acknowledgements", async () => {
     composio,
     classifier,
     recordIntake: fakeRecordIntake,
+    recordLinearPair: fakeRecordLinearPair,
     state,
     signal: new AbortController().signal,
     now,
@@ -412,7 +531,7 @@ test("blocked mail creates Linear, alerts the fixed owner, and is marked read", 
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "block" });
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   const slack = calls.find((call) => call.slug === "SLACKBOT_SEND_MESSAGE");
   assert.equal(slack.input.connectedAccountId, APPROVED.sendConnectedAccountId);
@@ -436,7 +555,7 @@ test("a blocked Slack failure is terminally ambiguous and never triggers a secon
     }
     return execute(slug, input);
   };
-  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  const result = await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(result.processed, 1);
   assert.equal(calls.filter((call) => call.slug === "SLACKBOT_SEND_MESSAGE").length, 1);
   assert.equal(calls.filter((call) => call.slug === "GMAIL_ADD_LABEL_TO_EMAIL").length, 0);
@@ -450,7 +569,7 @@ test("a pre-existing source marker prevents duplicate Linear creation", async ()
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
   const { composio, calls, classifier } = fakeComposio({ action: "track", existing: true });
-  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, state, signal: new AbortController().signal, now });
+  await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   assert.equal(calls.filter((call) => call.slug === "LINEAR_CREATE_LINEAR_ISSUE").length, 0);
 });
 

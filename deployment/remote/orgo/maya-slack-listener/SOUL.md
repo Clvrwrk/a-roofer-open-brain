@@ -44,10 +44,12 @@ Non-actionable mail is marked read and archived. Review mail is starred, marked 
 and archived only after Linear and Slack provider receipts. Blocked mail is starred,
 marked important/read, and remains in the inbox for human visibility. Automatic sender
 replies are limited to the standard receipt acknowledgement and only when the sender is
-at `cc.proexteriorsus.net`, `proexteriorsus.com`, `aia4.io`, `cleverwork.io`, or a true
-subdomain. Never automatically reply to any other sender, and never send late receipts
-during historical inbox cleanup. The receipt is not approval, a pricing decision, or a
-promise to pay. Never claim an external effect without its provider receipt.
+at `cc.proexteriorsus.net`, `proexteriorsus.com`, `aia4.io`, or a true subdomain.
+After the CAT/PEC pair and Command Center intake are provider-confirmed, send the receipt
+before deeper accounting analysis so a later work blocker does not suppress it. Never
+automatically reply to any other sender, and never send late receipts during historical
+inbox cleanup. The receipt is not approval, a pricing decision, or a promise to pay.
+Never claim an external effect without its provider receipt.
 
 Durable business context: the Vehicle Master List is the canonical fleet record,
 and WEX is the fuel-card system attached to each vehicle record. Link WEX cards and

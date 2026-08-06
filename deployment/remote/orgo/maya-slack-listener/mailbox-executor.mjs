@@ -3,13 +3,14 @@ import { classifyMailboxMessage } from "./mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "./mailbox-state.mjs";
 import {
   commentLinearIssue,
-  ensureCatFirstPair,
-  indexLinearOrchestrations,
-  listLinearIssues,
   sourceKeysForMessage,
   updateLinearIssue,
 } from "./linear-orchestration.mjs";
-import { classifyAccountingAlias, recordCommandCenterIntake } from "./command-center-client.mjs";
+import {
+  classifyAccountingAlias,
+  ensureCommandCenterLinearPair,
+  recordCommandCenterIntake,
+} from "./command-center-client.mjs";
 import {
   APPROVED,
   ACKNOWLEDGEMENT_DOMAINS,
@@ -124,6 +125,19 @@ export function senderCanReceiveAcknowledgement(senderEmail, domains = ACKNOWLED
   return domains.some((domain) => senderDomain === domain || senderDomain.endsWith(`.${domain}`));
 }
 
+function approvedInternalFallbackDecision(message) {
+  return Object.freeze({
+    version: 1,
+    action: "track",
+    priority: 3,
+    title: `[MAYA] Accounting intake: ${message.subject}`.slice(0, 140),
+    summary: "An approved internal sender emailed Maya's accounting mailbox and the message requires review.",
+    reason: "Approved internal-domain mail is acknowledged and tracked even when automated classification is unavailable or returns non-actionable.",
+    question: "",
+    options: [],
+  });
+}
+
 function securityAuthorizationDecision(message) {
   const content = `${message.subject}\n${message.body}`;
   if (message.senderEmail === "no-reply@accounts.google.com" && /\b(?:security alert|security key|new sign-in|login attempt)\b/iu.test(content)) {
@@ -222,7 +236,17 @@ export function buildAcknowledgementArguments(message) {
   return {
     user_id: "me",
     thread_id: message.threadId,
-    message_body: "[MAYA]\n\nReceived — thank you. I have received your email and added it to Maya's accounting intake queue.",
+    message_body: [
+      "[MAYA]",
+      "",
+      "Hi there,",
+      "",
+      "Thank you for sending this. I've received your email, and I'm working on it now. I'll follow up if I need any additional information.",
+      "",
+      "Best,",
+      "Maya Chen",
+      "Accounting Assistant | Pro Exteriors",
+    ].join("\n"),
     is_html: false,
     cc: [...REQUIRED_EMAIL_CC],
   };
@@ -481,7 +505,7 @@ async function fileMailboxMessage(composio, message, action, signal, expected) {
   return `labels:${add.join(",")}:${remove.join(",")}`;
 }
 
-async function processMessage({ composio, classifier, capabilityAgent, recordIntake, state, listMessage, occurrenceId, signal, expected, onEvent, linearOrchestrations, allowAcknowledgement = true }) {
+async function processMessage({ composio, classifier, capabilityAgent, recordIntake, recordLinearPair, state, listMessage, occurrenceId, signal, expected, onEvent, allowAcknowledgement = true }) {
   const messageId = String(firstDefined(listMessage, ["messageId", "message_id", "id"]) ?? "");
   if (!/^[0-9a-fA-F]+$/u.test(messageId)) throw new Error("Gmail list returned an invalid message ID");
   const claim = await state.claim(messageId, occurrenceId);
@@ -489,23 +513,43 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
   let message;
   let decision;
   let slackAttempted = false;
+  let acknowledgementAttempted = false;
+  let acknowledgementReference;
   try {
     message = await hydrateMessage(composio, messageId, signal, expected);
-    decision = enforceMailboxPolicy(message, await classifier(message, signal));
+    try {
+      decision = enforceMailboxPolicy(message, await classifier(message, signal));
+    } catch (error) {
+      if (!senderCanReceiveAcknowledgement(message.senderEmail)) throw error;
+      decision = approvedInternalFallbackDecision(message);
+      onEvent("mailbox_internal_classifier_fallback", { message_hash: claim.messageDigest });
+    }
+    if (senderCanReceiveAcknowledgement(message.senderEmail) && decision.action === "ignore") {
+      decision = approvedInternalFallbackDecision(message);
+      onEvent("mailbox_internal_ignore_promoted", { message_hash: claim.messageDigest });
+    }
     let linearPair;
     let sourceKeys = [];
     if (decision.action !== "ignore") {
       sourceKeys = sourceKeysForMessage(message);
-      linearPair = await ensureCatFirstPair({
-        composio,
-        sourceKeys,
-        knownIndex: linearOrchestrations,
-        buildSourceArguments: (keys) => buildLinearSourceIssueArguments(message, decision, keys, expected),
-        buildWorkArguments: ({ source, sourceKeys: keys }) => buildLinearIssueArguments(message, decision, source, keys, expected),
+      linearPair = await recordLinearPair({
+        payload: {
+          sourceKeys,
+          messageId: message.messageId,
+          sourceChannel: "gmail",
+          sender: message.sender,
+          receivedAt: message.receivedAt,
+          subject: message.subject,
+          summary: decision.summary,
+          reason: decision.reason,
+          priority: decision.priority,
+          attachments: message.attachments.map((attachment) => attachment.filename),
+        },
         signal,
         expected,
-        onConfirmed: (action, providerReference) => state.recordAction(claim.name, action, providerReference),
       });
+      await state.recordAction(claim.name, "command_center_linear_cat_source", linearPair.source.id);
+      await state.recordAction(claim.name, "command_center_linear_accounting_child", linearPair.work.id);
       const route = classifyAccountingAlias(message.recipients);
       const intake = await recordIntake({
         payload: {
@@ -530,6 +574,11 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
         expected,
       });
       await state.recordAction(claim.name, "command_center_intake", intake.providerReference);
+    }
+    if (allowAcknowledgement && decision.action !== "ignore" && senderCanReceiveAcknowledgement(message.senderEmail)) {
+      acknowledgementAttempted = true;
+      acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
+      await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
     }
     if (capabilityAgent && decision.action !== "ignore") {
       // A capability run may perform multiple external writes. Any uncertain failure
@@ -581,11 +630,6 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
       await state.recordAction(claim.name, "linear_work_agent_review", linearPair.work.id);
       await updateLinearIssue(composio, linearPair.source.id, { stateId: expected.linearSourceReviewStateId }, signal, expected);
       await state.recordAction(claim.name, "linear_source_agent_review", linearPair.source.id);
-      let acknowledgementReference;
-      if (allowAcknowledgement && senderCanReceiveAcknowledgement(message.senderEmail)) {
-        acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
-        await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
-      }
       const readState = await fileMailboxMessage(composio, message, decision.action, signal, expected);
       await state.confirm(claim.name, {
         action: "capability_work",
@@ -613,11 +657,6 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
       );
       await state.recordAction(claim.name, "slack_send", slackTimestamp);
     }
-    let acknowledgementReference;
-    if (allowAcknowledgement && senderCanReceiveAcknowledgement(message.senderEmail)) {
-      acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
-      await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
-    }
     const readState = await fileMailboxMessage(composio, message, decision.action, signal, expected);
     if (readState !== "labels_already_applied") {
       await state.recordAction(claim.name, "gmail_file", `${message.messageId}:${decision.action}`);
@@ -641,7 +680,11 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
         const fallbackDecision = {
           options: ["Open the source email and provide the missing context", "Route the message to the correct PE-CC-Dev owner"],
           question: "Which route should I use for this email?",
-          reason: `Mailbox processing failed closed (${errorClass}); no sender reply was made.`,
+          reason: acknowledgementReference
+            ? `Mailbox processing failed closed (${errorClass}) after the sender receipt was provider-confirmed; downstream work remains in review.`
+            : acknowledgementAttempted
+              ? `Mailbox processing failed closed (${errorClass}); the sender-reply outcome is ambiguous and must not be retried automatically.`
+              : `Mailbox processing failed closed (${errorClass}); no sender reply was made.`,
         };
         const ts = await sendOwnerSlack(
           composio,
@@ -665,6 +708,7 @@ export async function runMailboxOccurrence({
   classifier = classifyMailboxMessage,
   capabilityAgent,
   recordIntake = recordCommandCenterIntake,
+  recordLinearPair = ensureCommandCenterLinearPair,
   state,
   signal,
   expected = APPROVED,
@@ -678,14 +722,11 @@ export async function runMailboxOccurrence({
   }
   const occurrenceId = mailboxOccurrenceId(now);
   const candidates = await listCandidateMessages(composio, cursor.epochSeconds, signal, expected);
-  const linearOrchestrations = candidates.length
-    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
-    : new Map();
   let processed = 0;
   for (const candidate of candidates) {
     if (signal.aborted) throw new Error("Mailbox occurrence aborted");
     const result = await processMessage({
-      composio, classifier, capabilityAgent, recordIntake, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearOrchestrations,
+      composio, classifier, capabilityAgent, recordIntake, recordLinearPair, state, listMessage: candidate, occurrenceId, signal, expected, onEvent,
     });
     if (result.state !== "duplicate") processed += 1;
   }
@@ -707,14 +748,12 @@ export async function runInboxCleanup({
   onEvent = () => {},
   allowAcknowledgement = false,
   recordIntake = recordCommandCenterIntake,
+  recordLinearPair = ensureCommandCenterLinearPair,
   now = new Date(),
 }) {
   await state.initialize(Math.floor(now.getTime() / 1_000));
   const occurrenceId = `maya-chen:mailbox-cleanup:${now.toISOString()}`;
   const { candidates, truncated } = await listInboxCleanupCandidates(composio, signal, expected);
-  const linearOrchestrations = candidates.length
-    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
-    : new Map();
   let processed = 0;
   let duplicates = 0;
   let ambiguous = 0;
@@ -724,13 +763,13 @@ export async function runInboxCleanup({
       composio,
       classifier,
       recordIntake,
+      recordLinearPair,
       state,
       listMessage: candidate,
       occurrenceId,
       signal,
       expected,
       onEvent,
-      linearOrchestrations,
       allowAcknowledgement,
     });
     if (result.state === "duplicate") duplicates += 1;
