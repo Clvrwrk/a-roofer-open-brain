@@ -8,6 +8,7 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } fr
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -71,7 +72,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "not_actionable", error_description: approve ? "No draft credit memo request for this invoice." : "No approved (un-sent) credit memo request for this invoice." }, { status: 409 });
   }
 
-  await client.from("dashboard_action_log").insert({
+  const { error: logError } = await client.from("dashboard_action_log").insert({
     action_type: approve ? "credit_memo_approved" : "credit_memo_unapproved",
     actor_display_name: actor.displayName,
     actor_id: actor.id,
@@ -83,6 +84,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     source_table: "credit_memo_requests",
     workflow: "invoice-audit-v2",
   });
+  reportWriteFailure("credit-memos/approve dashboard_action_log", logError);
 
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ invoiceNumber, status: data[0].status });

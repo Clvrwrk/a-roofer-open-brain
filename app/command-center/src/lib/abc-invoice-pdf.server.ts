@@ -47,7 +47,10 @@ async function getAbcToken(env: RuntimeEnv): Promise<string | null> {
     body: new URLSearchParams({ grant_type: "client_credentials", scope }),
   });
   const json: any = await res.json().catch(() => ({}));
-  if (!res.ok || !json.access_token) return null;
+  if (!res.ok || !json.access_token) {
+    console.error(`[invoice-pdf] ABC token request failed: HTTP ${res.status}${json?.error ? ` ${json.error}` : ""}`);
+    return null;
+  }
   tokenCache = { token: json.access_token, expiresAtMs: Date.now() + Math.max(Number(json.expires_in || 0) - 120, 60) * 1000 };
   return tokenCache.token;
 }
@@ -72,27 +75,40 @@ export async function fetchAndStoreInvoicePdf(
   const cfg = ABC_DEFAULTS[abcEnv as "sandbox" | "production"] ?? ABC_DEFAULTS.production;
   const apiBaseUrl = stripSlash(env.ABC_SUPPLY_API_BASE_URL || cfg.apiBaseUrl);
 
-  const { data: inv } = await client
+  const { data: inv, error: invErr } = await client
     .from("abc_invoices")
     .select("invoice_id,sold_to_number,bill_to_number,invoice_date")
     .eq("invoice_number", invoiceNumber)
     .limit(1)
     .maybeSingle();
+  if (invErr) {
+    console.error(`[invoice-pdf] abc_invoices lookup failed for ${invoiceNumber}:`, invErr.message);
+    return null;
+  }
   if (!inv?.invoice_id) return null;
 
   const pdfRes = await fetch(`${apiBaseUrl}/api/invoice/v1/invoices/pdf/${encodeURIComponent(inv.invoice_id)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "*/*" },
   });
-  if (!pdfRes.ok) return null;
+  if (!pdfRes.ok) {
+    console.error(`[invoice-pdf] ABC PDF fetch failed for ${invoiceNumber}: HTTP ${pdfRes.status}`);
+    return null;
+  }
   const buf = Buffer.from(await pdfRes.arrayBuffer());
   const ct = pdfRes.headers.get("content-type") || "";
-  if (buf.length < 200 || !(ct.includes("pdf") || buf.subarray(0, 4).toString() === "%PDF")) return null;
+  if (buf.length < 200 || !(ct.includes("pdf") || buf.subarray(0, 4).toString() === "%PDF")) {
+    console.error(`[invoice-pdf] ABC returned a non-PDF body for ${invoiceNumber} (${buf.length} bytes, content-type ${ct || "none"})`);
+    return null;
+  }
 
   const cust = inv.sold_to_number || inv.bill_to_number || "unknown";
   const path = `${cust}_${invoiceNumber}_${fmtDate(inv.invoice_date)}.pdf`;
 
   const { error: upErr } = await client.storage.from(BUCKET).upload(path, buf, { contentType: "application/pdf", upsert: true });
-  if (upErr) return null;
+  if (upErr) {
+    console.error(`[invoice-pdf] storage upload failed for ${invoiceNumber}:`, upErr.message);
+    return null;
+  }
 
   // Best-effort metadata row so the next load is instant (failure here is non-fatal —
   // we still return the freshly uploaded path for the caller to sign).

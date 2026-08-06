@@ -124,12 +124,14 @@ export const POST: APIRoute = async ({ locals, request }) => {
   }
 
   // Retotal the draft from the latest-run claim set (same math as pending/approve).
-  const { data: claimRows } = await client
+  const { data: claimRows, error: claimRowsError } = await client
     .from("invoice_line_reaudit")
     .select("variance_ext")
     .eq("invoice_number", invoiceNumber)
     .eq("run_label", runLabel)
     .eq("classification", "discrepancy");
+  // Retotalling off a failed read would silently write a $0 credit memo.
+  if (claimRowsError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: claimRowsError.message }, { status: 500 });
   let expectedCredit = 0;
   let lineCount = 0;
   for (const r of (claimRows as any[] | null) ?? []) {
@@ -141,8 +143,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
   expectedCredit = Math.round(expectedCredit * 100) / 100;
 
   const packetNote = { line_added_by: actor.displayName, line_added_at: nowIso, source: "invoice-audit-tree" };
-  if (existingCm) {
-    await client
+  const { error: cmError } = existingCm
+    ? await client
       .from("credit_memo_requests")
       .update({
         status: existingCm.status === "cancelled" ? "draft" : existingCm.status,
@@ -150,9 +152,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
         line_count: lineCount,
         updated_at: nowIso,
       })
-      .eq("id", existingCm.id);
-  } else {
-    await client.from("credit_memo_requests").insert({
+      .eq("id", existingCm.id)
+    : await client.from("credit_memo_requests").insert({
       invoice_number: invoiceNumber,
       request_kind: "requested",
       status: "draft",
@@ -161,7 +162,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       assigned_to: actor.displayName,
       packet: packetNote,
     });
-  }
+  if (cmError) return jsonApiResponse({ error: "credit_memo_write_failed", error_description: cmError.message }, { status: 500 });
 
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ ok: true, invoiceNumber, claimId, runLabel, expectedCredit, lineCount });

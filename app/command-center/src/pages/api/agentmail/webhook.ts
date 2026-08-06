@@ -70,15 +70,18 @@ function logWebhook(event: string, details: Record<string, unknown> = {}) {
 }
 
 function verifyPayload(payload: string, headers: ReturnType<typeof buildSvixHeaders>, secrets: string[]) {
+  let lastError: string | null = null;
   for (const secret of secrets) {
     try {
-      return new Webhook(secret).verify(payload, headers) as VerifiedWebhookPayload;
-    } catch {
+      return { verified: new Webhook(secret).verify(payload, headers) as VerifiedWebhookPayload, lastError: null };
+    } catch (error) {
       // Try the next webhook signing secret. Multiple AgentMail endpoints can post here.
+      lastError = error instanceof Error ? error.message : String(error);
     }
   }
 
-  return null;
+  // Every secret failed — keep the last reason so a rotated/mistyped secret is diagnosable.
+  return { verified: null, lastError };
 }
 
 export const GET: APIRoute = () => {
@@ -124,10 +127,10 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const payload = await request.text();
-  const verified = verifyPayload(payload, svixHeaders, secrets);
+  const { verified, lastError } = verifyPayload(payload, svixHeaders, secrets);
 
   if (!verified) {
-    logWebhook("rejected_bad_signature");
+    logWebhook("rejected_bad_signature", { reason: lastError, secretsTried: secrets.length });
     return new Response(null, { status: 400 });
   }
 

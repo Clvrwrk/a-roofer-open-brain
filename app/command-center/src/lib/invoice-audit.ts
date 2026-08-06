@@ -973,10 +973,13 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
   // never greyed. True value = the invoice's PE office holds at least one agreement
   // (office-inherited pricing, migration 201) — offices without agreements grey the button.
   try {
-    const [{ data: oav }, { data: officeRows }] = await Promise.all([
+    const [{ data: oav, error: oavError }, { data: officeRows, error: officeError }] = await Promise.all([
       client.from("mv_office_agreement_versions").select("office_id"),
       client.from("office").select("id,name"),
     ]);
+    if (oavError || officeError) {
+      throw new Error(oavError?.message ?? officeError?.message ?? "office agreement coverage query failed");
+    }
     const officeIdsWithAgreements = new Set(((oav as any[] | null) ?? []).map((r) => r.office_id));
     const officeNamesWithAgreements = new Set(
       (((officeRows as any[] | null) ?? []).filter((o) => officeIdsWithAgreements.has(o.id))).map((o) => String(o.name)),
@@ -985,8 +988,10 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
       const covered = officeNamesWithAgreements.has(office.office);
       for (const branch of office.branches) for (const invoice of branch.invoices) (invoice as any).hasPriceList = covered;
     }
-  } catch {
-    // leave hasPriceList as summarized on any failure — button stays enabled
+  } catch (error) {
+    // Non-fatal: leave hasPriceList as summarized (button stays enabled), but log it —
+    // a silently degraded coverage gate is indistinguishable from "every office covered".
+    console.warn("[invoice-audit] price-list coverage decoration failed:", error instanceof Error ? error.message : error);
   }
   return summary;
 }

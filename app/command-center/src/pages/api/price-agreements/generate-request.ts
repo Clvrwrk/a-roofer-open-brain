@@ -57,8 +57,9 @@ export const POST: APIRoute = async ({ locals, request }) => {
   });
 
   // Supersede any earlier snapshot for the same vendor+month, then freeze this one.
-  await client.from("price_agreement_requests").update({ status: "superseded", updated_at: nowIso })
+  const { error: supersedeError } = await client.from("price_agreement_requests").update({ status: "superseded", updated_at: nowIso })
     .eq("vendor_id", vendorId).eq("month_label", monthLabel).eq("status", "generated");
+  if (supersedeError) return jsonApiResponse({ error: "write_failed", error_description: supersedeError.message }, { status: 500 });
   const { data: inserted, error } = await client
     .from("price_agreement_requests")
     .insert({
@@ -73,8 +74,9 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .single();
   if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
 
-  await client.from("price_agreement_proposals").update({ status: "included", month_label: monthLabel, updated_at: nowIso })
+  const { error: includeError } = await client.from("price_agreement_proposals").update({ status: "included", month_label: monthLabel, updated_at: nowIso })
     .eq("vendor_id", vendorId).eq("status", "draft");
+  if (includeError) return jsonApiResponse({ error: "proposals_update_failed", error_description: includeError.message }, { status: 500 });
 
   return jsonApiResponse({ ok: true, requestId: (inserted as any).id, monthLabel, gapCount, renewalCount });
 };

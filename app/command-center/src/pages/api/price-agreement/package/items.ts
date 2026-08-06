@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -25,7 +26,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
   // Get-or-create the draft package for this branch (vendor-scoped, latest version).
-  const { data: existing } = await client
+  const { data: existing, error: existingError } = await client
     .from("agreement_packages")
     .select("id,status")
     .eq("branch_number", branchNumber)
@@ -33,6 +34,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .order("package_version", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (existingError) return jsonApiResponse({ error: "read_failed", error_description: existingError.message }, { status: 500 });
 
   let packageId = (existing as any)?.id ?? null;
   if (!packageId) {
@@ -101,7 +103,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (upErr) return jsonApiResponse({ error: "write_failed", error_description: upErr.message }, { status: 500 });
 
   // Touch the package so its updated_at reflects the edit.
-  await client.from("agreement_packages").update({ updated_at: nowIso }).eq("id", packageId);
+  const { error: touchError } = await client.from("agreement_packages").update({ updated_at: nowIso }).eq("id", packageId);
+  reportWriteFailure("price-agreement/package/items agreement_packages touch", touchError);
 
   return jsonApiResponse({ ok: true, packageId, saved: rows.length, savedBy: who });
 };
