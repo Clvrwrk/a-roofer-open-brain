@@ -4,7 +4,7 @@ import { dueCadenceOccurrences, MAYA_CADENCE_LOOPS } from "../cadence-executor.m
 import { normalizeCapabilityAction } from "../capability-executor.mjs";
 import { classifyAccountingAlias, recordCommandCenterIntake } from "../command-center-client.mjs";
 import { sourceKeysForMessage } from "../linear-orchestration.mjs";
-import { isExecutableMayaIssue } from "../linear-work-executor.mjs";
+import { catSourceBinding, isExecutableMayaIssue } from "../linear-work-executor.mjs";
 import { APPROVED } from "../policy.mjs";
 
 test("same-day forwarded document copies share a content orchestration key", () => {
@@ -48,6 +48,14 @@ test("Linear worker claims only CAT-linked Maya Agent Todo work", () => {
   assert.equal(isExecutableMayaIssue({ ...issue, state: { id: APPROVED.linearWorkReviewStateId } }), false);
   assert.equal(isExecutableMayaIssue({ ...issue, description: "Maya execution gate: Agent Todo" }), false);
   assert.equal(isExecutableMayaIssue({ ...issue, title: "Unattributed work" }), false);
+});
+
+test("Linear worker binds CAT completion to the entity UUID when Linear hydrates markup", () => {
+  assert.deepEqual(
+    catSourceBinding('CAT source issue: <issue id="66223e8f-d466-4d56-a8c7-3c2918d894e0" href="https://linear.app/issue/CAT-24">CAT-24</issue>'),
+    { reference: "CAT-24", id: "66223e8f-d466-4d56-a8c7-3c2918d894e0" },
+  );
+  assert.deepEqual(catSourceBinding("CAT source issue: CAT-20"), { reference: "CAT-20", id: "CAT-20" });
 });
 
 test("Linear work mode is read/evidence-only", () => {

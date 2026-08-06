@@ -20,8 +20,11 @@ function issueIdentifier(issue) {
   return String(issue.identifier ?? issue.issueIdentifier ?? issue.id ?? "");
 }
 
-function catSourceIdentifier(description) {
-  return String(description ?? "").match(/^CAT source issue:[^\n]*(CAT-\d+)[^\n]*$/imu)?.[1] ?? "";
+export function catSourceBinding(description) {
+  const line = String(description ?? "").match(/^CAT source issue:([^\n]*)$/imu)?.[1] ?? "";
+  const reference = line.match(/\b(CAT-\d+)\b/u)?.[1] ?? "";
+  const entityId = line.match(/<issue\s+id="([0-9a-f-]{36})"[^>]*>/iu)?.[1] ?? "";
+  return Object.freeze({ reference, id: entityId || reference });
 }
 
 export function isExecutableMayaIssue(issue, expected = APPROVED) {
@@ -37,7 +40,7 @@ export function isExecutableMayaIssue(issue, expected = APPROVED) {
     /^\[MAYA\]/u.test(title) &&
     teamId === expected.linearWorkTeamId &&
     isTodoState &&
-    catSourceIdentifier(description) &&
+    catSourceBinding(description).reference &&
     /^Maya execution gate:\s*(?:Agent Todo|move this issue to Agent Todo)\s*$/imu.test(description)
   );
 }
@@ -59,7 +62,8 @@ export async function runLinearWorkOccurrence({
 
   const issue = candidates[0];
   const reference = issueIdentifier(issue);
-  const sourceReference = catSourceIdentifier(issue.description);
+  const source = catSourceBinding(issue.description);
+  const sourceReference = source.reference;
   const claim = await store.claim(`linear-work:${issue.id}`, {
     actorId: "maya-chen",
     channelId: "linear",
@@ -138,7 +142,7 @@ export async function runLinearWorkOccurrence({
     await store.recordAction(claim.name, "linear_result_comment", resultComment);
     await updateLinearIssue(composio, issue.id, { stateId: expected.linearWorkReviewStateId }, signal, expected);
     await store.recordAction(claim.name, "linear_work_agent_review", issue.id);
-    await updateLinearIssue(composio, sourceReference, { stateId: expected.linearSourceReviewStateId }, signal, expected);
+    await updateLinearIssue(composio, source.id, { stateId: expected.linearSourceReviewStateId }, signal, expected);
     await store.recordAction(claim.name, "linear_source_agent_review", sourceReference);
     await store.confirm(claim.name, issue.id, "linear-work-v1");
     onEvent("linear_work_confirmed", { work_issue: reference, source_issue: sourceReference });
