@@ -6,26 +6,22 @@
 // snapshot. Re-generating in the same month supersedes the prior snapshot.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot generate price agreement requests." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot generate price agreement requests." });
+  if (!actor) return authError;
 
   const body = (await request.json().catch(() => ({}))) as { vendorSlug?: string };
   const vendorSlug = String(body.vendorSlug ?? "").trim();
   if (!vendorSlug) return jsonApiResponse({ error: "invalid_request", error_description: "vendorSlug is required." }, { status: 400 });
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const data = await loadPriceAgreementManagement();
   const monthLabel = new Date().toISOString().slice(0, 7);

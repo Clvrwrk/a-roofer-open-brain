@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -9,9 +8,9 @@ export const prerender = false;
 // into price_refresh_request (reason='price_list_request', branch grain from
 // schema 95). For internal review (Lucinda/Roberto) — drafted, never auto-sent.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
+  const who = actorDisplayName(actor);
 
   const body = await request.json().catch(() => ({}));
   const vendorBranchId = String(body.vendorBranchId ?? "").trim();
@@ -24,8 +23,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const salesRepName = String(body.salesRepName ?? "").slice(0, 200) || null;
   const coverageStatus = ["none", "partial", "full"].includes(body.coverageStatus) ? body.coverageStatus : null;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // Idempotent: return an already-open price-list request for this branch.
   let existsQ = client.from("price_refresh_request").select("id,status,created_at").eq("reason", "price_list_request")

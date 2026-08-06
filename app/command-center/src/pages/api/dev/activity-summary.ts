@@ -1,14 +1,14 @@
 import type { APIRoute } from "astro";
 import { fetchActivitySummary } from "@lib/activity-rollups.server";
 import { jsonApiResponse } from "@lib/agent-api";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 
 export const prerender = false;
 
 /** DevTeam plane — session-analyst / dev-conductor service token only. */
 export const GET: APIRoute = async ({ locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   if (actor.id !== "dev-conductor" && actor.id !== "session-analyst") {
     return jsonApiResponse({ error: "forbidden", message: "DevTeam token required" }, { status: 403 });

@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -9,8 +8,8 @@ export const prerender = false;
 // (reason='agreement_renewal') for human approval. Never auto-sends — status
 // starts at 'awaiting_verification'; a human approves + sends.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
   const agreementId = Number(body.agreementId ?? body.agreement_id);
@@ -21,10 +20,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const scope = String(body.scope ?? "").slice(0, 120);
   const salesRep = String(body.salesRep ?? "").slice(0, 120);
   const expiry = String(body.expiry ?? "").slice(0, 20);
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const who = actorDisplayName(actor);
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // Idempotent-ish: if an open renewal request already exists for this agreement, return it.
   const { data: existing } = await client

@@ -1,9 +1,6 @@
 import type { APIRoute } from "astro";
-import {
-  buildUnauthorizedResponse,
-  hasPermission,
-  serializeActor,
-} from "@lib/access-control";
+import { hasPermission, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { buildAgentIntakeRows, type AgentIntakeMessage } from "@lib/agent-intake";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -19,8 +16,8 @@ export const prerender = false;
  * thread later evidence attachments.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   // Only service agents and named agents in the accounting department may create intake items.
   if (

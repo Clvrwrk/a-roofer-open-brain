@@ -6,19 +6,15 @@
 // it reviewed by the actor, and retotals the draft credit_memo_requests row.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot build credit memo claims." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot build credit memo claims." });
+  if (!actor) return authError;
 
   const body = (await request.json().catch(() => ({}))) as { invoiceNumber?: string; lineId?: string };
   const invoiceNumber = String(body.invoiceNumber ?? "").trim();
@@ -27,8 +23,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber and lineId are required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // The line must be a real negotiated-variance discrepancy per the LIVE engine.
   const { data: lineRows, error: lineError } = await client

@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, serializeActor } from "@lib/access-control";
+import { actorCanAccessDepartment, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import {
   loadPriceAgreementCoverage,
@@ -21,18 +22,12 @@ const miles = (b: CoverageBranch) => (b.milesFromOffice == null ? "" : b.milesFr
 const statusLabel = (b: CoverageBranch) => (b.isLapsed ? "Extended" : b.holdsAgreement ? "Current" : "");
 
 export const GET: APIRoute = async ({ url, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot access price agreement coverage data.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    department: "accounting",
+    forbiddenMessage: "This actor cannot access price agreement coverage data.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const vendorSlug = (url.searchParams.get("vendor") ?? "").trim();
   const format = (url.searchParams.get("format") ?? "pdf").toLowerCase() === "csv" ? "csv" : "pdf";

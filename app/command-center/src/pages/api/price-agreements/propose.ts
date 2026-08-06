@@ -5,18 +5,14 @@
 // Draft rows are unique per (office, vendor, item, kind); a null price clears.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot set price proposals." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot set price proposals." });
+  if (!actor) return authError;
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const officeId = String(body.officeId ?? "").trim();
@@ -28,8 +24,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "officeId, vendorId, itemNumber, kind ('gap'|'renewal') and a non-negative proposedPrice (or null to clear) are required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const nowIso = new Date().toISOString();
   const { data: existing } = await client

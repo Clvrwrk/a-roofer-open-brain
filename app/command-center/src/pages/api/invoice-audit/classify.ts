@@ -1,13 +1,9 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { isUuid, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
-
-const isUuid = (v: unknown) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v ?? ""));
 
 interface ClassifyLine {
   invoiceLineId: string;
@@ -26,8 +22,8 @@ interface ClassifyLine {
 // Body: { invoiceNumber, lines: [{ invoiceLineId, classification: "valid"|"discrepancy",
 //         itemNumber?, note?, paexpTag? }] }  — or the same fields flat for one line.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
   const invoiceNumber = String(body.invoiceNumber ?? body.invoice_number ?? "").trim();
@@ -55,10 +51,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber and at least one line are required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // Agent guard (docs/83 decision 4): agents may only classify a line as VALID when it
   // is at-or-under the matched agreement price. Positive-variance and UOM-mismatch lines

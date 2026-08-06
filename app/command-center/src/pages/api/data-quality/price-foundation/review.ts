@@ -1,12 +1,7 @@
 import type { APIRoute } from "astro";
-import {
-  actorCanAccessDepartment,
-  buildUnauthorizedResponse,
-  hasPermission,
-  serializeActor,
-} from "@lib/access-control";
+import { actorCanAccessDepartment, hasPermission, serializeActor } from "@lib/access-control";
+import { dashboardActionRow, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import {
   RESOLUTION_STATUSES,
   reviewKey,
@@ -31,23 +26,15 @@ function textOrNull(value: unknown) {
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-
   // Price foundation lives under the accounting/pricing surface. Edit requires the
   // same decide permission used elsewhere; Auditor/Viewer roles lack it (read-only).
-  const canAccess =
-    actorCanAccessDepartment(actor, "accounting") || actorCanAccessDepartment(actor, "system");
-  if (!canAccess || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot resolve price foundation review items.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    department: ["accounting", "system"],
+    permission: "approval.decide",
+    forbiddenMessage: "This actor cannot resolve price foundation review items.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
 
@@ -81,13 +68,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const problemCategory = textOrNull(body.problemCategory);
   const deferUntil = status === "deferred" ? textOrNull(body.deferUntil) : null;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse(
-      { error: "supabase_unconfigured", error_description: config.missing.join(", ") },
-      { status: 503 },
-    );
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const key = reviewKey(queue, sourceTable, sourcePk);
   const now = new Date().toISOString();
@@ -104,11 +86,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // 1. Immutable audit row (shared with Slack mirror + other dashboards).
   const { data: action, error: actionError } = await client
     .from("dashboard_action_log")
-    .insert({
+    .insert(dashboardActionRow(actor, {
       action_type: `price_foundation_${status}`,
-      actor_display_name: actor.displayName,
-      actor_id: actor.id,
-      actor_type: actor.type,
       decision: DECISION_BY_STATUS[status],
       department: "accounting",
       note,
@@ -117,7 +96,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       source_table: sourceTable,
       work_key: key,
       workflow: "price-foundation-review",
-    })
+    }))
     .select("id,created_at")
     .single();
 

@@ -5,22 +5,18 @@
 // the weekly vendor email.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot review credit memo lines." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot review credit memo lines." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const body = (await request.json().catch(() => ({}))) as { lineId?: number | string; reviewed?: boolean };
   const lineId = Number(body.lineId);

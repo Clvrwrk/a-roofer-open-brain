@@ -1,23 +1,18 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse, hasPermission, serializeActor } from "@lib/access-control";
+import { hasPermission, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { warmCommandCenterCaches } from "@lib/prewarm.server";
 
 export const prerender = false;
 
 async function runWarm(locals: App.Locals) {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!hasPermission(actor, "command_center.read")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot warm Command Center caches.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    permission: "command_center.read",
+    forbiddenMessage: "This actor cannot warm Command Center caches.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const started = Date.now();
   const results = await warmCommandCenterCaches();
