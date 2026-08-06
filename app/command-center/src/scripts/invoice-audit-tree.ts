@@ -76,7 +76,7 @@ if (root && dataEl && mount) {
         const val = card.querySelector(".iv-kpi-val");
         const sub = card.querySelector(".iv-kpi-sub");
         if (val) val.textContent = "$" + Math.round(apprTotal + draftTotal).toLocaleString("en-US");
-        if (sub) sub.textContent = `${apprN} approved ($${Math.round(apprTotal).toLocaleString("en-US")}) · ${draftN} draft`;
+        if (sub) sub.textContent = `${apprN} approved ($${Math.round(apprTotal).toLocaleString("en-US")}) · ${draftN} draft ($${Math.round(draftTotal).toLocaleString("en-US")})`;
       });
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
@@ -184,7 +184,9 @@ if (root && dataEl && mount) {
       const idxs = groups.get(k)!;
       const lines = idxs.map((li) => inv.lines[li]);
       const subtotal = lines.reduce((s, l) => s + (l.extendedPrice || 0), 0);
-      const atRisk = lines.reduce((s, l) => s + (!l.audited && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
+      // At-risk = overcharge NOT yet decided — a claim-reviewed (disputed) line is in
+      // the CM request, not "at risk" (matches v_invoice_audit_invoice, migration 214).
+      const atRisk = lines.reduce((s, l) => s + (!l.audited && l.auditStatus !== "disputed" && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
       const pend = lines.filter((l) => !l.audited).length;
       const catDone = lines.length - pend;
       const catPct = lines.length ? Math.round((catDone / lines.length) * 100) : 0;
