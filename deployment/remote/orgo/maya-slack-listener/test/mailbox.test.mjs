@@ -409,9 +409,10 @@ test("automatic receipts are limited to approved domains and always include both
   const directory = await mkdtemp(path.join(os.tmpdir(), "maya-mailbox-ack-"));
   const state = new MailboxState(directory);
   await state.initialize(Math.floor((now.getTime() - 120_000) / 1_000));
-  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda <lucinda@sub.aia4.io>" });
+  const { composio, calls, classifier } = fakeComposio({ sender: "Lucinda Dunn <accounting@proexteriorsus.com>" });
   await runMailboxOccurrence({ composio, classifier, recordIntake: fakeRecordIntake, recordLinearPair: fakeRecordLinearPair, state, signal: new AbortController().signal, now });
   const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
+  assert.equal(reply.input.arguments.recipient_email, "accounting@proexteriorsus.com");
   assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
   assert.match(reply.input.arguments.message_body, /I've received your email, and I'm working on it now/u);
   assert.match(reply.input.arguments.message_body, /Maya Chen\nAccounting Assistant \| Pro Exteriors/u);
