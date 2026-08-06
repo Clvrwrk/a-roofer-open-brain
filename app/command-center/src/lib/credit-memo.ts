@@ -48,7 +48,9 @@ export async function loadCreditMemo(invoiceNumber: string, env: RuntimeEnv = ge
     originalInvoiceNumber
       ? client.from("v_invoice_lines_complete").select("item_number,price_per_uom").eq("invoice_number", originalInvoiceNumber)
       : Promise.resolve({ data: [] as any[] }),
-    client.from("credit_memo_requests").select("status,approved_by,packet,updated_at").eq("invoice_number", invoiceNumber).maybeSingle(),
+    // An invoice can carry BOTH a 'requested' and a 'received' row — .maybeSingle()
+    // would error on multiple rows (docs/84 W3). Take the most recently updated.
+    client.from("credit_memo_requests").select("status,approved_by,packet,updated_at").eq("invoice_number", invoiceNumber).order("updated_at", { ascending: false }).limit(1),
   ]);
 
   const origByItem = new Map<string, number>();
@@ -70,7 +72,7 @@ export async function loadCreditMemo(invoiceNumber: string, env: RuntimeEnv = ge
     };
   });
 
-  const disp = dispRows as any;
+  const disp = ((dispRows as any[] | null) ?? [])[0] ?? null;
   return {
     kind: "received",
     invoiceNumber,

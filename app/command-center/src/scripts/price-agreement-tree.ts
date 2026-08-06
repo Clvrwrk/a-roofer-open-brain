@@ -101,7 +101,7 @@ if (root && dataEl && mount) {
     // Under-100% Global Price List coverage → jump to the Agreement Builder scoped to this branch
     // (prefilled from prior agreement pricing; process the items still missing a negotiated price).
     const build = gpaTotal && br.negotiatedCount < gpaTotal
-      ? `<a class="pa-build" href="/accounting/price-agreement/builder?branch=${encodeURIComponent(br.branchCode)}&focus=gaps" title="Build/extend this branch's agreement — prefilled from prior pricing; fill the ${gpaTotal - br.negotiatedCount} item(s) still un-negotiated" onclick="event.stopPropagation()">Build agreement →</a>`
+      ? `<a class="pa-build" href="/accounting/price-agreement/builder" title="Build/extend this branch's agreement — fill the ${gpaTotal - br.negotiatedCount} item(s) still un-negotiated" onclick="event.stopPropagation()">Build agreement →</a>`
       : "";
     const branchPath = `${pk(br.office)}/${pk(br.branchCode)}`;
     return `

@@ -76,6 +76,7 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
       <select id="vt-status-filter">
         <option value="all">All status</option>
         <option value="needs_office_route">Needs PE route</option>
+        <option value="agreement_expired">Expired (evergreen)</option>
         <option value="missing_branch_pricing">Missing pricing</option>
         <option value="vendor_brand">Healthy</option>
         <option value="overlap_pending">Overlap</option>
@@ -168,15 +169,6 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
       const stateFilter = document.getElementById("vt-state-filter");
       const statusFilter = document.getElementById("vt-status-filter");
       const searchInput = document.getElementById("vt-search");
-      const countEls = {
-        branches: root.querySelector('[data-vt-count="branches"]'),
-        offices: root.querySelector('[data-vt-count="offices"]'),
-        needsOfficeRoute: root.querySelector('[data-vt-count="needsOfficeRoute"]'),
-        missingBranchPricing: root.querySelector('[data-vt-count="missingBranchPricing"]'),
-        vendorBrand: root.querySelector('[data-vt-count="vendorBrand"]'),
-        missingCoordinates: root.querySelector('[data-vt-count="missingCoordinates"]'),
-      };
-
       const state = {
         map: null,
         infoWindow: null,
@@ -259,7 +251,9 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
       }
 
       function isNegotiated(branch) {
-        return Boolean(branch.currentAgreement);
+        // In-force, not merely in-date: an expired-evergreen (PAEXP) agreement still
+        // prices the audit (docs/81 §4), so it counts as negotiated coverage.
+        return Boolean(branch.currentAgreement || branch.agreementOnFile);
       }
 
       function lensColor(branch) {
@@ -584,20 +578,8 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
         return [...groups.values()].map((branches) => ({ branches }));
       }
 
-      function renderCounts(branches) {
-        const counts = {
-          branches: branches.length,
-          offices: visibleOffices().length,
-          needsOfficeRoute: branches.filter((branch) => branch.markerPriority === "needs_office_route").length,
-          missingBranchPricing: branches.filter((branch) => branch.markerPriority === "missing_branch_pricing").length,
-          vendorBrand: branches.filter((branch) => branch.markerPriority === "vendor_brand").length,
-          missingCoordinates: (payload.branches || []).filter((branch) => branch.latitude === null || branch.longitude === null).length,
-        };
-
-        Object.entries(counts).forEach(([key, value]) => {
-          if (countEls[key]) countEls[key].textContent = numberText(value);
-        });
-      }
+      // (The [data-vt-count] strip was removed from the template long ago; the dead
+      // renderCounts writer went with it — docs/84 W3.)
 
       function renderOfficeLayers() {
         const selectedState = stateFilter.value;
@@ -642,7 +624,6 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
 
       function renderBranches() {
         const branches = visibleBranches();
-        renderCounts(branches);
         clearMarkers(state.branchMarkers);
         clearMarkers(state.clusterMarkers);
 

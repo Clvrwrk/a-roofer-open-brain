@@ -187,20 +187,6 @@ interface FleetVarianceRow {
   created_at: string | null;
 }
 
-interface CallPriorityRow {
-  geoid: string | null;
-  layer: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  priority: string | null;
-  lead_score: number | string | null;
-  calls_7d: number | string | null;
-  est_job_value_usd: number | string | null;
-  profit_score: number | string | null;
-  data_completeness: string | null;
-}
-
 interface HeatZoneRow {
   zcta_geoid: string | null;
   state: string | null;
@@ -273,19 +259,19 @@ const DEPARTMENT_META: Record<DepartmentId, Pick<LiveDepartmentSurface, "primary
   },
   marketing: {
     primaryHuman: "Chris",
-    sourceSummary: "Marketing dashboard, hail heat-zone coverage, call priority, property enrichment, and proof assets.",
+    sourceSummary: "Hail heat-zone coverage and marketing action log.",
     subtitle: "Where to activate demand, what proof is safe to publish, and which markets need better data.",
     title: "Marketing",
   },
   operations: {
     primaryHuman: "Roberto",
-    sourceSummary: "AccuLynx job mirror, fleet compliance, variance alerts, maintenance, and job readiness records.",
+    sourceSummary: "AccuLynx job readiness, fleet data gaps, and variance alerts.",
     subtitle: "Job readiness, crew/fleet blockers, material confidence, and daily execution risk.",
     title: "Operations",
   },
   sales: {
     primaryHuman: "Roberto",
-    sourceSummary: "CRM pipeline, call priority, AccuLynx leads/prospects, hail demand signals, and insurance context.",
+    sourceSummary: "CRM pipeline and sales action log.",
     subtitle: "Hot leads, stale opportunities, claim follow-up, and high-value call priorities.",
     title: "Sales",
   },
@@ -693,7 +679,7 @@ async function loadAccountingSurface(client: SupabaseClient): Promise<LiveDepart
   };
 }
 
-function buildSalesItems(pipelineRows: CrmPipelineRow[], callRows: CallPriorityRow[]) {
+function buildSalesItems(pipelineRows: CrmPipelineRow[]) {
   const pipelineItems = pipelineRows.map((row) => {
     const value = Math.max(toNumber(row.contract_amount), toNumber(row.primary_estimate_amount));
     const staleDays = toNumber(row.last_touched_days);
@@ -735,40 +721,7 @@ function buildSalesItems(pipelineRows: CrmPipelineRow[], callRows: CallPriorityR
     });
   });
 
-  const callItems = callRows.map((row) => {
-    const value = toNumber(row.est_job_value_usd);
-    const leadScore = toNumber(row.lead_score);
-    const priority: LiveWorkPriority = leadScore >= 80 || value >= 25_000 ? "high" : "normal";
-    return item({
-      action: "Call / assign",
-      approval: "before_external",
-      auditTrail: [
-        "Source row is live in vw_call_priority.",
-        "Call list is prioritized by hail/property/CRM signals.",
-        "Human confirms outreach before customer contact.",
-      ],
-      auditorRequired: false,
-      cadence: "daily",
-      department: "sales",
-      detail: `${compact(row.priority, "priority")} call candidate with ${formatNumber(leadScore)} lead score and ${formatNumber(toNumber(row.calls_7d))} calls in the last 7 days.`,
-      evidence: `${compact(row.city, "city pending")}, ${compact(row.state, "state")} / ${formatMoney(value)} est.`,
-      href: `/sales/call-priority?geoid=${encodeURIComponent(compact(row.geoid, ""))}`,
-      nextRun: "Today",
-      owner: "@ob-sales",
-      primaryHuman: "Roberto",
-      priority,
-      sourceLabel: "Call priority",
-      sourcePk: compact(row.geoid, compact(row.address, "unknown")),
-      sourceTable: "vw_call_priority",
-      status: statusFromPriority(priority),
-      title: `Call priority / ${compact(row.address, compact(row.geoid, "property"))}`,
-      valueAtRisk: value,
-      workflow: "call-priority",
-      workKey: `sales:call-priority:${compact(row.geoid, compact(row.address, "unknown"))}`,
-    });
-  });
-
-  return [...pipelineItems, ...callItems].sort((a, b) => b.valueAtRisk - a.valueAtRisk);
+  return pipelineItems.sort((a, b) => b.valueAtRisk - a.valueAtRisk);
 }
 
 async function loadSalesSurface(client: SupabaseClient): Promise<LiveDepartmentSurface> {
@@ -782,7 +735,7 @@ async function loadSalesSurface(client: SupabaseClient): Promise<LiveDepartmentS
     ),
     safeCount(client, "dashboard_action_log", (query) => query.eq("department", "sales")),
   ]);
-  const items = buildSalesItems(pipelineRows, []);
+  const items = buildSalesItems(pipelineRows);
   const valueAtRisk = items.reduce((total, row) => total + row.valueAtRisk, 0);
   const highPriority = items.filter((row) => row.priority !== "normal").length;
 
@@ -988,7 +941,6 @@ async function loadMarketingSurface(client: SupabaseClient): Promise<LiveDepartm
     safeCount(client, "dashboard_action_log", (query) => query.eq("department", "marketing")),
   ]);
   const items = buildMarketingItems(heatRows);
-  const publishReview = items.filter((row) => row.auditorRequired).length;
 
   return {
     ...DEPARTMENT_META.marketing,
@@ -999,7 +951,6 @@ async function loadMarketingSurface(client: SupabaseClient): Promise<LiveDepartm
     metrics: [
       metric("Tracked hail zones", formatNumber(trackedZoneCount), "Live source-backed market coverage rows", "info", "/marketing/hail-zones"),
       metric("Activation zones", formatNumber(activateZoneCount), "Hail zones marked ACTIVATE or ACQUIRE", activateZoneCount ? "review" : "ready", "/marketing/hail-zones"),
-      metric("Campaign approvals", formatNumber(publishReview), "Activation items needing human approval before external work", publishReview ? "critical" : "ready"),
       metric("Marketing actions logged", formatNumber(actionCount), "Durable dashboard decisions", "info"),
     ],
     status: "live",

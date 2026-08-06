@@ -5,7 +5,10 @@ import { AGENT_AUTH_SOURCE, buildAuthorizationServerMetadata } from "@lib/agent-
 import { SERVICE_AGENT_IDENTITIES, getAgentAccessRuntimeConfig } from "@lib/access-control";
 import { loadDepartmentSurface } from "@lib/live-work";
 
-const surface = await loadDepartmentSurface("system");
+const DEPARTMENTS = ["accounting", "operations", "sales", "marketing", "executive", "system"] as const;
+const surfaces = await Promise.all(DEPARTMENTS.map((department) => loadDepartmentSurface(department)));
+const surface = surfaces[DEPARTMENTS.indexOf("system")];
+const allItems = surfaces.flatMap((departmentSurface) => departmentSurface.items);
 const authConfig = getAgentAccessRuntimeConfig();
 const metadata = buildAuthorizationServerMetadata();
 const authRows = [
@@ -60,8 +63,8 @@ const authRows = [
                 const access = agent.departmentAccess === "all" ? "all" : agent.departmentAccess.join(", ");
                 const openItems =
                   agent.departmentAccess === "all"
-                    ? surface.items.length
-                    : surface.items.filter((item) => agent.departmentAccess.includes(item.department)).length;
+                    ? allItems.length
+                    : allItems.filter((item) => agent.departmentAccess.includes(item.department)).length;
                 return (
                   <tr>
                     <td>
@@ -85,9 +88,11 @@ const authRows = [
         <h2>Agent Auth</h2>
         <span class="runtime-pill" data-tone="watch">
           <span class="signal-dot" aria-hidden="true"></span>
-          Discovery
+          Discovery only — not implemented yet
         </span>
       </div>
+
+      <p class="auth-note">These endpoints publish discovery metadata only; registration, token minting, and revocation currently return 501 not_implemented.</p>
 
       <dl class="auth-list">
         {
@@ -101,7 +106,7 @@ const authRows = [
       </dl>
 
       <div class="auth-foot">
-        <span>{AGENT_AUTH_SOURCE.version}</span>
+        <span>{AGENT_AUTH_SOURCE.repo}</span>
         <span>{AGENT_AUTH_SOURCE.dated}</span>
         <span>{authConfig.namedAgentCount} named agents</span>
       </div>

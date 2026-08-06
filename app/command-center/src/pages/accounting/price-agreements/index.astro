@@ -1,0 +1,180 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
+
+// Price Agreement Management (docs/83) — the consolidated procurement loop:
+// Coverage → Gap Worksheet (bought 2+ times, no negotiated price) → Renewal
+// Worksheet → (P2) monthly vendor request packet. Replaces the four legacy
+// price surfaces (docs/84 W2/P3).
+const data = await loadPriceAgreementManagement();
+const money = (n: number | null) => (n == null ? "—" : "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const money0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+---
+
+<AppShell title="Price Agreements" eyebrow="Accounting · Procurement" activePage="accounting">
+  <section class="pam">
+    <header class="pam-head">
+      <div>
+        <h1>Price Agreement Management</h1>
+        <p class="pam-sub">Everything we buy more than once gets a negotiated price. Gap items are repeat purchases with no in-force agreement price; set a <b>proposed price</b> on any line to include it in the next monthly vendor request. Expired agreements remain in force (evergreen · PAEXP) until replaced.</p>
+      </div>
+      <div class="pam-kpis">
+        <div class="pam-kpi"><b>{data.totals.gapItems.toLocaleString()}</b><span>gap items</span></div>
+        <div class="pam-kpi"><b>{money0(data.totals.gapLifetimeValue)}</b><span>lifetime spend un-negotiated</span></div>
+        <div class="pam-kpi"><b>{data.totals.renewalItems.toLocaleString()}</b><span>negotiated items</span></div>
+        <div class="pam-kpi"><b>{data.totals.draftProposals.toLocaleString()}</b><span>draft proposals</span></div>
+      </div>
+    </header>
+
+    {data.status !== "live" && <p class="pam-empty">Price agreement data isn't configured for this brain yet.</p>}
+    {data.status === "live" && data.offices.map((o) => (
+      <details class="pam-office" open={data.offices.length <= 2}>
+        <summary><span class="pam-chev">›</span><b>{o.officeName}</b>
+          <span class="pam-tags">{o.vendors.map((v) => <span class="pam-pill grey">{v.vendorName}: {v.gapItems.length} gaps</span>)}</span>
+        </summary>
+        {o.vendors.map((v) => (
+          <details class="pam-vendor" open={o.vendors.length === 1}>
+            <summary><span class="pam-chev">›</span><b>{v.vendorName}</b>
+              <span class="pam-tags">
+                {v.agreements.map((a) => (
+                  <span class={`pam-pill ${a.inDate ? "ok" : "warn"}`} title={`${a.itemCount} items · eff ${a.effective || "—"}${a.expiry ? " → " + a.expiry : ""}`}>
+                    {a.number}{a.inDate ? "" : " · PAEXP"}
+                  </span>
+                ))}
+                {v.agreements.length === 0 && <span class="pam-pill bad">No agreement on file</span>}
+                <span class="pam-pill grey">{v.gapItems.length} gaps · {money0(v.gapLifetimeValue)} lifetime</span>
+              </span>
+            </summary>
+
+            <h3 class="pam-h3">Gap Worksheet <span class="pam-note">repeat purchases with no negotiated price — highest lifetime spend first</span></h3>
+            {v.gapItems.length === 0 ? <p class="pam-empty sm">No gap items — every repeat purchase is under agreement.</p> : (
+              <div class="pam-tablewrap"><table class="pam-table">
+                <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Buys</th><th class="num">Qty</th><th class="num">Lifetime $</th><th class="num">Min</th><th class="num">Avg</th><th class="num">Max</th><th class="num">Latest</th><th class="num">API</th><th>Last buy</th><th class="num">Proposed</th></tr></thead>
+                <tbody>
+                  {v.gapItems.map((g) => (
+                    <tr>
+                      <td class="mono">{g.itemNumber}</td>
+                      <td>{g.description}</td>
+                      <td>{g.uom}</td>
+                      <td class="num">{g.purchaseCount}</td>
+                      <td class="num">{g.totalQty.toLocaleString()}</td>
+                      <td class="num"><b>{money(g.lifetimeValue)}</b></td>
+                      <td class="num">{money(g.minPaid)}</td>
+                      <td class="num">{money(g.avgPaid)}</td>
+                      <td class="num">{money(g.maxPaid)}</td>
+                      <td class="num">{money(g.latestPaid)}</td>
+                      <td class="num">{money(g.apiPrice)}</td>
+                      <td>{g.lastPurchased || "—"}</td>
+                      <td class="num"><input class="pam-price" type="number" step="0.01" min="0" placeholder={g.latestPaid ? g.latestPaid.toFixed(2) : ""} value={g.proposedPrice ?? ""} data-propose data-office={o.officeId} data-vendor={v.vendorId} data-item={g.itemNumber} data-kind="gap" data-desc={g.description} data-uom={g.uom} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            )}
+
+            <h3 class="pam-h3">Renewal Worksheet <span class="pam-note">currently negotiated items — variance is avg paid vs agreement price</span></h3>
+            {v.renewalItems.length === 0 ? <p class="pam-empty sm">No negotiated items on file for this vendor.</p> : (
+              <div class="pam-tablewrap"><table class="pam-table">
+                <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th>Agreement</th><th class="num">Negotiated</th><th class="num">Buys</th><th class="num">Avg paid</th><th class="num">Latest paid</th><th class="num">Var %</th><th class="num">Proposed</th></tr></thead>
+                <tbody>
+                  {v.renewalItems.map((r) => (
+                    <tr>
+                      <td class="mono">{r.itemNumber}</td>
+                      <td>{r.description}</td>
+                      <td>{r.uom}</td>
+                      <td class="mono sm">{r.agreementNumber}</td>
+                      <td class="num">{money(r.negotiatedPrice)}</td>
+                      <td class="num">{r.purchaseCount}</td>
+                      <td class="num">{money(r.avgPaid)}</td>
+                      <td class="num">{money(r.latestPaid)}</td>
+                      <td class={`num ${r.variancePct != null && r.variancePct > 0.5 ? "pam-var-hi" : ""}`}>{r.variancePct == null ? "—" : r.variancePct.toFixed(1) + "%"}</td>
+                      <td class="num"><input class="pam-price" type="number" step="0.01" min="0" placeholder={r.negotiatedPrice.toFixed(2)} value={r.proposedPrice ?? ""} data-propose data-office={o.officeId} data-vendor={v.vendorId} data-item={r.itemNumber} data-kind="renewal" data-desc={r.description} data-uom={r.uom} data-current={r.negotiatedPrice} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            )}
+          </details>
+        ))}
+      </details>
+    ))}
+  </section>
+  <div class="ia-toast" id="pam-toast" role="status" aria-live="polite"></div>
+
+  <style is:global>
+    .pam{padding:6px 4px 40px;color:var(--ink,#1c2733);font-size:13px}
+    .pam-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap}
+    .pam-head h1{margin:0;font-size:21px}
+    .pam-sub{margin:5px 0 0;color:var(--muted,#6b7886);font-size:12.5px;max-width:720px;line-height:1.5}
+    .pam-sub b{color:var(--ink,#1c2733)}
+    .pam-kpis{display:flex;gap:10px;flex-wrap:wrap}
+    .pam-kpi{background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:12px;padding:10px 14px;text-align:center;min-width:96px}
+    .pam-kpi b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+    .pam-kpi span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#6b7886)}
+    .pam-office{border:1px solid var(--line,#e3e8ef);border-radius:12px;margin:10px 0;background:var(--panel,#fff)}
+    .pam-office>summary,.pam-vendor>summary{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;list-style:none;flex-wrap:wrap}
+    .pam-office>summary::-webkit-details-marker,.pam-vendor>summary::-webkit-details-marker{display:none}
+    .pam-office>summary b{font-size:14.5px}
+    .pam-vendor{border:1px solid var(--line,#e3e8ef);border-radius:10px;margin:8px 12px 12px;background:var(--panel2,#f7f8fb)}
+    .pam-chev{color:var(--muted,#6b7886);transition:transform .15s;font-size:15px}
+    details[open]>summary .pam-chev{transform:rotate(90deg)}
+    .pam-tags{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;align-items:center}
+    .pam-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:650}
+    .pam-pill.ok{background:#e3f5ec;color:#137a4d}.pam-pill.warn{background:#fbf0d4;color:#946400}
+    .pam-pill.bad{background:#fbe2e2;color:#a51f1f}.pam-pill.grey{background:#eceff4;color:#5a6573}
+    .pam-h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7886);margin:12px 14px 6px;font-weight:700}
+    .pam-note{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px;margin-left:6px}
+    .pam-empty{color:var(--muted,#6b7886);padding:16px 6px}.pam-empty.sm{padding:4px 14px 10px;font-size:12px}
+    .pam-tablewrap{overflow-x:auto;margin:0 12px 12px}
+    .pam-table{width:100%;border-collapse:collapse;background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);border-radius:10px;overflow:hidden}
+    .pam-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#6b7886);text-align:left;padding:8px 9px;border-bottom:1px solid var(--line,#e3e8ef);background:var(--panel2,#f7f8fb);white-space:nowrap}
+    .pam-table th.num,.pam-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .pam-table td{padding:6px 9px;border-bottom:1px solid var(--line,#e3e8ef);font-size:12.5px}
+    .pam-table tbody tr:last-child td{border-bottom:0}
+    .pam-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+    .pam-table .mono.sm{font-size:10.5px}
+    .pam-var-hi{color:#a51f1f;font-weight:650}
+    .pam-price{width:86px;text-align:right;background:var(--panel,#fff);border:1px solid var(--line,#e3e8ef);color:inherit;border-radius:7px;padding:4px 7px;font-size:12px;font-family:inherit;font-variant-numeric:tabular-nums}
+    .pam-price.saved{border-color:#137a4d;box-shadow:0 0 0 2px #e3f5ec}
+    .pam-price.err{border-color:#a51f1f}
+    .ia-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:60}
+    .ia-toast.show{opacity:1}
+  </style>
+
+  <script>
+    const toastEl = document.getElementById("pam-toast");
+    let toastT: number | undefined;
+    function toast(msg: string) {
+      if (!toastEl) return;
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      window.clearTimeout(toastT);
+      toastT = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
+    }
+    document.querySelectorAll<HTMLInputElement>("input[data-propose]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        input.classList.remove("saved", "err");
+        const value = input.value.trim();
+        const res = await fetch("/api/price-agreements/propose", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            officeId: input.dataset.office,
+            vendorId: input.dataset.vendor,
+            itemNumber: input.dataset.item,
+            kind: input.dataset.kind,
+            proposedPrice: value === "" ? null : Number(value),
+            itemDescription: input.dataset.desc || null,
+            uom: input.dataset.uom || null,
+            currentPrice: input.dataset.current ? Number(input.dataset.current) : null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { input.classList.add("err"); toast("Save failed: " + (data?.error_description || data?.error || "error")); return; }
+        input.classList.add("saved");
+        toast(value === "" ? `${input.dataset.item} proposal cleared` : `${input.dataset.item} proposed at $${Number(value).toFixed(2)}`);
+      });
+    });
+  </script>
+</AppShell>

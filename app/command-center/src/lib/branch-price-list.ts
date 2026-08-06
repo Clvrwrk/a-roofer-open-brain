@@ -127,71 +127,26 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     branchAddress = [vb?.address, [vb?.city, vb?.state].filter(Boolean).join(", ")].filter(Boolean).join(", ");
   }
 
-  // Invoice scoping: find the agreement active on the invoice's date for its ship-to.
-  let scopedAgreementId: number | null = null;
+  // Invoice scoping (docs/84 W1c): scoping is now DATE scoping through the same
+  // office-inherited resolution the v2 audit engine uses — the retired ship-to +
+  // expiry-filter path could show "no agreement" for an office-inheriting branch.
   let scopedInvoice = "";
   let scopedInvoiceDate = "";
-  let scopedAgreementNumber = "";
-  let scopedAgreementEffective = "";
-  let scopedAgreementExpiry = "";
+  const scopedAgreementNumber = "";
   if (invoiceNumber && !nonAbcVendor) {
-    const { data: invRows } = await client.from("abc_invoices").select("invoice_date,ship_to_number").eq("invoice_number", invoiceNumber).limit(1);
-    const inv = (invRows as any[] | null)?.[0] ?? null;
-    const invDate = d10(inv?.invoice_date);
-    if (inv && invDate && inv.ship_to_number) {
+    const { data: invRows } = await client.from("abc_invoices").select("invoice_date").eq("invoice_number", invoiceNumber).limit(1);
+    const invDate = d10((invRows as any[] | null)?.[0]?.invoice_date);
+    if (invDate) {
       scopedInvoice = invoiceNumber;
       scopedInvoiceDate = invDate;
-      const { data: matchRows } = await client.from("abc_price_agreement_branch_matches").select("abc_price_agreement_id,confidence_score").eq("ship_to_number", inv.ship_to_number);
-      const agIds = Array.from(new Set(((matchRows as any[] | null) ?? []).map((m) => m.abc_price_agreement_id).filter((x) => x != null)));
-      const confById = new Map<number, number>();
-      for (const m of (matchRows as any[] | null) ?? []) confById.set(m.abc_price_agreement_id, Math.max(confById.get(m.abc_price_agreement_id) ?? -1, num(m.confidence_score)));
-      if (agIds.length) {
-        const { data: agRows } = await client.from("abc_price_agreements").select("id,agreement_number,effective_date,expiry_date").in("id", agIds);
-        const activeAtInvoice = ((agRows as any[] | null) ?? []).filter((a) => d10(a.effective_date) <= invDate && (!a.expiry_date || d10(a.expiry_date) >= invDate));
-        activeAtInvoice.sort((a, b) => (confById.get(b.id) ?? 0) - (confById.get(a.id) ?? 0) || d10(b.effective_date).localeCompare(d10(a.effective_date)));
-        const chosen = activeAtInvoice[0] ?? null;
-        if (chosen) {
-          scopedAgreementId = chosen.id;
-          scopedAgreementNumber = chosen.agreement_number ?? "";
-          scopedAgreementEffective = d10(chosen.effective_date);
-          scopedAgreementExpiry = d10(chosen.expiry_date);
-        }
-      }
     }
   }
 
-  // Scoped path: the chosen agreement's full price list straight from abc_price_list_items.
-  if (scopedAgreementId != null) {
-    const { data: pliRows } = await client.from("abc_price_list_items")
-      .select("item_number,description,unit,unit_price,manufacturer,product_category,agreement_id,category_key")
-      .eq("agreement_id", scopedAgreementId).order("description");
-    const rows = (pliRows as any[] | null) ?? [];
-    if (rows.length === 0) return { ...base, status: "empty", branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, categories };
-    const items: BranchPriceItem[] = rows.map((r) => ({
-      itemNumber: r.item_number ?? "",
-      description: r.description ?? "",
-      uom: r.unit ?? "",
-      unitPrice: num(r.unit_price),
-      manufacturer: r.manufacturer ?? "",
-      category: r.product_category ?? "",
-      agreementId: r.agreement_id ?? scopedAgreementId,
-      agreementNumber: scopedAgreementNumber,
-      effective: scopedAgreementEffective,
-      expiry: scopedAgreementExpiry,
-      active: true, // active as of the invoice date, by construction
-      categoryKey: r.category_key ?? "uncategorized",
-    }));
-    return {
-      status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber, inheritedOffice: "",
-      items, activeItems: items.length, expiredItems: 0,
-      agreements: [{ id: scopedAgreementId, number: scopedAgreementNumber, effective: scopedAgreementEffective, expiry: scopedAgreementExpiry, active: true, itemCount: items.length }],
-      categories,
-    };
-  }
-
-  // Unscoped path: all agreements for the branch (v_branch_price_list — ABC-keyed,
-  // so non-ABC vendors go straight to their own office-inherited list).
-  const rows: any[] = nonAbcVendor
+  // Direct path: all agreements for the branch (v_branch_price_list — ABC-keyed,
+  // so non-ABC vendors go straight to their own office-inherited list). When
+  // invoice-scoped, skip the direct list too: the engine prices from the office
+  // set in force at the invoice date, so that is what the button must show.
+  const rows: any[] = nonAbcVendor || scopedInvoice
     ? []
     : (((await client.from("v_branch_price_list").select("*").eq("branch_number", branchNumber).order("description")).data as any[] | null) ?? []);
   if (rows.length === 0) {
@@ -255,7 +210,8 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
       ];
       if (items.length) {
         return {
-          status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate, scopedAgreementNumber,
+          status: "live", branchNumber, branchName, branchAddress, scopedInvoice, scopedInvoiceDate,
+          scopedAgreementNumber: scopedInvoice ? inherited.agreements.map((a) => a.number).join(", ") : scopedAgreementNumber,
           inheritedOffice: inherited.officeName,
           items, activeItems: items.length, expiredItems: 0,
           agreements: inherited.agreements.map((a) => ({

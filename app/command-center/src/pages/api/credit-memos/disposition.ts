@@ -37,7 +37,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const patch: Record<string, unknown> = { status, updated_at: nowIso };
     if (status === "sent") { patch.sent_by = who; patch.sent_at = nowIso; patch.follow_up_due_at = new Date(Date.now() + 14 * 864e5).toISOString(); }
     if (status === "received") { patch.received_by = who; patch.received_at = nowIso; }
-    const { data, error } = await client.from("credit_memo_requests").update(patch).eq("invoice_number", invoiceNumber).select("invoice_number,status,sent_at,received_at").maybeSingle();
+    const { data, error } = await client.from("credit_memo_requests").update(patch).eq("invoice_number", invoiceNumber).eq("request_kind", "requested").select("invoice_number,status,sent_at,received_at").maybeSingle();
     if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
     if (!data) return jsonApiResponse({ error: "not_found", error_description: `No credit-memo request for ${invoiceNumber}.` }, { status: 404 });
     return jsonApiResponse({ ok: true, record: data });

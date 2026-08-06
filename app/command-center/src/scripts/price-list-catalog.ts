@@ -135,8 +135,7 @@ if (dataEl && root) {
         <td>${it.vendor}</td>
         <td class="num">${money(it.spend / d)}</td>
         <td class="num">${num(it.qty / d)}</td>
-        <td><span class="pill ${cov[1]}">${cov[0]} · ${share}%</span></td>
-        <td><span class="pill pill-grey">TBD</span></td></tr>`;
+        <td><span class="pill ${cov[1]}">${cov[0]} · ${share}%</span></td></tr>`;
     }).join("");
 
     const totalSpend = items.reduce((s, it) => s + it.spend / d, 0);

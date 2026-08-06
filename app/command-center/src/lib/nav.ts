@@ -39,6 +39,7 @@ export const navDepartments: NavDepartment[] = [
       { label: "Tools Audit", status: "soon", note: "Software, subscriptions" },
       { label: "Business Expense Audit", status: "soon", note: "Insurance, CPA, advisors, compliance" },
       { label: "EH&S Audit", status: "soon", note: "Environmental, Health & Safety" },
+      { label: "Price Agreements", href: "/accounting/price-agreements", status: "built", note: "Coverage · Gap Worksheet (bought 2+ times, no negotiated price) · Renewal Worksheet (docs/83)" },
       { label: "Price Agreement Audit", href: "/abc-price-agreement-gaps", status: "built" },
       { label: "Global Price List", href: "/accounting/price-list/review", status: "built", note: "PE Office → Global Price List → Vendor → Branch → Current/Archived agreements, all in canonical UOM" },
       { label: "Price List Review", href: "/accounting/price-agreement/review", status: "built", note: "Confirm item-id matches for family-level PDFs (Denver/Dallas), then promote to agreements" },

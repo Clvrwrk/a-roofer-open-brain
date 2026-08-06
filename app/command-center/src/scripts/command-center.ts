@@ -226,16 +226,6 @@ cadenceButtons.forEach((button) => {
 
 departmentFilter?.addEventListener("change", applyFilters);
 
-document.querySelectorAll<HTMLButtonElement>("[data-approval-action]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const selected = rows.find((row) => row.classList.contains("is-selected"));
-    if (!selected || !note) return;
-
-    const action = button.dataset.approvalAction === "approve" ? "Approval" : "Rejection";
-    note.textContent = `${action} recorded locally for ${selected.dataset.title}. Live audit writes arrive with the cadence engine.`;
-  });
-});
-
 document.querySelectorAll<HTMLButtonElement>("[data-live-decision]").forEach((button) => {
   button.dataset.commandCenterBound = "legacy";
 });
