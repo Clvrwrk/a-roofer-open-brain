@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // The line must be a real negotiated-variance discrepancy per the LIVE engine.
   const { data: lineRows, error: lineError } = await client
     .from("v_invoice_audit_line")
-    .select("line_id, invoice_number, item_number, item_description, quantity, uom, unit_price, negotiated_price, variance_ext, uom_mismatch")
+    .select("line_id, invoice_number, item_number, item_description, quantity, uom, unit_price, negotiated_price, variance_ext, uom_mismatch, negotiated_agreement_id")
     .eq("line_id", lineId)
     .limit(1);
   if (lineError) return jsonApiResponse({ error: "line_lookup_failed", error_description: lineError.message }, { status: 500 });
@@ -61,6 +61,33 @@ export const POST: APIRoute = async ({ locals, request }) => {
       { error: "cm_locked", error_description: `The credit memo request is already '${existingCm.status}' — it can no longer be changed.` },
       { status: 409 },
     );
+  }
+
+  // Agreement + office context for the vendor email (Chris 2026-08-05 QA: every CM
+  // line must name the price agreement used to challenge the invoiced amount).
+  let officeId: string | null = null;
+  let officeName: string | null = null;
+  let agreementNumber: string | null = null;
+  let agreementEffective: string | null = null;
+  let agreementExpiry: string | null = null;
+  {
+    const { data: officeRows } = await client.from("mv_invoice_pricing_office").select("office_id").eq("invoice_number", invoiceNumber).limit(1);
+    officeId = (officeRows as any[] | null)?.[0]?.office_id ?? null;
+    if (officeId) {
+      const { data: oRows } = await client.from("office").select("name").eq("id", officeId).limit(1);
+      officeName = (oRows as any[] | null)?.[0]?.name ?? null;
+    }
+    if (line.negotiated_agreement_id != null) {
+      const { data: agRows } = await client
+        .from("abc_price_agreements")
+        .select("agreement_number, effective_date, expiry_date")
+        .eq("id", line.negotiated_agreement_id)
+        .limit(1);
+      const ag = (agRows as any[] | null)?.[0] ?? null;
+      agreementNumber = ag?.agreement_number ?? null;
+      agreementEffective = ag?.effective_date ?? null;
+      agreementExpiry = ag?.expiry_date ?? null;
+    }
   }
 
   // Join the invoice's latest re-audit run (or start a UI-origin one).
@@ -95,6 +122,12 @@ export const POST: APIRoute = async ({ locals, request }) => {
         invoiced_price: line.unit_price,
         office_price: line.negotiated_price,
         variance_ext: line.variance_ext,
+        office_id: officeId,
+        office_name: officeName,
+        agreement_id: line.negotiated_agreement_id ?? null,
+        agreement_number: agreementNumber,
+        agreement_effective: agreementEffective,
+        agreement_expiry: agreementExpiry,
         reviewed_by: actor.displayName,
         reviewed_at: nowIso,
       })
@@ -115,6 +148,12 @@ export const POST: APIRoute = async ({ locals, request }) => {
         invoiced_price: line.unit_price,
         office_price: line.negotiated_price,
         variance_ext: line.variance_ext,
+        office_id: officeId,
+        office_name: officeName,
+        agreement_id: line.negotiated_agreement_id ?? null,
+        agreement_number: agreementNumber,
+        agreement_effective: agreementEffective,
+        agreement_expiry: agreementExpiry,
         classification: "discrepancy",
         match_method: "audit_ui",
         reviewed_by: actor.displayName,
@@ -166,6 +205,22 @@ export const POST: APIRoute = async ({ locals, request }) => {
       packet: packetNote,
     });
   if (cmError) return jsonApiResponse({ error: "credit_memo_write_failed", error_description: cmError.message }, { status: 500 });
+
+  // Adding to the CM is also the audit decision on this line (append-only 'disputed')
+  // so it leaves the "to audit" count immediately.
+  try {
+    await client.from("invoice_line_audit").insert({
+      invoice_line_id: lineId,
+      invoice_number: invoiceNumber,
+      item_number: line.item_number,
+      audit_status: "disputed",
+      decision: "discrepancy",
+      approved_by: actor.displayName,
+      approval_note: "Added to credit memo request (line reviewed)",
+      source: "manual",
+      decided_by: actor.displayName,
+    });
+  } catch { /* claim already recorded */ }
 
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ ok: true, invoiceNumber, claimId, runLabel, expectedCredit, lineCount });

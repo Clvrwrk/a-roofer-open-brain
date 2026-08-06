@@ -92,10 +92,13 @@ if (root && dataEl && mount) {
   // or UOM mismatch = discrepancy (shown); everything else is valid (hidden).
   const isDiscrepancy = (l: InvLine) =>
     l.uomMismatch || l.negotiatedPrice == null || (l.qty > 0 && l.unitPrice > l.negotiatedPrice);
-  const lineCredit = (l: InvLine) =>
-    !l.uomMismatch && l.negotiatedPrice != null && l.qty > 0 && l.unitPrice > l.negotiatedPrice
-      ? (l.unitPrice - l.negotiatedPrice) * l.qty
-      : 0;
+  const lineCredit = (l: InvLine) => {
+    if (l.uomMismatch || l.negotiatedPrice == null || l.qty <= 0 || l.unitPrice <= l.negotiatedPrice) return 0;
+    const credit = (l.unitPrice - l.negotiatedPrice) * l.qty;
+    // Sub-nickel variance is In Tolerance (matches the claim engine's 0.05 floor) —
+    // it gets the reviewed-valid checkbox, never an unclickable "CM $0.00".
+    return credit >= 0.05 ? credit : 0;
+  };
   function auditCell(inv: Invoice, l: InvLine): string {
     if (l.audited) {
       const meta = [l.auditNote, l.agreementId ? `Agreement #${l.agreementId}${l.agreementCurrent === false ? " (expired " + l.agreementExpiry + ")" : ""}` : "", l.auditedAt].filter(Boolean).join(" · ");
@@ -283,6 +286,23 @@ if (root && dataEl && mount) {
   }
 
   let filtersReady = false;
+  // Re-render an invoice body WITHOUT losing which category sections are open
+  // (Chris 2026-08-05 QA: a 6-line review must not cost 12 clicks).
+  function reRenderInvoiceBody(invObj: Invoice) {
+    const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invObj.invoiceNumber)}"]`) as HTMLElement | null;
+    const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
+    if (body) {
+      const openCats = new Set(
+        Array.from(body.querySelectorAll<HTMLDetailsElement>("details.iv-cat")).filter((d) => d.open).map((d) => d.dataset.cat || ""),
+      );
+      body.innerHTML = invoiceBody(invObj);
+      body.querySelectorAll<HTMLDetailsElement>("details.iv-cat").forEach((d) => {
+        if (openCats.has(d.dataset.cat || "")) d.open = true;
+      });
+    }
+    if (det) refreshInvoiceTags(det, invObj);
+  }
+
   function syncInvoiceProgressToTree(inv: Invoice) {
     const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(inv.invoiceNumber)}"]`) as HTMLElement | null;
     const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
@@ -598,8 +618,19 @@ if (root && dataEl && mount) {
       const reauditId = Number(box.dataset.reviewClaim);
       const { ok, data } = await postJson("/api/credit-memos/review-line", { lineId: reauditId, reviewed: box.checked });
       if (!ok) { toast("Review failed: " + (data?.error_description || data?.error || "error")); box.checked = !box.checked; box.disabled = false; return; }
-      const claim = claimByLineId.get([...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "");
+      const claimLineId = [...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "";
+      const claim = claimByLineId.get(claimLineId);
       if (claim) claim.reviewed = box.checked;
+      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts
+      // in place (no body re-render, so nothing collapses).
+      const claimInv = invByNumber.get((data as any)?.invoiceNumber || "");
+      const claimLine = claimInv?.lines.find((l) => l.lineId === claimLineId);
+      if (claimInv && claimLine) {
+        claimLine.auditStatus = box.checked ? "disputed" : "pending";
+        claimInv.pendingLines = Math.max(0, claimInv.pendingLines + (box.checked ? -1 : 1));
+        const det = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(claimInv.invoiceNumber)}"]`)?.closest("details.iv-inv") as HTMLDetailsElement | null;
+        if (det) refreshInvoiceTags(det, claimInv);
+      }
       box.disabled = false;
       await loadCreditMemoRequests(); // r/N + Approve gating changed
       return;
@@ -614,10 +645,14 @@ if (root && dataEl && mount) {
       if (!ok) { toast("Add to credit memo failed: " + (data?.error_description || data?.error || "error")); box.checked = false; box.disabled = false; return; }
       await loadCreditMemoRequests(); // claim set + totals changed
       const invObj = invByNumber.get(invoiceNumber);
-      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
-      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
-      if (invObj && body) body.innerHTML = invoiceBody(invObj); // checkbox re-renders as a checked claim box
-      if (invObj && det) refreshInvoiceTags(det, invObj);
+      if (invObj) {
+        const addedLine = invObj.lines.find((l) => l.lineId === box.dataset.cmAdd);
+        if (addedLine) {
+          addedLine.auditStatus = "disputed";
+          invObj.pendingLines = Math.max(0, invObj.pendingLines - 1);
+        }
+        reRenderInvoiceBody(invObj); // checkbox re-renders as a checked claim box; open sections preserved
+      }
       toast(`Line added to credit memo — ${invoiceNumber} now claims ${money2(data.expectedCredit)} across ${data.lineCount} line(s)`);
       return;
     }
@@ -645,10 +680,7 @@ if (root && dataEl && mount) {
       line.auditNote = note;
       invObj.pendingLines = Math.max(0, invObj.pendingLines - 1);
       if ((line.varianceExt || 0) > 0) invObj.atRisk = Math.max(0, invObj.atRisk - (line.varianceExt || 0));
-      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
-      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
-      if (body) body.innerHTML = invoiceBody(invObj);
-      if (det) refreshInvoiceTags(det, invObj);
+      reRenderInvoiceBody(invObj); // open sections preserved
       if (filtersReady) applyFilter();
     }
     toast(`Line marked reviewed (${invoiceNumber})`);
