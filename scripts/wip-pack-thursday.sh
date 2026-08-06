@@ -22,6 +22,10 @@ set -euo pipefail
 AS_OF="${1:-$(date +%F)}"
 REPO_ROOT="${WIP_PACK_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export PATH="/opt/homebrew/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
+# aspose-cells (bundled .NET) on Linux hosts: ICU discovery fails on Ubuntu 24
+# even with libicu74 installed — invariant globalization is the supported
+# workaround and is safe for this workbook (all en-US content).
+export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 LOG_DIR="$HOME/.wip-pack/logs"
 mkdir -p "$LOG_DIR"
