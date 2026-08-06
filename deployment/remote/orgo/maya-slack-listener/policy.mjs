@@ -19,6 +19,7 @@ export const APPROVED = Object.freeze({
   linearWorkTeamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
   linearWorkReviewStateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
   linearWorkTodoStateId: "286ecb7c-e682-4c67-884e-88d620036e02",
+  linearWorkTodoStateName: "Agent Todo",
   linearWorkWorkingStateId: "3fb1725c-3e0a-43f5-8dc4-6a0455fff657",
   linearWorkNeedsInputStateId: "c548790b-a977-477a-8fa4-493c2f74af26",
   linearReviewerId: "002bc1e6-c102-42f7-86cc-45b7c499dae3",

@@ -183,8 +183,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .maybeSingle();
 
   if (alError) {
-    // Non-fatal: work item was created, log failed.
     console.error("[agent-intake] dashboard_action_log insert failed:", alError.message);
+    return jsonApiResponse(
+      { error: "audit_log_failed", error_description: "The work item was recorded, but its required audit row was not. The caller must stop for reconciliation." },
+      { status: 500 },
+    );
   }
 
   return jsonApiResponse({
