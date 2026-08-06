@@ -37,7 +37,6 @@ export const ACKNOWLEDGEMENT_DOMAINS = Object.freeze([
   "cc.proexteriorsus.net",
   "proexteriorsus.com",
   "aia4.io",
-  "cleverwork.io",
 ]);
 
 export const GMAIL_TOOL_VERSION = "20260721_00";
