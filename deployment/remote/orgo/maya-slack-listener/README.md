@@ -10,16 +10,28 @@ mention.
 
 The same single Supervisor-owned runtime also owns Maya's canonical mailbox cadence.
 It checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
-bootstraps at activation time so historical mail is not replayed, and deduplicates by
-Gmail message ID. For each new message, Maya may search/read Gmail, retrieve an
-attachment, reply/send/draft email, file or recoverably trash mail, search/create/
-update/comment in PE-CC-Dev Linear, and read or communicate through accessible Slack
-channels. A successfully handled message is marked read; unknown provider outcomes
-remain ambiguous and are never retried automatically.
+bootstraps at activation time, and deduplicates by Gmail message ID. The scheduled
+mailbox path is deterministic: it classifies untrusted mail; forces documents,
+accounting requests, and pricing conversations into PE-CC-DevTeam; assigns new issues
+to Christopher in Agent Review; sends the pinned admin Slack route a `[REVIEW]` or
+`[BLOCKED]` notice; optionally sends one standard received acknowledgement to an
+approved internal-domain sender; and then applies the reviewed Gmail filing plan.
+Unknown provider outcomes remain ambiguous and are never retried automatically. Known
+Google and Slack account-security notices are deterministically normalized into
+owner-authorization checks, preventing the classifier from inventing account
+deactivation or recovery work. Slack notices resolve the created Linear issue to its
+human `PEC-*` identifier and suppress internal UUIDs if that display lookup is
+temporarily unavailable.
+
+`mailbox-cleanup.mjs` and `run-mailbox-cleanup.sh` provide a bounded one-shot pass over
+the existing inbox. Cleanup deliberately disables sender acknowledgements so old mail
+does not receive a late receipt. It uses the same per-message receipts and Linear source
+markers as the scheduled executor.
 
 PEC-113 removes the old intake-only, draft-only, no-attachment, create-only Linear,
-and fixed-owner-only Slack limitations. The release still enforces Maya attribution,
-mandatory email CC to `admin@cc.proexteriorsus.net`, exact account/team identity,
+and fixed-owner-only Slack limitations for human-requested work. The scheduled mailbox
+path remains deliberately narrow. The release enforces Maya attribution, mandatory
+email CC to both `admin@cc.proexteriorsus.net` and `chussey@aia4.io`, exact account/team identity,
 credential secrecy, hashed effect receipts, and an operator kill switch. Permanent
 deletion, payment execution, credential disclosure, and access-control administration
 are not exposed because they are not required for normal Maya work.
@@ -36,13 +48,15 @@ Security invariants:
 - all human authors and all accessible channel, private-channel, and multi-person
   channel types are accepted when the message addresses Maya;
 - bot/self messages, subtypes, duplicates, and malformed scope fail closed;
-- identity, deduplication, owner email CC, and the Maya prefix are code; normal
+- identity, deduplication, both oversight email CCs, approved acknowledgement domains,
+  deterministic Gmail filing, and the Maya prefix are code; normal
   Slack destinations may be selected from channels accessible to Maya;
 - an interrupted or failed send is `ambiguous` and is never retried automatically;
 - receipts contain only hashes and provider IDs, never messages, prompts, replies,
   tokens, headers, or credentials;
 - Gmail, Linear, and Slack effects are pinned to Maya's reviewed Composio user and
-  connected accounts; new Linear issues are always pinned to PE-CC-DevTeam;
+  connected accounts; new Linear issues are pinned to PE-CC-DevTeam, Christopher,
+  and Agent Review;
 - the mailbox cursor and per-message receipts are private local state; first start
   records the activation cursor without replaying historical email, then exactly one
   in-process timer schedules the next UTC half-hour occurrence;

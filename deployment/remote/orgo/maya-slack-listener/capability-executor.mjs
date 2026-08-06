@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { APPROVED, GMAIL_TOOL_VERSION, LINEAR_TOOL_VERSION } from "./policy.mjs";
+import { APPROVED, GMAIL_TOOL_VERSION, LINEAR_TOOL_VERSION, REQUIRED_EMAIL_CC } from "./policy.mjs";
 import { PREFIX, TOOL_VERSION, isSlackTimestamp } from "./core.mjs";
 
-export const OWNER_EMAIL = "admin@cc.proexteriorsus.net";
+export const OWNER_EMAIL = REQUIRED_EMAIL_CC[0];
+export const OWNER_EMAILS = REQUIRED_EMAIL_CC;
 export const MAX_CAPABILITY_STEPS = 8;
 
 export const CAPABILITY_CATALOG = Object.freeze([
@@ -10,9 +11,9 @@ export const CAPABILITY_CATALOG = Object.freeze([
   ["gmail_get_message", "Read one Gmail message by messageId."],
   ["gmail_get_thread", "Read a Gmail thread by threadId."],
   ["gmail_get_attachment", "Retrieve one Gmail attachment using messageId, attachmentId, and fileName."],
-  ["gmail_reply", "Reply in a Gmail thread; body and optional recipientEmail. The owner CC is added in code."],
-  ["gmail_send", "Send a new email with recipientEmail, subject, and body. The owner CC is added in code."],
-  ["gmail_draft", "Create an email draft with recipientEmail, subject, and body. The owner CC is added in code."],
+  ["gmail_reply", "Reply in a Gmail thread; body and optional recipientEmail. Both required oversight CCs are added in code."],
+  ["gmail_send", "Send a new email with recipientEmail, subject, and body. Both required oversight CCs are added in code."],
+  ["gmail_draft", "Create an email draft with recipientEmail, subject, and body. Both required oversight CCs are added in code."],
   ["gmail_label", "Add or remove Gmail label IDs on a message."],
   ["gmail_trash", "Move one Gmail message to Trash; this is recoverable."],
   ["linear_search", "Search PE-CC-Dev Linear issues."],
@@ -103,7 +104,7 @@ function attributedLinear(value, name, limit) {
 }
 
 function withOwnerCc(value) {
-  return [...new Set([...emailList(value, "cc"), OWNER_EMAIL])];
+  return [...new Set([...emailList(value, "cc"), ...REQUIRED_EMAIL_CC])];
 }
 
 function executeInput(expected, connectedAccountId, version, arguments_) {
@@ -156,7 +157,14 @@ export function normalizeCapabilityAction(value, expected = APPROVED) {
     arguments_ = { first: integer(args.first, 100, 1, 250), include_transitions: Boolean(args.includeTransitions) };
   } else if (name === "linear_create") {
     slug = "LINEAR_CREATE_LINEAR_ISSUE"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
-    arguments_ = { team_id: expected.linearTeamId, title: attributedLinear(args.title, "title", 140), description: attributedLinear(args.description, "description", 12_000), priority: integer(args.priority, 3, 1, 4) };
+    arguments_ = {
+      team_id: expected.linearTeamId,
+      state_id: expected.linearReviewStateId,
+      assignee_id: expected.linearReviewerId,
+      title: attributedLinear(args.title, "title", 140),
+      description: attributedLinear(args.description, "description", 12_000),
+      priority: integer(args.priority, 3, 1, 4),
+    };
   } else if (name === "linear_update") {
     slug = "LINEAR_UPDATE_ISSUE"; connection = expected.linearConnectedAccountId; version = LINEAR_TOOL_VERSION;
     arguments_ = { issueId: id(args.issueId, "issueId", LINEAR_ISSUE), ...(args.title ? { title: attributedLinear(args.title, "title", 140) } : {}), ...(args.description ? { description: attributedLinear(args.description, "description", 12_000) } : {}), ...(args.priority !== undefined ? { priority: integer(args.priority, 3, 0, 4) } : {}), ...(args.stateId ? { stateId: id(args.stateId, "stateId", /^[0-9a-fA-F-]{36}$/u) } : {}) };
