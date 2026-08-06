@@ -301,7 +301,10 @@ describe("loadInvoiceAuditSummary", () => {
     expect(inv?.held).toBe(true);
     expect(inv?.approvedToPay).toBe(false);
     expect(inv?.disposition).toBe("Hold — credit memo");
-    expect(inv?.toBePaid).toBe(false);            // a disputed (held) line keeps it out of to-be-paid
+    // v2 (2026-08-05): a decided (disputed) line no longer counts as pending, so a
+    // fully-dispositioned held invoice IS to-be-paid — matching the docs/63 Change 1b
+    // contract; the payment exclusion lives in approvedToPay/isInvoicePayable below.
+    expect(inv?.toBePaid).toBe(true);
     expect(isInvoicePayable(inv!)).toBe(false);   // excluded from the Payment CSV
     // …but a fully-DECIDED held invoice (1 passed + 1 disputed) still loads to the register.
     expect(inv?.workedLines).toBe(2);
