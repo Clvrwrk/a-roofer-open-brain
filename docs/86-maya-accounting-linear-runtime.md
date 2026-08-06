@@ -78,7 +78,7 @@ The Orgo runtime is the execution owner. `runtime_auth.recurring_loops` is the d
 
 ## Persistence and audit
 
-Migration 218 adds default-deny runtime tables for channel deliveries, intake orchestrations, Linear work claims, recurring-loop registry, and append-only Linear receipts. It also gives `dashboard_action_log` a unique idempotency key. `/api/agent/intake` now requires `orchestrationKey` and `catSourceIssue`; Gmail, Slack, recurring, and manually queued Linear work post this record after the CAT/PEC pair exists and before Maya acts. Duplicate provider deliveries cannot append duplicate action-log rows.
+Migration 218 adds default-deny runtime tables for channel deliveries, intake orchestrations, Linear work claims, recurring-loop registry, and append-only Linear receipts. It also gives `dashboard_action_log` a unique idempotency key. Migration 219 adds a server-only named-agent bearer registry so the raw runtime token stays on Orgo while Supabase stores only its SHA-256 digest. `/api/agent/intake` now requires `orchestrationKey` and `catSourceIssue`; Gmail, Slack, recurring, and manually queued Linear work post this record after the CAT/PEC pair exists and before Maya acts. Duplicate provider deliveries cannot append duplicate action-log rows.
 
 Receipts contain stable IDs/digests, actor, action, target, result, timestamps, and previous hash. They do not contain raw message bodies, PII, credentials, or provider tokens.
 
@@ -88,7 +88,7 @@ Maya's canonical memory zone is `ob1-pe-finance`, not `ob1-maya`. Fast.io is the
 
 ## Activation and rollback
 
-Activation requires tests/build, migration 218, a named Maya Command Center service token with read/evidence permissions only, updated Fast.io files, runtime release, and a live smoke test that proves CAT parent → accounting child → Agent Review.
+Activation requires tests/build, migrations 218–219, a named Maya Command Center service token with read/evidence permissions only, updated Fast.io files, runtime release, and a live smoke test that proves CAT parent → accounting child → Agent Review.
 
 Rollback order:
 

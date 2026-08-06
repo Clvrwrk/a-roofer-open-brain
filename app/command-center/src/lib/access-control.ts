@@ -456,10 +456,14 @@ function isOpenAccessEnabled(env: RuntimeEnv) {
   return !["false", "0", "off", "no"].includes(raw);
 }
 
-function getBearerToken(request: Request) {
+export function getServiceBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+export function hashServiceToken(value: string) {
+  return hashToken(value);
 }
 
 export function getServiceTokenHashEnvKey(agentId: string) {
@@ -517,7 +521,12 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
 
 /** Bearer-token resolution for service agents (no header-based identity trust). */
 export function resolveServiceActorFromBearer(request: Request, env: RuntimeEnv = getRuntimeEnv()) {
-  return resolveServiceActorFromToken(getBearerToken(request), env);
+  return resolveServiceActorFromToken(getServiceBearerToken(request), env);
+}
+
+export function resolveNamedAgentServiceActor(agentId: string) {
+  const agent = NAMED_AGENT_IDENTITIES.find((candidate) => candidate.id === agentId);
+  return agent ? namedAgentServiceActor(agent) : null;
 }
 
 export interface WorkOsSessionIdentity {

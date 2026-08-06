@@ -68,8 +68,8 @@ Security invariants:
   a linked PE-CC-DevTeam child, Christopher, and reviewed workflow states;
 - Maya's named Command Center token grants accounting reads and evidence only; it
   carries no approval or financial-write authority. The raw token exists only in
-  Orgo's owner-only `MAYA_COMMAND_CENTER_TOKEN` secret; Command Center stores only
-  its SHA-256 digest in `AGENT_SERVICE_TOKEN_SHA256_MAYA_CHEN`;
+  Orgo's owner-only `MAYA_COMMAND_CENTER_TOKEN` secret; Supabase stores only its
+  SHA-256 digest in the server-only named-agent token registry;
 - price work uses ABC `priceQty.uom`, `abc_invoice_lines.price_per_uom`, and
   `v_item_uom_map`; WIP/AR keeps billed receivables separate from unbilled work, and
   QuickBooks production remains read-only;
