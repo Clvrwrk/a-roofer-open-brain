@@ -3,13 +3,14 @@ import { classifyMailboxMessage } from "./mailbox-hermes.mjs";
 import { MailboxState, mailboxOccurrenceId, millisecondsUntilNextHalfHour } from "./mailbox-state.mjs";
 import {
   commentLinearIssue,
-  ensureCatFirstPair,
-  indexLinearOrchestrations,
-  listLinearIssues,
   sourceKeysForMessage,
   updateLinearIssue,
 } from "./linear-orchestration.mjs";
-import { classifyAccountingAlias, recordCommandCenterIntake } from "./command-center-client.mjs";
+import {
+  classifyAccountingAlias,
+  ensureCommandCenterLinearPair,
+  recordCommandCenterIntake,
+} from "./command-center-client.mjs";
 import {
   APPROVED,
   ACKNOWLEDGEMENT_DOMAINS,
@@ -504,7 +505,7 @@ async function fileMailboxMessage(composio, message, action, signal, expected) {
   return `labels:${add.join(",")}:${remove.join(",")}`;
 }
 
-async function processMessage({ composio, classifier, capabilityAgent, recordIntake, state, listMessage, occurrenceId, signal, expected, onEvent, linearOrchestrations, allowAcknowledgement = true }) {
+async function processMessage({ composio, classifier, capabilityAgent, recordIntake, recordLinearPair, state, listMessage, occurrenceId, signal, expected, onEvent, allowAcknowledgement = true }) {
   const messageId = String(firstDefined(listMessage, ["messageId", "message_id", "id"]) ?? "");
   if (!/^[0-9a-fA-F]+$/u.test(messageId)) throw new Error("Gmail list returned an invalid message ID");
   const claim = await state.claim(messageId, occurrenceId);
@@ -531,16 +532,24 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
     let sourceKeys = [];
     if (decision.action !== "ignore") {
       sourceKeys = sourceKeysForMessage(message);
-      linearPair = await ensureCatFirstPair({
-        composio,
-        sourceKeys,
-        knownIndex: linearOrchestrations,
-        buildSourceArguments: (keys) => buildLinearSourceIssueArguments(message, decision, keys, expected),
-        buildWorkArguments: ({ source, sourceKeys: keys }) => buildLinearIssueArguments(message, decision, source, keys, expected),
+      linearPair = await recordLinearPair({
+        payload: {
+          sourceKeys,
+          messageId: message.messageId,
+          sourceChannel: "gmail",
+          sender: message.sender,
+          receivedAt: message.receivedAt,
+          subject: message.subject,
+          summary: decision.summary,
+          reason: decision.reason,
+          priority: decision.priority,
+          attachments: message.attachments.map((attachment) => attachment.filename),
+        },
         signal,
         expected,
-        onConfirmed: (action, providerReference) => state.recordAction(claim.name, action, providerReference),
       });
+      await state.recordAction(claim.name, "command_center_linear_cat_source", linearPair.source.id);
+      await state.recordAction(claim.name, "command_center_linear_accounting_child", linearPair.work.id);
       const route = classifyAccountingAlias(message.recipients);
       const intake = await recordIntake({
         payload: {
@@ -699,6 +708,7 @@ export async function runMailboxOccurrence({
   classifier = classifyMailboxMessage,
   capabilityAgent,
   recordIntake = recordCommandCenterIntake,
+  recordLinearPair = ensureCommandCenterLinearPair,
   state,
   signal,
   expected = APPROVED,
@@ -712,14 +722,11 @@ export async function runMailboxOccurrence({
   }
   const occurrenceId = mailboxOccurrenceId(now);
   const candidates = await listCandidateMessages(composio, cursor.epochSeconds, signal, expected);
-  const linearOrchestrations = candidates.length
-    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
-    : new Map();
   let processed = 0;
   for (const candidate of candidates) {
     if (signal.aborted) throw new Error("Mailbox occurrence aborted");
     const result = await processMessage({
-      composio, classifier, capabilityAgent, recordIntake, state, listMessage: candidate, occurrenceId, signal, expected, onEvent, linearOrchestrations,
+      composio, classifier, capabilityAgent, recordIntake, recordLinearPair, state, listMessage: candidate, occurrenceId, signal, expected, onEvent,
     });
     if (result.state !== "duplicate") processed += 1;
   }
@@ -741,14 +748,12 @@ export async function runInboxCleanup({
   onEvent = () => {},
   allowAcknowledgement = false,
   recordIntake = recordCommandCenterIntake,
+  recordLinearPair = ensureCommandCenterLinearPair,
   now = new Date(),
 }) {
   await state.initialize(Math.floor(now.getTime() / 1_000));
   const occurrenceId = `maya-chen:mailbox-cleanup:${now.toISOString()}`;
   const { candidates, truncated } = await listInboxCleanupCandidates(composio, signal, expected);
-  const linearOrchestrations = candidates.length
-    ? indexLinearOrchestrations(await listLinearIssues(composio, signal, expected))
-    : new Map();
   let processed = 0;
   let duplicates = 0;
   let ambiguous = 0;
@@ -758,13 +763,13 @@ export async function runInboxCleanup({
       composio,
       classifier,
       recordIntake,
+      recordLinearPair,
       state,
       listMessage: candidate,
       occurrenceId,
       signal,
       expected,
       onEvent,
-      linearOrchestrations,
       allowAcknowledgement,
     });
     if (result.state === "duplicate") duplicates += 1;

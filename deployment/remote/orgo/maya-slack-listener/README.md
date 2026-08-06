@@ -13,8 +13,9 @@ daily-through-annual loop materialization, and explicit Linear work claimant. It
 checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
 bootstraps at activation time, and deduplicates by day-scoped content, Gmail thread,
 and Gmail message keys. The scheduled mailbox path is deterministic: it classifies
-untrusted mail; creates or resolves one CODEX AGENT TEAM source; creates or repairs
-one linked PE-CC-DevTeam accounting child; assigns both to Christopher in Agent
+untrusted mail; asks the authenticated Command Center server to create or resolve one
+CODEX AGENT TEAM source and one linked PE-CC-DevTeam accounting child using its
+server-only Linear credential; assigns both to Christopher in Agent
 Review; records the CAT/PEC lineage idempotently in Command Center/Supabase before
 analysis; sends the pinned admin Slack route a `[REVIEW]` or
 `[BLOCKED]` notice; sends one standard received acknowledgement to an approved
@@ -24,12 +25,18 @@ not suppress an already provider-confirmed receipt.
 Unknown provider outcomes remain ambiguous and are never retried automatically. Known
 Google and Slack account-security notices are deterministically normalized into
 owner-authorization checks, preventing the classifier from inventing account
-deactivation or recovery work. Slack notices resolve the source to its human `CAT-*`
-identifier and suppress internal UUIDs if that display lookup is
-temporarily unavailable.
+deactivation or recovery work. Slack notices use the server-confirmed human `CAT-*`
+identifier and suppress any malformed or internal UUID reference.
 The scan excludes Gmail Sent mail and Maya's own sender address, and the acknowledgement
 gate independently refuses Maya's own address. These layered guards prevent receipt
 messages from becoming recursive accounting issues or replies.
+
+The named-agent bearer cannot choose a Linear team, project, parent, state, or assignee.
+`/api/agent/linear-orchestration` pins those fields server-side, searches every stable
+Gmail content/thread/message key before creating, repairs a missing child parent, and
+returns only a provider-confirmed CAT/PEC pair. Raw Linear authority stays off Maya's
+Orgo machine, and mailbox intake does not depend on Maya's narrower Composio Linear
+workspace visibility.
 
 `mailbox-cleanup.mjs` and `run-mailbox-cleanup.sh` provide a bounded one-shot pass over
 the existing inbox. Cleanup deliberately disables sender acknowledgements so old mail

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dueCadenceOccurrences, MAYA_CADENCE_LOOPS } from "../cadence-executor.mjs";
 import { normalizeCapabilityAction } from "../capability-executor.mjs";
-import { classifyAccountingAlias, recordCommandCenterIntake } from "../command-center-client.mjs";
+import {
+  classifyAccountingAlias,
+  ensureCommandCenterLinearPair,
+  recordCommandCenterIntake,
+} from "../command-center-client.mjs";
 import { sourceKeysForMessage } from "../linear-orchestration.mjs";
 import { catSourceBinding, isExecutableMayaIssue } from "../linear-work-executor.mjs";
 import { APPROVED } from "../policy.mjs";
@@ -114,4 +118,37 @@ test("Command Center intake is pinned, authenticated, and provider-confirmed", a
   assert.equal(request.url, "https://cc.proexteriorsus.net/api/agent/intake");
   assert.equal(request.options.headers.authorization, "Bearer fixture-token");
   assert.equal(outcome.providerReference, "work-item-1");
+});
+
+test("Command Center Linear orchestration is pinned, scoped, and provider-confirmed", async () => {
+  let request;
+  const outcome = await ensureCommandCenterLinearPair({
+    payload: {
+      sourceKeys: ["gmail-message:19fabcdef1234567"],
+      messageId: "19fabcdef1234567",
+      sourceChannel: "gmail",
+      sender: "Lucinda <accounting@proexteriorsus.com>",
+      receivedAt: "2026-08-06T16:30:00.000Z",
+      subject: "test for Maya",
+      summary: "Internal accounting test.",
+      reason: "Approved sender receipt.",
+      priority: 3,
+      attachments: [],
+    },
+    signal: new AbortController().signal,
+    expected: APPROVED,
+    token: "fixture-token",
+    fetchImpl: async (url, options) => {
+      request = { url: String(url), options };
+      return new Response(JSON.stringify({
+        status: "accepted",
+        source: { id: "58961032-e114-47f0-b5ff-de3ce8591c3c", identifier: "CAT-901", created: true },
+        work: { id: "68961032-e114-47f0-b5ff-de3ce8591c3c", identifier: "PEC-901", created: true, parentRepaired: false },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.equal(request.url, "https://cc.proexteriorsus.net/api/agent/linear-orchestration");
+  assert.equal(request.options.headers.authorization, "Bearer fixture-token");
+  assert.equal(outcome.source.reference, "CAT-901");
+  assert.equal(outcome.work.reference, "PEC-901");
 });
