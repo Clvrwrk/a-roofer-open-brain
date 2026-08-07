@@ -346,6 +346,14 @@ export async function syncJobWalk(
     const idx = jobIds.indexOf(lastWalked);
     if (idx >= 0) startIdx = idx + 1; // start AFTER the last processed job
   }
+  // Wrap-around (2026-08-07, MC-68 incident): once the cursor reached the END of an
+  // account's list, startIdx === jobIds.length and this loop never executed again —
+  // existing jobs were NEVER re-walked, freezing invoices/financials at their
+  // initial-sweep values (payments applied in AccuLynx stayed invisible for weeks).
+  // When a sweep is complete, start the next sweep from the top; D-16 still skips
+  // every unchanged job, so a wrapped pass only re-pulls jobs whose modified_date
+  // moved past their newest archive.
+  if (startIdx >= jobIds.length && jobIds.length > 0) startIdx = 0;
 
   for (let i = startIdx; i < jobIds.length; i++) {
     if (Date.now() >= deadline) break;

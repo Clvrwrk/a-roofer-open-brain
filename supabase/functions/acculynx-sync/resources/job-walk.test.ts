@@ -509,3 +509,30 @@ Deno.test("syncJobWalk — the Task 2a jobId->repName Map still returns correctl
   // job-unchanged was skipped (D-16) and therefore has no rep-map entry this run.
   assertEquals(repMap.has("job-unchanged"), false);
 });
+
+Deno.test("syncJobWalk — cursor at END of list wraps to the top (MC-68 incident, 2026-08-07)", async () => {
+  // When last_walked_job_id is the LAST job in the ordered list, the old resume
+  // logic set startIdx past the end and the walk never ran again for the account —
+  // freezing invoices/financials forever. A completed sweep must wrap to index 0.
+  const jobIds = ["job-abc", "job-def"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, {
+    "job-abc": ["inv-1"],
+    "job-def": ["inv-2"],
+  });
+  const { sb } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = {
+    account_key: "kansas_city",
+    resource_type: "job_walk",
+    last_walked_job_id: "job-def", // cursor parked on the FINAL job
+  };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const walkedFirstJob = fetchedUrls.some((u) => u.includes("/jobs/job-abc/"));
+  assertEquals(
+    walkedFirstJob,
+    true,
+    `A completed sweep must wrap and re-evaluate from the top. Fetched: ${JSON.stringify(fetchedUrls)}`,
+  );
+});
