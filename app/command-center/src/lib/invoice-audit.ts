@@ -116,6 +116,7 @@ export interface Invoice {
   salesType: string;
   po: string;
   branchCode: string;
+  vendor: string;
   branchName: string;
   office: string;
   lineCount: number;
@@ -388,7 +389,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     }
   };
 
-  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, apiPriceRows, processedRows] = await Promise.all([
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, vendorRows, apiPriceRows, processedRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
     fetchAll(() => client.from("v_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
@@ -402,6 +403,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
     // invoice_documents gate is a secondary internal signal we reconcile to this.
     fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    fetchAll(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
     // Current ABC API price per item per branch (monthly seed, migration 134).
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
     fetchOptional(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
@@ -495,8 +497,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   }
 
   const cutoff = scopeCutoffDate();
+  const vendorByInvoice = new Map<string, string>(vendorRows.map((r: any) => [String(r.invoice_number), String(r.vendor_slug)]));
   const invoices: Invoice[] = invRows.map((i) => ({
     invoiceNumber: i.invoice_number,
+    vendor: vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply",
     invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
     orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
     totalAmount: num(i.total_amount),
