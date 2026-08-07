@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 import * as Sentry from "@sentry/astro";
 import {
   buildUnauthorizedResponse,
+  isLocalOperatorFallbackAllowed,
   localActor,
   resolveActorFromSessionUser,
   resolveServiceActorFromBearer,
@@ -135,8 +136,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // 3. Dev fallback: anything but explicit workos mode keeps the Local Operator.
-  if (env.COMMAND_CENTER_AUTH_MODE !== "workos") {
+  // 3. Dev-only fallback: an explicit opt-in mode on a non-production runtime keeps the
+  //    Local Operator. Everything else (unset/typo'd mode, production) falls through to
+  //    the WorkOS check below and fails closed — see isLocalOperatorFallbackAllowed.
+  if (isLocalOperatorFallbackAllowed(env)) {
     const actor = localActor();
     locals.actor = actor;
     applySentryUser(actor);

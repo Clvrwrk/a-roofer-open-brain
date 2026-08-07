@@ -14,6 +14,12 @@
 | **Magic** | Single-use or scoped magic link token |
 | **Dev** | DevTeam service token (`dev-conductor`) only |
 
+Authentication alone is never authorization: every write route also checks that the actor is
+write-capable (`actorCanWrite` — viewers hold `departmentAccess: "all"` but are read-only) and
+that it owns the department (plus `approval.decide` where a human gate is documented), so
+neither a viewer nor a department-scoped service token can mutate another department's data. The unauthenticated Local Operator is
+dev-only and refuses to engage on a production runtime — see `isLocalOperatorFallbackAllowed`.
+
 ## API routes
 
 | Route | Methods | Auth | Write | Notes |
@@ -25,9 +31,10 @@
 | `/api/agent/linear-orchestration` | POST | Bearer (`maya-chen`/`ob-accounting`), local | yes | Server-pinned CAT source → PE-CC accounting child; no caller-selected Linear routing |
 | `/api/agentmail/webhook` | POST | Public (Svix sig) | yes | Verified signature required |
 | `/api/price-agreement/submit/[token]` | POST | Magic | yes | Vendor submission |
-| `/api/invoice-audit/*` | GET/POST | WorkOS, Bearer | mixed | Financial paths — RBAC |
-| `/api/price-agreement/*` | GET/POST | WorkOS | mixed | Human purchasing flows |
-| `/api/operations/estimate-audit/save` | POST | WorkOS | yes | Ops human |
+| `/api/invoice-audit/*` | GET/POST | WorkOS, Bearer | mixed | Financial paths — RBAC; writes require `accounting` department |
+| `/api/price-agreement/*` | GET/POST | WorkOS | mixed | Human purchasing flows; writes require `accounting` department |
+| `/api/price-agreement/package/issue-link` | POST | WorkOS | yes | Mints a vendor magic link — `accounting` + `approval.decide` (humans only; agents never issue) |
+| `/api/operations/estimate-audit/save` | POST | WorkOS | yes | Ops human; requires `operations` department |
 | `/api/performance/warm` | GET/POST | WorkOS, Bearer | no | Cache warm |
 | `/api/performance/cadence` | GET | WorkOS, Bearer | no | Activity cadence |
 | `/api/dev/activity-summary` | GET | Dev | no | DevTeam plane only |
@@ -36,7 +43,7 @@
 | `/api/vendor-territories` | GET | WorkOS | no | |
 | `/api/vendor-territories/assign` | POST | WorkOS | yes | Admin |
 | `/api/data-quality/*` | GET/POST | WorkOS | mixed | |
-| `/api/credit-memos/disposition` | POST | WorkOS | yes | |
+| `/api/credit-memos/disposition` | POST | WorkOS | yes | Requires `accounting` department |
 | `/api/order-audit/lines` | GET | WorkOS | no | |
 | `/api/product-surface.json` | GET | WorkOS | no | |
 

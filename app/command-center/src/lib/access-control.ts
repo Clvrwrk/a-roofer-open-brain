@@ -93,6 +93,9 @@ const SERVICE_AGENT_PERMISSIONS: CommandCenterPermission[] = [
 
 const VIEWER_PERMISSIONS: CommandCenterPermission[] = ["command_center.read", "work_queue.read"];
 
+/** Explicit opt-in values for the unauthenticated Local Operator path (dev only). */
+const LOCAL_OPERATOR_MODES = new Set(["local", "disabled"]);
+
 export const NAMED_AGENT_IDENTITIES: NamedAgentIdentity[] = [
   {
     id: "maya-chen",
@@ -381,6 +384,28 @@ function humanActor(
   };
 }
 
+/**
+ * The Local Operator fallback is a DEV-ONLY escape hatch: it grants full human
+ * permissions with no authentication at all. PEC-135 (2026-08-05) showed that
+ * treating "anything that is not workos" as the fallback fails open — a missing or
+ * misspelled COMMAND_CENTER_AUTH_MODE published every dashboard and API publicly for
+ * ~3.5h. The fallback therefore requires BOTH:
+ *   1. an explicit opt-in mode value ("local" or "disabled"), and
+ *   2. a non-production runtime (NODE_ENV !== "production"), unless
+ *      COMMAND_CENTER_ALLOW_LOCAL_OPERATOR is explicitly truthy.
+ * Anything else — unset, typo'd, or a production deploy — falls through to the WorkOS
+ * session check, which fails closed.
+ */
+export function isLocalOperatorFallbackAllowed(env: RuntimeEnv = getRuntimeEnv()) {
+  const mode = String(env.COMMAND_CENTER_AUTH_MODE ?? "").trim().toLowerCase();
+  if (!LOCAL_OPERATOR_MODES.has(mode)) return false;
+
+  const override = String(env.COMMAND_CENTER_ALLOW_LOCAL_OPERATOR ?? "").trim().toLowerCase();
+  if (["true", "1", "on", "yes"].includes(override)) return true;
+
+  return String(env.NODE_ENV ?? "").trim().toLowerCase() !== "production";
+}
+
 export function localActor(): CommandCenterActor {
   return {
     id: "local-operator",
@@ -590,6 +615,17 @@ export function hasPermission(actor: CommandCenterActor, permission: CommandCent
 
 export function actorCanAccessDepartment(actor: CommandCenterActor, department: DepartmentId) {
   return actor.departmentAccess === "all" || actor.departmentAccess.includes(department);
+}
+
+/**
+ * Whether an actor may mutate anything at all. Department access is NOT enough on its own:
+ * viewers carry `departmentAccess: "all"` with read-only VIEWER_PERMISSIONS, so a write route
+ * gated only by department would let a viewer mutate every department. `evidence.attach` is the
+ * marker every write-capable identity holds (humans, named agents, service agents) and viewers
+ * do not. Routes with a documented human gate check `approval.decide` on top of this.
+ */
+export function actorCanWrite(actor: CommandCenterActor) {
+  return hasPermission(actor, "evidence.attach");
 }
 
 export function actorCanAccessWork(actor: CommandCenterActor, work: WorkDefinition) {

@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, actorCanWrite, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -28,6 +28,9 @@ interface ClassifyLine {
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
+  if (!actorCanWrite(actor) || !actorCanAccessDepartment(actor, "accounting")) {
+    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot classify invoice lines." }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const invoiceNumber = String(body.invoiceNumber ?? body.invoice_number ?? "").trim();

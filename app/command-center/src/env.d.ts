@@ -16,7 +16,9 @@ interface ImportMetaEnv {
   readonly WORKOS_CLIENT_ID?: string;
   readonly WORKOS_COOKIE_PASSWORD?: string;
   readonly WORKOS_REDIRECT_URI?: string;
-  readonly COMMAND_CENTER_AUTH_MODE?: "disabled" | "workos";
+  readonly COMMAND_CENTER_AUTH_MODE?: "disabled" | "local" | "workos";
+  /** Dev-only escape hatch: allow the unauthenticated Local Operator even when NODE_ENV=production. */
+  readonly COMMAND_CENTER_ALLOW_LOCAL_OPERATOR?: string;
   readonly COMMAND_CENTER_PUBLIC_URL?: string;
   readonly AGENT_AUTH_ISSUER?: string;
   readonly AGENT_RUNTIME_URL?: string;

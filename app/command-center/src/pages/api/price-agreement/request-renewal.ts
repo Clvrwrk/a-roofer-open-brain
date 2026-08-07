@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorCanAccessDepartment, actorCanWrite, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -11,6 +11,9 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
+  if (!actorCanWrite(actor) || !actorCanAccessDepartment(actor, "accounting")) {
+    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot request agreement renewals." }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const agreementId = Number(body.agreementId ?? body.agreement_id);

@@ -42,7 +42,7 @@ npm run dev -- --port 4326
 ## Runtime notes
 
 - The app resolves environment variables from process env first, then local `.env` / `.env.local` files found by walking up from the app/runtime path. Production should use Coolify env, not repo files.
-- WorkOS is not enforced in local/default mode. Set `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, and `COMMAND_CENTER_AUTH_MODE=workos` when the real auth layer is enabled.
+- WorkOS is not enforced when `COMMAND_CENTER_AUTH_MODE` is explicitly `local`/`disabled` on a non-production runtime. Any other value — including unset or misspelled — enforces the WorkOS session, and a `NODE_ENV=production` deploy never gets the unauthenticated Local Operator unless `COMMAND_CENTER_ALLOW_LOCAL_OPERATOR` is truthy. Set `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, and `COMMAND_CENTER_AUTH_MODE=workos` for production.
 - The product surface uses server-only Supabase credentials. Set `SUPABASE_URL` or `PUBLIC_SUPABASE_URL`, plus `SUPABASE_SERVICE_ROLE_KEY`. Do not expose the service-role key with a `PUBLIC_` variable.
 - The weekly snapshot uses live Supabase mirrors only: CRM pipeline, AccuLynx job mirror health, ABC invoice/review rows, and dashboard action logs. Missing payment/QB data renders as a live empty/unavailable state, never copied screenshot numbers.
 - Agent auth discovery defaults to `https://cc.proexteriorsus.net`. Override with `COMMAND_CENTER_PUBLIC_URL` or `AGENT_AUTH_ISSUER` for another deployment origin.
