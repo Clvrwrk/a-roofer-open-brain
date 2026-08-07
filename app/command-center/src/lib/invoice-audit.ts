@@ -1000,11 +1000,14 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
   try {
     // Coverage is per (vendor, office) — an SRS invoice's button lights only if SRS
     // holds an agreement in that office (silo eval 2026-08-07; was ABC-only matview).
-    const [{ data: oav }, { data: officeRows }, { data: vendorRows2 }] = await Promise.all([
+    const [{ data: oav, error: oavError }, { data: officeRows, error: officeError }, { data: vendorRows2, error: vendorError }] = await Promise.all([
       client.from("v_office_vendor_agreements").select("office_id,vendor_id"),
       client.from("office").select("id,name"),
       client.from("vendors").select("id,slug"),
     ]);
+    if (oavError || officeError || vendorError) {
+      throw new Error(oavError?.message ?? officeError?.message ?? vendorError?.message ?? "office agreement coverage query failed");
+    }
     const officeNameById = new Map((((officeRows as any[] | null) ?? [])).map((o) => [o.id, String(o.name)]));
     const slugByVendorId = new Map((((vendorRows2 as any[] | null) ?? [])).map((v) => [v.id, String(v.slug)]));
     const coveredPairs = new Set(
@@ -1016,8 +1019,10 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
         for (const invoice of branch.invoices)
           (invoice as any).hasPriceList = coveredPairs.has(`${(invoice as any).vendor ?? "abc-supply"}@${office.office}`);
     }
-  } catch {
-    // leave hasPriceList as summarized on any failure — button stays enabled
+  } catch (error) {
+    // Non-fatal: leave hasPriceList as summarized (button stays enabled), but log it —
+    // a silently degraded coverage gate is indistinguishable from "every office covered".
+    console.warn("[invoice-audit] price-list coverage decoration failed:", error instanceof Error ? error.message : error);
   }
   return summary;
 }

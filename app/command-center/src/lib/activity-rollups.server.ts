@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportReadFailure, reportWriteFailure } from "@lib/supabase-write";
 import type { CommandCenterActorType } from "@lib/access-control";
 
 function hourBucket(date = new Date()) {
@@ -15,7 +16,8 @@ function normalizeActorType(type: CommandCenterActorType): string {
 }
 
 /**
- * Upsert hourly route rollup — fire-and-forget; failures must not block requests.
+ * Upsert hourly route rollup — fire-and-forget; failures must not block requests,
+ * but they are logged so a persistently broken rollup table is visible.
  */
 export function persistActivityRollup(pathname: string, actorType: CommandCenterActorType) {
   const route = pathname.split("?")[0] || "/";
@@ -26,32 +28,37 @@ export function persistActivityRollup(pathname: string, actorType: CommandCenter
   if (!client) return;
 
   void (async () => {
-    const { data: existing } = await client
+    const { data: existing, error: selectError } = await client
       .from("command_center_activity_rollups")
       .select("id, request_count")
       .eq("route", route)
       .eq("actor_type", actor)
       .eq("hour_bucket", bucket)
       .maybeSingle();
+    if (reportReadFailure("activity-rollups", selectError)) return;
 
     if (existing?.id) {
-      await client
+      const { error: updateError } = await client
         .from("command_center_activity_rollups")
         .update({
           request_count: (existing.request_count ?? 0) + 1,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
+      reportWriteFailure("activity-rollups", updateError);
       return;
     }
 
-    await client.from("command_center_activity_rollups").insert({
+    const { error: insertError } = await client.from("command_center_activity_rollups").insert({
       route,
       actor_type: actor,
       hour_bucket: bucket,
       request_count: 1,
     });
-  })().catch(() => undefined);
+    reportWriteFailure("activity-rollups", insertError);
+  })().catch((error) => {
+    console.error("[activity-rollups] rollup persist threw:", error instanceof Error ? error.message : error);
+  });
 }
 
 export async function fetchActivitySummary(limitHours = 168) {

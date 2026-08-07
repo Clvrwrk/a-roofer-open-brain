@@ -32,15 +32,19 @@ export const POST: APIRoute = async ({ locals, request }) => {
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
   const nowIso = new Date().toISOString();
-  const { data: existing } = await client
+  const { data: existing, error: existingError } = await client
     .from("price_agreement_proposals")
     .select("id")
     .eq("office_id", officeId).eq("vendor_id", vendorId).eq("item_number", itemNumber).eq("kind", kind).eq("status", "draft")
     .limit(1);
+  if (existingError) return jsonApiResponse({ error: "read_failed", error_description: existingError.message }, { status: 500 });
   const row = (existing as any[] | null)?.[0] ?? null;
 
   if (proposedPrice == null) {
-    if (row) await client.from("price_agreement_proposals").update({ status: "superseded", updated_at: nowIso }).eq("id", row.id);
+    if (row) {
+      const { error: clearError } = await client.from("price_agreement_proposals").update({ status: "superseded", updated_at: nowIso }).eq("id", row.id);
+      if (clearError) return jsonApiResponse({ error: "write_failed", error_description: clearError.message }, { status: 500 });
+    }
     return jsonApiResponse({ ok: true, cleared: true });
   }
 

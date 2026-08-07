@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 import { buildAgreementExport } from "@lib/agreement-export";
 import { classifyRecipients } from "@lib/outbound-guard";
 import { getRuntimeEnv } from "@lib/runtime-env";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -45,7 +46,7 @@ const handle: APIRoute = async ({ request, locals }) => {
   const humanSendRequired = !klass.ok;
 
   // Idempotent: return an already-open draft for this branch.
-  const { data: existing } = await client
+  const { data: existing, error: existingError } = await client
     .from("price_refresh_request")
     .select("id,status,created_at")
     .eq("reason", "agreement_package")
@@ -54,6 +55,7 @@ const handle: APIRoute = async ({ request, locals }) => {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (existingError) return jsonApiResponse({ error: "read_failed", error_description: existingError.message }, { status: 500 });
   if (existing) return jsonApiResponse({ ok: true, record: existing, alreadyOpen: true, humanSendRequired });
 
   const base = publicBase();
@@ -93,11 +95,13 @@ const handle: APIRoute = async ({ request, locals }) => {
   if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
 
   // Move the package into review (best-effort; no-op if no package row yet).
-  await client.from("agreement_packages").update({ status: "pending_review", updated_at: new Date().toISOString() }).eq("branch_number", branchNumber).eq("vendor", "ABC Supply Co.");
+  const { error: packageError } = await client.from("agreement_packages").update({ status: "pending_review", updated_at: new Date().toISOString() }).eq("branch_number", branchNumber).eq("vendor", "ABC Supply Co.");
+  reportWriteFailure("price-agreement/package/handoff agreement_packages", packageError);
 
   return jsonApiResponse({
     ok: true,
     record: data,
+    packageStatusUpdated: !packageError,
     draftedBy: who,
     humanSendRequired,
     recipient: exp.recipient,

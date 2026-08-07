@@ -10,6 +10,7 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } fr
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadPriceAgreementManagement } from "@lib/price-agreement-management";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -57,8 +58,9 @@ export const POST: APIRoute = async ({ locals, request }) => {
   });
 
   // Supersede any earlier snapshot for the same vendor+month, then freeze this one.
-  await client.from("price_agreement_requests").update({ status: "superseded", updated_at: nowIso })
+  const { error: supersedeError } = await client.from("price_agreement_requests").update({ status: "superseded", updated_at: nowIso })
     .eq("vendor_id", vendorId).eq("month_label", monthLabel).eq("status", "generated");
+  if (supersedeError) return jsonApiResponse({ error: "write_failed", error_description: supersedeError.message }, { status: 500 });
   const { data: inserted, error } = await client
     .from("price_agreement_requests")
     .insert({
@@ -73,8 +75,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .single();
   if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
 
-  await client.from("price_agreement_proposals").update({ status: "included", month_label: monthLabel, updated_at: nowIso })
+  // The snapshot is already committed, so failing the request here would make a retry
+  // supersede a request the caller never learned about. Report it instead.
+  const { error: includeError } = await client.from("price_agreement_proposals").update({ status: "included", month_label: monthLabel, updated_at: nowIso })
     .eq("vendor_id", vendorId).eq("status", "draft");
+  reportWriteFailure("price-agreements/generate-request price_agreement_proposals", includeError);
 
-  return jsonApiResponse({ ok: true, requestId: (inserted as any).id, monthLabel, gapCount, renewalCount });
+  return jsonApiResponse({ ok: true, requestId: (inserted as any).id, monthLabel, gapCount, renewalCount, proposalsMarkedIncluded: !includeError });
 };
