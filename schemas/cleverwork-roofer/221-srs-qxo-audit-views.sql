@@ -16,3 +16,14 @@
 -- risk vs the SRS Level-4 agreements; QXO 3 inv all No-Price (no agreements).
 -- Full applied text in Supabase migration history.
 SELECT 1; -- marker; see migration history for applied bodies
+
+-- 222 (2026-08-06, same night): Chris caught the drill-down bleed — the invoice
+-- tree hardcoded vendor=abc-supply into every Price List link, so an SRS
+-- invoice's button rendered ABC's office agreements as "the prices the audit
+-- compares against" (the ENGINE was correct; the reference surface lied).
+-- Fixes: tree passes the invoice's real vendor (lib stamps it from
+-- v_invoice_audit_invoice_vendor); invoiceVendor() payment seam maps real
+-- vendor names; migration generic_arm_strict_office_222 tightened the generic
+-- arm's office join from IS NOT DISTINCT FROM to strict equality (unknown
+-- office => No-Price, never NULL-to-NULL). Verified: SRS pricing unchanged
+-- (65 lines, $2,879.55); branch page with vendor=srs renders only SRS 0049345641.
