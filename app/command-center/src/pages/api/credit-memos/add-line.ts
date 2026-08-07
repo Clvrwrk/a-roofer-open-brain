@@ -137,6 +137,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       .insert({
         run_label: runLabel,
         invoice_number: invoiceNumber,
+        vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
         line_id: lineId,
         item_number: line.item_number,
         item_description: line.item_description,
@@ -193,6 +194,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   } else {
     await client.from("credit_memo_requests").insert({
       invoice_number: invoiceNumber,
+      vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
       request_kind: "requested",
       status: "draft",
       expected_credit: expectedCredit,
@@ -208,6 +210,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     await client.from("invoice_line_audit").insert({
       invoice_line_id: lineId,
       invoice_number: invoiceNumber,
+      vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
       item_number: line.item_number,
       audit_status: "disputed",
       decision: "discrepancy",
@@ -221,3 +224,10 @@ export const POST: APIRoute = async ({ locals, request }) => {
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ ok: true, invoiceNumber, claimId, runLabel, expectedCredit, lineCount });
 };
+
+// Silo eval 2026-08-07: single source for an invoice's vendor slug. Falls back to
+// abc-supply only when the invoice is unknown to the vendor map (should not happen).
+async function resolveInvoiceVendorSlug(client: any, invoiceNumber: string): Promise<string> {
+  const { data } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(1);
+  return (data as any[] | null)?.[0]?.vendor_slug ?? "abc-supply";
+}

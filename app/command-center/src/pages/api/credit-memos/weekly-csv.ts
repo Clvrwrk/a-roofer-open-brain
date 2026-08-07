@@ -9,6 +9,8 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
+const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
+
 export const prerender = false;
 
 const csvCell = (v: unknown) => {
@@ -29,12 +31,12 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
   const { data: requests, error: reqError } = await client
     .from("credit_memo_requests")
-    .select("invoice_number, expected_credit, packet")
+    .select("vendor_slug,invoice_number, expected_credit, packet")
     .eq("request_kind", "requested")
     .eq("status", "approved")
     .limit(1000);
   if (reqError) return jsonApiResponse({ error: "credit_memo_requests", error_description: reqError.message }, { status: 409 });
-  const vendorOf = new Map((requests ?? []).map((r) => [r.invoice_number, ((r.packet as Record<string, unknown> | null)?.vendor as string) ?? "ABC Supply"]));
+  const vendorOf = new Map((requests ?? []).map((r) => [r.invoice_number, VENDOR_LABEL[(r as any).vendor_slug ?? "abc-supply"] ?? "ABC Supply"]));
   const invoices = [...vendorOf.keys()];
   const today = new Date().toISOString().slice(0, 10);
 

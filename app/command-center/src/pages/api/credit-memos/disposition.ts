@@ -57,6 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .from("credit_memo_requests")
     .upsert({
       invoice_number: invoiceNumber,
+      vendor_slug: "abc-supply",
       request_kind: "received",
       status,
       expected_credit: Math.abs(Number((cm as any).credit_amount) || 0),
@@ -65,6 +66,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       approved_by: approved ? who : null,
       approved_at: approved ? nowIso : null,
       packet: {
+        vendor: "ABC Supply",
         match_status: (cm as any).match_status,
         matched_lines: (cm as any).matched_lines,
         mismatch_lines: (cm as any).mismatch_lines,
@@ -75,7 +77,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         note,
       },
       updated_at: nowIso,
-    }, { onConflict: "invoice_number" })
+    }, { onConflict: "vendor_slug,invoice_number,request_kind" })
     .select("invoice_number,status,approved_by,approved_at,expected_credit")
     .single();
 
