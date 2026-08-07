@@ -109,8 +109,9 @@ export function buildVendorFileName(vendor: string, date: Date) {
 
 // Vendor that owns an invoice. Today the invoice-audit pipeline is ABC Supply
 // only; this is the single seam to generalize when other vendor pipelines land.
-export function invoiceVendor(_invoice: Invoice) {
-  return "ABC Supply";
+const VENDOR_DISPLAY: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
+export function invoiceVendor(invoice: Invoice & { vendor?: string }) {
+  return VENDOR_DISPLAY[invoice.vendor ?? "abc-supply"] ?? invoice.vendor ?? "ABC Supply";
 }
 
 export function csvRows(invoices: Invoice[], detailByInvoice: Map<string, AbcInvoicePayRow>): ProcessedCsvRow[] {

@@ -1,0 +1,15 @@
+-- 220 — credit memo receipt reconciliation (Chris 2026-08-06). Applied to prod.
+-- When a vendor credit-memo document arrives in the ABC mirror (is_credit_memo,
+-- negative total, dated >= 2026-08-01), credit_memo_reconcile() matches it
+-- against open CM requests (approved/sent):
+--   exactly one request with expected_credit == -total  → request status
+--   'received' + received_* + external_credit_memo_number + packet.satisfied
+--   ("satisfied and completed"); receipt row matched_exact/review none.
+--   otherwise → credit_memo_receipts row (amount_mismatch | ambiguous |
+--   no_open_request) with review_status 'pending' → surfaces on
+--   /accounting/credit-memos/weekly for Approve (accept as satisfying the
+--   closest request) or Re-request (our request stays in the weekly email).
+-- Runs on the 15-min cron after credit_memo_claims_sync_all().
+-- Endpoint: POST /api/credit-memos/receipt-review. Full applied text in
+-- Supabase migration history as credit_memo_receipt_reconcile_220.
+SELECT 1; -- marker; see migration history for applied body
