@@ -1,0 +1,15 @@
+[Unit]
+Description=Maya diagnose -> Slack-approved repair gate pass (A3; PEC intakes -> #pe-cc-dev-team)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/maya-gate.sh run
+User=root
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

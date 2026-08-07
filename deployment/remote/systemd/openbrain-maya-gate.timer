@@ -1,0 +1,10 @@
+[Unit]
+Description=Maya gate pass every 15 minutes (diagnose new [MAYA] intakes, process Slack approvals)
+
+[Timer]
+OnCalendar=*:0/15
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
