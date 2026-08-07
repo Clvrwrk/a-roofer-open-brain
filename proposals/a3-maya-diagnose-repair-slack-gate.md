@@ -1,6 +1,6 @@
 # A3 — Maya: autonomous diagnose → Slack-approved repair (pilot: Friday WIP/AR discrepancies)
 
-**Sponsor:** Chris Hussey · **Date:** 2026-08-07 · **Status:** PROPOSED (hard rule 9 gate)
+**Sponsor:** Chris Hussey · **Date:** 2026-08-07 · **Status:** APPROVED + BUILT 2026-08-07 (Chris: channel #pe-cc-dev-team `C0BNVF99Y74`; approver = Chris only `U0B8SGJJZLJ`; Phase A auto-runs on accounting intakes; 7-day TTL). Shipped: mig 224/224b, scripts/maya-gate.{mjs,sh}, openbrain-maya-gate.timer (15-min, PE-US-AGENTS), wip-triage skill.
 **Trigger case:** PEC-186 → PEC-187 (Lucinda's MC-68 $87,007.25 report, 2026-08-07)
 
 ## 1 · Problem
