@@ -98,7 +98,9 @@ runbook.
 
 ## 9 · Open decisions for Chris
 
-1. Approval channel: **#ob-approvals** (new, private) — or an existing channel?
+1. ~~Approval channel~~ **DECIDED (Chris, 2026-08-07): `#pe-cc-dev-team`** — the standing
+   channel for ALL app/code/Linear-issue traffic, approvals included. (Maya's bot must be
+   invited; the channel isn't visible to the bot yet.)
 2. Approver allowlist: Chris only, or Chris + Chandler?
 3. Approval TTL (proposal auto-expires if unapproved after N days — suggest 7)?
 4. Phase A auto-run on every `[MAYA]` accounting intake, or only when a human adds the
