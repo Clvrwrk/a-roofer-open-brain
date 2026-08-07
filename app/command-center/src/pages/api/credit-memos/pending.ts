@@ -8,6 +8,8 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
+const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
+
 export const prerender = false;
 
 export const GET: APIRoute = async ({ locals }) => {
@@ -22,7 +24,7 @@ export const GET: APIRoute = async ({ locals }) => {
 
   const { data, error } = await client
     .from("credit_memo_requests")
-    .select("invoice_number, status, request_kind, expected_credit, line_count, packet, approved_by, approved_at")
+    .select("vendor_slug,invoice_number, status, request_kind, expected_credit, line_count, packet, approved_by, approved_at")
     .eq("request_kind", "requested")
     .in("status", ["draft", "approved"])
     .order("invoice_number")
@@ -69,7 +71,7 @@ export const GET: APIRoute = async ({ locals }) => {
       claimLines: claimTotals.get(r.invoice_number)?.total ?? 0,
       reviewedLines: claimTotals.get(r.invoice_number)?.reviewed ?? 0,
       claims: claimsByInvoice.get(r.invoice_number) ?? [],
-      vendor: (r.packet as Record<string, unknown> | null)?.vendor ?? "ABC Supply",
+      vendor: VENDOR_LABEL[(r as any).vendor_slug ?? "abc-supply"] ?? "ABC Supply",
       approvedBy: r.approved_by,
       approvedAt: r.approved_at,
     })),

@@ -123,7 +123,7 @@ if (root && dataEl && mount) {
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-inv-no">${esc(ord.orderNumber)}</span> <span class="iv-inv-sub">${dates}${ord.po ? " · PO " + esc(ord.po) : ""}${job}</span></span>
-          <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(ord.branchCode)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
+          <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(ord.branchCode)}&vendor=abc-supply" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
           <span class="iv-inv-tags">${orderTags(ord)}</span>
           ${reviewBar()}
         </summary>

@@ -27,9 +27,15 @@ export const GET: APIRoute = async ({ params, locals }) => {
     .maybeSingle()).data as { storage_bucket: string | null; storage_path: string | null } | null;
 
   // On-demand: no PDF on file → fetch live from ABC, store, and serve it.
+  // Silo eval 2026-08-07: the live-fetch path is the ABC API — only take it for
+  // ABC invoices, or a colliding SRS/QXO number would serve ABC's PDF.
   if (!doc?.storage_path) {
-    const fetched = await fetchAndStoreInvoicePdf(client, invoiceNumber).catch(() => null);
-    if (fetched) doc = { storage_bucket: fetched.bucket, storage_path: fetched.path };
+    const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(2);
+    const slugs = ((vRow as any[] | null) ?? []).map((r) => String(r.vendor_slug));
+    if (slugs.length === 0 || slugs.includes("abc-supply")) {
+      const fetched = await fetchAndStoreInvoicePdf(client, invoiceNumber).catch(() => null);
+      if (fetched) doc = { storage_bucket: fetched.bucket, storage_path: fetched.path };
+    }
   }
 
   if (!doc?.storage_path) {

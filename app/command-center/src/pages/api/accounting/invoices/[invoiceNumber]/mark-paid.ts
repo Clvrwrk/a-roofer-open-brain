@@ -106,6 +106,17 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     );
   }
 
+  // Silo eval 2026-08-07: this route reads/writes ABC tables only (abc_invoices,
+  // v_invoice_lines_complete, abc_price_observations). Refuse non-ABC invoices
+  // outright rather than 404-ing or, worse, acting on a colliding ABC number.
+  {
+    const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber);
+    const slugs = ((vRow as any[] | null) ?? []).map((r) => String(r.vendor_slug));
+    if (slugs.length && !slugs.includes("abc-supply")) {
+      return jsonApiResponse({ error: "vendor_not_supported", error_description: `mark-paid is ABC-only today; ${invoiceNumber} belongs to ${slugs.join(", ")}.` }, { status: 409 });
+    }
+  }
+
   const { data: invoiceDocument, error: documentError } = await client
     .from("invoice_documents")
     .select("id,invoice_number,payment_status,original_filename")
