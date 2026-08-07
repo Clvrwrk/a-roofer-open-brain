@@ -45,9 +45,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
   const claim = data[0] as { invoice_number: string; line_id: string | null; item_number: string | null };
   if (claim.line_id) {
     try {
+      const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", claim.invoice_number).limit(1);
       await client.from("invoice_line_audit").insert({
         invoice_line_id: claim.line_id,
         invoice_number: claim.invoice_number,
+        vendor_slug: (vRow as any[] | null)?.[0]?.vendor_slug ?? "abc-supply",
         item_number: claim.item_number,
         audit_status: reviewed ? "disputed" : "pending",
         decision: reviewed ? "discrepancy" : "reset",
@@ -57,7 +59,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
         decided_by: actor.displayName,
       });
       invalidateInvoiceAuditSummaryCache();
-    } catch { /* the review stamp is already recorded */ }
+    } catch (err) { console.error("review-line audit stamp failed:", err instanceof Error ? err.message : err); }
   }
 
   return jsonApiResponse({ lineId, invoiceNumber: claim.invoice_number, reviewed });

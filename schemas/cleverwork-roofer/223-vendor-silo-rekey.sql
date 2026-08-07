@@ -1,0 +1,29 @@
+-- 223 (+223b) — vendor-silo re-keying of the money tables + scoped functions.
+-- Applied to prod 2026-08-07 as vendor_silo_rekey_223 + vendor_scoped_money_functions_223b.
+-- Driven by the end-to-end silo eval (docs/87), Chris: "we can't have a single
+-- error, this is money."
+--
+-- Schema: credit_memo_requests + invoice_payment_processed + invoice_line_reaudit
+-- gain vendor_slug (default 'abc-supply'); the two global UNIQUE(invoice_number)
+-- constraints become UNIQUE(vendor_slug, invoice_number[, request_kind]) — two
+-- vendors' colliding invoice numbers can no longer share one CM request or one
+-- payment-ledger row.
+--
+-- Functions: credit_memo_claims_sync loops per-vendor CM rows and only reads
+-- lines OWNED by that CM's vendor (ownership tested against vendor_invoice_lines
+-- by uuid); claim rows stamp vendor_slug. vendor_payment_memo_apply reads/writes
+-- the ledger vendor-scoped. silo_assertions() recomputes every priced generic
+-- line's winning agreement and flags any vendor/office crossing plus any
+-- ledger/CM row whose vendor stamp disagrees with the invoice's true vendor;
+-- pg_cron 'nightly-silo-assertions' (09:30 UTC) logs violations to
+-- dashboard_action_log.
+--
+-- First assertion run caught 12 cancelled/$0 CM requests on SRS invoice numbers
+-- stamped abc-supply by the backfill default (Aug-5 artifacts, pre-SRS-pricing);
+-- corrected to srs with packet provenance. Post-correction: 0 violations.
+--
+-- Deferred (fail-closed today, tracked in docs/87): invoice_audit_reset vendor
+-- scoping (404s for non-ABC — safe); agreement-builder ABC-hardcoding (explicit
+-- label/refusal); invoice_pipeline_status slug normalization ('abc');
+-- dead-code deletion (invoice-payment orphans).
+SELECT 1; -- marker; full applied bodies in Supabase migration history

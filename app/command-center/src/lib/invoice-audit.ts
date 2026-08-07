@@ -767,7 +767,7 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   return progressByInvoice;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map(), vendorByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
@@ -789,11 +789,15 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const hasWork = (progress?.worked ?? auditedLines) > 0;
     const workedLines = progress?.worked ?? auditedLines; // lines decided (passed OR disputed) — docs/63 Change 1b
     const held = progress?.held ?? false; // do-not-pay hold (credit-flag line) — docs/63 Change 1b
-    const paid = arByInvoice.has(i.invoice_number)
+    const rowVendor = vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply";
+    // abc_invoices AR status only ever describes ABC's ledger — never let a
+    // colliding SRS/QXO number inherit ABC's paid state (silo eval 2026-08-07).
+    const paid = rowVendor === "abc-supply" && arByInvoice.has(i.invoice_number)
       ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
       : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
     const paymentState = derivePaymentState(processedByInvoice.get(i.invoice_number));
     const invoice: Invoice & { hasPriceList: boolean; searchText: string } = {
+      vendor: rowVendor,
       invoiceNumber: i.invoice_number,
       invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
       orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
@@ -966,7 +970,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows, vendorRowsSummary] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
@@ -981,31 +985,39 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     fetchOptionalForInvoiceAudit(() => client.from("service_warranty_audit_queue").select("invoice_number,status")),
     // Register export ledger (mig 164) — load-once stamp so an invoice isn't re-loaded to QuickBooks.
     fetchOptionalForInvoiceAudit(() => client.from("invoice_register_export").select("invoice_number,register_exported_at")),
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
   ]);
   if (invRows.length === 0) return empty;
   const transferredSet = new Set<string>((swqRows ?? []).map((r) => String(r.invoice_number)));
   const registerExportedByInvoice = new Map<string, string>(
     (registerRows ?? []).map((r) => [String(r.invoice_number), r.register_exported_at ? String(r.register_exported_at) : "1"]),
   );
-  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice);
+  const vendorByInvoiceSummary = new Map<string, string>((vendorRowsSummary ?? []).map((r: any) => [String(r.invoice_number), String(r.vendor_slug)]));
+  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice, vendorByInvoiceSummary);
   // R3 honest gate (docs/82): hasPriceList was hardcoded true, so the 📋 Price List button
   // never greyed. True value = the invoice's PE office holds at least one agreement
   // (office-inherited pricing, migration 201) — offices without agreements grey the button.
   try {
-    const [{ data: oav, error: oavError }, { data: officeRows, error: officeError }] = await Promise.all([
-      client.from("mv_office_agreement_versions").select("office_id"),
+    // Coverage is per (vendor, office) — an SRS invoice's button lights only if SRS
+    // holds an agreement in that office (silo eval 2026-08-07; was ABC-only matview).
+    const [{ data: oav, error: oavError }, { data: officeRows, error: officeError }, { data: vendorRows2, error: vendorError }] = await Promise.all([
+      client.from("v_office_vendor_agreements").select("office_id,vendor_id"),
       client.from("office").select("id,name"),
+      client.from("vendors").select("id,slug"),
     ]);
-    if (oavError || officeError) {
-      throw new Error(oavError?.message ?? officeError?.message ?? "office agreement coverage query failed");
+    if (oavError || officeError || vendorError) {
+      throw new Error(oavError?.message ?? officeError?.message ?? vendorError?.message ?? "office agreement coverage query failed");
     }
-    const officeIdsWithAgreements = new Set(((oav as any[] | null) ?? []).map((r) => r.office_id));
-    const officeNamesWithAgreements = new Set(
-      (((officeRows as any[] | null) ?? []).filter((o) => officeIdsWithAgreements.has(o.id))).map((o) => String(o.name)),
+    const officeNameById = new Map((((officeRows as any[] | null) ?? [])).map((o) => [o.id, String(o.name)]));
+    const slugByVendorId = new Map((((vendorRows2 as any[] | null) ?? [])).map((v) => [v.id, String(v.slug)]));
+    const coveredPairs = new Set(
+      (((oav as any[] | null) ?? []))
+        .map((r) => `${slugByVendorId.get(r.vendor_id) ?? "?"}@${officeNameById.get(r.office_id) ?? "?"}`),
     );
     for (const office of summary.offices) {
-      const covered = officeNamesWithAgreements.has(office.office);
-      for (const branch of office.branches) for (const invoice of branch.invoices) (invoice as any).hasPriceList = covered;
+      for (const branch of office.branches)
+        for (const invoice of branch.invoices)
+          (invoice as any).hasPriceList = coveredPairs.has(`${(invoice as any).vendor ?? "abc-supply"}@${office.office}`);
     }
   } catch (error) {
     // Non-fatal: leave hasPriceList as summarized (button stays enabled), but log it —
@@ -1060,8 +1072,14 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   const { client } = createServerSupabaseClient(env);
   if (!client) return null;
 
-  const invoiceResult = await client.from("v_invoice_audit_invoice").select("*").eq("invoice_number", wanted).maybeSingle();
-  const i = invoiceResult.data as any | null;
+  // The view is vendor-UNIONed (mig 221): a cross-vendor invoice-number collision
+  // returns 2 rows, and maybeSingle() would 500 both. Fetch up to 2 and disambiguate.
+  const invoiceResult = await client.from("v_invoice_audit_invoice").select("*").eq("invoice_number", wanted).limit(2);
+  const invoiceRows = (invoiceResult.data as any[] | null) ?? [];
+  const { data: vendorRowsDetail } = await client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug").eq("invoice_number", wanted).limit(2);
+  const detailVendors = ((vendorRowsDetail as any[] | null) ?? []).map((r) => String(r.vendor_slug));
+  const detailVendor = detailVendors.length === 1 ? detailVendors[0] : detailVendors.includes("abc-supply") ? "abc-supply" : (detailVendors[0] ?? "abc-supply");
+  const i = invoiceRows[0] ?? null;
   if (!i) return null;
 
   const lineRows = await fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("*").eq("invoice_number", wanted));
@@ -1139,8 +1157,9 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     };
   }).sort((a, b) => Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0));
 
-  const paid = ar ? ar.ar_status === "paid" : doc?.payment_status === "paid";
+  const paid = detailVendor === "abc-supply" && ar ? ar.ar_status === "paid" : doc?.payment_status === "paid";
   const invoice: Invoice = {
+    vendor: detailVendor,
     invoiceNumber: i.invoice_number,
     invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
     orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
