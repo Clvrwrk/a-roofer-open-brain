@@ -24,7 +24,7 @@ the canonical access + ops reference so we never re-discover it. Full background
 | Coolify dashboard (public HTTPS) | `https://coolify.proexteriorsus.net` |
 | Coolify admin (firewalled to admin IPs) | `http://5.78.124.10:8000` |
 | API base | `https://coolify.proexteriorsus.net/api/v1` |
-| App | `command-center`, **uuid `og0rmt02rff8qti9nlfk3nr7`**, deploys from `main`, fqdn `cc.proexteriorsus.net` |
+| App | `command-center`, **uuid `lu5txzhyoza7uuz0scwpobv7`**, deploys from `main`, fqdn `cc.proexteriorsus.net` |
 | GitHub source | `Clvrwrk/a-roofer-open-brain`; push to `main` auto-deploys (webhook → Coolify builds `app/command-center/Dockerfile`) |
 
 ## Credentials — READ THIS FIRST
@@ -37,6 +37,12 @@ They are **NOT** in `.env.agent-passwords` — that file holds the WorkOS *agent
 previously had it backwards and that cost real time.)
 Keys: `COOLIFY_PE_OPEN_BRAIN_API_KEY` (API bearer token), `COOLIFY_USER_EMAIL`,
 `COOLIFY_PASSWORD` (dashboard login).
+
+**Token history (2026-08-06):** the pre-rebuild API key died with the old Coolify host
+(rebuilt 2026-08-04 on PE.CC.DEV `178.105.220.14`). The current Root API token was minted
+2026-08-06 and lives in 1Password **CW_Master → `coolify.proexteriorsus.net - Root API`**
+(field `credential`); the commented root-`.env` line was refreshed from it. The app was
+recreated on the new instance — uuid `lu5txzhyoza7uuz0scwpobv7` (old `og0rmt02…` is gone).
 
 ### Secret-handling rules (non-negotiable)
 - **Never print a Coolify (or any) secret value into the chat transcript.** The auto-mode
@@ -55,7 +61,7 @@ Keys: `COOLIFY_PE_OPEN_BRAIN_API_KEY` (API bearer token), `COOLIFY_USER_EMAIL`,
 
 ## API cookbook
 
-All calls: header `Authorization: Bearer $KEY`. `UUID=og0rmt02rff8qti9nlfk3nr7`,
+All calls: header `Authorization: Bearer $KEY`. `UUID=lu5txzhyoza7uuz0scwpobv7`,
 `BASE=https://coolify.proexteriorsus.net/api/v1`.
 
 ```bash
