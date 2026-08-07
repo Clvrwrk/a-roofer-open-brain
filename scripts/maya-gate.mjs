@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Maya diagnose → Slack-approved repair gate (A3: proposals/a3-maya-diagnose-repair-slack-gate.md).
 //
-//   node scripts/maya-gate.mjs run          # one full pass: diagnose new intakes, then process approvals
+//   node scripts/maya-gate.mjs run          # full pass: notices, diagnose, approvals
+//   node scripts/maya-gate.mjs notices      # ticket-opened notices only
 //   node scripts/maya-gate.mjs diagnose     # phase A only
 //   node scripts/maya-gate.mjs approvals    # phase B only
+//
+// TICKET-OPENED NOTICES (Chris, 2026-08-07): every new [MAYA] intake issue
+// triggers ONE email to the original (internal) sender linking the Linear
+// ticket — "your request is now PEC-xxx and it's being worked." Deduped via
+// agent_intake_notices (mig 225); external senders are never emailed
+// (outbound-guard domain rules re-implemented here); MAYA_NOTICE_DRY_RUN=1
+// logs instead of sending.
 //
 // PHASE A — DIAGNOSE (auto, read-only):
 //   Finds [MAYA] accounting-intake issues in Linear (team PEC) that have no
@@ -100,6 +108,98 @@ async function linear(query, variables = {}) {
 }
 
 const planHash = (plan) => createHash("sha256").update(JSON.stringify(plan, Object.keys(plan).sort())).digest("hex");
+
+// ---------------------------------------------------------------------------
+// TICKET-OPENED NOTICES — one email per new [MAYA] intake, internal only
+// ---------------------------------------------------------------------------
+const AGENTMAIL_KEY = process.env.AGENTMAIL_API_KEY || "";
+const NOTICE_SENDER_INBOX = process.env.MAYA_NOTICE_SENDER_INBOX || "ob-accounting@agentmail.proexteriorsus.net";
+const NOTICE_DRY_RUN = process.env.MAYA_NOTICE_DRY_RUN === "1";
+// Mirrors app/command-center/src/lib/outbound-guard.ts DEFAULT_INTERNAL_DOMAINS.
+const INTERNAL_DOMAINS = ["proexteriorsus.com", "proexteriorsus.net", "cleverwork.io", "aia4.io"];
+const isInternalEmail = (email) => {
+  const at = String(email ?? "").trim().toLowerCase().lastIndexOf("@");
+  if (at < 0) return false;
+  const domain = email.trim().toLowerCase().slice(at + 1);
+  return INTERNAL_DOMAINS.some((d) => domain === d || domain.endsWith("." + d));
+};
+
+// Intake descriptions carry "Source sender: Name [email](mailto:email)" (PEC-186 shape).
+function extractSenderEmail(description) {
+  const m =
+    /Source sender:[^\n]*?\[([^\]\s]+@[^\]\s]+)\]/i.exec(description ?? "") ||
+    /Source sender:[^\n]*?([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i.exec(description ?? "");
+  return m ? m[1].trim() : null;
+}
+
+async function phaseNotices() {
+  const data = await linear(
+    `query($filter: IssueFilter) {
+       issues(filter: $filter, first: 25, orderBy: createdAt) {
+         nodes { id identifier title description url createdAt }
+       }
+     }`,
+    {
+      filter: {
+        team: { name: { eq: LINEAR_TEAM } },
+        title: { startsWith: "[MAYA]" },
+        createdAt: { gt: GATE_SINCE },
+      },
+    },
+  );
+  const issues = data.issues.nodes;
+  let sent = 0;
+  for (const issue of issues) {
+    const seen = await sb(`/rest/v1/agent_intake_notices?issue_identifier=eq.${issue.identifier}&select=issue_identifier&limit=1`);
+    if (seen?.length) continue;
+
+    const record = async (recipient, status, extra = {}) =>
+      sb(`/rest/v1/agent_intake_notices`, {
+        method: "POST",
+        body: { issue_identifier: issue.identifier, issue_title: issue.title, issue_url: issue.url, recipient_email: recipient ?? "(none)", status, ...extra },
+      });
+
+    const sender = extractSenderEmail(issue.description);
+    if (!sender) { await record(null, "skipped_no_sender"); log(`notices: ${issue.identifier} no sender found`); continue; }
+    if (!isInternalEmail(sender)) { await record(sender, "skipped_external", { note: "external sender — agents never email outside the company" }); log(`notices: ${issue.identifier} external sender, skipped`); continue; }
+
+    const cleanTitle = issue.title.replace(/^\[MAYA\]\s*/i, "").replace(/^Accounting intake:\s*/i, "");
+    const html =
+      `<p>Hi,</p>` +
+      `<p>Quick follow-up on your email (<em>${cleanTitle}</em>): it has been turned into a tracked ticket — ` +
+      `<a href="${issue.url}"><strong>${issue.identifier}</strong></a> — and is now in the team's work queue.</p>` +
+      `<p>You'll hear back on this thread as it progresses; the ticket link above always shows current status.</p>` +
+      `<p>— Maya Chen · Open Brain Accounting</p>`;
+
+    if (NOTICE_DRY_RUN) {
+      await record(sender, "dry_run", { note: "MAYA_NOTICE_DRY_RUN=1" });
+      log(`notices: DRY RUN — would email ${sender} for ${issue.identifier}`);
+      continue;
+    }
+    if (!AGENTMAIL_KEY) { log("notices: AGENTMAIL_API_KEY missing — skipping sends"); return; }
+    try {
+      const res = await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(NOTICE_SENDER_INBOX)}/messages/send`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${AGENTMAIL_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          to: [sender],
+          subject: `Ticket opened: ${issue.identifier} — ${cleanTitle}`,
+          html,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`agentmail ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
+      await record(sender, "sent", { agentmail_thread: json.thread_id ?? null });
+      await commentOnLinear(issue.id, `Ticket-opened notice sent to ${sender} (Maya, AgentMail thread ${json.thread_id ?? "n/a"}).`);
+      sent += 1;
+      log(`notices: sent to ${sender} for ${issue.identifier}`);
+    } catch (err) {
+      await record(sender, "failed", { note: String(err.message).slice(0, 500) });
+      log(`notices: ${issue.identifier} FAILED: ${err.message}`);
+    }
+  }
+  log(`notices: ${sent} sent`);
+}
 
 // ---------------------------------------------------------------------------
 // PHASE A — diagnose
@@ -344,6 +444,7 @@ async function phaseApprovals() {
 
 // ---------------------------------------------------------------------------
 const mode = process.argv[2] || "run";
+if (mode === "run" || mode === "notices") await phaseNotices();
 if (mode === "run" || mode === "diagnose") await phaseDiagnose();
 if (mode === "run" || mode === "approvals") await phaseApprovals();
 log("done");
