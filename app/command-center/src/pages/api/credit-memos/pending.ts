@@ -4,23 +4,19 @@
 // Approve button + CM pill, and by the weekly view header.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot view credit memos." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", forbiddenMessage: "This actor cannot view credit memos." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data, error } = await client
     .from("credit_memo_requests")

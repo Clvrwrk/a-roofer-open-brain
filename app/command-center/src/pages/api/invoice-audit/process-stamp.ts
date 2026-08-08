@@ -5,32 +5,25 @@
 // INV-PROCESSED file, docs/81 decision 2).
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { logDashboardAction, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot stamp audits complete." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot stamp audits complete." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data, error } = await client.rpc("invoice_audit_process_stamp", { p_actor: actor.displayName });
   if (error) return jsonApiResponse({ error: "process_stamp", error_description: error.message }, { status: 409 });
   const stamped = Number(data ?? 0);
 
-  await client.from("dashboard_action_log").insert({
+  await logDashboardAction(client, actor, {
     action_type: "invoice_audit_process_stamp",
-    actor_display_name: actor.displayName,
-    actor_id: actor.id,
-    actor_type: actor.type,
     decision: "mark_done",
     department: "accounting",
     payload: { stamped },

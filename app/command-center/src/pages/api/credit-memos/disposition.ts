@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { actorDisplayName, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -13,8 +12,8 @@ const RECEIVED_STATUS: Record<string, string> = { approve: "approved", review: "
 const REQUESTED_STATUS: Record<string, string> = { "mark-sent": "sent", "mark-received": "received", close: "closed" };
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const body = await request.json().catch(() => ({}));
   const invoiceNumber = String(body.invoiceNumber ?? body.invoice_number ?? "").trim();
@@ -24,11 +23,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber and a valid decision (approve|review|reject|mark-sent|mark-received|close) are required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
-  }
-  const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
+  const who = actorDisplayName(actor);
   const nowIso = new Date().toISOString();
 
   // REQUESTED-CM lifecycle: advance an existing request (no audit-view lookup).

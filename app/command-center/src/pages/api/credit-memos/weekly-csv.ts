@@ -5,9 +5,8 @@
 // Both build from APPROVED requests (drafts are excluded from the vendor packet).
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
 
@@ -19,15 +18,12 @@ const csvCell = (v: unknown) => {
 };
 
 export const GET: APIRoute = async ({ locals, url }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot download credit memo files." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", forbiddenMessage: "This actor cannot download credit memo files." });
+  if (!actor) return authError;
   const kind = url.searchParams.get("kind") === "tracker" ? "tracker" : "detail";
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data: requests, error: reqError } = await client
     .from("credit_memo_requests")

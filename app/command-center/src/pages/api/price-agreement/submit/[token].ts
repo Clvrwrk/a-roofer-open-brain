@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
+import { requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import { resolveSubmission } from "@lib/agreement-submission";
 
 export const prerender = false;
@@ -10,8 +10,8 @@ export const prerender = false;
 // token; cannot enumerate, escalate, or send. Allowlisted in middleware.ts.
 export const POST: APIRoute = async ({ params, request }) => {
   const token = String(params.token ?? "");
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const resolved = await resolveSubmission(client, token);
   if (resolved.state === "not_found") return jsonApiResponse({ error: "not_found", error_description: "Invalid link." }, { status: 404 });

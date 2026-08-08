@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import type { APIRoute } from "astro";
-import {
-  buildUnauthorizedResponse,
-  hasPermission,
-  serializeActor,
-} from "@lib/access-control";
+import { hasPermission, serializeActor } from "@lib/access-control";
+import { requireActor } from "@lib/api-guards";
 import {
   buildPendingWriteRows,
   departmentForLane,
@@ -47,8 +44,8 @@ function hashText(value: string) {
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   // Only agent actors (service/named/local) may enqueue a pending AccuLynx write.
   if (

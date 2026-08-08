@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { buildUnauthorizedResponse } from "@lib/access-control";
+import { requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 import { convertPrice, type ItemUomMap } from "@lib/uom";
 
 export const prerender = false;
@@ -12,18 +11,16 @@ const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
 // office→branch→order summary tree without lines (so it never fetches the full
 // 18.6k-line set); this returns one order's lines on expand. Read-only.
 export const GET: APIRoute = async ({ url, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
+  const { actor, response: authError } = requireActor(locals);
+  if (!actor) return authError;
 
   const orderNumber = String(url.searchParams.get("order") ?? "").trim();
   if (!orderNumber) {
     return jsonApiResponse({ error: "invalid_request", error_description: "order is required." }, { status: 400 });
   }
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const { data, error } = await client
     .from("v_order_audit_line")

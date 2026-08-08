@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
 import type { APIRoute } from "astro";
-import {
-  actorCanAccessDepartment,
-  buildUnauthorizedResponse,
-  hasPermission,
-  serializeActor,
-} from "@lib/access-control";
+import { actorCanAccessDepartment, hasPermission, serializeActor } from "@lib/access-control";
+import { dashboardActionRow, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
@@ -77,19 +72,13 @@ function hashJson(value: unknown) {
 }
 
 export const POST: APIRoute = async ({ request, params, locals }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse(
-      {
-        actor: serializeActor(actor),
-        error: "forbidden",
-        error_description: "This actor cannot mark accounting invoices paid.",
-      },
-      { status: 403 },
-    );
-  }
+  const { actor, response: authError } = requireActor(locals, {
+    department: "accounting",
+    permission: "approval.decide",
+    forbiddenMessage: "This actor cannot mark accounting invoices paid.",
+    forbiddenExtra: (a) => ({ actor: serializeActor(a) }),
+  });
+  if (!actor) return authError;
 
   const invoiceNumber = params.invoiceNumber ? decodeURIComponent(params.invoiceNumber) : "";
   if (!invoiceNumber) {
@@ -98,13 +87,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
   const body = await request.json().catch(() => ({}));
   const note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
-  const { client, config } = createServerSupabaseClient();
-  if (!client) {
-    return jsonApiResponse(
-      { error: "supabase_unconfigured", error_description: config.missing.join(", ") },
-      { status: 503 },
-    );
-  }
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   // Silo eval 2026-08-07: this route reads/writes ABC tables only (abc_invoices,
   // v_invoice_lines_complete, abc_price_observations). Refuse non-ABC invoices
@@ -324,11 +308,8 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
 
   const { data: action } = await client
     .from("dashboard_action_log")
-    .insert({
+    .insert(dashboardActionRow(actor, {
       action_type: "invoice_paid",
-      actor_display_name: actor.displayName,
-      actor_id: actor.id,
-      actor_type: actor.type,
       decision: "mark_done",
       department: "accounting",
       note,
@@ -338,7 +319,7 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       work_item_id: workItem?.id ?? null,
       work_key: workKey,
       workflow: "invoice-payment-gate",
-    })
+    }))
     .select("id,created_at")
     .single();
 

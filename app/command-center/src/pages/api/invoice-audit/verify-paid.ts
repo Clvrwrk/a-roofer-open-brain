@@ -3,22 +3,18 @@
 // paid_pending_verification -> paid_verified, stamped with verifier + time.
 
 import type { APIRoute } from "astro";
-import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
+import { logDashboardAction, requireActor, requireSupabaseClient } from "@lib/api-guards";
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
-  const actor = locals.actor;
-  if (!actor) return buildUnauthorizedResponse();
-  if (!actorCanAccessDepartment(actor, "accounting") || !hasPermission(actor, "approval.decide")) {
-    return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot verify payments." }, { status: 403 });
-  }
+  const { actor, response: authError } = requireActor(locals, { department: "accounting", permission: "approval.decide", forbiddenMessage: "This actor cannot verify payments." });
+  if (!actor) return authError;
 
-  const { client, config } = createServerSupabaseClient();
-  if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+  const { client, response: supabaseError } = requireSupabaseClient();
+  if (!client) return supabaseError;
 
   const body = (await request.json().catch(() => ({}))) as { invoiceNumber?: string };
   const invoiceNumber = typeof body.invoiceNumber === "string" ? body.invoiceNumber.trim() : "";
@@ -42,11 +38,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "not_pending_verification", error_description: "Invoice is not in Paid-pending verification." }, { status: 409 });
   }
 
-  await client.from("dashboard_action_log").insert({
+  await logDashboardAction(client, actor, {
     action_type: "invoice_payment_verified",
-    actor_display_name: actor.displayName,
-    actor_id: actor.id,
-    actor_type: actor.type,
     decision: "mark_done",
     department: "accounting",
     payload: { invoiceNumber },
