@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/6-7 marathon (PEC-183/184/185, docs/86-87):** office silo mig 217 ($3,212 bad claims retracted); QBO sync restored + token-rotation persistence; payment memos → 133 paid_verified (docs/86); CM receipt reconcile (mig 220); SRS live in audit ($2,879.55 at risk, migs 221-222); money tables re-keyed (vendor_slug, invoice_number) mig 223; **nightly `silo_assertions()` = 0**. NEXT: PEC-185 deferred hardening. Handoff: docs/handoffs/current.md.
+**8/7 PM (PEC-186/187/188):** job-walk cursor-wrap fix (mirror had frozen Jul 2 — sync walkers must WRAP); Maya gate LIVE (migs 224-225, maya-gate.mjs 15-min timer on host): auto-diagnose accounting intakes → propose in #pe-cc-dev-team → Chris `APPROVE PEC-xxx` (allowlist U0B8SGJJZLJ, plan-hash, fail closed) → whitelisted mirror_refresh only; + ticket-opened requester notices. AWAITING: Chris `APPROVE PEC-186` (gate live test). NEXT: PEC-185 deferred hardening. Handoff: docs/handoffs/current.md.
 
 ## Standing instructions (Chris)
 - **Silo doctrine: price agreement = (vendor, PE office). No pricing join crosses either; unknown office ⇒ No-Price; fail closed. Every money table keys (vendor_slug, invoice_number).**

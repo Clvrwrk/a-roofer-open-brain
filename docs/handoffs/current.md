@@ -2,106 +2,91 @@
 **Project:** a-roofers-open-brain (Command Center app + brain schemas)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net (Coolify, deploys from `main`; verify via `/healthz` `buildCommit`)
-**Date:** 2026-08-07 00:05 (CT 02:05)
+**Date:** 2026-08-08 02:10 (CT)
 **Agent:** Lead Orchestrator (Claude Code, Fable 5)
-**Reason:** User-requested wrapup + full Linear documentation
+**Reason:** User-requested wrapup + full Linear update
 
-> Prior handoff (Friday WIP/AR + PE-US-AGENTS cutover, 2026-08-06 09:15) archived under `docs/handoffs/archive/`.
-> Linear this session: PEC-180/181/182 (payment memos) + session report + learnings log (see Linear section of the wrap report).
+> Prior handoff (silo marathon, 2026-08-07 00:05) archived as `archive/2026-08-07-0005-silo-marathon.md`.
+> Linear this session: **PEC-188** (report) · **PEC-187** (cursor-wrap, Done) · **PEC-186** (closed, Maya replied) · A3 approved+built.
 
 ---
 
-## Accomplished This Session (2026-08-06 07:00 → 08-07 00:05)
+## Accomplished This Session (2026-08-07 PM → 08-08 02:10)
 
-### 1 · Friday WIP/AR horizontal scroll (deployed `0ada49f`)
-- `app/command-center/src/pages/accounting/friday-wip.astro`: `min-width:0` on `.fw-group` — round 3's `overflow-x:clip` + grid `min-width:auto` had clipped tables with no scrollbar.
+### 1 · MC-68 missing payment → job-walk cursor-wrap fix (PEC-187, deployed)
+- `supabase/functions/acculynx-sync/resources/job-walk.ts`: the resume logic ran from `last_walked_job_id` to the END of the list with **no wrap** — once an account's initial sweep completed (Jul 2), `startIdx === jobIds.length` forever and existing jobs were never re-walked. The entire invoice/financials mirror froze at initial-sweep values (0/1,660 invoices re-synced in 7+ days) while the sync looked healthy (new jobs still got first-sight walks). Fix: completed sweep wraps to index 0; D-16 still skips unchanged jobs. Regression test added (`job-walk.test.ts`, 15/15). Edge function redeployed (CLI auth via 1P `SUPABASE_ACCESS_TOKEN` item — the repo `.env` copy is stale/401).
+- Recovery: `maya_gate_cursor_jump`-style cursor park + targeted sync + `refresh_wip_ar_master()` → MC-68 board row corrected to **Collected $150,587.25 / Balance Due $137,149.75** (the $87,007.25 payment, real in QBO 7/28 and applied in AccuLynx, finally reached the mirror). Full-fleet sweep triggered; hourly cron converges the rest. Commit `1dc9da1`.
 
-### 2 · Price-agreement OFFICE silo (migs 217, 222; deployed)
-- `schemas/cleverwork-roofer/217-office-silo-legacy-shipto-arm.sql`: legacy ship-to arm office-constrained in all 4 audit views. Pre-fix: 188 cross-office lines, 94 flagged, $3,212.04 erroneous claims on 46 approved (unsent) CMs — all retracted via `credit_memo_claims_sync_all()` (24 CMs auto-cancelled; open CMs 71→47, $5,132.46→$1,920.42 exact).
-- 43 human `accept-neg` lines vs wrong-office prices reset to pending (Chris-directed one-time; 41 now No-Price, 2 in tolerance, 0 new claims). Weekly CM email rebuilt: 47 inv / 98 lines / $1,920.42, all same-office (verified 0/98 cross).
-- Mig 222: generic-arm office join → strict equality (unknown office ⇒ No-Price).
+### 2 · Maya replied to Lucinda (Chris-directed)
+- Lucinda's original email = Maya intake **PEC-186**/CAT-30 (the same MC-68 question). Maya replied from `ob-accounting@agentmail.proexteriorsus.net` to accounting@proexteriorsus.com, cc admin@cc.proexteriorsus.net + chussey@aia4.io (AgentMail thread `8dd85036…`): summary, PEC-187 link, corrected numbers, what to expect. PEC-186 → Done, related to PEC-187.
 
-### 3 · QBO re-auth + sync restored (PEC-175 closed)
-- Re-auth via Intuit OAuth **Playground** (app PE-CC-Dashboard; its registered redirect IS the playground). **Canonical creds: 1P `QBO - PROD TOKENS` (CW_Master)**, fields `QUICKBOOKS_PROD_{CLIENT_ID,CLIENT_SECRET,REFRESH_TOKEN,REALM_ID}`. First save was old values re-consolidated (caught by fingerprint compare — `op read | shasum`, never values); second save succeeded.
-- Sync ran clean; `refresh_wip_ar_master()` run manually: costs_incurred_asof Jul 27 → Aug 6, $1.19M costs over 101/115 jobs, Billed AR $777,021.55 tie intact.
-- `integrations/bridges/quickbooks/mirror-backfill.mjs`: rotated refresh tokens now persisted to master.env (atomic tmp+rename, 0600) AND process.env (mid-run rotation bug) — root cause of both token deaths. Smoke-tested on host.
+### 3 · A3 approved + BUILT: Maya diagnose → Slack-approved repair gate
+- Decisions (Chris): channel **#pe-cc-dev-team** (`C0BNVF99Y74`, Maya invited, kickoff posted); approver = **Chris only** (Slack user `U0B8SGJJZLJ` = admin@cc); Phase A auto-runs on accounting intakes; 7-day proposal TTL.
+- `schemas/cleverwork-roofer/224-agent-fix-approvals.sql` (applied, +224b): `agent_fix_approvals` fail-closed ledger (plan-hash verified, TTL, Slack ts evidence); `ob_readonly` SELECT-only role; `maya_gate_cursor_jump(account, job_id)`.
+- `scripts/maya-gate.mjs` + `maya-gate.sh`: **Phase A** diagnoses new `[MAYA] Accounting intake` issues (created after `2026-08-07T22:00Z`; the 14 pre-existing intakes grandfathered) via the wip-triage ladder (REST GETs — cannot mutate), comments Linear, posts pilot-class proposals to the channel; **Phase B** honors `APPROVE|REJECT PEC-xxx` from allowlisted Slack user IDs only, recomputes plan_hash before executing, runs ONLY the whitelisted `mirror_refresh` executor (cursor jump → targeted sync → refresh → verify), reports to channel + ledger. Code/schema changes are never auto-executed.
+- `deployment/remote/systemd/openbrain-maya-gate.{service,timer}`: every 15 min on PE-US-AGENTS (installed + enabled; first pass clean). `LINEAR_API_KEY` provisioned to host (`~/.config/cleverwork/linear.env`, from 1P).
+- `.claude/skills/wip-triage/SKILL.md`: the PEC-186/187 diagnostic ladder as a runbook.
+- **Dry-run staged:** proposal row #1 (PEC-186 replay, `mirror_refresh` MC-68) posted to #pe-cc-dev-team — **awaiting Chris's `APPROVE PEC-186`** as the live gate test.
 
-### 4 · Coolify API restored
-- New Root API token → 1P **CW_Master → `coolify.proexteriorsus.net - Root API`**; root `.env` commented line refreshed in place. **App uuid changed with the 8/4 rebuild: `lu5txzhyoza7uuz0scwpobv7`** (old `og0rmt02…` dead) — patched coolify skill, `scripts/coolify-redeploy.sh`, docs/27.
-
-### 5 · Vendor payment memos → paid-verified (docs/86, mig 218, PEC-180/181/182; deployed `d3e201a`)
-- Raw vendor-agnostic pair `vendor_payment_memos`/`_lines` keyed (vendor_slug, invoice_number) → `vendor_payment_memo_apply()` drives `invoice_payment_processed`. `POST /api/accounting/payment-memos/process` (accounting + approval.decide) refuses memos whose line sums don't tie the printed totals.
-- Backfilled May/June/July ABC memos (scans; vision-transcribed 164 lines, tied to the penny + 164/164 in mirror): **133 invoices paid_verified** (incl. 2009332466-001 flipped from `returned_reason='testing'`), 31 credit docs recorded. Paid-pending-verification 75→20. Idempotency + totals-guard proven live.
-- ⚠️ July scan p4 shows the **Amex CVV in the clear** — Chris to redact Dropbox copy (noted PEC-182).
-
-### 6 · CM receipt reconciliation (mig 220; deployed `bc173f6`)
-- `credit_memo_receipts` + `credit_memo_reconcile()` on the 15-min cron: arriving CM docs (≥2026-08-01) exact-match open requests → request `received`/satisfied + `external_credit_memo_number`; mismatch/ambiguous/no-request → pending receipt on `/accounting/credit-memos/weekly` with **Approve / Re-request** buttons (`/api/credit-memos/receipt-review`). Queue starts empty (no credits arrived yet).
-
-### 7 · SRS/QXO lit up in Invoice Audit (migs 221/221b; deployed `bc173f6`)
-- Audit views UNION `vendor_invoices`; generic pricing arm vendor- AND office-siloed; `invoice_line_audit.vendor_slug` collision guard; `v_invoice_audit_invoice_vendor` map. Live: SRS 30 inv/242 lines → 12 flagged, **$2,879.55 at risk** vs SRS L4 agreements (177 No-Price); QXO 3 inv No-Price (= valid, no agreements). Open Invoices 270→303.
-
-### 8 · End-to-end vendor-silo eval (docs/87, mig 223; deployed `0b39bc2`) — Chris mandate "zero errors, this is money"
-- Two exhaustive sweeps (59 links/routes + all write paths). **Critical: mig-222's vendor fix had landed in dead code** — live loaders never stamped `Invoice.vendor`; fixed in `loadFreshInvoiceAuditSummary` + `loadInvoiceAuditInvoiceDetail` and verified through the live page payload (30×"srs", 3×"qxo").
-- Mig 223: `credit_memo_requests` + `invoice_payment_processed` re-keyed `(vendor_slug, invoice_number[, request_kind])`; `invoice_line_reaudit.vendor_slug`; claims-sync vendor-scoped per-CM (223b); payment-memo apply vendor-scoped.
-- App: classify/review-line/add-line stamp `vendor_slug` (+ line↔invoice ownership check); AR-paid gated to ABC; 📋 gate per (vendor,office) via `v_office_vendor_agreements`; PDF ABC-fallback gated; mark-paid refuses non-ABC; order-audit link explicit vendor; detail fetch collision-safe.
-- **`silo_assertions()`** + nightly pg_cron (09:30 UTC → `dashboard_action_log`, workflow `silo-assertions`). First run caught 12 mislabeled (cancelled/$0) SRS CM requests — corrected with packet provenance. **Current: 0 violations.**
+### 4 · Ticket-opened notices (mig 225, deployed `730d3f0`)
+- `schemas/cleverwork-roofer/225-agent-intake-notices.sql` (applied): `agent_intake_notices` dedupe/audit ledger.
+- `scripts/maya-gate.mjs` `notices` phase: every new `[MAYA]` intake → ONE email to the original internal sender with the Linear ticket link ("your request is now PEC-xxx and is being worked"); external senders recorded-and-skipped, never emailed; `MAYA_NOTICE_DRY_RUN=1` supported; Linear gets a "notice sent" comment. Dry-run verified against PEC-186 (parsed `accounting@proexteriorsus.com`, sent nothing). Live on the 15-min timer.
 
 ## Git State
 - **Branch:** `main` == `origin/main`
-- **Last commit:** `0b39bc2` — "fix(invoice-audit): end-to-end vendor-silo eval …" (this handoff commits after)
-- **Uncommitted changes:** only this handoff + wrap docs (committed as part of wrapup)
-- Migrations applied to prod this session: **217, 218 (payment memos), 220, 221/221b, 222, 223/223b** (+ parallel session's 218-maya/219 — note: two files named `218-*`, cosmetic)
-- Deploys: `0ada49f`, `31a2f9d`(=217 docs), `d3e201a`, `bc173f6`, `9ddabf9`, `0b39bc2` — all verified via `/healthz`.
+- **Last commit:** `99ba90f` — "docs(memory): session 9 — ticket-opened notices live" (this handoff commits after)
+- **Uncommitted changes:** only this handoff (committed as part of wrapup)
+- Migrations applied this session: **224, 224b, 225**. Edge function `acculynx-sync` redeployed (v48+).
 
 ## Task Cut Off
-None — session ended at a clean boundary (silo eval wave deployed and verified).
+None — clean boundary. All four workstreams deployed and verified.
 
 ## Next Task — Start Here
 
-**Task:** docs/87 deferred silo hardening (before SRS goes deeper into the CM flow)
-**What to check / do:**
-1. `invoice_audit_reset` vendor scoping (today fails-closed/404 for non-ABC — safe but blocks SRS resets).
-2. `add-line` office/agreement context generic arm (SRS CM claims currently get null office/agreement metadata).
-3. Delete dead code carrying old defaults: `lib/invoice-payment.ts` orphans, `loadInvoiceAudit`/`loadFreshInvoiceAudit`, `loadDecisionDetailCsv`.
-4. Add a real typechecker to `check` (`astro check`/tsc) — the dead-code miss would have been a compile error.
-5. Normalize `invoice_pipeline_status.vendor_slug` `'abc'` → `'abc-supply'`; label Agreement Builder ABC-only.
+Two open threads; pick by Chris's priority:
 
-**If a silo violation alert appears** (dashboard_action_log workflow `silo-assertions`): treat as a stop-the-line bug; run `select * from silo_assertions();` and trace before any CM/payment action.
+**Thread A (pending Chris, zero dev work):** the gate's live test — Chris replies `APPROVE PEC-186` in #pe-cc-dev-team; the next 15-min pass executes and reports. If it misbehaves: `journalctl -u openbrain-maya-gate.service` on PE-US-AGENTS + `select * from agent_fix_approvals;`.
 
-**Prompt to use:** "Read docs/handoffs/current.md and docs/87-vendor-silo-eval.md §Deferred. Implement the deferred silo hardening items 1–5, verifying each through the live call path."
+**Thread B (the standing dev task, unchanged from the prior handoff):** **PEC-185 deferred silo hardening** (docs/87 §Deferred, items 1–5): invoice_audit_reset vendor scoping; add-line generic office/agreement context; dead-code deletion (`lib/invoice-payment.ts` orphans, `loadInvoiceAudit`/`loadFreshInvoiceAudit`, `loadDecisionDetailCsv`); real typechecker in `check`; `invoice_pipeline_status.vendor_slug` `'abc'`→`'abc-supply'` normalization.
+
+**Prompt to use:** "Read docs/handoffs/current.md and docs/87-vendor-silo-eval.md §Deferred. Implement the deferred silo hardening items 1–5 (PEC-185), verifying each through the live call path."
 
 ## Decisions Made This Session
 
-- **Office silo outranks no-regression** (Chris): agreements are office-specific due to regional pricing; unknown office ⇒ No-Price. Mirrors the vendor silo one level down.
-- **Payment memos flow through raw vendor-agnostic tables first** (Chris); `(vendor_slug, invoice_number)` populates the working table — never parse→working directly.
-- **Memo endpoint refuses untied totals** — transcription errors cannot reach the books.
-- **CM satisfied = exact amount match, exactly one candidate**; everything else needs a human (Approve / Re-request).
-- **One-time human-approval cleanups get explicit ledger provenance** (43-line reset; returned-row flip; 12 CM vendor corrections) — the normal gates stay for new work.
-- **1P consolidation:** `QBO - PROD TOKENS` and `coolify.proexteriorsus.net - Root API` are canonical; per-var QBO items are legacy.
+- **#pe-cc-dev-team (`C0BNVF99Y74`) is THE channel for all app/code/Linear-issue Slack traffic** — approvals included; no new channels (superseded the proposed #ob-approvals). Recorded in MEMORY.md + slack-agents skill.
+- **Approval = Slack user ID allowlist (U0B8SGJJZLJ), exact-phrase `APPROVE PEC-xxx`, plan-hash-bound, 7-day expiry, fail closed.** Display names never count; a changed plan re-requires approval.
+- **Only whitelisted plan types auto-execute** (`mirror_refresh`). Approvals on code/schema plans are recorded go-aheads for humans, never auto-run.
+- **Requester notice on every intake ticket** — internal senders only, one per ticket ever, dry-run-testable.
+- **Sync walkers must wrap** — a cursor that parks at end-of-list is a silent freezer (PEC-187 class). Regression-test the wrap.
+- **Grandfather pre-existing queue items** when arming a new automation (MAYA_GATE_SINCE cutoff) — never let a go-live spam the backlog.
 
 ## Blockers Requiring Human Action
 
-1. **Redact the Amex CVV** from `08042026_ABC Supply.pdf` p4 in Dropbox; crop payment-method pages from future memo scans.
-2. None else — QBO restored, Coolify restored.
+1. **Chris: `APPROVE PEC-186` in #pe-cc-dev-team** — fires the gate's live end-to-end test (harmless near-no-op replay).
+2. **Redact the Amex CVV** from `08042026_ABC Supply.pdf` p4 in Dropbox (carried from prior handoff).
+3. **Repo `.env` hygiene (agent barred from editing):** refresh `SUPABASE_ACCESS_TOKEN` (working copy is in 1P `SUPABASE_ACCESS_TOKEN` item) and fix line 214 `SLACK_APP_ID_ROWAN` missing `=` (host copy already fixed).
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts `0b39bc2`.
-2. SQL: `select count(*) from silo_assertions();` — **0**.
-3. SQL: `select status, count(*), round(sum(expected_credit),2) from credit_memo_requests where request_kind='requested' and status in ('draft','approved') group by 1;` — approved 47 / $1,920.42.
-4. SQL: `select max(costs_incurred_asof) from wip_ar_master;` — ≥ 2026-08-06 (nightly QBO keeps it current).
-5. `cd app/command-center && npm run build && npx vitest run` — Complete!, 293/293.
-6. `curl -s "http://localhost:4399/accounting/invoice-audit" | grep -c '"vendor":"srs"'` (dev) — 30.
+1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `origin/main` HEAD.
+2. `ssh -i ~/.ssh/hetzner_office root@178.156.203.23 'systemctl list-timers | grep openbrain'` — abc 07:30 · qbo 01:00 · wip-pack 11:00 · jt-sentinel 17:00 · **maya-gate every 15 min** (UTC).
+3. SQL: `select issue_identifier, status from agent_fix_approvals;` — row 1 = PEC-186 (proposed → approved/executed after Chris's reply).
+4. SQL: `select count(*) from acculynx_invoices where synced_at > now() - interval '1 day';` — climbing as the wrapped walk converges (was 0/1,660 in 7d pre-fix).
+5. SQL: `select count(*) from silo_assertions();` — **0**.
+6. SQL: `select max(costs_incurred_asof) from wip_ar_master;` — ≥ yesterday (nightly QBO).
 
 ## Full Context
 
 ### What was built across ALL sessions (running list — never delete)
-- OB1 memory spine; property-first schemas; UOM pricing contract (docs/46, migs 119–122); ABC invoice/order/estimate audit surfaces; territory map + WorkOS gating + agent service tokens; AccuLynx→JobTread gated write queue; QuickBooks read-only mirror (docs/74); Slack agent identities; AgentMail; Maya accounting inbox + CAT-first runtime (parallel session 8/6); Invoice Audit v2 (docs/81, migs 197–203); docs/82 remediation R1–R6; docs/83 Price Agreement Management; docs/84 GUI audit; Friday WIP/AR live board (docs/85, migs 215–216) + nightly Excel pack + Maya email + CPA accrual inputs; PE-US-AGENTS host (178.156.203.23), QBO nightly sync w/ token-rotation persistence; **office silo (migs 217/222) + $3,212.04 claim retraction; vendor payment memos (docs/86, mig 218) w/ 133 invoices paid-verified; CM receipt reconciliation (mig 220); SRS/QXO in Invoice Audit (migs 221) — SRS $2,879.55 at risk; vendor-silo re-key of money tables (mig 223) + nightly silo_assertions() guard (docs/87).**
+- OB1 memory spine; property-first schemas; UOM pricing contract (docs/46, migs 119–122); ABC invoice/order/estimate audit surfaces; territory map + WorkOS gating + agent service tokens; AccuLynx→JobTread gated write queue; QuickBooks read-only mirror (docs/74); Slack agent identities; AgentMail; Maya accounting inbox + CAT-first runtime (parallel session 8/6); Invoice Audit v2 (docs/81, migs 197–203); docs/82 remediation R1–R6; docs/83 Price Agreement Management; docs/84 GUI audit; Friday WIP/AR live board (docs/85, migs 215–216) + nightly Excel pack + Maya email + CPA accrual inputs; PE-US-AGENTS host (178.156.203.23), QBO nightly sync w/ token-rotation persistence; office silo (migs 217/222) + $3,212.04 claim retraction; vendor payment memos (docs/86, mig 218) w/ 133 invoices paid-verified; CM receipt reconciliation (mig 220); SRS/QXO in Invoice Audit (migs 221) — SRS $2,879.55 at risk; vendor-silo re-key of money tables (mig 223) + nightly silo_assertions() guard (docs/87); **AccuLynx job-walk wrap fix (PEC-187); Maya diagnose→Slack-approved repair gate (A3, migs 224/225, maya-gate.mjs on 15-min timer) + ticket-opened requester notices.**
 
 ### Architecture decisions
 - Pricing: office-inherited, invoice-date-effective, evergreen (PAEXP), lowest-price-wins **within the (vendor, office) silo**; ship-to matches survive only office-constrained.
 - Every money table keys `(vendor_slug, invoice_number)` — invoice numbers are NOT globally unique. Vendor slug vocabulary = `vendors.slug` (`abc-supply`, `srs`, `qxo`); `invoice_pipeline_status` still carries legacy `'abc'` (deferred normalization).
 - `v_invoice_audit_invoice_vendor` is the one vendor-lookup seam for UI/API; `lib/branch-price-list.ts` and `price-agreements/propose` are the reference silo implementations.
-- 15-min cron: matview refresh → `credit_memo_claims_sync_all()` → `credit_memo_reconcile()`. Nightly 09:30 UTC: `silo_assertions()` → action log.
+- 15-min crons: matview refresh → `credit_memo_claims_sync_all()` → `credit_memo_reconcile()` (pg_cron); **maya-gate pass (systemd, PE-US-AGENTS)**. Nightly 09:30 UTC: `silo_assertions()` → action log.
+- AccuLynx sub-resources (invoices/financials/milestones) refresh ONLY inside the job-walk (D-15 first-sight / D-16 change-driven / wrap on completed sweep) — the hourly headline resources do not include them.
+- Friday WIP/AR: computed columns belong to `refresh_wip_ar_master()`; human columns belong to the meeting; update API allowlist-only.
+- **Agent repair actions: fail-closed approval ledger (`agent_fix_approvals`) — Slack-ID allowlist, plan-hash bound, whitelisted executors only.**
 
 ### Key invariants (never violate)
 - Additive/idempotent migrations only; archive, never delete.
@@ -109,8 +94,9 @@ None — session ended at a clean boundary (silo eval wave deployed and verified
 - Compare prices only in the pricing UOM via `price_per_uom` (docs/46).
 - Sent/received CMs are history; only draft/approved change.
 - `main` is the only deploy branch; verify `/healthz` after every push. **A fix isn't fixed until verified through the LIVE call path.**
-- QBO read-only forever; agents never email external domains.
+- QBO read-only forever; **agents never email external domains** (outbound-guard in-app; mirrored host-side in maya-gate).
 - Never send Σ N to a lender — billed AR (Σ Q) is the receivable.
+- **Nothing mutating runs from the Maya gate without an allowlisted `APPROVE PEC-xxx` whose plan hash matches.**
 
 ### Service / deployment map
 | Service | Detail |
@@ -118,7 +104,9 @@ None — session ended at a clean boundary (silo eval wave deployed and verified
 | Prod app | https://cc.proexteriorsus.net — Coolify app uuid **`lu5txzhyoza7uuz0scwpobv7`** (post-8/4-rebuild), builds `app/command-center/Dockerfile` from `main` |
 | Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` |
 | Deploy check | `GET /healthz` → `buildCommit` (~30–90s, ~300s cold) |
-| Agent host | PE-US-AGENTS `178.156.203.23` (root, `~/.ssh/hetzner_office`); repo `/opt/openbrain/a-roofers-open-brain`; timers: abc 07:30 UTC · qbo nightly 01:00 UTC · wip-pack 11:00 UTC · jt-sentinel 17:00 UTC |
-| Secrets | 1P CW_Master via `op`: **`QBO - PROD TOKENS`**, **`coolify.proexteriorsus.net - Root API`**; provisioning: `op inject` → 600-perm scratch → `scp` → delete |
-| Linear | team PE-CC-DevTeam; this session: PEC-180/181/182 + session report + learnings issues |
+| Edge functions | `supabase functions deploy <fn> --project-ref rnhmvcpsvtqjlffpsayu` with `SUPABASE_ACCESS_TOKEN` from 1P (repo `.env` copy stale); MCP deploy tool unusable for multi-file arrays (schema-stripped) |
+| Agent host | PE-US-AGENTS `178.156.203.23` (root, `~/.ssh/hetzner_office`); repo `/opt/openbrain/a-roofers-open-brain`; timers: abc 07:30 UTC · qbo nightly 01:00 UTC · wip-pack 11:00 UTC · jt-sentinel 17:00 UTC · **maya-gate */15** |
+| Secrets | 1P CW_Master via `op`: `QBO - PROD TOKENS`, `coolify.proexteriorsus.net - Root API`, `SUPABASE_ACCESS_TOKEN`, `LINEAR_API_KEY`, `AGENTMAIL_API_KEY`; provisioning: `op inject` → 600-perm scratch → `scp` → delete |
+| Slack | workspace pe-command-center; **#pe-cc-dev-team `C0BNVF99Y74` = all app/code/Linear traffic + approvals**; Maya bot `MAYA_CHEN_BOT_TOKEN`; approver allowlist `U0B8SGJJZLJ` |
+| Linear | team PE-CC-DevTeam; this session: PEC-186 (Done) / PEC-187 (Done) / PEC-188 (report) |
 | Dev server | `.claude/launch.json` — port **4399** (4321 taken by Cursor) |
