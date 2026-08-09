@@ -36,6 +36,7 @@ export const navDepartments: NavDepartment[] = [
     items: [
       { label: "Invoice Audit", href: "/accounting/invoice-audit", status: "built" },
       { label: "Friday WIP/AR", href: "/accounting/friday-wip", status: "built", note: "Live AR meeting board · Thursday pack · Maya email (docs/85)" },
+      { label: "QB Bank Export", href: "/accounting/qb-bank-export", status: "built", note: "Per-vendor bank-ledger CSVs (invoices · CM-TBD · credit memos) — human loads into QB (mig 226)" },
       { label: "Fleet Audit", status: "soon" },
       { label: "Tools Audit", status: "soon", note: "Software, subscriptions" },
       { label: "Business Expense Audit", status: "soon", note: "Insurance, CPA, advisors, compliance" },

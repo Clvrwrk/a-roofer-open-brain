@@ -1,0 +1,87 @@
+---
+// QB bank-ledger CSV export (mig 226, Chris directive 2026-08-09).
+// One card per CM_VENDORS vendor: pending row counts, Preview download, and
+// "Download & mark exported" (stamps qb_bank_export_log so rows go to QB once).
+// The HUMAN loads the file into QuickBooks — QBO stays read-only (hard rule 13).
+import AppShell from "../../layouts/AppShell.astro";
+import { CM_VENDORS } from "@lib/cm-vendor-roster";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+
+const { client } = createServerSupabaseClient();
+
+interface Batch { batch_id: string; vendor_slug: string; exported_at: string; exported_by: string | null; rows: number; }
+let recentBatches: Batch[] = [];
+if (client) {
+  const { data } = await client
+    .from("qb_bank_export_log")
+    .select("batch_id, vendor_slug, exported_at, exported_by")
+    .order("exported_at", { ascending: false })
+    .limit(500);
+  const byBatch = new Map<string, Batch>();
+  for (const r of data ?? []) {
+    const b = byBatch.get(r.batch_id) ?? { batch_id: r.batch_id, vendor_slug: r.vendor_slug, exported_at: r.exported_at, exported_by: r.exported_by, rows: 0 };
+    b.rows += 1;
+    byBatch.set(r.batch_id, b);
+  }
+  recentBatches = [...byBatch.values()].slice(0, 12);
+}
+const fmt = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+---
+
+<AppShell title="QB Bank Export" eyebrow="Accounting" activePage="accounting">
+  <section class="qbx">
+    <h1>QB Bank-Ledger Export</h1>
+    <p class="qbx-note">
+      Per-vendor CSVs for the QuickBooks bank-transaction pending window. Rows: new invoices
+      (<code>VENDOR-INV#…</code>, Spent), pending credit-memo QA lines (<code>CM-TBD-INV#…</code>, Received =
+      requested credit — proves the vendor credit eventually arrives), and actual credit memos
+      (<code>CMINV#…-OriginalINV#…</code>, Received). Check&nbsp;No = AccuLynx job # + customer last name.
+      <b>Preview</b> never records anything; <b>Download &amp; mark exported</b> stamps each row so it is only
+      handed to QB once. A human loads the file into QuickBooks — nothing here writes to QBO.
+    </p>
+    <div class="qbx-cards">
+      {CM_VENDORS.map((v) => (
+        <div class="qbx-card">
+          <h2>{v.label} <span class="qbx-slug">{v.acronym} ledger</span></h2>
+          <div class="qbx-actions">
+            <a class="qbx-btn qbx-secondary" href={`/api/accounting/qb-bank-csv?vendor=${encodeURIComponent(v.slug)}&mode=preview`} download>Preview CSV</a>
+            <a class="qbx-btn" href={`/api/accounting/qb-bank-csv?vendor=${encodeURIComponent(v.slug)}&mode=export`} download
+              title="Downloads the CSV and stamps every row as exported — rows will not appear again">Download &amp; mark exported</a>
+          </div>
+        </div>
+      ))}
+    </div>
+    <h3>Recent export batches</h3>
+    {recentBatches.length === 0 ? (
+      <p class="qbx-empty">No exports yet.</p>
+    ) : (
+      <table class="qbx-table">
+        <thead><tr><th>When</th><th>Vendor</th><th class="num">Rows</th><th>By</th></tr></thead>
+        <tbody>
+          {recentBatches.map((b) => (
+            <tr><td>{fmt(b.exported_at)}</td><td>{b.vendor_slug}</td><td class="num">{b.rows}</td><td>{b.exported_by ?? "—"}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+  </section>
+</AppShell>
+
+<style>
+  .qbx{padding:8px 4px 40px;max-width:860px}
+  .qbx h1{font-size:22px;margin:0 0 8px}
+  .qbx-note{font-size:13px;color:#6b7886;line-height:1.55;margin:0 0 18px}
+  .qbx-note code{font-size:12px}
+  .qbx-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:26px}
+  .qbx-card{border:1px solid #e3e8ef;border-radius:12px;background:#fff;padding:14px}
+  .qbx-card h2{font-size:15px;margin:0 0 10px}
+  .qbx-slug{color:#6b7886;font-size:12px;font-weight:400;margin-left:6px}
+  .qbx-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .qbx-btn{border:1px solid #5b46d8;background:#5b46d8;color:#fff;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;text-decoration:none}
+  .qbx-btn.qbx-secondary{background:transparent;color:#5b46d8}
+  .qbx h3{font-size:15px;margin:0 0 8px}
+  .qbx-empty{color:#6b7886;font-size:13px}
+  .qbx-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  .qbx-table th,.qbx-table td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
+  .qbx-table th.num,.qbx-table td.num{text-align:right}
+</style>
