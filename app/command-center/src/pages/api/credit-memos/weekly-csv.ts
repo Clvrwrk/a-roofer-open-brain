@@ -7,6 +7,7 @@
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
+import { cmVendorBySlug } from "@lib/cm-vendor-roster";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
@@ -25,16 +26,19 @@ export const GET: APIRoute = async ({ locals, url }) => {
     return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot download credit memo files." }, { status: 403 });
   }
   const kind = url.searchParams.get("kind") === "tracker" ? "tracker" : "detail";
+  // Multi-vendor pill (docs/88): ?vendor=<slug> scopes both downloads to one vendor.
+  const vendorParam = cmVendorBySlug(url.searchParams.get("vendor"))?.slug ?? null;
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
-  const { data: requests, error: reqError } = await client
+  let reqQuery = client
     .from("credit_memo_requests")
     .select("vendor_slug,invoice_number, expected_credit, packet")
     .eq("request_kind", "requested")
-    .eq("status", "approved")
-    .limit(1000);
+    .eq("status", "approved");
+  if (vendorParam) reqQuery = reqQuery.eq("vendor_slug", vendorParam);
+  const { data: requests, error: reqError } = await reqQuery.limit(1000);
   if (reqError) return jsonApiResponse({ error: "credit_memo_requests", error_description: reqError.message }, { status: 409 });
   const vendorOf = new Map((requests ?? []).map((r) => [r.invoice_number, VENDOR_LABEL[(r as any).vendor_slug ?? "abc-supply"] ?? "ABC Supply"]));
   const invoices = [...vendorOf.keys()];
@@ -71,7 +75,8 @@ export const GET: APIRoute = async ({ locals, url }) => {
     }
   }
 
-  const name = kind === "tracker" ? `credit_memo_request_tracker_${today}.csv` : `credit_memo_reconciliation_${today}.csv`;
+  const vendorTag = vendorParam ? `${vendorParam.replace(/[^a-z0-9]+/gi, "_")}_` : "";
+  const name = kind === "tracker" ? `credit_memo_request_tracker_${vendorTag}${today}.csv` : `credit_memo_reconciliation_${vendorTag}${today}.csv`;
   return new Response(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
