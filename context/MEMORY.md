@@ -2,7 +2,8 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/7 PM (PEC-186/187/188):** job-walk cursor-wrap fix (mirror had frozen Jul 2 — sync walkers must WRAP); Maya gate LIVE (migs 224-225, maya-gate.mjs 15-min timer on host): auto-diagnose accounting intakes → propose in #pe-cc-dev-team → Chris `APPROVE PEC-xxx` (allowlist U0B8SGJJZLJ, plan-hash, fail closed) → whitelisted mirror_refresh only; + ticket-opened requester notices. AWAITING: Chris `APPROVE PEC-186` (gate live test). NEXT: PEC-185 deferred hardening. Handoff: docs/handoffs/current.md.
+**8/9 (PEC-189..192):** Cleanup done (1,033 ABC No-Price approved as Chris; 47 CMs $1,920.42 sent; 15 QXO auto-approved). Multi-vendor CM pill live (cm-vendor-roster.ts seam, docs/88). QB bank CSV live (/accounting/qb-bank-export, mig 226; CM-TBD lines = arrives-QA). SRS parity: audit epic **PEC-191** — fixed migs 227/227b (vendor-scoped reset) + endpoint scoping + srs run restamp; NEXT: G1 SRS claim gen, G2/G3 add-line ctx (matview risk), G4 reconcile — read docs/89 first. PEC-185→epic. AWAITING `APPROVE PEC-186`.
+
 
 ## Standing instructions (Chris)
 - **Silo doctrine: price agreement = (vendor, PE office). No pricing join crosses either; unknown office ⇒ No-Price; fail closed. Every money table keys (vendor_slug, invoice_number).**
