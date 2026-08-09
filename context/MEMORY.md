@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/9 (PEC-189..192):** Cleanup done (1,033 ABC No-Price approved as Chris; 47 CMs $1,920.42 sent; 15 QXO auto-approved). Multi-vendor CM pill live (cm-vendor-roster.ts seam, docs/88). QB bank CSV live (/accounting/qb-bank-export, mig 226; CM-TBD lines = arrives-QA). SRS parity: audit epic **PEC-191** — fixed migs 227/227b (vendor-scoped reset) + endpoint scoping + srs run restamp; NEXT: G1 SRS claim gen, G2/G3 add-line ctx (matview risk), G4 reconcile — read docs/89 first. PEC-185→epic. AWAITING `APPROVE PEC-186`.
+**8/9 (PEC-189..192):** Cleanup done (1,033 ABC No-Price→Chris; 47 CMs $1,920.42 sent; 15 QXO auto). Multi-vendor CM pill live (cm-vendor-roster.ts seam, docs/88). QB bank CSV live (/accounting/qb-bank-export, mig 226; CM-TBD lines = arrives-QA). SRS parity: audit epic **PEC-191** — fixed migs 227/227b (vendor-scoped reset) + endpoint scoping + srs run restamp; NEXT: G1 SRS claim gen, G2/G3 add-line ctx (matview risk), G4 reconcile — read docs/89 first. PEC-185→epic. AWAITING `APPROVE PEC-186`.
 
 
 ## Standing instructions (Chris)
