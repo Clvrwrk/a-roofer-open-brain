@@ -4,7 +4,12 @@
 // vendor-specific HTML request email(s) (approved invoices only; drafts listed but
 // excluded from the email) with downloads for the reconciliation spreadsheet + tracker.
 import AppShell from "../../../layouts/AppShell.astro";
+import { cmVendorBySlug, cmVendorLabel } from "@lib/cm-vendor-roster";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+
+// Multi-vendor pill (docs/88): ?vendor=<slug> scopes this page (and its downloads)
+// to one vendor; without it the page renders every vendor's email as before.
+const vendorParam = cmVendorBySlug(Astro.url.searchParams.get("vendor"))?.slug ?? null;
 
 interface CmLine {
   id: number; invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
@@ -22,33 +27,37 @@ interface CmReceipt {
 }
 let pendingReceipts: CmReceipt[] = [];
 if (client) {
-  const { data: receiptRows } = await client
+  let receiptQuery = client
     .from("credit_memo_receipts")
     .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
-    .eq("review_status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(200);
+    .eq("review_status", "pending");
+  if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
+  const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
   pendingReceipts = (receiptRows ?? []) as CmReceipt[];
-  const { data: reqRows } = await client
+  let reqQuery = client
     .from("credit_memo_requests")
-    .select("invoice_number, status, expected_credit, packet")
+    .select("invoice_number, vendor_slug, status, expected_credit, packet")
     .eq("request_kind", "requested")
-    .in("status", ["draft", "approved"])
-    .order("invoice_number")
-    .limit(1000);
+    .in("status", ["draft", "approved"]);
+  if (vendorParam) reqQuery = reqQuery.eq("vendor_slug", vendorParam);
+  const { data: reqRows } = await reqQuery.order("invoice_number").limit(1000);
   requests = (reqRows ?? []).map((r) => ({
     invoice_number: r.invoice_number,
     status: r.status,
     expected_credit: Number(r.expected_credit ?? 0),
-    vendor: ((r.packet as Record<string, unknown> | null)?.vendor as string) ?? "ABC Supply",
+    // vendor_slug is the silo key (docs/87); packet.vendor is only a legacy fallback.
+    vendor: cmVendorLabel((r as any).vendor_slug) ?? (((r.packet as Record<string, unknown> | null)?.vendor as string) ?? "ABC Supply"),
   }));
   const invoiceNumbers = requests.map((r) => r.invoice_number);
   if (invoiceNumbers.length) {
-    const { data: lineRows } = await client
+    let lineQuery = client
       .from("invoice_line_reaudit")
       .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
       .in("invoice_number", invoiceNumbers)
-      .eq("classification", "discrepancy")
+      .eq("classification", "discrepancy");
+    // Silo (docs/87): a colliding invoice number must not pull another vendor's lines.
+    if (vendorParam) lineQuery = lineQuery.eq("vendor_slug", vendorParam);
+    const { data: lineRows } = await lineQuery
       .order("created_at", { ascending: false })
       .limit(2000);
     const latestRun = new Map<string, string>();
@@ -87,10 +96,11 @@ const reasonFor = (l: CmLine) => {
 <AppShell title="Weekly Credit Memo Request" eyebrow="Accounting" activePage="accounting">
   <section class="cmw">
     <div class="cmw-bar">
-      <h1>Weekly Credit Memo Request</h1>
+      <h1>Weekly Credit Memo Request{vendorParam ? ` — ${cmVendorLabel(vendorParam)}` : ""}</h1>
       <div class="cmw-actions">
-        <a class="cmw-btn" href="/api/credit-memos/weekly-csv?kind=detail" download>⬇ Reconciliation spreadsheet</a>
-        <a class="cmw-btn" href="/api/credit-memos/weekly-csv?kind=tracker" download>⬇ Tracker CSV</a>
+        <a class="cmw-btn" href={`/api/credit-memos/weekly-csv?kind=detail${vendorParam ? `&vendor=${encodeURIComponent(vendorParam)}` : ""}`} download>⬇ Reconciliation spreadsheet</a>
+        <a class="cmw-btn" href={`/api/credit-memos/weekly-csv?kind=tracker${vendorParam ? `&vendor=${encodeURIComponent(vendorParam)}` : ""}`} download>⬇ Tracker CSV</a>
+        {vendorParam && <a class="cmw-btn cmw-secondary" href="/accounting/credit-memos/weekly">All vendors</a>}
         <a class="cmw-btn cmw-secondary" href="/accounting/invoice-audit">← Invoice Audit</a>
       </div>
     </div>

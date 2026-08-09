@@ -31,20 +31,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
   const nowIso = new Date().toISOString();
 
+  // Silo (docs/87): resolve the invoice's vendor and scope every write — a
+  // colliding number must never advance the other vendor's request.
+  const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(2);
+  const vSlugs = ((vRow as any[] | null) ?? []).map((r) => String(r.vendor_slug));
+  if (vSlugs.length > 1) {
+    return jsonApiResponse({ error: "ambiguous_vendor", error_description: `Invoice ${invoiceNumber} exists for ${vSlugs.join(" and ")} — vendor disambiguation required.` }, { status: 409 });
+  }
+  const vendorSlug = vSlugs[0] ?? "abc-supply";
+
   // REQUESTED-CM lifecycle: advance an existing request (no audit-view lookup).
   if (REQUESTED_STATUS[decision]) {
     const status = REQUESTED_STATUS[decision];
     const patch: Record<string, unknown> = { status, updated_at: nowIso };
     if (status === "sent") { patch.sent_by = who; patch.sent_at = nowIso; patch.follow_up_due_at = new Date(Date.now() + 14 * 864e5).toISOString(); }
     if (status === "received") { patch.received_by = who; patch.received_at = nowIso; }
-    const { data, error } = await client.from("credit_memo_requests").update(patch).eq("invoice_number", invoiceNumber).eq("request_kind", "requested").select("invoice_number,status,sent_at,received_at").maybeSingle();
+    const { data, error } = await client.from("credit_memo_requests").update(patch).eq("invoice_number", invoiceNumber).eq("vendor_slug", vendorSlug).eq("request_kind", "requested").select("invoice_number,status,sent_at,received_at").maybeSingle();
     if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
     if (!data) return jsonApiResponse({ error: "not_found", error_description: `No credit-memo request for ${invoiceNumber}.` }, { status: 404 });
     return jsonApiResponse({ ok: true, record: data });
   }
 
   // RECEIVED-CM disposition: recompute credit/line facts server-side from the audit view.
+  // v_credit_memo_audit is ABC-only today (mig 115) — refuse other vendors honestly
+  // instead of silently filing their CM under ABC (docs/87; SRS arm is a tracked gap).
   const status = RECEIVED_STATUS[decision];
+  if (vendorSlug !== "abc-supply") {
+    return jsonApiResponse({ error: "vendor_not_supported", error_description: `Received-CM disposition for ${vendorSlug} is not wired yet — v_credit_memo_audit only covers ABC (docs/87 gap).` }, { status: 409 });
+  }
   const { data: cm } = await client.from("v_credit_memo_audit").select("*").eq("invoice_number", invoiceNumber).maybeSingle();
   if (!cm) {
     return jsonApiResponse({ error: "not_found", error_description: `No credit memo ${invoiceNumber}.` }, { status: 404 });

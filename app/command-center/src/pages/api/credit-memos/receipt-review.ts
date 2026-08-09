@@ -27,6 +27,18 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return jsonApiResponse({ error: "invalid_request", error_description: "cmInvoiceNumber and action (approve|rerequest) are required." }, { status: 400 });
   }
 
+  // Silo (docs/87): refuse a cross-vendor CM-number collision rather than
+  // reviewing whichever row matches first.
+  const { data: pendRows } = await client
+    .from("credit_memo_receipts")
+    .select("vendor_slug")
+    .eq("cm_invoice_number", cmInvoiceNumber)
+    .eq("review_status", "pending")
+    .limit(2);
+  const pendVendors = [...new Set(((pendRows as any[] | null) ?? []).map((r) => String(r.vendor_slug)))];
+  if (pendVendors.length > 1) {
+    return jsonApiResponse({ error: "ambiguous_vendor", error_description: `Credit memo ${cmInvoiceNumber} is pending for ${pendVendors.join(" and ")} — vendor disambiguation required.` }, { status: 409 });
+  }
   const { data: receipt, error: rErr } = await client
     .from("credit_memo_receipts")
     .update({

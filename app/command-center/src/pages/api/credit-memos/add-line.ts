@@ -41,6 +41,9 @@ export const POST: APIRoute = async ({ locals, request }) => {
   if (!line || line.invoice_number !== invoiceNumber) {
     return jsonApiResponse({ error: "not_found", error_description: "Invoice line not found." }, { status: 404 });
   }
+  // Silo (docs/87): resolve the vendor once; every read/write below is scoped by it —
+  // invoice numbers are NOT globally unique across vendors.
+  const vendorSlug = await resolveInvoiceVendorSlug(client, invoiceNumber);
   if (line.uom_mismatch || line.negotiated_price == null || Number(line.variance_ext ?? 0) < 0.05) {
     return jsonApiResponse(
       { error: "not_a_claim", error_description: "Only lines billed over a matched agreement price can join a credit memo claim." },
@@ -53,6 +56,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("credit_memo_requests")
     .select("id, status")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("request_kind", "requested")
     .limit(1);
   const existingCm = (cmRows as any[] | null)?.[0] ?? null;
@@ -95,6 +99,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("invoice_line_reaudit")
     .select("run_label, created_at")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .order("created_at", { ascending: false })
     .limit(1);
   const runLabel = (runRows as any[] | null)?.[0]?.run_label ?? "audit_ui";
@@ -108,6 +113,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("invoice_line_reaudit")
     .select("id")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("run_label", runLabel)
     .eq("line_id", lineId)
     .limit(1);
@@ -137,7 +143,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       .insert({
         run_label: runLabel,
         invoice_number: invoiceNumber,
-        vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
+        vendor_slug: vendorSlug,
         line_id: lineId,
         item_number: line.item_number,
         item_description: line.item_description,
@@ -168,6 +174,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("invoice_line_reaudit")
     .select("variance_ext")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("run_label", runLabel)
     .eq("classification", "discrepancy");
   let expectedCredit = 0;
@@ -194,7 +201,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   } else {
     await client.from("credit_memo_requests").insert({
       invoice_number: invoiceNumber,
-      vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
+      vendor_slug: vendorSlug,
       request_kind: "requested",
       status: "draft",
       expected_credit: expectedCredit,
@@ -210,7 +217,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     await client.from("invoice_line_audit").insert({
       invoice_line_id: lineId,
       invoice_number: invoiceNumber,
-      vendor_slug: (await resolveInvoiceVendorSlug(client, invoiceNumber)),
+      vendor_slug: vendorSlug,
       item_number: line.item_number,
       audit_status: "disputed",
       decision: "discrepancy",

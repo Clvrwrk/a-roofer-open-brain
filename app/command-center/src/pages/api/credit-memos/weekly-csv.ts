@@ -7,6 +7,7 @@
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
+import { cmVendorBySlug } from "@lib/cm-vendor-roster";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 const VENDOR_LABEL: Record<string, string> = { "abc-supply": "ABC Supply", srs: "SRS Distribution", qxo: "QXO" };
@@ -25,16 +26,19 @@ export const GET: APIRoute = async ({ locals, url }) => {
     return jsonApiResponse({ error: "forbidden", error_description: "This actor cannot download credit memo files." }, { status: 403 });
   }
   const kind = url.searchParams.get("kind") === "tracker" ? "tracker" : "detail";
+  // Multi-vendor pill (docs/88): ?vendor=<slug> scopes both downloads to one vendor.
+  const vendorParam = cmVendorBySlug(url.searchParams.get("vendor"))?.slug ?? null;
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
-  const { data: requests, error: reqError } = await client
+  let reqQuery = client
     .from("credit_memo_requests")
     .select("vendor_slug,invoice_number, expected_credit, packet")
     .eq("request_kind", "requested")
-    .eq("status", "approved")
-    .limit(1000);
+    .eq("status", "approved");
+  if (vendorParam) reqQuery = reqQuery.eq("vendor_slug", vendorParam);
+  const { data: requests, error: reqError } = await reqQuery.limit(1000);
   if (reqError) return jsonApiResponse({ error: "credit_memo_requests", error_description: reqError.message }, { status: 409 });
   const vendorOf = new Map((requests ?? []).map((r) => [r.invoice_number, VENDOR_LABEL[(r as any).vendor_slug ?? "abc-supply"] ?? "ABC Supply"]));
   const invoices = [...vendorOf.keys()];
@@ -48,14 +52,18 @@ export const GET: APIRoute = async ({ locals, url }) => {
     }
   } else {
     // latest re-audit run per invoice supplies the line detail
-    const { data: lines, error: lineError } = invoices.length
-      ? await client
+    let lineQuery = invoices.length
+      ? client
           .from("invoice_line_reaudit")
           .select("run_label, invoice_number, item_number, item_description, quantity, uom, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at")
           .in("invoice_number", invoices)
           .eq("classification", "discrepancy")
-          .order("created_at", { ascending: false })
-          .limit(2000)
+      : null;
+    // Silo (docs/87): scope the line fetch too — a colliding invoice number must
+    // not pull another vendor's claim lines into this vendor's packet.
+    if (lineQuery && vendorParam) lineQuery = lineQuery.eq("vendor_slug", vendorParam);
+    const { data: lines, error: lineError } = lineQuery
+      ? await lineQuery.order("created_at", { ascending: false }).limit(2000)
       : { data: [], error: null };
     if (lineError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: lineError.message }, { status: 409 });
     const latestRun = new Map<string, string>();
@@ -71,7 +79,8 @@ export const GET: APIRoute = async ({ locals, url }) => {
     }
   }
 
-  const name = kind === "tracker" ? `credit_memo_request_tracker_${today}.csv` : `credit_memo_reconciliation_${today}.csv`;
+  const vendorTag = vendorParam ? `${vendorParam.replace(/[^a-z0-9]+/gi, "_")}_` : "";
+  const name = kind === "tracker" ? `credit_memo_request_tracker_${vendorTag}${today}.csv` : `credit_memo_reconciliation_${vendorTag}${today}.csv`;
   return new Response(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
