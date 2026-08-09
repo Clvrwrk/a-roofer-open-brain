@@ -34,31 +34,38 @@ export const GET: APIRoute = async ({ locals }) => {
   // Per-line human review progress (Chris 2026-08-05): Approve activates only once
   // every claim line of the invoice's LATEST re-audit run is acknowledged.
   const invoiceNumbers = (data ?? []).map((r) => r.invoice_number);
+  // Silo (docs/87): invoice numbers collide across vendors — key every map on
+  // vendor|invoice so one vendor's claim lines never feed another's Approve gate.
+  const key = (vendor: string | null | undefined, invoice: string) => `${vendor ?? "abc-supply"}|${invoice}`;
   const claimTotals = new Map<string, { total: number; reviewed: number }>();
   const claimsByInvoice = new Map<string, { id: number; lineId: string | null; reviewed: boolean }[]>();
   if (invoiceNumbers.length) {
     const { data: lines, error: lineError } = await client
       .from("invoice_line_reaudit")
-      .select("id, line_id, run_label, invoice_number, variance_ext, reviewed_at, created_at")
+      .select("id, line_id, run_label, vendor_slug, invoice_number, variance_ext, reviewed_at, created_at")
       .in("invoice_number", invoiceNumbers)
       .eq("classification", "discrepancy")
       .order("created_at", { ascending: false })
       .limit(2000);
     if (lineError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: lineError.message }, { status: 409 });
     const latestRun = new Map<string, string>();
-    for (const l of lines ?? []) if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
     for (const l of lines ?? []) {
-      if (latestRun.get(l.invoice_number) !== l.run_label) continue;
+      const k = key((l as any).vendor_slug, l.invoice_number);
+      if (!latestRun.has(k)) latestRun.set(k, l.run_label);
+    }
+    for (const l of lines ?? []) {
+      const k = key((l as any).vendor_slug, l.invoice_number);
+      if (latestRun.get(k) !== l.run_label) continue;
       if (Number(l.variance_ext ?? 0) < 0.05) continue;
-      const agg = claimTotals.get(l.invoice_number) ?? { total: 0, reviewed: 0 };
+      const agg = claimTotals.get(k) ?? { total: 0, reviewed: 0 };
       agg.total += 1;
       if (l.reviewed_at) agg.reviewed += 1;
-      claimTotals.set(l.invoice_number, agg);
+      claimTotals.set(k, agg);
       // Per-line claim detail so the invoice-audit tree can render its own review
       // checkboxes (Chris 2026-08-05: the check-off must live on the audit lines too).
-      const list = claimsByInvoice.get(l.invoice_number) ?? [];
+      const list = claimsByInvoice.get(k) ?? [];
       list.push({ id: l.id, lineId: l.line_id ?? null, reviewed: Boolean(l.reviewed_at) });
-      claimsByInvoice.set(l.invoice_number, list);
+      claimsByInvoice.set(k, list);
     }
   }
 
@@ -68,9 +75,9 @@ export const GET: APIRoute = async ({ locals }) => {
       status: r.status,
       expectedCredit: Number(r.expected_credit ?? 0),
       lineCount: Number(r.line_count ?? 0),
-      claimLines: claimTotals.get(r.invoice_number)?.total ?? 0,
-      reviewedLines: claimTotals.get(r.invoice_number)?.reviewed ?? 0,
-      claims: claimsByInvoice.get(r.invoice_number) ?? [],
+      claimLines: claimTotals.get(key((r as any).vendor_slug, r.invoice_number))?.total ?? 0,
+      reviewedLines: claimTotals.get(key((r as any).vendor_slug, r.invoice_number))?.reviewed ?? 0,
+      claims: claimsByInvoice.get(key((r as any).vendor_slug, r.invoice_number)) ?? [],
       vendor: VENDOR_LABEL[(r as any).vendor_slug ?? "abc-supply"] ?? "ABC Supply",
       approvedBy: r.approved_by,
       approvedAt: r.approved_at,

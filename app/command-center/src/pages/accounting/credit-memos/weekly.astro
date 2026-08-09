@@ -50,11 +50,14 @@ if (client) {
   }));
   const invoiceNumbers = requests.map((r) => r.invoice_number);
   if (invoiceNumbers.length) {
-    const { data: lineRows } = await client
+    let lineQuery = client
       .from("invoice_line_reaudit")
       .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
       .in("invoice_number", invoiceNumbers)
-      .eq("classification", "discrepancy")
+      .eq("classification", "discrepancy");
+    // Silo (docs/87): a colliding invoice number must not pull another vendor's lines.
+    if (vendorParam) lineQuery = lineQuery.eq("vendor_slug", vendorParam);
+    const { data: lineRows } = await lineQuery
       .order("created_at", { ascending: false })
       .limit(2000);
     const latestRun = new Map<string, string>();

@@ -52,14 +52,18 @@ export const GET: APIRoute = async ({ locals, url }) => {
     }
   } else {
     // latest re-audit run per invoice supplies the line detail
-    const { data: lines, error: lineError } = invoices.length
-      ? await client
+    let lineQuery = invoices.length
+      ? client
           .from("invoice_line_reaudit")
           .select("run_label, invoice_number, item_number, item_description, quantity, uom, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at")
           .in("invoice_number", invoices)
           .eq("classification", "discrepancy")
-          .order("created_at", { ascending: false })
-          .limit(2000)
+      : null;
+    // Silo (docs/87): scope the line fetch too — a colliding invoice number must
+    // not pull another vendor's claim lines into this vendor's packet.
+    if (lineQuery && vendorParam) lineQuery = lineQuery.eq("vendor_slug", vendorParam);
+    const { data: lines, error: lineError } = lineQuery
+      ? await lineQuery.order("created_at", { ascending: false }).limit(2000)
       : { data: [], error: null };
     if (lineError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: lineError.message }, { status: 409 });
     const latestRun = new Map<string, string>();

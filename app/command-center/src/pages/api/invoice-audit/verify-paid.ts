@@ -29,7 +29,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // resolve the invoice's vendor so a colliding number can never verify both.
   const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(2);
   const vSlugs = ((vRow as any[] | null) ?? []).map((x) => String(x.vendor_slug));
-  const vSlug = vSlugs.length === 1 ? vSlugs[0] : "abc-supply";
+  // Fail closed on a cross-vendor number collision — never guess ABC (docs/87).
+  if (vSlugs.length > 1) {
+    return jsonApiResponse({ error: "ambiguous_vendor", error_description: `Invoice ${invoiceNumber} exists for ${vSlugs.join(" and ")} — vendor disambiguation required.` }, { status: 409 });
+  }
+  const vSlug = vSlugs[0] ?? "abc-supply";
   const { data, error } = await client
     .from("invoice_payment_processed")
     .update({ status: "paid_verified", updated_at: nowIso, verified_at: nowIso, verified_by: actor.displayName })
