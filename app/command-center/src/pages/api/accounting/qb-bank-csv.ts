@@ -99,14 +99,19 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const jobByInvoice = new Map<string, { job: string | null; client: string | null }>();
 
   if (vendor.slug === "abc-supply") {
-    // ABC job/customer match rides the existing PO-driven match view.
+    // ABC job/customer resolution rides the PO-driven match view. PEC-186 follow-up
+    // (Chris 2026-08-09): do NOT require matched=true — the audit surface shows the
+    // job number for every invoice whose PO carries one (pe_job_number), and recent
+    // invoices sit matched=false until the AccuLynx link lands. Job precedence:
+    // pe_job_number, then canonical_po (the corrected job-shaped PO).
     const { data: matches } = await client
       .from("v_invoice_acculynx_match")
-      .select("invoice_number, pe_job_number, client_name, matched")
-      .eq("matched", true)
+      .select("invoice_number, pe_job_number, canonical_po, client_name, matched")
       .limit(5000);
-    // matched=true only — unmatched rows carry PO/order numbers, not job + client.
-    for (const m of matches ?? []) jobByInvoice.set(String(m.invoice_number), { job: m.pe_job_number, client: m.client_name });
+    for (const m of matches ?? []) {
+      const job = String(m.pe_job_number ?? m.canonical_po ?? "").trim().toUpperCase() || null;
+      jobByInvoice.set(String(m.invoice_number), { job, client: m.client_name ?? null });
+    }
 
     const { data: invs, error } = await client
       .from("abc_invoices")

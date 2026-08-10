@@ -81,10 +81,24 @@ function fmtDate(d) {
 async function main() {
   console.log(`ABC env=${abcEnv} api=${apiBaseUrl}  dryRun=${dryRun}`);
 
-  // 1) window invoices, invoices with a PDF, and the ABC vendor_id
-  const windowRows = await (await sb(`/rest/v1/v_invoice_audit_invoice?select=invoice_number`)).json();
+  // 1) window invoices, invoices with a PDF, and the ABC vendor_id.
+  // PostgREST silently caps un-ranged responses at 1000 rows (playbook: "exactly 1000
+  // = cap signature") — both sets exceed that, which hid every NEW invoice from this
+  // backfill (2026-08-09 bug: 10 recent invoices never got PDFs). Paginate everything.
+  const pageAll = async (pathAndQuery) => {
+    const rows = [];
+    for (let from = 0; ; from += 1000) {
+      const res = await sb(pathAndQuery, { headers: { Range: `${from}-${from + 999}`, "Range-Unit": "items" } });
+      const page = await res.json();
+      if (!Array.isArray(page)) break;
+      rows.push(...page);
+      if (page.length < 1000) break;
+    }
+    return rows;
+  };
+  const windowRows = await pageAll(`/rest/v1/v_invoice_audit_invoice?select=invoice_number&order=invoice_number`);
   const havePdf = new Set(
-    (await (await sb(`/rest/v1/invoice_documents?select=invoice_number&storage_path=not.is.null`)).json()).map((r) => r.invoice_number),
+    (await pageAll(`/rest/v1/invoice_documents?select=invoice_number&storage_path=not.is.null&order=invoice_number`)).map((r) => r.invoice_number),
   );
   const sampleDoc = (await (await sb(`/rest/v1/invoice_documents?select=vendor_id&limit=1`)).json())[0];
   const vendorId = sampleDoc?.vendor_id ?? null;
@@ -93,9 +107,12 @@ async function main() {
   console.log(`window=${windowRows.length} missingPdf=${missingNumbers.length} vendor_id=${vendorId}`);
   if (!missingNumbers.length) { console.log("Nothing to backfill."); return; }
 
-  // 2) pull invoice_id + metadata for the missing invoices
-  const inList = missingNumbers.map((n) => `"${n}"`).join(",");
-  const invs = await (await sb(`/rest/v1/abc_invoices?select=invoice_number,invoice_id,sold_to_number,bill_to_number,invoice_date&invoice_number=in.(${encodeURIComponent(inList)})`)).json();
+  // 2) pull invoice_id + metadata for the missing invoices (chunked .in() — playbook)
+  const invs = [];
+  for (let i = 0; i < missingNumbers.length; i += 150) {
+    const inList = missingNumbers.slice(i, i + 150).map((n) => `"${n}"`).join(",");
+    invs.push(...(await (await sb(`/rest/v1/abc_invoices?select=invoice_number,invoice_id,sold_to_number,bill_to_number,invoice_date&invoice_number=in.(${encodeURIComponent(inList)})`)).json()));
+  }
 
   const token = await getToken();
   const out = { fetched: 0, uploaded: 0, upserted: 0, skipped: [], failed: [] };
