@@ -1,6 +1,7 @@
 // Invoice Audit — PE Office → Vendor/Branch → Invoice → Line drill-down.
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
+import { priceListUrl } from "./price-list-url";
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -374,11 +375,12 @@ if (root && dataEl && mount) {
     // Invoice PDF: always an active link — the endpoint fetches it on demand from ABC
     // and stores it if no PDF is on file yet (so every invoice resolves to a document).
     const invoiceBtn = `<a class="iv-rowbtn" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Invoice</a>`;
-    // Price List: greyed + non-navigating when this branch has no negotiated price list
-    // (otherwise the link lands on a blank price-list screen).
+    // Price List: canonical vendor-scoped URL (PEC-193) — office rides along so the
+    // target resolves the same (vendor, office) agreement set this gate checked.
+    // No data → greyed with tooltip, pointer events kept alive (Chris 2026-08-09).
     const priceListBtn = hasPriceList
-      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}&vendor=${encodeURIComponent(inv.vendor || "abc-supply")}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
-      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
+      ? `<a class="iv-rowbtn" href="${priceListUrl({ branch: inv.branchCode, vendor: inv.vendor || "abc-supply", invoice: inv.invoiceNumber, office: inv.office })}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
+      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No data available — report empty" onclick="event.stopPropagation()">📋 Price List</span>`;
     // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
     // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
     // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
