@@ -187,7 +187,9 @@ if (root && dataEl && mount) {
       // At-risk = overcharge NOT yet decided — a claim-reviewed (disputed) line is in
       // the CM request, not "at risk" (matches v_invoice_audit_invoice, migration 214).
       const atRisk = lines.reduce((s, l) => s + (!l.audited && l.auditStatus !== "disputed" && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
-      const pend = lines.filter((l) => !l.audited).length;
+      // PEC-194: decided = passed OR disputed (claim-reviewed). Counting only `audited`
+      // left CM-checked lines stuck "to audit" in this header forever.
+      const pend = lines.filter((l) => !l.audited && l.auditStatus !== "disputed").length;
       const catDone = lines.length - pend;
       const catPct = lines.length ? Math.round((catDone / lines.length) * 100) : 0;
       const tags = [
@@ -623,15 +625,16 @@ if (root && dataEl && mount) {
       const claimLineId = [...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "";
       const claim = claimByLineId.get(claimLineId);
       if (claim) claim.reviewed = box.checked;
-      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts
-      // in place (no body re-render, so nothing collapses).
+      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts.
+      // PEC-194: re-render the body (open sections preserved) so the category header's
+      // "N to audit" pill and bar move too, then re-roll the branch/office pills.
       const claimInv = invByNumber.get((data as any)?.invoiceNumber || "");
       const claimLine = claimInv?.lines.find((l) => l.lineId === claimLineId);
       if (claimInv && claimLine) {
         claimLine.auditStatus = box.checked ? "disputed" : "pending";
         claimInv.pendingLines = Math.max(0, claimInv.pendingLines + (box.checked ? -1 : 1));
-        const det = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(claimInv.invoiceNumber)}"]`)?.closest("details.iv-inv") as HTMLDetailsElement | null;
-        if (det) refreshInvoiceTags(det, claimInv);
+        reRenderInvoiceBody(claimInv);
+        if (filtersReady) applyFilter();
       }
       box.disabled = false;
       await loadCreditMemoRequests(); // r/N + Approve gating changed
