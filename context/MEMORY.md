@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/9 eve (deploy 1283b99, migs→228):** Shipped PEC-193/194/197/198/200 + PEC-196 phase A (5 fail-closed vendor guards, roster agreementStatus, docs/90). PEC-195 A3 drafted. **NEXT: PEC-196 B1 staging vendor col → B2 generic promote → B3 builder threading** (docs/90 has the map; Price Agreements page = the multi-vendor reference). PEC-186 tree CLOSED (gate live test done, Maya replied). PEC-195 LIVE (migs 229/229b, nightly, pill 7, gap queue; threshold ≥2 — flag if Chris meant ≥3). ABC API 10-line truncation FIXED upstream; June re-pulled.
+**8/9 eve (deploy 1283b99, migs→228):** Shipped PEC-193/194/197/198/200 + PEC-196 phase A (5 fail-closed vendor guards, roster agreementStatus, docs/90). PEC-195 A3 drafted. **NEXT: PEC-196 B1 staging vendor col → B2 generic promote → B3 builder threading** (docs/90 has the map; Price Agreements page = the multi-vendor reference). PEC-186 tree CLOSED (gate live test done, Maya replied). PEC-195 LIVE (migs 229/229b, nightly, pill 7, gap queue; threshold ≥2 — flag if Chris meant ≥3).
 
 
 ## Standing instructions (Chris)
