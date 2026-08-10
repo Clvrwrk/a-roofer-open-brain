@@ -1,6 +1,7 @@
 // Invoice Audit — PE Office → Vendor/Branch → Invoice → Line drill-down.
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
+import { priceListUrl } from "./price-list-url";
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -187,7 +188,9 @@ if (root && dataEl && mount) {
       // At-risk = overcharge NOT yet decided — a claim-reviewed (disputed) line is in
       // the CM request, not "at risk" (matches v_invoice_audit_invoice, migration 214).
       const atRisk = lines.reduce((s, l) => s + (!l.audited && l.auditStatus !== "disputed" && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
-      const pend = lines.filter((l) => !l.audited).length;
+      // PEC-194: decided = passed OR disputed (claim-reviewed). Counting only `audited`
+      // left CM-checked lines stuck "to audit" in this header forever.
+      const pend = lines.filter((l) => !l.audited && l.auditStatus !== "disputed").length;
       const catDone = lines.length - pend;
       const catPct = lines.length ? Math.round((catDone / lines.length) * 100) : 0;
       const tags = [
@@ -372,11 +375,12 @@ if (root && dataEl && mount) {
     // Invoice PDF: always an active link — the endpoint fetches it on demand from ABC
     // and stores it if no PDF is on file yet (so every invoice resolves to a document).
     const invoiceBtn = `<a class="iv-rowbtn" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Invoice</a>`;
-    // Price List: greyed + non-navigating when this branch has no negotiated price list
-    // (otherwise the link lands on a blank price-list screen).
+    // Price List: canonical vendor-scoped URL (PEC-193) — office rides along so the
+    // target resolves the same (vendor, office) agreement set this gate checked.
+    // No data → greyed with tooltip, pointer events kept alive (Chris 2026-08-09).
     const priceListBtn = hasPriceList
-      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}&vendor=${encodeURIComponent(inv.vendor || "abc-supply")}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
-      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
+      ? `<a class="iv-rowbtn" href="${priceListUrl({ branch: inv.branchCode, vendor: inv.vendor || "abc-supply", invoice: inv.invoiceNumber, office: inv.office })}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
+      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No data available — report empty" onclick="event.stopPropagation()">📋 Price List</span>`;
     // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
     // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
     // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
@@ -623,15 +627,16 @@ if (root && dataEl && mount) {
       const claimLineId = [...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "";
       const claim = claimByLineId.get(claimLineId);
       if (claim) claim.reviewed = box.checked;
-      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts
-      // in place (no body re-render, so nothing collapses).
+      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts.
+      // PEC-194: re-render the body (open sections preserved) so the category header's
+      // "N to audit" pill and bar move too, then re-roll the branch/office pills.
       const claimInv = invByNumber.get((data as any)?.invoiceNumber || "");
       const claimLine = claimInv?.lines.find((l) => l.lineId === claimLineId);
       if (claimInv && claimLine) {
         claimLine.auditStatus = box.checked ? "disputed" : "pending";
         claimInv.pendingLines = Math.max(0, claimInv.pendingLines + (box.checked ? -1 : 1));
-        const det = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(claimInv.invoiceNumber)}"]`)?.closest("details.iv-inv") as HTMLDetailsElement | null;
-        if (det) refreshInvoiceTags(det, claimInv);
+        reRenderInvoiceBody(claimInv);
+        if (filtersReady) applyFilter();
       }
       box.disabled = false;
       await loadCreditMemoRequests(); // r/N + Approve gating changed

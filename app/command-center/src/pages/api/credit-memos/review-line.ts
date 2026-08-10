@@ -43,6 +43,18 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // it must leave the "to audit" count. Append-only: reviewed → 'disputed'
   // (discrepancy, in the CM); un-reviewed → back to 'pending'. Best-effort.
   const claim = data[0] as { invoice_number: string; line_id: string | null; item_number: string | null };
+  // PEC-194 insurance: a reaudit claim without a line link (wave/ad-hoc runs) would never
+  // get a ledger stamp, leaving the line "to audit" forever. Resolve it by unique
+  // (invoice_number, item_number) against the audit lines view before stamping.
+  if (!claim.line_id && claim.item_number) {
+    const { data: cand } = await client
+      .from("v_invoice_audit_line")
+      .select("line_id")
+      .eq("invoice_number", claim.invoice_number)
+      .eq("item_number", claim.item_number)
+      .limit(2);
+    if (cand?.length === 1) claim.line_id = String((cand[0] as any).line_id);
+  }
   if (claim.line_id) {
     try {
       const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", claim.invoice_number).limit(1);

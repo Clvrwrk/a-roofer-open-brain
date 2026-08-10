@@ -4,7 +4,11 @@ import { loadBranchPriceList } from "@lib/branch-price-list";
 const branch = Astro.url.searchParams.get("branch") ?? "";
 const invoice = Astro.url.searchParams.get("invoice") ?? "";
 const vendor = Astro.url.searchParams.get("vendor") ?? "";
-const pl = await loadBranchPriceList(branch, invoice, vendor);
+// PEC-193: the PE office rides in from the audit surfaces so this page resolves the
+// same (vendor, office) agreement set the button's gate checked — even when
+// vendor_branches carries no pricing_territory_office_id for the branch.
+const office = Astro.url.searchParams.get("office") ?? "";
+const pl = await loadBranchPriceList(branch, invoice, vendor, office);
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hasActive = pl.agreements.some((a) => a.active);
 const fmtDate = (s: string) => s || "—";
