@@ -414,7 +414,8 @@ test("automatic receipts are limited to approved domains and always include both
   const reply = calls.find((call) => call.slug === "GMAIL_REPLY_TO_THREAD");
   assert.equal(reply.input.arguments.recipient_email, "accounting@proexteriorsus.com");
   assert.deepEqual(reply.input.arguments.cc, ["admin@cc.proexteriorsus.net", "chussey@aia4.io"]);
-  assert.match(reply.input.arguments.message_body, /I've received your email, and I'm working on it now/u);
+  assert.match(reply.input.arguments.message_body, /I've received your email and opened ticket PEC-\d+ to track it/u);
+  assert.match(reply.input.arguments.message_body, /https:\/\/linear\.app\/cleverwork\/issue\/PEC-\d+/u);
   assert.match(reply.input.arguments.message_body, /Maya Chen\nAccounting Assistant \| Pro Exteriors/u);
 });
 

@@ -6,12 +6,12 @@
 //   node scripts/maya-gate.mjs diagnose     # phase A only
 //   node scripts/maya-gate.mjs approvals    # phase B only
 //
-// TICKET-OPENED NOTICES (Chris, 2026-08-07): every new [MAYA] intake issue
-// triggers ONE email to the original (internal) sender linking the Linear
-// ticket — "your request is now PEC-xxx and it's being worked." Deduped via
-// agent_intake_notices (mig 225); external senders are never emailed
-// (outbound-guard domain rules re-implemented here); MAYA_NOTICE_DRY_RUN=1
-// logs instead of sending.
+// TICKET-OPENED NOTICES (Chris, 2026-08-07; cutover 2026-08-10): the ticket
+// link is delivered inside Maya's Gmail receipt acknowledgement (in-thread
+// reply from her Workspace account, forced CC, [MAYA] attribution — see the
+// Orgo listener's mailbox-executor). This gate no longer sends any email; it
+// records the audit row in agent_intake_notices (mig 225) and comments the
+// Linear issue. External senders were never emailed and still are not.
 //
 // PHASE A — DIAGNOSE (auto, read-only):
 //   Finds [MAYA] accounting-intake issues in Linear (team PEC) that have no
@@ -112,9 +112,6 @@ const planHash = (plan) => createHash("sha256").update(JSON.stringify(plan, Obje
 // ---------------------------------------------------------------------------
 // TICKET-OPENED NOTICES — one email per new [MAYA] intake, internal only
 // ---------------------------------------------------------------------------
-const AGENTMAIL_KEY = process.env.AGENTMAIL_API_KEY || "";
-const NOTICE_SENDER_INBOX = process.env.MAYA_NOTICE_SENDER_INBOX || "ob-accounting@agentmail.proexteriorsus.net";
-const NOTICE_DRY_RUN = process.env.MAYA_NOTICE_DRY_RUN === "1";
 // Mirrors app/command-center/src/lib/outbound-guard.ts DEFAULT_INTERNAL_DOMAINS.
 const INTERNAL_DOMAINS = ["proexteriorsus.com", "proexteriorsus.net", "cleverwork.io", "aia4.io"];
 const isInternalEmail = (email) => {
@@ -163,42 +160,22 @@ async function phaseNotices() {
     if (!sender) { await record(null, "skipped_no_sender"); log(`notices: ${issue.identifier} no sender found`); continue; }
     if (!isInternalEmail(sender)) { await record(sender, "skipped_external", { note: "external sender — agents never email outside the company" }); log(`notices: ${issue.identifier} external sender, skipped`); continue; }
 
-    const cleanTitle = issue.title.replace(/^\[MAYA\]\s*/i, "").replace(/^Accounting intake:\s*/i, "");
-    const html =
-      `<p>Hi,</p>` +
-      `<p>Quick follow-up on your email (<em>${cleanTitle}</em>): it has been turned into a tracked ticket — ` +
-      `<a href="${issue.url}"><strong>${issue.identifier}</strong></a> — and is now in the team's work queue.</p>` +
-      `<p>You'll hear back on this thread as it progresses; the ticket link above always shows current status.</p>` +
-      `<p>— Maya Chen · Open Brain Accounting</p>`;
-
-    if (NOTICE_DRY_RUN) {
-      await record(sender, "dry_run", { note: "MAYA_NOTICE_DRY_RUN=1" });
-      log(`notices: DRY RUN — would email ${sender} for ${issue.identifier}`);
-      continue;
-    }
-    if (!AGENTMAIL_KEY) { log("notices: AGENTMAIL_API_KEY missing — skipping sends"); return; }
+    // 2026-08-10 cutover: the ticket link now travels IN Maya's Gmail receipt
+    // acknowledgement (in-thread reply, forced CC, [MAYA] attribution — the Orgo
+    // listener's mailbox executor includes the PEC reference at intake time). The
+    // gate no longer emails via AgentMail; it records the audit row + Linear
+    // comment so dedup and lineage stay intact. AgentMail is retired from this flow.
     try {
-      const res = await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(NOTICE_SENDER_INBOX)}/messages/send`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${AGENTMAIL_KEY}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          to: [sender],
-          subject: `Ticket opened: ${issue.identifier} — ${cleanTitle}`,
-          html,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`agentmail ${res.status}: ${JSON.stringify(json).slice(0, 200)}`);
-      await record(sender, "sent", { agentmail_thread: json.thread_id ?? null });
-      await commentOnLinear(issue.id, `Ticket-opened notice sent to ${sender} (Maya, AgentMail thread ${json.thread_id ?? "n/a"}).`);
+      await record(sender, "ack_in_thread", { note: "ticket link delivered in Maya's Gmail receipt acknowledgement (listener release ≥ 2026-08-10)" });
+      await commentOnLinear(issue.id, `Ticket-opened notice for ${sender} is carried in Maya's in-thread Gmail receipt acknowledgement (no separate email; cutover 2026-08-10).`);
       sent += 1;
-      log(`notices: sent to ${sender} for ${issue.identifier}`);
+      log(`notices: ${issue.identifier} recorded as ack_in_thread for ${sender}`);
     } catch (err) {
       await record(sender, "failed", { note: String(err.message).slice(0, 500) });
       log(`notices: ${issue.identifier} FAILED: ${err.message}`);
     }
   }
-  log(`notices: ${sent} sent`);
+  log(`notices: ${sent} recorded (in-thread ack cutover)`);
 }
 
 // ---------------------------------------------------------------------------

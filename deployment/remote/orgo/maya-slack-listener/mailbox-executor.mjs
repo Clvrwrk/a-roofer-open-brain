@@ -228,11 +228,24 @@ export function enforceMailboxPolicy(message, decision) {
   return decision;
 }
 
-export function buildAcknowledgementArguments(message) {
+export function buildAcknowledgementArguments(message, linearReference) {
   if (!senderCanReceiveAcknowledgement(message.senderEmail)) {
     throw new Error("Sender is not eligible for an automatic acknowledgement");
   }
   if (!/^[0-9a-fA-F]+$/u.test(message.threadId)) throw new Error("Gmail thread ID is invalid");
+  // Only a provider-confirmed PEC-style identifier may appear in the sender-facing
+  // receipt; anything else falls back to the plain acknowledgement wording.
+  const safeReference = LINEAR_IDENTIFIER.test(String(linearReference ?? "")) ? String(linearReference) : "";
+  const receiptLines = safeReference
+    ? [
+        `Thank you for sending this. I've received your email and opened ticket ${safeReference} to track it:`,
+        `https://linear.app/cleverwork/issue/${safeReference}`,
+        "",
+        "I'm working on it now and will follow up on this thread if I need any additional information; the ticket link above always shows current status.",
+      ]
+    : [
+        "Thank you for sending this. I've received your email, and I'm working on it now. I'll follow up if I need any additional information.",
+      ];
   return {
     user_id: "me",
     thread_id: message.threadId,
@@ -242,7 +255,7 @@ export function buildAcknowledgementArguments(message) {
       "",
       "Hi there,",
       "",
-      "Thank you for sending this. I've received your email, and I'm working on it now. I'll follow up if I need any additional information.",
+      ...receiptLines,
       "",
       "Best,",
       "Maya Chen",
@@ -462,14 +475,14 @@ async function sendOwnerSlack(composio, arguments_, signal, expected) {
   return data.ts;
 }
 
-async function sendAcknowledgement(composio, message, signal, expected) {
+async function sendAcknowledgement(composio, message, signal, expected, linearReference) {
   const result = await composio.tools.execute(
     GMAIL_REPLY,
     {
       userId: expected.composioUserId,
       connectedAccountId: expected.gmailConnectedAccountId,
       version: GMAIL_TOOL_VERSION,
-      arguments: buildAcknowledgementArguments(message),
+      arguments: buildAcknowledgementArguments(message, linearReference),
     },
     requestOptions(signal),
   );
@@ -578,7 +591,7 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
     }
     if (allowAcknowledgement && decision.action !== "ignore" && senderCanReceiveAcknowledgement(message.senderEmail)) {
       acknowledgementAttempted = true;
-      acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected);
+      acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected, linearPair?.work?.reference);
       await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
     }
     if (capabilityAgent && decision.action !== "ignore") {
@@ -631,12 +644,28 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
       await state.recordAction(claim.name, "linear_work_agent_review", linearPair.work.id);
       await updateLinearIssue(composio, linearPair.source.id, { stateId: expected.linearSourceReviewStateId }, signal, expected);
       await state.recordAction(claim.name, "linear_source_agent_review", linearPair.source.id);
+      // The owner [REVIEW] notice is deterministic on every non-ignored intake — the
+      // capability planner is never trusted to be the only notification path. It is
+      // best-effort: a Slack outage must not wedge an already-confirmed intake.
+      let ownerNoticeTimestamp = null;
+      try {
+        ownerNoticeTimestamp = await sendOwnerSlack(
+          composio,
+          buildOwnerSlackArguments(message, decision, linearPair.source.reference, expected),
+          signal,
+          expected,
+        );
+        await state.recordAction(claim.name, "slack_send", ownerNoticeTimestamp);
+      } catch {
+        onEvent("mailbox_owner_notice_failed", { message_hash: claim.messageDigest });
+      }
       const readState = await fileMailboxMessage(composio, message, decision.action, signal, expected);
       await state.confirm(claim.name, {
         action: "capability_work",
         confirmedWrites: result.confirmedWrites,
         finalDigest: hash(result.text),
         acknowledgementHash: acknowledgementReference ? hash(acknowledgementReference) : null,
+        slackMessageHash: ownerNoticeTimestamp ? hash(ownerNoticeTimestamp) : null,
         readState,
       });
       onEvent("mailbox_message_confirmed", { message_hash: claim.messageDigest, action: "capability_work" });

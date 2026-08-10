@@ -9,7 +9,10 @@ export const APPROVED = Object.freeze({
   teamId: "T0B8QEGPVQW",
   mayaBotUserId: "U0BD0Q0H55G",
   ownerSlackUserId: "U0B8SGJJZLJ",
-  ownerSlackChannelId: "C0BD7L43PC2",
+  // 2026-08-10: moved from C0BD7L43PC2 (dead/unreachable route — no [NA-5][MAYA]
+  // notice was ever seen there) to #pe-cc-dev-team per Chris's 2026-08-07 standing
+  // rule: all app/code/Linear-issue Slack traffic goes to #pe-cc-dev-team.
+  ownerSlackChannelId: "C0BNVF99Y74",
   linearSourceTeamId: "fca0aed7-1eac-43ea-aa9b-280d487fcc86",
   linearSourceProjectId: "9b8ce36d-bb1c-444f-84ea-fa2c785b84ce",
   linearSourceReviewStateId: "721fd015-d82a-4ae2-b5d8-a34c1fb76c05",
