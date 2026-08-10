@@ -35,7 +35,8 @@ const fmt = (iso: string) => new Intl.DateTimeFormat("en-US", { month: "short", 
       Per-vendor CSVs for the QuickBooks bank-transaction pending window. Rows: new invoices
       (<code>VENDOR-INV#…</code>, Spent), pending credit-memo QA lines (<code>CM-TBD-INV#…</code>, Received =
       requested credit — proves the vendor credit eventually arrives), and actual credit memos
-      (<code>CMINV#…-OriginalINV#…</code>, Received). Check&nbsp;No = AccuLynx job # + customer last name.
+      (<code>CMINV#…-OriginalINV#…</code>, Received). Check&nbsp;No = the AccuLynx job # (e.g. <code>KS-131</code>, 12-char cap);
+      the client's name rides at the end of the Description. Dates are <code>YYYY-MM-DD</code>.
       <b>Preview</b> never records anything; <b>Download &amp; mark exported</b> stamps each row so it is only
       handed to QB once. A human loads the file into QuickBooks — nothing here writes to QBO.
     </p>

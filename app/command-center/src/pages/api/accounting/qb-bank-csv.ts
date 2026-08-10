@@ -10,8 +10,9 @@
 //               this pending amount, proving every requested CM was received.
 //   cm_actual — Description "CMINV#<cm invoice#>-OriginalINV#<original#>",
 //               Received = credit memo total
-// Check No = "<AccuLynx job #>-<customer last name>" truncated to QB's 21-char
-// cap; when no job match, the customer last name alone; blank when unknown.
+// Check No = the AccuLynx job number alone (e.g. "KS-131"), QB's usable cap is
+// 12 chars (PEC-200); blank when no job match. The client's full name rides at
+// the END of the Description instead. Dates are ISO YYYY-MM-DD.
 //
 // mode=preview (default) renders the CSV without recording anything.
 // mode=export also stamps qb_bank_export_log (unique per vendor/kind/doc) so a
@@ -24,26 +25,28 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
-const CHECK_NO_MAX = 21; // QB check-number field cap
+const CHECK_NO_MAX = 12; // QB check-number field cap (PEC-200)
 
 const csvCell = (v: unknown) => {
   const s = String(v ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const lastName = (client: string | null | undefined): string => {
-  const s = String(client ?? "").trim().replace(/\s+/g, " ");
-  if (!s) return "";
-  const parts = s.split(" ");
-  return parts[parts.length - 1] ?? "";
+// AccuLynx job number only (e.g. "KS-131"); "" when no job match — the client
+// name lives at the end of the Description instead (PEC-200).
+const checkNo = (job: string | null | undefined): string =>
+  String(job ?? "").trim().slice(0, CHECK_NO_MAX);
+
+// "<doc reference> - <Client Name>"; reference alone when the client is unknown.
+const describe = (ref: string, client: string | null | undefined): string => {
+  const c = String(client ?? "").trim().replace(/\s+/g, " ");
+  return c ? `${ref} - ${c}` : ref;
 };
 
-// "<job#>-<LastName>" truncated to 21; last name only when no job; "" when neither.
-const checkNo = (job: string | null | undefined, client: string | null | undefined): string => {
-  const j = String(job ?? "").trim();
-  const ln = lastName(client);
-  const full = j && ln ? `${j}-${ln}` : j || ln;
-  return full.slice(0, CHECK_NO_MAX);
+// QB only accepts a real date; normalize to YYYY-MM-DD and reject anything else.
+const isoDate = (v: unknown): string => {
+  const s = String(v ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 };
 
 interface CsvRow {
@@ -132,17 +135,17 @@ export const GET: APIRoute = async ({ locals, url }) => {
         const orig = originalByCm.get(n);
         const origJc = orig ? (jobByInvoice.get(String(orig)) ?? jc) : jc;
         rows.push({
-          kind: "cm_actual", docNumber: n, date: String(i.invoice_date ?? "").slice(0, 10),
-          checkNo: checkNo(origJc.job, origJc.client),
-          description: `CMINV#${n}${orig ? `-OriginalINV#${orig}` : ""}`,
+          kind: "cm_actual", docNumber: n, date: isoDate(i.invoice_date),
+          checkNo: checkNo(origJc.job),
+          description: describe(`CMINV#${n}${orig ? `-OriginalINV#${orig}` : ""}`, origJc.client),
           spent: null, received: total,
         });
       } else {
         if (exported.has(`invoice:${n}`)) continue;
         rows.push({
-          kind: "invoice", docNumber: n, date: String(i.invoice_date ?? "").slice(0, 10),
-          checkNo: checkNo(jc.job, jc.client),
-          description: `${vendor.acronym}-INV#${n}`,
+          kind: "invoice", docNumber: n, date: isoDate(i.invoice_date),
+          checkNo: checkNo(jc.job),
+          description: describe(`${vendor.acronym}-INV#${n}`, jc.client),
           spent: total, received: null,
         });
       }
@@ -180,21 +183,24 @@ export const GET: APIRoute = async ({ locals, url }) => {
       const total = Math.abs(Number(i.total_due ?? 0));
       const job = String(i.po_number ?? "").trim().toUpperCase() || null;
       const clientName = job ? (clientByJob.get(job) ?? null) : null;
+      // Feed the shared map so cm_tbd rows resolve job/client for SRS/QXO too
+      // (pre-PEC-200 this map was ABC-only and SRS CM-TBD rows went blank).
+      jobByInvoice.set(n, { job, client: clientName });
       if (i.doc_type === "credit") {
         if (exported.has(`cm_actual:${n}`)) continue;
         const orig = String((i.raw as any)?.original_invoice_number ?? (i.raw as any)?.originalInvoiceNumber ?? "").trim() || null;
         rows.push({
-          kind: "cm_actual", docNumber: n, date: String(i.invoice_date ?? "").slice(0, 10),
-          checkNo: checkNo(job, clientName),
-          description: `CMINV#${n}${orig ? `-OriginalINV#${orig}` : ""}`,
+          kind: "cm_actual", docNumber: n, date: isoDate(i.invoice_date),
+          checkNo: checkNo(job),
+          description: describe(`CMINV#${n}${orig ? `-OriginalINV#${orig}` : ""}`, clientName),
           spent: null, received: total,
         });
       } else {
         if (exported.has(`invoice:${n}`)) continue;
         rows.push({
-          kind: "invoice", docNumber: n, date: String(i.invoice_date ?? "").slice(0, 10),
-          checkNo: checkNo(job, clientName),
-          description: `${vendor.acronym}-INV#${n}`,
+          kind: "invoice", docNumber: n, date: isoDate(i.invoice_date),
+          checkNo: checkNo(job),
+          description: describe(`${vendor.acronym}-INV#${n}`, clientName),
           spent: total, received: null,
         });
       }
@@ -219,9 +225,9 @@ export const GET: APIRoute = async ({ locals, url }) => {
       const jc = jobByInvoice.get(n) ?? { job: null, client: null };
       rows.push({
         kind: "cm_tbd", docNumber: n,
-        date: String(r.sent_at ?? "").slice(0, 10),
-        checkNo: checkNo(jc.job, jc.client),
-        description: `CM-TBD-INV#${n}`,
+        date: isoDate(r.sent_at),
+        checkNo: checkNo(jc.job),
+        description: describe(`CM-TBD-INV#${n}`, jc.client),
         spent: null, received: Math.abs(Number(r.expected_credit ?? 0)),
       });
     }
