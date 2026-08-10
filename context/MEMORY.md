@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/9 eve (deployed 1283b99, migs thru 228):** PEC-200 QB CSV (Check No=job# 12-cap, client→description, ISO dates), PEC-194 (client counted only 'passed' as decided), PEC-193 (price-list-url.ts builder + office-name fallback; gate=(vendor,office) but page resolved via vendor_branches — 12/37 ABC branches unmapped), PEC-197+198 (7-pill KPI row, kpi-pills endpoint+60s poll, mark-sent auto-Process), PEC-196 phase A (5 fail-closed vendor guards, roster agreementStatus axis, docs/90 — **NEXT: B1 staging vendor col → B2 generic promote → B3 builder threading**). PEC-195 A3 drafted. AWAITING Chris: `APPROVE PEC-195` + `APPROVE PEC-186`.
+**8/9 eve (deploy 1283b99, migs→228):** Shipped PEC-193/194/197/198/200 + PEC-196 phase A (5 fail-closed vendor guards, roster agreementStatus, docs/90). PEC-195 A3 drafted. **NEXT: PEC-196 B1 staging vendor col → B2 generic promote → B3 builder threading** (docs/90 has the map; Price Agreements page = the multi-vendor reference). AWAITING Chris: `APPROVE PEC-195` + `APPROVE PEC-186`.
 
 
 ## Standing instructions (Chris)
