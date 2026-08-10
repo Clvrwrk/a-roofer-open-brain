@@ -1,6 +1,6 @@
 # A3 — Alex: No-Price repeat-purchase triage → Agreement Builder queue (PEC-195)
 
-**Sponsor:** Chris Hussey · **Date:** 2026-08-09 · **Status:** DRAFT — awaiting Chris approval (rule 9 gate; no build until approved)
+**Sponsor:** Chris Hussey · **Date:** 2026-08-09 · **Status:** APPROVED 2026-08-09 (Chris, in session: "APPROVE PEC-195") — build greenlit as specified (2+/yr per vendor+office threshold, `Alex (agent)` attribution)
 **Trigger case:** 1,161 raw No-Price lines sitting in the Invoice Audit with no triage path; PEC-189 cleared the backlog by bulk approval, but nothing stops it re-accumulating.
 
 ## 1 · Problem
