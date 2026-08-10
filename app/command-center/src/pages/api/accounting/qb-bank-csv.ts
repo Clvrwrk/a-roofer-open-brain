@@ -104,13 +104,19 @@ export const GET: APIRoute = async ({ locals, url }) => {
     // job number for every invoice whose PO carries one (pe_job_number), and recent
     // invoices sit matched=false until the AccuLynx link lands. Job precedence:
     // pe_job_number, then canonical_po (the corrected job-shaped PO).
-    const { data: matches } = await client
-      .from("v_invoice_acculynx_match")
-      .select("invoice_number, pe_job_number, canonical_po, client_name, matched")
-      .limit(5000);
-    for (const m of matches ?? []) {
-      const job = String(m.pe_job_number ?? m.canonical_po ?? "").trim().toUpperCase() || null;
-      jobByInvoice.set(String(m.invoice_number), { job, client: m.client_name ?? null });
+    // Paginate: the view exceeds PostgREST's 1000-row cap, and an un-ranged read
+    // silently drops the NEWEST invoices from the map (playbook: exactly-1000).
+    for (let from = 0; ; from += 1000) {
+      const { data: matches } = await client
+        .from("v_invoice_acculynx_match")
+        .select("invoice_number, pe_job_number, canonical_po, client_name, matched")
+        .order("invoice_number")
+        .range(from, from + 999);
+      for (const m of matches ?? []) {
+        const job = String(m.pe_job_number ?? m.canonical_po ?? "").trim().toUpperCase() || null;
+        jobByInvoice.set(String(m.invoice_number), { job, client: m.client_name ?? null });
+      }
+      if (!matches || matches.length < 1000) break;
     }
 
     const { data: invs, error } = await client
