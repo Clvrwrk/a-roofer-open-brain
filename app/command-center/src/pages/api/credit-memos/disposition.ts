@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
+import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -49,6 +50,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const { data, error } = await client.from("credit_memo_requests").update(patch).eq("invoice_number", invoiceNumber).eq("vendor_slug", vendorSlug).eq("request_kind", "requested").select("invoice_number,status,sent_at,received_at").maybeSingle();
     if (error) return jsonApiResponse({ error: "write_failed", error_description: error.message }, { status: 500 });
     if (!data) return jsonApiResponse({ error: "not_found", error_description: `No credit-memo request for ${invoiceNumber}.` }, { status: 404 });
+    // PEC-198 pill 2: marking the vendor email SENT is the moment the audit work on
+    // this invoice is done — auto-fire the per-invoice Process stamp (same flip the
+    // Process button does in bulk). Best-effort; the button remains the manual path.
+    if (status === "sent") {
+      try {
+        await client
+          .from("invoice_pipeline_status")
+          .update({ pipeline_status: "invoice_audit_complete", audit_completed_at: nowIso, note: `stamped complete on CM mark-sent by ${who}` })
+          .eq("invoice_number", invoiceNumber)
+          .eq("pipeline_status", "invoice_audit_pending");
+        invalidateInvoiceAuditSummaryCache();
+      } catch (err) { console.error("mark-sent auto process-stamp failed:", err instanceof Error ? err.message : err); }
+    }
     return jsonApiResponse({ ok: true, record: data });
   }
 

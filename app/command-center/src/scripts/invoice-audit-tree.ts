@@ -50,6 +50,62 @@ if (root && dataEl && mount) {
     return b ? ` <span class="pill ${b.cls}" title="${esc(b.tip)}">${b.lab}</span>` : "";
   }
 
+  /* ---- KPI pill realtime refresh (PEC-197/198) ----
+     Re-fetches /api/accounting/kpi-pills after every mutating action (and on a 60s
+     visible-tab poll) and patches the 7-pill row in place — no full reload. Pill
+     markup contract: data-kpi-val/-sub hooks in invoice-audit.astro. */
+  async function refreshKpiPills() {
+    try {
+      const res = await fetch("/api/accounting/kpi-pills", { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) return;
+      const k = await res.json();
+      const m$ = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+      const num$ = (n: number) => (Number(n) || 0).toLocaleString("en-US");
+      const set = (sel: string, txt: string) => { const el = document.querySelector<HTMLElement>(sel); if (el) el.textContent = txt; };
+      set('[data-kpi-val="claims"]', num$(k.claimsUnreviewed));
+      set('[data-kpi-sub="claims"]', `of ${num$(k.claimsTotal)} claim lines · ${m$(k.atRisk)} at risk`);
+      set('[data-kpi-val="cm"]', m$((k.cmApprovedTotal || 0) + (k.cmDraftTotal || 0)));
+      set('[data-kpi-sub="cm"]', `${num$(k.cmApprovedCount)} approved (${m$(k.cmApprovedTotal)}) · ${num$(k.cmDraftCount)} draft (${m$(k.cmDraftTotal)})`);
+      const vend = document.querySelector<HTMLElement>("[data-kpi-vendors]");
+      if (vend && Array.isArray(k.cmByVendor)) {
+        vend.innerHTML = k.cmByVendor.map((v: any) => {
+          if (v.cmStatus === "coming_soon") return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon">${esc(v.acronym)}</span>`;
+          if (!v.count) return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">${esc(v.acronym)}</span>`;
+          return `<a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}" title="Open the ${esc(v.label)} credit memo email + downloads">${esc(v.acronym)} →</a>`;
+        }).join("");
+      }
+      const pb = document.getElementById("iv-process") as HTMLButtonElement | null;
+      if (pb) {
+        const n = Number(k.auditPendingCount || 0);
+        pb.dataset.count = String(n);
+        pb.disabled = n === 0;
+        pb.classList.toggle("is-disabled", n === 0);
+        const span = pb.querySelector('[data-kpi-val="auditPending"]');
+        if (span) span.textContent = num$(n);
+      }
+      set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
+      const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');
+      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} requested · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
+      set('[data-kpi-val="dueNow"]', num$(k.dueNow));
+      set('[data-kpi-val="verify"]', num$(k.pendingVerification));
+      set('[data-kpi-val="qb"]', num$(k.qbPendingTotal));
+      const qbSub = document.querySelector<HTMLElement>('[data-kpi-sub="qb"]');
+      if (qbSub) {
+        qbSub.textContent = Array.isArray(k.qbPendingByVendor) && k.qbPendingByVendor.length
+          ? k.qbPendingByVendor.map((r: any) => `${r.slug} ${r.pending}`).join(" · ")
+          : "all ledgers exported";
+        const qbBtn = qbSub.closest(".iv-kpi")?.querySelector<HTMLElement>(".iv-process-btn");
+        if (qbBtn) {
+          qbBtn.outerHTML = Number(k.qbPendingTotal) > 0
+            ? `<a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export →</a>`
+            : `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>`;
+        }
+      }
+      set('[data-kpi-sub="alex"]', `${num$(k.noPriceLines)} raw no-price lines await Alex triage`);
+      set('[data-kpi-sub="scope"]', `${num$(k.openInvoices)} open invoices · ${num$(k.paidInvoices)} paid/closed · ${num$(k.creditMemosOpen)} credit memos open`);
+    } catch {}
+  }
+
   /* ---- credit memo requests (v2 R2, docs/82): Approve-into-weekly-email flow ---- */
   const cmByInvoice = new Map<string, { status: string; expectedCredit: number; claimLines: number; reviewedLines: number }>();
   // Per-line claim review state (Chris 2026-08-05: the check-off lives on the audit
@@ -66,19 +122,9 @@ if (root && dataEl && mount) {
         cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
         for (const c of r.claims ?? []) if (c.lineId) claimByLineId.set(String(c.lineId), { reauditId: Number(c.id), reviewed: Boolean(c.reviewed) });
       }
-      // Keep the server-rendered "Credit Memo Requested" KPI card honest without a reload.
-      let apprTotal = 0, apprN = 0, draftTotal = 0, draftN = 0;
-      for (const r of payload.requests) {
-        if (r.status === "approved") { apprTotal += r.expectedCredit || 0; apprN += 1; }
-        else { draftTotal += r.expectedCredit || 0; draftN += 1; }
-      }
-      document.querySelectorAll<HTMLElement>(".iv-kpi").forEach((card) => {
-        if (card.querySelector(".iv-kpi-lab")?.textContent !== "Credit Memo Requested") return;
-        const val = card.querySelector(".iv-kpi-val");
-        const sub = card.querySelector(".iv-kpi-sub");
-        if (val) val.textContent = "$" + Math.round(apprTotal + draftTotal).toLocaleString("en-US");
-        if (sub) sub.textContent = `${apprN} approved ($${Math.round(apprTotal).toLocaleString("en-US")}) · ${draftN} draft ($${Math.round(draftTotal).toLocaleString("en-US")})`;
-      });
+      // PEC-197: the whole KPI row refreshes from the pills endpoint (replaces the
+      // old single-card patch — the pill set changed in PEC-198).
+      void refreshKpiPills();
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
         const det = node.closest("details.iv-inv") as HTMLElement | null;
@@ -690,6 +736,7 @@ if (root && dataEl && mount) {
       reRenderInvoiceBody(invObj); // open sections preserved
       if (filtersReady) applyFilter();
     }
+    void refreshKpiPills(); // PEC-197
     toast(`Line marked reviewed (${invoiceNumber})`);
   });
 
@@ -915,6 +962,7 @@ if (root && dataEl && mount) {
         payDirty = true;
         const row = btn.closest(".iv-pay-batch");
         if (row) row.remove();
+        void refreshKpiPills(); // PEC-197
         toast(`${data.invoiceNumber} marked Paid-Verified`);
         if (!body.querySelector("[data-verify]")) body.insertAdjacentHTML("beforeend", '<p class="iv-pay-empty">Nothing pending verification.</p>');
       }));
@@ -946,4 +994,14 @@ if (root && dataEl && mount) {
   }
   openManageFromHash();
   window.addEventListener("hashchange", openManageFromHash);
+
+  /* ---- PEC-197/198 wiring ---- */
+  // Due Now — Pay pill: the Filter button toggles the toolbar's Due-now scope.
+  document.getElementById("iv-kpi-duenow")?.addEventListener("click", () => {
+    if (!dueNowBox) return;
+    dueNowBox.checked = !dueNowBox.checked;
+    applyFilter();
+  });
+  // Gentle multi-user freshness: re-pull the pill numbers every 60s while visible.
+  window.setInterval(() => { if (!document.hidden) void refreshKpiPills(); }, 60_000);
 }
