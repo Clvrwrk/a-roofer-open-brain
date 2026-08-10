@@ -50,6 +50,12 @@ update it whenever SRS state changes.
 ## Known gaps (tracked in the Linear SRS-parity epic — check there first)
 
 1. **No committed SRS claim generator** (`wave-b-reaudit.sql` is ABC-only).
+   ⚠️ G1 REQUIREMENT (Chris 2026-08-09, learned the hard way): the generator MUST
+   exclude `doc_type='credit'` — the ad-hoc srs_2026-08-05 run pulled 12 credit
+   docs into the claims pipeline and drafted a CM request ON a credit memo
+   (0050095528-001, cancelled). Credit docs reconcile against the original
+   invoice / CM request (receipt flow), never through the standard price audit.
+   Guards now enforce this (pendingLines=0 for CM docs, add-line 409 credit_doc).
 2. **add-line agreement context** is ABC-keyed (`abc_price_agreements` by int id) —
    SRS CM lines say "negotiated price list on file" instead of naming the agreement.
 3. **add-line office context**: `mv_invoice_pricing_office` is ABC-only → SRS claim

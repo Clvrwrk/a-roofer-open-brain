@@ -565,6 +565,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     ).length;
     // Transferred (Commercial) invoices are auto-approved → no pending review (docs/63 Change 2).
     if (inv.transferred) inv.pendingLines = 0;
+    // Credit memo documents are NEVER audited as invoices (Chris 2026-08-09): credits
+    // reconcile against the original invoice / CM request (receipt flow), so a CM doc
+    // carries no "to audit" count regardless of its line classifications.
+    if (inv.isCreditMemo) inv.pendingLines = 0;
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.workedLines = inv.lines.filter((l) => l.auditStatus === "passed" || l.auditStatus === "disputed").length;
@@ -785,7 +789,9 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const fallbackAuditedLines = num(i.audited_lines ?? i.passed_lines ?? 0);
     const fallbackPendingLines = Math.max(0, num(i.pending_lines ?? i.flagged_lines) + num(i.no_price_lines) - fallbackAuditedLines);
     const auditedLines = progress?.audited ?? fallbackAuditedLines;
-    const pendingLines = progress?.pending ?? fallbackPendingLines;
+    // Credit memo docs never carry a to-audit count (Chris 2026-08-09) — credits
+    // reconcile against the original invoice / CM request, not the price audit.
+    const pendingLines = i.is_credit_memo ? 0 : (progress?.pending ?? fallbackPendingLines);
     const hasWork = (progress?.worked ?? auditedLines) > 0;
     const workedLines = progress?.worked ?? auditedLines; // lines decided (passed OR disputed) — docs/63 Change 1b
     const held = progress?.held ?? false; // do-not-pay hold (credit-flag line) — docs/63 Change 1b
