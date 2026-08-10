@@ -17,6 +17,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const body = await request.json().catch(() => ({}));
   const branchNumber = String(body.branchNumber ?? "").trim();
   const items = Array.isArray(body.items) ? body.items : [];
+  // VENDOR SILO (PEC-196): this flow writes ABC-labeled packages against the ABC
+  // branch universe. Until the roster-driven rebuild threads vendors end-to-end,
+  // refuse any non-ABC slug instead of silently mis-filing it under ABC.
+  const vendorSlug = String(body.vendorSlug ?? "abc-supply").trim();
+  if (vendorSlug !== "abc-supply") {
+    return jsonApiResponse({ error: "vendor_not_supported", error_description: `Agreement Builder drafts are ABC-only today (PEC-196); got vendor ${vendorSlug}.` }, { status: 409 });
+  }
   if (!branchNumber) return jsonApiResponse({ error: "invalid_request", error_description: "branchNumber is required." }, { status: 400 });
   if (items.length === 0) return jsonApiResponse({ error: "invalid_request", error_description: "no items to save." }, { status: 400 });
   if (items.length > 2000) return jsonApiResponse({ error: "too_many_items", error_description: "max 2000 items per save." }, { status: 400 });

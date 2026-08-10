@@ -33,6 +33,12 @@ const handle: APIRoute = async ({ request, locals }) => {
   const body = await request.json().catch(() => ({}));
   const branchNumber = String(body.branchNumber ?? "").trim();
   if (!branchNumber) return jsonApiResponse({ error: "invalid_request", error_description: "branchNumber is required." }, { status: 400 });
+  // VENDOR SILO (PEC-196): handoff emails the ABC NAM and flips ABC-labeled packages.
+  // Fail closed for any other vendor until the roster rebuild threads vendors through.
+  const vendorSlug = String(body.vendorSlug ?? "abc-supply").trim();
+  if (vendorSlug !== "abc-supply") {
+    return jsonApiResponse({ error: "vendor_not_supported", error_description: `Agreement handoff is ABC-only today (PEC-196); got vendor ${vendorSlug}.` }, { status: 409 });
+  }
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });

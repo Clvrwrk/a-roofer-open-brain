@@ -2,6 +2,7 @@
 import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
 import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
+import { CM_VENDORS } from "@lib/cm-vendor-roster";
 
 // Each loader degrades to its own empty shape rather than 500-ing the page: the cost
 // roll-up reads v_negotiable_items, which intermittently exceeds the statement timeout,
@@ -42,6 +43,19 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
         <option value="">All PE offices</option>
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
+      <!-- Vendor strip (PEC-196): roster-driven, one seam (cm-vendor-roster agreementStatus).
+           The builder worksheet below is ABC-only by construction today; other vendors
+           surface honestly — read_only points at the multi-vendor Price Agreements page,
+           coming_soon greys out. Adding vendor N+1 = one roster entry (docs/90). -->
+      <div class="iv-vendor-strip" role="group" aria-label="Vendor">
+        {CM_VENDORS.map((v) => {
+          if (v.agreementStatus === "live")
+            return <span class="iv-vbtn is-active" title={`${v.label} — full builder flow`}>{v.acronym}</span>;
+          if (v.agreementStatus === "read_only")
+            return <a class="iv-vbtn iv-vbtn-ro" href="/accounting/price-agreements" title={`${v.label} — coverage, worksheets and price lists live on Price Agreements; the builder send flow is ABC-only today (PEC-196)`}>{v.acronym} ↗</a>;
+          return <span class="iv-vbtn iv-vendor-off" title="Coming Soon">{v.acronym}</span>;
+        })}
+      </div>
       <a class="iv-export" id="iv-methodology" href="/accounting/price-agreement/methodology" target="_blank" rel="noopener">📘 ABC classes</a>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
@@ -161,6 +175,12 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 </AppShell>
 
 <style is:global>
+  /* Vendor strip (PEC-196) — greyed buttons keep pointer events so tooltips work. */
+  .iv .iv-vendor-strip{display:inline-flex;gap:6px;align-items:center}
+  .iv .iv-vbtn{display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-weight:700;text-decoration:none}
+  .iv .iv-vbtn.is-active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .iv .iv-vbtn-ro{color:var(--brand)}
+  .iv .iv-vbtn.iv-vendor-off{opacity:.45;filter:grayscale(.35);cursor:not-allowed}
   .iv .iv-load-warning{margin:0 0 12px;padding:10px 13px;border-radius:8px;background:var(--yellow-bg);border:1px solid var(--yellow);color:var(--yellow);font-size:13px}
   .iv .iv-load-warning strong{color:var(--ink)}
   .iv{

@@ -14,8 +14,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const who = (actor as any).displayName ?? (actor as any).name ?? (actor as any).id ?? "operator";
 
   const body = await request.json().catch(() => ({}));
-  const vendorBranchId = String(body.vendorBranchId ?? "").trim();
+  let vendorBranchId = String(body.vendorBranchId ?? "").trim();
   const branchNumber = String(body.branchNumber ?? "").trim();
+  const vendorSlug = String(body.vendorSlug ?? "").trim();
   if (!vendorBranchId && !branchNumber) {
     return jsonApiResponse({ error: "invalid_request", error_description: "vendorBranchId or branchNumber is required." }, { status: 400 });
   }
@@ -26,6 +27,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
+
+  // VENDOR SILO (PEC-196): a bare branch number is ambiguous across vendors (QXO 113
+  // vs ABC 0113) — two vendors' requests would collapse into one. When no
+  // vendor_branch_id is given, require a vendorSlug and resolve the id; fail closed
+  // if it doesn't resolve rather than filing a vendor-blind request.
+  if (!vendorBranchId) {
+    if (!vendorSlug) {
+      return jsonApiResponse({ error: "invalid_request", error_description: "branchNumber requires vendorSlug (branch numbers collide across vendors — docs/87)." }, { status: 400 });
+    }
+    const { data: ven } = await client.from("vendors").select("id").eq("slug", vendorSlug).maybeSingle();
+    if (!(ven as any)?.id) return jsonApiResponse({ error: "vendor_not_found", error_description: vendorSlug }, { status: 404 });
+    const { data: vb } = await client.from("vendor_branches").select("id").eq("vendor_id", (ven as any).id).eq("branch_number", branchNumber).maybeSingle();
+    if (!(vb as any)?.id) {
+      return jsonApiResponse({ error: "branch_not_found", error_description: `No ${vendorSlug} branch ${branchNumber} in vendor_branches — fail closed (PEC-196).` }, { status: 404 });
+    }
+    vendorBranchId = String((vb as any).id);
+  }
 
   // Idempotent: return an already-open price-list request for this branch.
   let existsQ = client.from("price_refresh_request").select("id,status,created_at").eq("reason", "price_list_request")
