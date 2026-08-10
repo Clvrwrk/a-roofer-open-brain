@@ -1,9 +1,8 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
-import { CM_VENDORS } from "@lib/cm-vendor-roster";
 import { loadInvoiceAuditSummary } from "@lib/invoice-audit";
+import { loadKpiPills } from "@lib/kpi-pills";
 import { logPerfMetrics, payloadBytes, serverTiming, timeAsync, type PerfMetric } from "@lib/perf";
-import { createServerSupabaseClient } from "@lib/supabase.server";
 
 // The Service/Warranty page variant (?audit=service_warranty) was retired in docs/82
 // §5.4 — the transfer flow and queue table remain, and this audit still EXCLUDES the
@@ -22,61 +21,11 @@ const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pendin
 const offices = data.offices.map((o) => o.office);
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
-// Invoice Audit v2 (docs/81): dispositions are gone — classification is binary
-// (billed > agreement price = credit-memo candidate, else valid). The two new
-// status axes come straight from the v2 tables.
-let auditPendingCount = 0;
-let pendingVerificationCount = 0;
-let cmApprovedTotal = 0;
-let cmDraftTotal = 0;
-let cmApprovedCount = 0;
-let cmDraftCount = 0;
-// Per-vendor draft+approved rollup for the multi-vendor pill buttons (docs/88).
-const cmCountByVendor = new Map<string, { count: number; total: number }>();
-let claimLinesTotal = 0;
-let claimLinesUnreviewed = 0;
-{
-  const { client } = createServerSupabaseClient();
-  if (client) {
-    const [pipe, pay, cms] = await Promise.all([
-      client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
-      client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
-      client.from("credit_memo_requests").select("invoice_number, vendor_slug, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
-    ]);
-    auditPendingCount = pipe.count ?? 0;
-    pendingVerificationCount = pay.count ?? 0;
-    for (const r of cms.data ?? []) {
-      if (r.status === "approved") { cmApprovedTotal += Number(r.expected_credit ?? 0); cmApprovedCount += 1; }
-      else { cmDraftTotal += Number(r.expected_credit ?? 0); cmDraftCount += 1; }
-      const slug = String((r as any).vendor_slug ?? "abc-supply");
-      const v = cmCountByVendor.get(slug) ?? { count: 0, total: 0 };
-      v.count += 1;
-      v.total += Number(r.expected_credit ?? 0);
-      cmCountByVendor.set(slug, v);
-    }
-    // Claims To Review (docs/82 R5): the human review gate — claim lines of each CM
-    // invoice's LATEST re-audit run not yet acknowledged. Same math as
-    // /api/credit-memos/pending, so this card always agrees with the checkboxes.
-    const cmInvoices = (cms.data ?? []).map((r) => r.invoice_number);
-    if (cmInvoices.length) {
-      const { data: lines } = await client
-        .from("invoice_line_reaudit")
-        .select("run_label, invoice_number, variance_ext, reviewed_at, created_at")
-        .in("invoice_number", cmInvoices)
-        .eq("classification", "discrepancy")
-        .order("created_at", { ascending: false })
-        .limit(2000);
-      const latestRun = new Map<string, string>();
-      for (const l of lines ?? []) if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
-      for (const l of lines ?? []) {
-        if (latestRun.get(l.invoice_number) !== l.run_label) continue;
-        if (Number(l.variance_ext ?? 0) < 0.05) continue;
-        claimLinesTotal += 1;
-        if (!l.reviewed_at) claimLinesUnreviewed += 1;
-      }
-    }
-  }
-}
+// KPI pills (PEC-198, Chris-approved 2026-08-09): the task-first 7-pill set.
+// ONE loader (lib/kpi-pills.ts) feeds this render AND /api/accounting/kpi-pills —
+// the client re-fetches after every action + a 60s visible-tab poll (PEC-197).
+const kpi = await timeAsync("invoice_audit.kpis", () => loadKpiPills(), perfMetrics);
+const auditPendingCount = kpi.auditPendingCount;
 
 const initialPayload = { offices: data.offices, categories: data.categories };
 const initialPayloadBytes = payloadBytes(initialPayload);
@@ -120,43 +69,72 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       </div>
     </div>
 
-    <p class="iv-kpis-scope">Audit KPIs cover the <strong>processing set</strong> — open, unpaid, excluding credit memos (all ages — every open invoice is processed daily). Use <strong>Due&nbsp;now</strong> to see what’s payment-due (invoice&nbsp;+&nbsp;60&nbsp;days); <strong>Show all</strong> for paid/recent/credit-memo history.</p>
+    <p class="iv-kpis-scope">Every pill is a <strong>work queue</strong> — count + button (PEC-198). Scope: open, unpaid, excluding credit memos.
+      Context: <span data-kpi-sub="scope">{kpi.openInvoices.toLocaleString()} open invoices · {kpi.paidInvoices.toLocaleString()} paid/closed · {kpi.creditMemosOpen.toLocaleString()} credit memos open</span>.
+      Use <strong>Due&nbsp;now</strong> / <strong>Show all</strong> in the toolbar for scope changes.</p>
     <div class="iv-kpis">
-      <div class="iv-kpi"><span class="iv-kpi-lab">Open Invoices</span><span class="iv-kpi-val">{data.totals.openInvoices.toLocaleString()}</span><span class="iv-kpi-sub">active · {data.totals.paidInvoices} paid/closed</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Due Now</span><span class="iv-kpi-val">{data.totals.dueNow.toLocaleString()}</span><span class="iv-kpi-sub">payment due · invoice + 60 days</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Claims To Review</span><span class="iv-kpi-val">{claimLinesUnreviewed.toLocaleString()}</span><span class="iv-kpi-sub">of {claimLinesTotal.toLocaleString()} claim lines · human review gate</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">$ At Risk</span><span class="iv-kpi-val">{money(data.totals.atRisk)}</span><span class="iv-kpi-sub">un-audited overcharge vs negotiated</span></div>
+      <!-- 1 · Claims to Review — the human review gate ($ at risk folded into subtext) -->
       <div class="iv-kpi">
-        <span class="iv-kpi-lab">Credit Memo Requested</span>
-        <span class="iv-kpi-val">{money(cmApprovedTotal + cmDraftTotal)}</span>
-        <span class="iv-kpi-sub">{cmApprovedCount} approved ({money(cmApprovedTotal)}) · {cmDraftCount} draft ({money(cmDraftTotal)})</span>
-        <div class="iv-cm-vendors">
-          {CM_VENDORS.map((v) => {
-            const stats = cmCountByVendor.get(v.slug);
+        <span class="iv-kpi-lab">Claims to Review</span>
+        <span class="iv-kpi-val" data-kpi-val="claims">{kpi.claimsUnreviewed.toLocaleString()}</span>
+        <span class="iv-kpi-sub" data-kpi-sub="claims">of {kpi.claimsTotal.toLocaleString()} claim lines · {money(kpi.atRisk)} at risk</span>
+        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review →</a>
+      </div>
+      <!-- 2 · CM Requests — Approve & Send (merges old CM Requested + Invoice Audit Pending) -->
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">CM Requests — Approve &amp; Send</span>
+        <span class="iv-kpi-val" data-kpi-val="cm">{money(kpi.cmApprovedTotal + kpi.cmDraftTotal)}</span>
+        <span class="iv-kpi-sub" data-kpi-sub="cm">{kpi.cmApprovedCount} approved ({money(kpi.cmApprovedTotal)}) · {kpi.cmDraftCount} draft ({money(kpi.cmDraftTotal)})</span>
+        <div class="iv-cm-vendors" data-kpi-vendors>
+          {kpi.cmByVendor.map((v) => {
             if (v.cmStatus === "coming_soon")
               return <span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon">{v.acronym}</span>;
-            if (!stats || stats.count === 0)
-              return <span class="iv-process-btn iv-secondary iv-vendor-off" title="No credit memos exist for this weekly run">{v.acronym}</span>;
+            if (v.count === 0)
+              return <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">{v.acronym}</span>;
             return (
               <a class="iv-process-btn iv-secondary" href={`/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}`}
                 title={`Open the ${v.label} credit memo email + downloads`}>{v.acronym} →</a>
             );
           })}
         </div>
+        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0} title={auditPendingCount === 0 ? "No data available — report empty" : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)"}>Process <span data-kpi-val="auditPending">{auditPendingCount.toLocaleString()}</span></button>
       </div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">No-Price Lines</span><span class="iv-kpi-val">{data.totals.noPrice.toLocaleString()}</span><span class="iv-kpi-sub">no negotiated match</span></div>
-      <div class="iv-kpi"><span class="iv-kpi-lab">Credit Memos</span><span class="iv-kpi-val">{data.totals.creditMemos.toLocaleString()}</span><span class="iv-kpi-sub">open · unapplied</span></div>
+      <!-- 3 · CMs Awaiting Vendor Credit — the money-chasing queue (NEW) -->
       <div class="iv-kpi">
-        <span class="iv-kpi-lab">Invoice Audit Pending</span>
-        <span class="iv-kpi-val">{auditPendingCount.toLocaleString()}</span>
-        <span class="iv-kpi-sub">credit memos approved → stamp complete</span>
-        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}>Process</button>
+        <span class="iv-kpi-lab">CMs Awaiting Vendor Credit</span>
+        <span class="iv-kpi-val" data-kpi-val="awaiting">{kpi.awaitingCount.toLocaleString()}</span>
+        <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} requested · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
+        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Sent requests not yet received — pairs with the QB CM-TBD QA lines">Chase →</a>
       </div>
+      <!-- 4 · Due Now — Pay -->
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">Due Now — Pay</span>
+        <span class="iv-kpi-val" data-kpi-val="dueNow">{kpi.dueNow.toLocaleString()}</span>
+        <span class="iv-kpi-sub">payment due · invoice + 60 days</span>
+        <button type="button" class="iv-process-btn iv-secondary" id="iv-kpi-duenow" title="Filter the tree to payment-due invoices">Filter ↓</button>
+      </div>
+      <!-- 5 · Paid — Pending Verification -->
       <div class="iv-kpi">
         <span class="iv-kpi-lab">Paid — Pending Verification</span>
-        <span class="iv-kpi-val">{pendingVerificationCount.toLocaleString()}</span>
+        <span class="iv-kpi-val" data-kpi-val="verify">{kpi.pendingVerification.toLocaleString()}</span>
         <span class="iv-kpi-sub">60+ days past invoice date · verify paid</span>
         <button type="button" class="iv-process-btn iv-secondary" id="iv-payments">Manage</button>
+      </div>
+      <!-- 6 · QB Export Pending — un-exported bank-ledger rows per vendor (NEW, mig 228) -->
+      <div class="iv-kpi">
+        <span class="iv-kpi-lab">QB Export Pending</span>
+        <span class="iv-kpi-val" data-kpi-val="qb">{kpi.qbPendingTotal.toLocaleString()}</span>
+        <span class="iv-kpi-sub" data-kpi-sub="qb">{kpi.qbPendingByVendor.length ? kpi.qbPendingByVendor.map((r) => `${r.slug} ${r.pending}`).join(" · ") : "all ledgers exported"}</span>
+        {kpi.qbPendingTotal > 0
+          ? <a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export →</a>
+          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>}
+      </div>
+      <!-- 7 · Agreement Gaps (Alex queue) — lands with PEC-195; raw No-Price is context -->
+      <div class="iv-kpi iv-kpi-off">
+        <span class="iv-kpi-lab">Agreement Gaps — Alex Queue</span>
+        <span class="iv-kpi-val">—</span>
+        <span class="iv-kpi-sub" data-kpi-sub="alex">{kpi.noPriceLines.toLocaleString()} raw no-price lines await Alex triage</span>
+        <span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon — lands with Agent Alex (PEC-195, A3 pending approval)">Coming Soon</span>
       </div>
     </div>
 
@@ -214,7 +192,9 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-date{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit}
   .iv-kpis-scope{font-size:12px;color:var(--muted);margin:0 0 8px}
   .iv-kpis-scope strong{color:var(--text)}
-  .iv-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  .iv-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .iv-kpi-off{opacity:.62}
+  .iv-overdue{color:var(--red);font-weight:700}
   .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
   .iv-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
