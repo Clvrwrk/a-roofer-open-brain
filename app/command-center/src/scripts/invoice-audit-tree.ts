@@ -101,7 +101,7 @@ if (root && dataEl && mount) {
             : `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>`;
         }
       }
-      set('[data-kpi-sub="alex"]', `${num$(k.noPriceLines)} raw no-price lines await Alex triage`);
+      set('[data-kpi-val="alex"]', num$(k.alexCandidates));
       set('[data-kpi-sub="scope"]', `${num$(k.openInvoices)} open invoices · ${num$(k.paidInvoices)} paid/closed · ${num$(k.creditMemosOpen)} credit memos open`);
     } catch {}
   }

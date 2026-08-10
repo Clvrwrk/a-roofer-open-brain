@@ -46,7 +46,9 @@ export interface KpiPillData {
   // 6 · QB Export Pending (per vendor ledger, mig 228)
   qbPendingByVendor: { slug: string; pending: number }[];
   qbPendingTotal: number;
-  // 7 · Agreement Gaps (Alex queue) — lands with PEC-195; raw no-price is its context
+  // 7 · Agreement Gaps (Alex queue) — LIVE (PEC-195): candidate (vendor, office, item)
+  // groups awaiting Agreement Builder review as global product file considerations
+  alexCandidates: number;
   noPriceLines: number;
   // header subtext context (demoted from pills)
   openInvoices: number;
@@ -74,6 +76,7 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
     pendingVerification: 0,
     qbPendingByVendor: [],
     qbPendingTotal: 0,
+    alexCandidates: 0,
     noPriceLines: data.totals.noPrice,
     openInvoices: data.totals.openInvoices,
     paidInvoices: data.totals.paidInvoices,
@@ -84,13 +87,15 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
   if (!client) return out;
 
   const nowIso = new Date().toISOString();
-  const [pipe, pay, cms, sent, qbPend] = await Promise.all([
+  const [pipe, pay, cms, sent, qbPend, alexQ] = await Promise.all([
     client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
     client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
     client.from("credit_memo_requests").select("invoice_number, vendor_slug, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
     client.from("credit_memo_requests").select("expected_credit, follow_up_due_at").eq("request_kind", "requested").eq("status", "sent").limit(2000),
     client.from("v_qb_export_pending").select("vendor_slug, pending_rows"),
+    client.from("agreement_gap_queue").select("id", { count: "exact", head: true }).eq("status", "candidate"),
   ]);
+  out.alexCandidates = alexQ.count ?? 0;
 
   out.auditPendingCount = pipe.count ?? 0;
   out.pendingVerification = pay.count ?? 0;

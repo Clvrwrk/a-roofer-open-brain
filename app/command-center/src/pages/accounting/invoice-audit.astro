@@ -129,12 +129,15 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
           ? <a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export →</a>
           : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>}
       </div>
-      <!-- 7 · Agreement Gaps (Alex queue) — lands with PEC-195; raw No-Price is context -->
-      <div class="iv-kpi iv-kpi-off">
+      <!-- 7 · Agreement Gaps (Alex queue) — LIVE (PEC-195): repeat-purchase No-Price
+           items per (vendor, office) queued as global product file candidates -->
+      <div class="iv-kpi">
         <span class="iv-kpi-lab">Agreement Gaps — Alex Queue</span>
-        <span class="iv-kpi-val">—</span>
-        <span class="iv-kpi-sub" data-kpi-sub="alex">{kpi.noPriceLines.toLocaleString()} raw no-price lines await Alex triage</span>
-        <span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon — lands with Agent Alex (PEC-195, A3 pending approval)">Coming Soon</span>
+        <span class="iv-kpi-val" data-kpi-val="alex">{kpi.alexCandidates.toLocaleString()}</span>
+        <span class="iv-kpi-sub" data-kpi-sub="alex">repeat-purchase items → global product file · Alex auto-clears the rest</span>
+        {kpi.alexCandidates > 0
+          ? <a class="iv-process-btn iv-secondary" href="/accounting/price-agreement/builder#agreement-gaps" title="Review the repeat-purchase candidates in the Agreement Builder">Review →</a>
+          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Review →</span>}
       </div>
     </div>
 

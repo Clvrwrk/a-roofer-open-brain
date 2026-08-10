@@ -3,6 +3,33 @@ import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
 import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
 import { CM_VENDORS } from "@lib/cm-vendor-roster";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+
+// Agreement Gaps — the Alex queue (PEC-195): repeat-purchase No-Price items per
+// (vendor, PE office), candidates for the GLOBAL PRODUCT FILE — the base standard
+// for all negotiated price lists. Populated nightly by alex_no_price_triage().
+interface GapRow { vendor_slug: string; office: string; item_number: string; item_description: string | null; purchases_ytd: number; spend_ytd: number | null; last_purchase: string | null; }
+let gapRows: GapRow[] = [];
+{
+  const { client } = createServerSupabaseClient();
+  if (client) {
+    for (let from = 0; ; from += 1000) {
+      const { data } = await client
+        .from("agreement_gap_queue")
+        .select("vendor_slug, office, item_number, item_description, purchases_ytd, spend_ytd, last_purchase")
+        .eq("status", "candidate")
+        .order("vendor_slug").order("office").order("spend_ytd", { ascending: false })
+        .range(from, from + 999);
+      gapRows.push(...(((data as any[] | null) ?? []) as GapRow[]));
+      if (!data || data.length < 1000) break;
+    }
+  }
+}
+const gapGroups = new Map<string, GapRow[]>();
+for (const r of gapRows) {
+  const k = `${r.vendor_slug} · ${r.office}`;
+  (gapGroups.get(k) ?? (gapGroups.set(k, []), gapGroups.get(k)!)).push(r);
+}
 
 // Each loader degrades to its own empty shape rather than 500-ing the page: the cost
 // roll-up reads v_negotiable_items, which intermittently exceeds the statement timeout,
@@ -79,6 +106,31 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 
     {data.offices.length === 0 && <p class="iv-empty">No negotiable items found.</p>}
     <div id="iv-tree"></div>
+
+    <h2 class="tc-head" id="agreement-gaps">Agreement Gaps — Alex Queue ({gapRows.length} candidates)</h2>
+    <p class="iv-note">Items with <b>no negotiated price</b> purchased <b>2+ times this calendar year</b> for the same (vendor, PE office) — Alex auto-clears every other No-Price line nightly. These are the candidates for the <b>global product file</b>, the base standard for all negotiated price lists. Sorted by YTD spend.</p>
+    {gapRows.length === 0 && <p class="iv-empty">No candidates — Alex has triaged every No-Price line.</p>}
+    <div class="gap-groups">
+      {[...gapGroups.entries()].map(([label, rows]) => (
+        <details class="gap-group">
+          <summary><b>{label}</b><span class="gap-tags"><span class="pill pill-brand">{rows.length} items</span><span class="pill pill-grey">${Math.round(rows.reduce((s, r) => s + Number(r.spend_ytd ?? 0), 0)).toLocaleString()} YTD</span></span></summary>
+          <table class="gap-table">
+            <thead><tr><th>Item</th><th>Description</th><th class="num">Purchases YTD</th><th class="num">Spend YTD</th><th>Last Purchase</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr>
+                  <td class="mono">{r.item_number}</td>
+                  <td>{r.item_description}</td>
+                  <td class="num">{r.purchases_ytd}</td>
+                  <td class="num">${Number(r.spend_ytd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                  <td>{r.last_purchase ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ))}
+    </div>
 
     <h2 class="tc-head">Territory Coverage — who inherits which price list</h2>
     <p class="iv-note">A price agreement held by <b>any</b> branch inside a PE office's 2-hour drive-time ring is <b>inherited by every branch of that vendor in that ring</b>. Where two agreements compete, they resolve <b>per item — lowest price wins</b>, and the source branch is recorded. A lapsed list is <b>still in force</b> until the vendor replaces it, so it shows as <b>Extended (awaiting replacement)</b>, never as an error. A branch that sits inside two office rings is listed under <b>both</b> offices — that is intentional.</p>
@@ -175,6 +227,17 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 </AppShell>
 
 <style is:global>
+  /* Agreement Gaps queue (PEC-195) */
+  .iv .gap-groups{margin:0 0 26px}
+  .iv .gap-group{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--panel)}
+  .iv .gap-group>summary{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer;list-style:none}
+  .iv .gap-group>summary::-webkit-details-marker{display:none}
+  .iv .gap-tags{margin-left:auto;display:flex;gap:6px}
+  .iv .gap-table{width:100%;border-collapse:collapse;border-top:1px solid var(--line)}
+  .iv .gap-table th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 12px;background:var(--panel2)}
+  .iv .gap-table td{padding:7px 12px;border-top:1px solid var(--line);font-size:12.5px}
+  .iv .gap-table .num{text-align:right;font-variant-numeric:tabular-nums}
+  .iv .gap-table .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
   /* Vendor strip (PEC-196) — greyed buttons keep pointer events so tooltips work. */
   .iv .iv-vendor-strip{display:inline-flex;gap:6px;align-items:center}
   .iv .iv-vbtn{display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-weight:700;text-decoration:none}
