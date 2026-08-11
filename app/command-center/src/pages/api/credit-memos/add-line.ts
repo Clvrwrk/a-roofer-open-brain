@@ -118,7 +118,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // engine's numbers and make it a reviewed claim. (Wave runs can predate the
   // migration-205 office pricing — a line the wave saw as no_price may now carry a
   // real negotiated variance; the human's add wins with current data.)
-  const { data: existingRows } = await client
+  const { data: existingRows, error: existingRowsError } = await client
     .from("invoice_line_reaudit")
     .select("id")
     .eq("invoice_number", invoiceNumber)
@@ -126,10 +126,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .eq("run_label", runLabel)
     .eq("line_id", lineId)
     .limit(1);
+  if (existingRowsError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: existingRowsError.message }, { status: 500 });
   let claimId: number;
   if ((existingRows as any[] | null)?.length) {
     claimId = (existingRows as any[])[0].id;
-    await client
+    const { error: claimUpdateError } = await client
       .from("invoice_line_reaudit")
       .update({
         classification: "discrepancy",
@@ -146,6 +147,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
         reviewed_at: nowIso,
       })
       .eq("id", claimId);
+    // A stale claim would retotal the memo wrong and read as unreviewed at approval.
+    if (claimUpdateError) return jsonApiResponse({ error: "claim_update_failed", error_description: claimUpdateError.message }, { status: 500 });
   } else {
     const { data: inserted, error: insertError } = await client
       .from("invoice_line_reaudit")
@@ -179,13 +182,15 @@ export const POST: APIRoute = async ({ locals, request }) => {
   }
 
   // Retotal the draft from the latest-run claim set (same math as pending/approve).
-  const { data: claimRows } = await client
+  const { data: claimRows, error: claimRowsError } = await client
     .from("invoice_line_reaudit")
     .select("variance_ext")
     .eq("invoice_number", invoiceNumber)
     .eq("vendor_slug", vendorSlug)
     .eq("run_label", runLabel)
     .eq("classification", "discrepancy");
+  // Retotalling off a failed read would silently write a $0 credit memo.
+  if (claimRowsError) return jsonApiResponse({ error: "invoice_line_reaudit", error_description: claimRowsError.message }, { status: 500 });
   let expectedCredit = 0;
   let lineCount = 0;
   for (const r of (claimRows as any[] | null) ?? []) {
@@ -197,8 +202,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
   expectedCredit = Math.round(expectedCredit * 100) / 100;
 
   const packetNote = { line_added_by: actor.displayName, line_added_at: nowIso, source: "invoice-audit-tree" };
-  if (existingCm) {
-    await client
+  const { error: cmError } = existingCm
+    ? await client
       .from("credit_memo_requests")
       .update({
         status: existingCm.status === "cancelled" ? "draft" : existingCm.status,
@@ -206,9 +211,8 @@ export const POST: APIRoute = async ({ locals, request }) => {
         line_count: lineCount,
         updated_at: nowIso,
       })
-      .eq("id", existingCm.id);
-  } else {
-    await client.from("credit_memo_requests").insert({
+      .eq("id", existingCm.id)
+    : await client.from("credit_memo_requests").insert({
       invoice_number: invoiceNumber,
       vendor_slug: vendorSlug,
       request_kind: "requested",
@@ -218,7 +222,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       assigned_to: actor.displayName,
       packet: packetNote,
     });
-  }
+  if (cmError) return jsonApiResponse({ error: "credit_memo_write_failed", error_description: cmError.message }, { status: 500 });
 
   // Adding to the CM is also the audit decision on this line (append-only 'disputed')
   // so it leaves the "to audit" count immediately.

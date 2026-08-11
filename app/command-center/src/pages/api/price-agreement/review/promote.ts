@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -35,21 +36,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured" }, { status: 503 });
 
   // confirmed + high rows with a resolved item id.
-  const { data: rows } = await client
+  const { data: rows, error: rowsErr } = await client
     .from("price_list_pdf_staging")
     .select("id,raw_description,price,uom,matched_item_number,match_status")
     .eq("source_doc", sourceDoc)
     .in("match_status", ["confirmed", "high"])
     .not("matched_item_number", "is", null);
+  // A failed read is not "nothing to promote" — reporting it as such hides an outage.
+  if (rowsErr) return jsonApiResponse({ error: "staging_read_failed", error_description: rowsErr.message }, { status: 500 });
   const promote = (rows as any[] | null) ?? [];
   if (!promote.length) return jsonApiResponse({ error: "nothing_to_promote", error_description: "no confirmed/high rows with an item id" }, { status: 400 });
 
   // Reuse an existing agreement for this source (idempotent re-promote), else create one.
   let agreementId: number;
-  const { data: existing } = await client.from("abc_price_agreements").select("id").eq("agreement_number", meta.agreement_number).limit(1).maybeSingle();
+  const { data: existing, error: existingErr } = await client.from("abc_price_agreements").select("id").eq("agreement_number", meta.agreement_number).limit(1).maybeSingle();
+  if (existingErr) return jsonApiResponse({ error: "agreement_read_failed", error_description: existingErr.message }, { status: 500 });
   if ((existing as any)?.id) {
     agreementId = (existing as any).id;
-    await client.from("abc_price_list_items").delete().eq("agreement_id", agreementId); // replace items
+    // Replace items — if the delete fails the insert below would duplicate the agreement's lines.
+    const { error: delErr } = await client.from("abc_price_list_items").delete().eq("agreement_id", agreementId);
+    if (delErr) return jsonApiResponse({ error: "items_delete_failed", error_description: delErr.message }, { status: 500 });
   } else {
     const { data: ins, error: aerr } = await client.from("abc_price_agreements").insert({
       agreement_number: meta.agreement_number, effective_date: meta.effective, expiry_date: meta.expiry,
@@ -70,15 +76,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (ierr) return jsonApiResponse({ error: "items_insert_failed", error_description: ierr.message }, { status: 500 });
 
   // Branch match (idempotent): ship_to derived from a PE Ship-To covering this branch.
-  const { data: st } = await client.from("abc_regions").select("ship_to_number,branch_numbers").eq("account_type", "Ship-To").like("ship_to_number", "2036874%");
+  const { data: st, error: stErr } = await client.from("abc_regions").select("ship_to_number,branch_numbers").eq("account_type", "Ship-To").like("ship_to_number", "2036874%");
+  if (stErr) return jsonApiResponse({ error: "regions_read_failed", error_description: stErr.message }, { status: 500 });
   const shipTo = ((st as any[] | null) ?? []).find((r) => Array.isArray(r.branch_numbers) && r.branch_numbers.map(String).includes(meta.branch))?.ship_to_number ?? null;
-  await client.from("abc_price_agreement_branch_matches").upsert(
+  const { error: matchErr } = await client.from("abc_price_agreement_branch_matches").upsert(
     { abc_price_agreement_id: agreementId, branch_number: meta.branch, ship_to_number: shipTo, confidence_score: 100 },
     { onConflict: "abc_price_agreement_id,branch_number" },
   );
+  if (matchErr) return jsonApiResponse({ error: "branch_match_failed", error_description: matchErr.message }, { status: 500 });
 
-  await client.from("price_list_pdf_staging").update({ match_status: "promoted" }).eq("source_doc", sourceDoc).in("match_status", ["confirmed", "high"]);
-  await client.rpc("refresh_agreement_version_review");
+  // Leaving the staging rows unmarked would let the next promote duplicate this work,
+  // so a failure here is fatal to the request rather than an `ok: true`.
+  const { error: stageErr } = await client.from("price_list_pdf_staging").update({ match_status: "promoted" }).eq("source_doc", sourceDoc).in("match_status", ["confirmed", "high"]);
+  if (stageErr) return jsonApiResponse({ error: "staging_update_failed", error_description: stageErr.message }, { status: 500 });
 
-  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo });
+  const { error: refreshErr } = await client.rpc("refresh_agreement_version_review");
+  reportWriteFailure("price-agreement/review/promote refresh_agreement_version_review", refreshErr);
+
+  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo, versionReviewRefreshed: !refreshErr });
 };

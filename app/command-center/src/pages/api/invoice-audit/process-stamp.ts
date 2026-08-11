@@ -9,6 +9,7 @@ import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } fr
 import { jsonApiResponse } from "@lib/agent-api";
 import { invalidateInvoiceAuditSummaryCache } from "@lib/invoice-audit";
 import { createServerSupabaseClient } from "@lib/supabase.server";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -26,7 +27,7 @@ export const POST: APIRoute = async ({ locals }) => {
   if (error) return jsonApiResponse({ error: "process_stamp", error_description: error.message }, { status: 409 });
   const stamped = Number(data ?? 0);
 
-  await client.from("dashboard_action_log").insert({
+  const { error: logError } = await client.from("dashboard_action_log").insert({
     action_type: "invoice_audit_process_stamp",
     actor_display_name: actor.displayName,
     actor_id: actor.id,
@@ -37,6 +38,7 @@ export const POST: APIRoute = async ({ locals }) => {
     source_table: "invoice_pipeline_status",
     workflow: "invoice-audit-v2",
   });
+  reportWriteFailure("invoice-audit/process-stamp dashboard_action_log", logError);
 
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ stamped });

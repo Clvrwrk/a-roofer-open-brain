@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { resolveSubmission } from "@lib/agreement-submission";
+import { reportWriteFailure } from "@lib/supabase-write";
 
 export const prerender = false;
 
@@ -46,6 +47,7 @@ export const POST: APIRoute = async ({ params, request }) => {
     return Math.round(n * 100) / 100;
   };
   let written = 0;
+  const failedItems: string[] = [];
   for (const it of items) {
     const itemNumber = String(it.itemNumber ?? "").slice(0, 80);
     if (!itemNumber) continue;
@@ -57,10 +59,27 @@ export const POST: APIRoute = async ({ params, request }) => {
       .update({ vendor_final_price: price, vendor_note: vnote, updated_at: nowIso })
       .eq("package_id", sub.package_id)
       .eq("item_number", itemNumber);
-    if (!error) written++;
+    if (error) {
+      reportWriteFailure(`price-agreement/submit agreement_package_items ${itemNumber}`, error);
+      failedItems.push(itemNumber);
+      continue;
+    }
+    written++;
   }
 
-  await client.from("agreement_packages").update({ status: action === "rejected" ? "rejected" : "submitted", updated_at: nowIso }).eq("id", sub.package_id);
+  // The token is already claimed, so a failed status flip must not 500 the vendor —
+  // but it is reported both in the log and in the response.
+  const { error: packageError } = await client
+    .from("agreement_packages")
+    .update({ status: action === "rejected" ? "rejected" : "submitted", updated_at: nowIso })
+    .eq("id", sub.package_id);
+  reportWriteFailure("price-agreement/submit agreement_packages", packageError);
 
-  return jsonApiResponse({ ok: true, action, itemsWritten: written });
+  return jsonApiResponse({
+    ok: true,
+    action,
+    itemsWritten: written,
+    itemsFailed: failedItems.length,
+    packageStatusUpdated: !packageError,
+  });
 };
