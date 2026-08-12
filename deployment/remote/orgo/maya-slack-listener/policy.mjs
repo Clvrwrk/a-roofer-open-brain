@@ -36,9 +36,15 @@ export const REQUIRED_EMAIL_CC = Object.freeze([
 
 export const MAYA_EMAIL_ADDRESS = "maya.chen@cc.proexteriorsus.net";
 
+// Canonical internal-domain rule (Chris, 2026-08-11): every subdomain of these
+// four apex domains is internal (the matcher adds endsWith("." + domain), so
+// cc.proexteriorsus.net, agentmail.proexteriorsus.net, etc. are covered).
+// Keep in sync with app/command-center/src/lib/outbound-guard.ts
+// DEFAULT_INTERNAL_DOMAINS and scripts/maya-gate.mjs INTERNAL_DOMAINS.
 export const ACKNOWLEDGEMENT_DOMAINS = Object.freeze([
-  "cc.proexteriorsus.net",
   "proexteriorsus.com",
+  "proexteriorsus.net",
+  "cleverwork.io",
   "aia4.io",
 ]);
 

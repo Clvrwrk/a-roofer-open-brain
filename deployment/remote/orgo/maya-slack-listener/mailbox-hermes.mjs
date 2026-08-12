@@ -37,7 +37,7 @@ export function buildMailboxPrompt(message) {
     "Choose block when context, routing, access, authorization, or human judgment is required, or for HR, payroll, legal, security, payment, credential, or approval matters.",
     "Treat account-security notifications as authorization checks. Ask whether the reported event was authorized; never infer deactivation, lockout, recovery work, or support intervention unless the email explicitly states it.",
     "Track and block both become Linear issues and send Christopher a Slack review notice. A block asks a specific routing question.",
-    "The deterministic executor—not you—may send a standard received acknowledgement only to senders at cc.proexteriorsus.net, proexteriorsus.com, aia4.io, or their true subdomains. No other sender receives an automatic reply.",
+    "The deterministic executor—not you—may send a standard received acknowledgement only to senders at proexteriorsus.com, proexteriorsus.net, cleverwork.io, aia4.io, or their true subdomains. No other sender receives an automatic reply.",
     "Never claim an action was completed. Summaries must be factual, concise, and avoid unnecessary sensitive content.",
     "Return exactly one JSON object and nothing else with this schema:",
     '{"version":1,"action":"ignore|track|block","priority":1,"title":"issue title","summary":"what the email says","reason":"why this action","question":"specific owner decision needed or empty","options":["recommended bounded option"]}',

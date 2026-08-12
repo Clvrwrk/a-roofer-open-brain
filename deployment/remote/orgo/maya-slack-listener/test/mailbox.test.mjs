@@ -388,8 +388,9 @@ test("every legacy accounting alias is a deterministic review route", () => {
 
 test("automatic receipts are limited to approved domains and always include both CCs", async () => {
   assert.deepEqual(ACKNOWLEDGEMENT_DOMAINS, [
-    "cc.proexteriorsus.net",
     "proexteriorsus.com",
+    "proexteriorsus.net",
+    "cleverwork.io",
     "aia4.io",
   ]);
   assert.equal(senderCanReceiveAcknowledgement("person@cc.proexteriorsus.net"), true);
@@ -398,8 +399,9 @@ test("automatic receipts are limited to approved domains and always include both
   assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.com"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@aia4.io"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@ops.aia4.io"), true);
-  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.net"), false);
-  assert.equal(senderCanReceiveAcknowledgement("person@cleverwork.io"), false);
+  assert.equal(senderCanReceiveAcknowledgement("person@mail.proexteriorsus.net"), true);
+  assert.equal(senderCanReceiveAcknowledgement("person@cleverwork.io"), true);
+  assert.equal(senderCanReceiveAcknowledgement("chussey@cleverwork.io"), true);
   assert.equal(senderCanReceiveAcknowledgement("person@proexteriorsus.com.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@aia4.io.example"), false);
   assert.equal(senderCanReceiveAcknowledgement("person@evil-cleverwork.io.example"), false);
