@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/9 eve (deploy 1283b99, migs→228):** Shipped PEC-193/194/197/198/200 + PEC-196 phase A (5 fail-closed vendor guards, roster agreementStatus, docs/90). PEC-195 A3 drafted. **NEXT: PEC-196 B1 staging vendor col → B2 generic promote → B3 builder threading** (docs/90 has the map; Price Agreements page = the multi-vendor reference). PEC-186 tree CLOSED (gate live test done, Maya replied). PEC-195 LIVE (migs 229/229b, nightly, pill 7, gap queue; threshold ≥2 — flag if Chris meant ≥3).
+**8/11 eve (main de0e24e):** Maya wave PEC-206..209. Slack FIXED (channel was private, bots now invited). Claimant ALIVE (Orgo listener polls Agent Todo 5-min; 206-208 → Agent Working; that mode can't send email). **NEXT: `scripts/orgo-ship-maya-listener.sh` (Chris runs w/ ORGO_API_KEY, or grants op/curl perm)**; then PEC-209: v_invoice_pricing_office uses ship-to HOME branch not servicing branch → 38 inv/~$135K wrong office; + gate 23514 (notices CHECK lacks 'ack_in_thread'). PEC-196 B1-B3 queued.
 
 
 ## Standing instructions (Chris)
