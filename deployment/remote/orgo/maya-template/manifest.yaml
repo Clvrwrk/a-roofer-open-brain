@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "package": "maya-runtime",
+  "runtime_version": "1.0.0-rc.4",
+  "release_state": "build_only",
+  "identity": {
+    "persona_id": "maya-chen",
+    "display_name": "Maya Chen",
+    "destination": "INJECT_AT_LAUNCH"
+  },
+  "activation": {
+    "enabled_by_default": false,
+    "environment_flag": "MAYA_ENABLED",
+    "receipt_path": "/var/lib/cleverwork/maya-agent-v1/gates/activation.json",
+    "public_key_path": "/var/lib/cleverwork/maya-agent-v1/gates/activation-ed25519.pub"
+  },
+  "runtime": {
+    "service": "maya-runtime-v1",
+    "service_account": "maya-agent",
+    "release_root": "/opt/cleverwork/maya-runtime-v1",
+    "state_root": "/var/lib/cleverwork/maya-agent-v1/state",
+    "health_path": "/var/lib/cleverwork/maya-agent-v1/state/health.json",
+    "supervisor": "supervisor",
+    "node_path": "/usr/local/bin/node",
+    "node_version": "22.22.3"
+  },
+  "work": {
+    "tracker_home": "CODEX AGENT TEAM",
+    "work_in_progress_limit": 1,
+    "retry_limit": 3
+  },
+  "memory": {
+    "zone": "ob1-pe-finance",
+    "principal": "INJECT_AT_LAUNCH",
+    "required_client_id": "pe-finance"
+  },
+  "communications": {
+    "email": "off",
+    "slack": "off",
+    "linear_external": "off",
+    "publishing": "off"
+  }
+}
