@@ -534,6 +534,12 @@ if (root && dataEl && mount) {
   async function loadInvoiceLines(inv: Invoice): Promise<boolean> {
     if (inv.lines.length > 0) return true;
     if (inv.linesLoaded && inv.lineCount <= 0) return true;
+    // PEC-215 guard: never request detail for a blank invoice number. A CSV
+    // totals row ingested as an invoice used to reach this surface and fire
+    // /api/invoice-audit/invoice?invoiceNumber= → 404 on every page load. The
+    // row is quarantined (mig 232) and the ingest now fails closed, but keep
+    // the client honest so a malformed row can never re-emit that 404.
+    if (!String(inv.invoiceNumber ?? "").trim()) return false;
     let inflight = invoiceDetailInflight.get(inv.invoiceNumber);
     if (!inflight) {
       inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { cache: "no-store", credentials: "same-origin", headers: { accept: "application/json" } })

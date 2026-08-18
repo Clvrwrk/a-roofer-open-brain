@@ -93,12 +93,11 @@ export async function loadPriceAgreementManagement(env: RuntimeEnv = getRuntimeE
   if (!client) return empty;
   const today = new Date().toISOString().slice(0, 10);
 
-  const [officeRows, vendorRows, covRows, histRows, apiRows, proposalRows] = await Promise.all([
+  const [officeRows, vendorRows, covRows, histRows, proposalRows] = await Promise.all([
     fetchAll<any>((a, b) => client.from("office").select("id,name,is_active").range(a, b)),
     fetchAll<any>((a, b) => client.from("vendors").select("id,name,slug,is_active").range(a, b)),
     fetchAll<any>((a, b) => client.from("v_office_vendor_agreements").select("*").range(a, b)),
     fetchAll<any>((a, b) => client.from("mv_vendor_office_item_history").select("*").gte("purchase_count", 2).range(a, b)),
-    fetchAll<any>((a, b) => client.from("v_branch_item_api_price").select("item_number,api_price").range(a, b)),
     fetchAll<any>((a, b) => client.from("price_agreement_proposals").select("*").eq("status", "draft").range(a, b)),
   ]);
 
@@ -146,12 +145,24 @@ export async function loadPriceAgreementManagement(env: RuntimeEnv = getRuntimeE
     (histByOfficeVendor.get(key) ?? (histByOfficeVendor.set(key, []), histByOfficeVendor.get(key)!)).push(h);
   }
 
+  // PEC-216: fetch API prices ONLY for the items the gap worksheet actually shows.
+  // This used to page v_branch_item_api_price in full — 39,984 rows / ~40 round
+  // trips on every page load — to serve a lookup consulted solely at the
+  // `apiPrice:` line below, for the ~593 history items. That single query was the
+  // bulk of a 13.5s render. `.in()` is chunked per the PostgREST playbook, and each
+  // chunk still pages because one item spans many branches.
+  const apiItemNumbers = [...new Set(histRows.map((h) => h.item_number).filter(Boolean).map(String))];
   const apiByItem = new Map<string, number>();
-  for (const r of apiRows) {
-    const p = num(r.api_price);
-    if (!r.item_number || p <= 0) continue;
-    const cur = apiByItem.get(r.item_number);
-    if (cur == null || p < cur) apiByItem.set(r.item_number, p);
+  for (let i = 0; i < apiItemNumbers.length; i += 200) {
+    const chunk = apiItemNumbers.slice(i, i + 200);
+    const rows = await fetchAll<any>((a, b) =>
+      client.from("v_branch_item_api_price").select("item_number,api_price").in("item_number", chunk).range(a, b));
+    for (const r of rows) {
+      const p = num(r.api_price);
+      if (!r.item_number || p <= 0) continue;
+      const cur = apiByItem.get(r.item_number);
+      if (cur == null || p < cur) apiByItem.set(r.item_number, p);
+    }
   }
 
   const proposalByKey = new Map<string, any>();
