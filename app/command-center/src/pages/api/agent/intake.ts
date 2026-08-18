@@ -5,6 +5,7 @@ import {
   serializeActor,
 } from "@lib/access-control";
 import { buildAgentIntakeRows, type AgentIntakeMessage } from "@lib/agent-intake";
+import { evaluateIntakeGuard } from "@lib/agent-intake-guard";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 import { getRuntimeEnv } from "@lib/runtime-env";
@@ -130,12 +131,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
+  // Boundary guard (PEC-149..158, PEC-167/169/170): drop agent self-receipt
+  // echoes outright, and fold account/security notices into one rolling monthly
+  // work item instead of one Urgent ticket per notice. See agent-intake-guard.ts.
+  const guard = evaluateIntakeGuard({
+    from: String(payload.from),
+    receivedAt: String(payload.receivedAt),
+  });
+  if (guard.action === "drop") {
+    return jsonApiResponse({
+      status: "ignored",
+      rule: guard.rule,
+      reason: guard.reason,
+    });
+  }
+
   const msg: AgentIntakeMessage = {
     messageId: String(payload.messageId),
     externalEventId: String(payload.externalEventId ?? payload.messageId),
     sourceChannel: sourceChannel as AgentIntakeMessage["sourceChannel"],
     sourceThreadId: String(payload.sourceThreadId ?? ""),
-    orchestrationKey: String(payload.orchestrationKey),
+    orchestrationKey: guard.action === "fold" ? guard.orchestrationKey : String(payload.orchestrationKey),
     catSourceIssue: String(payload.catSourceIssue),
     downstreamIssue: String(payload.downstreamIssue ?? ""),
     alias: String(payload.alias),
