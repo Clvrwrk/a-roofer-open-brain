@@ -219,12 +219,22 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     .fw .fw-group-name { font-weight: 700; }
     .fw .fw-group-count { color: var(--muted); font-size: 12.5px; }
     .fw .fw-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
-    .fw .fw-tablewrap { overflow-x: auto; }
-    .fw .fw-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+    /* Expanded office = a fixed 70vh spreadsheet pane: rows scroll vertically,
+       the yellow columns scroll horizontally, the header row and the first two
+       columns (Job # · Client) stay frozen. Sticky cells need border-collapse:
+       separate (collapsed borders don't travel with sticky cells) and their own
+       opaque backgrounds, so zebra/hover paint on td, not tr. */
+    .fw .fw-tablewrap { overflow: auto; max-height: 70vh; }
+    .fw .fw-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
     .fw .fw-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
     .fw .fw-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    .fw .fw-table tbody tr:nth-child(even) { background: var(--zebra); }
-    .fw .fw-table tbody tr:hover { background: var(--fill-bg); }
+    .fw .fw-table thead th { position: sticky; top: 0; z-index: 3; background: var(--panel); }
+    .fw .fw-table th:nth-child(-n + 2), .fw .fw-table td:nth-child(-n + 2) { position: sticky; z-index: 2; background: var(--panel); }
+    .fw .fw-table th:nth-child(1), .fw .fw-table td:nth-child(1) { left: 0; width: 72px; min-width: 72px; max-width: 72px; white-space: nowrap; }
+    .fw .fw-table th:nth-child(2), .fw .fw-table td:nth-child(2) { left: 72px; box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.28); }
+    .fw .fw-table thead th:nth-child(-n + 2) { z-index: 4; }
+    .fw .fw-table tbody tr:nth-child(even) td { background: var(--zebra); }
+    .fw .fw-table tbody tr:hover td { background: var(--fill-bg); }
     .fw .fw-table th.fw-fill { background: var(--fill-bg); }
     .fw .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .fw .fw-client { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
