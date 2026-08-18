@@ -121,11 +121,49 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
     const { data: invs, error } = await client
       .from("abc_invoices")
-      .select("invoice_number, invoice_date, total_amount, is_credit_memo")
+      .select("invoice_number, invoice_date, total_amount, is_credit_memo, purchase_order_number")
       .gte("invoice_date", since)
       .order("invoice_date")
       .limit(5000);
     if (error) return jsonApiResponse({ error: "abc_invoices", error_description: error.message }, { status: 409 });
+
+    // PEC-208: when the match view lacks a job-shaped number (sloppy ABC POs like
+    // "ks191", "KS 178", "tx450" fall back to the ship-to ACCOUNT name, e.g.
+    // "Storm/wichita"), try to recover the job from the raw PO: normalize to
+    // XX-123 shape, then only trust it if that job actually exists in AccuLynx.
+    const JOB_SHAPE = /^[A-Z]{2,3}-\d{1,5}$/;
+    const normalizePo = (po: string): string | null => {
+      const m = po.trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z]{2,3})-?(\d{1,5})$/);
+      return m ? `${m[1]}-${m[2]}` : null;
+    };
+    const candidates = new Map<string, string>(); // invoice_number → normalized job candidate
+    for (const i of invs ?? []) {
+      const n = String(i.invoice_number);
+      const cur = jobByInvoice.get(n);
+      const curJob = String(cur?.job ?? "");
+      if (JOB_SHAPE.test(curJob) || JOB_SHAPE.test(curJob.replace(/-\d+$/, ""))) continue;
+      const cand = normalizePo(String((i as any).purchase_order_number ?? ""));
+      if (cand) candidates.set(n, cand);
+    }
+    if (candidates.size) {
+      const uniq = [...new Set(candidates.values())];
+      const verified = new Set<string>();
+      for (let i = 0; i < uniq.length; i += 200) {
+        const { data: jobs } = await client
+          .from("acculynx_jobs")
+          .select("job_number, job_name")
+          .in("job_number", uniq.slice(i, i + 200));
+        for (const j of jobs ?? []) {
+          verified.add(String(j.job_number).toUpperCase());
+          const name = String(j.job_name ?? "").replace(new RegExp(`^${String(j.job_number)}\\s*:\\s*`, "i"), "").trim();
+          for (const [inv, cand] of candidates) {
+            if (cand === String(j.job_number).toUpperCase()) {
+              jobByInvoice.set(inv, { job: cand, client: name || jobByInvoice.get(inv)?.client || null });
+            }
+          }
+        }
+      }
+    }
 
     const cmNumbers = (invs ?? []).filter((i) => i.is_credit_memo).map((i) => String(i.invoice_number));
     const originalByCm = new Map<string, string | null>();
