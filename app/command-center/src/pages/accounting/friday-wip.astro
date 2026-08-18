@@ -16,10 +16,7 @@ const runtimeTone = board.status === "live" ? "ready" : "watch";
 const runtimeLabel = board.status === "live" ? "Supabase live" : "Supabase pending";
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(board.generatedAt));
 const today = new Date().toISOString().slice(0, 10);
-const statusClass = (s: string) =>
-  s === "Critical AR" ? "fw-status-critical" : s === "Collected in Full" ? "fw-status-full" : s === "Invoiced" ? "fw-status-invoiced" : "fw-status-pending";
-
-// Status column = [AccuLynx status] · our reference bucket.
+// Status column = AccuLynx status; ref bucket + collection status live in the tooltip.
 const MILESTONE_LABELS: Record<string, string> = {
   unassigned_lead: "Lead",
   assigned_lead: "Lead",
@@ -100,7 +97,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
           <table class="fw-table">
             <thead>
               <tr>
-                <th>Job #</th><th>Client</th><th>Status (AccuLynx · ref)</th><th>Rep</th>
+                <th>Job #</th><th>Client</th><th>Status (AccuLynx)</th><th>Rep</th>
                 <th class="fw-num" title="AccuLynx approved job value (L)">Contract Total</th>
                 <th class="fw-num" title="Σ non-void invoices issued (P)">Invoiced Total</th>
                 <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
@@ -123,7 +120,6 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
                   <td class="fw-client" title={j.client}>{j.client}</td>
                   <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}`}>
                     <strong>{milestoneLabel(j.milestone)}</strong>
-                    <span class={"fw-ref " + statusClass(j.collectionStatus)}> · {j.bucket}</span>
                   </td>
                   <td>{j.salesperson}</td>
                   <td class="fw-num">{money(j.contractAmount)}</td>
@@ -239,16 +235,11 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     .fw .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .fw .fw-client { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fw .fw-bucket { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fw .fw-ref { font-size: 11.5px; }
     .fw .fw-days { text-align: center; }
     .fw .fw-days-chip { display: inline-block; min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .fw .fw-action-invoice { color: var(--red); font-weight: 600; }
     .fw .fw-action-collect { color: var(--teal); font-weight: 600; }
     .fw[data-theme="dark"] .fw-action-collect { color: var(--green); }
-    .fw .fw-status-critical { color: var(--red); font-weight: 600; }
-    .fw .fw-status-full { color: var(--green); font-weight: 600; }
-    .fw .fw-status-invoiced { color: var(--orange); }
-    .fw .fw-status-pending { color: var(--purple); }
     .fw .fw-edit { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 12px; background: var(--fill-cell); color: var(--ink); }
     .fw .fw-edit.fw-saved { border-color: var(--saved-line); background: var(--saved-bg); }
     .fw .fw-edit.fw-failed { border-color: var(--failed-line); background: var(--failed-bg); }
