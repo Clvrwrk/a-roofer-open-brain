@@ -21,6 +21,7 @@ import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { cmVendorBySlug } from "@lib/cm-vendor-roster";
+import { commercialCheckNo } from "@lib/qb-bank-job";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
@@ -121,7 +122,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
     const { data: invs, error } = await client
       .from("abc_invoices")
-      .select("invoice_number, invoice_date, total_amount, is_credit_memo, purchase_order_number")
+      .select("invoice_number, invoice_date, total_amount, is_credit_memo, purchase_order_number, ship_to_name")
       .gte("invoice_date", since)
       .order("invoice_date")
       .limit(5000);
@@ -163,6 +164,27 @@ export const GET: APIRoute = async ({ locals, url }) => {
           }
         }
       }
+    }
+
+    // Commercial override (Chris 2026-08-18, PEC-214). Commercial work is not
+    // tracked as an AccuLynx job, so the match view falls back to the ship-to
+    // ACCOUNT name and every commercial invoice used to export Check No
+    // "Commercial" — useless for job costing. The Customer PO# is where PE
+    // actually records the commercial job reference, so for these invoices it
+    // IS the job number and takes precedence over everything above.
+    //
+    // Detection uses the ship-to NAME (mig 231 generated column) rather than the
+    // ship-to number 2036874-17, so a second Commercial ship-to would still be
+    // caught. Value is used verbatim (trim + uppercase, then the shared 12-char
+    // QB cap) — including freeform references like "SERVICE STOCK"; we do NOT
+    // try to normalize job-shaped POs such as "TX454" into "TX-454", because on
+    // a commercial invoice the PO as written is the reference accounting uses.
+    // A blank Customer PO# falls through to the standard resolution above.
+    for (const i of invs ?? []) {
+      const po = commercialCheckNo((i as any).ship_to_name, (i as any).purchase_order_number);
+      if (!po) continue; // not commercial, or blank PO → keep the standard resolution
+      const n = String(i.invoice_number);
+      jobByInvoice.set(n, { job: po, client: jobByInvoice.get(n)?.client ?? null });
     }
 
     const cmNumbers = (invs ?? []).filter((i) => i.is_credit_memo).map((i) => String(i.invoice_number));
