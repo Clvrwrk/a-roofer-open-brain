@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/11 eve (main de0e24e):** Maya wave PEC-206..209. Slack FIXED (channel was private, bots now invited). Claimant ALIVE (Orgo listener polls Agent Todo 5-min; 206-208 → Agent Working; that mode can't send email). **NEXT: `scripts/orgo-ship-maya-listener.sh` (Chris runs w/ ORGO_API_KEY, or grants op/curl perm)**; then PEC-209: v_invoice_pricing_office uses ship-to HOME branch not servicing branch → 38 inv/~$135K wrong office; + gate 23514 (notices CHECK lacks 'ack_in_thread'). PEC-196 B1-B3 queued.
+**8/18 (live 36227c5):** mig **230** shipped (office = SERVICING branch; 49 inv/$119.6K refiled; 23514 dead), intake guard, WIP/AR frozen cols. **NEXT = PEC-213:** Wichita has NO price coverage (SRS exp 7/23, ABC 7/31) → 83% of new lines No-Price + Alex auto-passes, so "0 to audit" = COVERAGE hole not clean billing; `agreement_gap_queue` 302/$579K. Never infer prices from invoices. **Chris owes:** PEC-111 (IKO KS or DFW?), 177 (Titan quote), 149-158 (6/6), 172 (Billy), 203 (export). Report: PEC-212.
 
 
 ## Standing instructions (Chris)
