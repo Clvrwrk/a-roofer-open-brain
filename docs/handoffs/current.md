@@ -2,118 +2,112 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-18 10:05 (CT)
+**Date:** 2026-08-19 11:35 (CT)
 **Agent:** Lead Orchestrator (Claude Code)
-**Reason:** User-requested /wrapup + /project-handoff
+**Reason:** User-requested /project-handoff + /wrapup
 
 ---
 
 ## Accomplished This Session
 
-### Friday WIP/AR board UX (shipped, live)
+### Fixes shipped to production
+- `schemas/cleverwork-roofer/232-quarantine-blank-invoice-rows.sql` **(prod)**: quarantined the phantom $59,639.20 CSV-footer row into `abc_invoices_quarantine` (archived, not deleted) + a CHECK so a malformed import fails closed. ABC spend now reads the true **$2,197,424.94**. (PEC-215)
+- `app/command-center/src/lib/price-agreement-management.ts`: chunked `.in()` — was paging **39,984** `v_branch_item_api_price` rows to serve ~593 items. **13.56s → 2.9s**. Equivalence proven in SQL across all 492 needed items, zero mismatches. (PEC-216)
+- `app/command-center/src/pages/accounting/price-agreements/index.astro`: worksheet rows deferred to the client as JSON. **3.77 MB → 309 KB (12x)**. Propose-price handler moved to event delegation. (PEC-216)
+- `app/command-center/src/scripts/invoice-audit-tree.ts`: guard against fetching detail for a blank invoice number.
 
-- `app/command-center/src/pages/accounting/friday-wip.astro`: expanded PE-office group is now a 70vh scroll pane — vertical row scroll + horizontal scroll for the yellow edit columns, sticky header row, and **Job # + Client frozen left** (72px col 1, edge shadow on col 2). Required `border-collapse: separate` and moving zebra/hover paint from `tr` to `td` so sticky cells stay opaque.
-- `app/command-center/src/pages/accounting/friday-wip.astro`: Status column reduced to the **AccuLynx status only** (dropped the `· ref bucket` trailer); ref bucket + collection status remain in the hover tooltip. Removed the now-dead `statusClass` helper and `.fw-ref` / `.fw-status-*` CSS.
+### Site cleanup (PEC-217)
+- Deleted 11 files: the whole `/data-quality/*` Price Foundation stack, Negotiated Catalog, Vendor Regions, and `lib/price-list.ts` (10 invented SKUs + 8 fake branches). Rationale + restore SHA in `docs/91`.
+- Vendor Regions needed companion edits: it linked *from the territory map to itself*, and sat in the service-worker precache — **SW VERSION bumped** so installed workers evict the stale entry instead of serving a cached 404.
+- Kept redirect stubs deliberately: deleting them would *create* broken links.
 
-### P0 — wrong-office pricing (PEC-209 / PEC-210)
+### Daily automation (Layer 2)
+- `scripts/site-quality-sweep.mjs` + `deployment/remote/systemd/openbrain-site-sweep.{service,timer}` — 06:00 CT on the Hetzner agent host. Static (link graph, fabricated data, orphans) + live (`/healthz`, deploy drift, `/api/*` budgets). Docs `docs/92`.
+- First draft emitted 2 errors + 21 warnings, **all false positives**; detectors tightened to a real baseline of 0 errors / 2 genuine warnings.
 
-- `schemas/cleverwork-roofer/230-invoice-office-servicing-branch.sql` **(applied to prod)**: `v_invoice_pricing_office` now derives the PE office from the invoice's **servicing branch** (`abc_invoices.branch_number_extracted`), vendor-scoped to abc-supply, instead of the ship-to's *home* branch. **49 invoices / $119,576 were mis-officed.** Fails closed (unknown / uncovered / no-office branch drops out → Alex No-Price triage). Same migration widens `agent_intake_notices.status` CHECK to accept `ack_in_thread` (was throwing 23514 on every Maya gate run) and refreshes `mv_invoice_pricing_office` (the live call path used by `credit-memos/add-line.ts` and `credit_memo_claims_sync`).
+### Orgo QA desktop + site walker (PEC-220)
+- Provisioned workspace `pro-exteriors-open-brain` (`ea96d7b0-…`) and desktop `pe-site-qa` (`725ce9d6-2bf7-4f4e-baac-f63b1390c117`, instance `073ff51e`). npm + playwright-core installed; chrome/xdotool/scrot present.
+- `scripts/orgo-site-walker.mjs` — per-page speed, hangs, console errors, failed requests, click-through validation, and surface-level vulnerability checks. Docs `docs/94`.
 
-### P1 — ledger (PEC-203 / 206 / 207 / 208)
-
-- `app/command-center/src/pages/api/accounting/qb-bank-csv.ts`: PEC-208 sloppy-PO job recovery (live).
-- PEC-203 diagnosed: the ABC mirror was **complete**; the gap is an export seam (hard-coded `since=2026-08-01` floor + legacy register CSV last run 7/19 ⇒ 7/20–7/31 fell in the crack). 62-row catch-up preview generated since 7/1; `mode=export` deliberately left for a human to fire.
-
-### P3 — intake queue hygiene
-
-- `app/command-center/src/lib/agent-intake-guard.ts` **(new)**: server-side boundary guard for `POST /api/agent/intake`. Rule `self_receipt_loop` drops messages whose sender is an agent workspace address (`*@cc.proexteriorsus.net`) — the echo that produced PEC-167/169/170. Rule `security_notice_fold` rewrites the `orchestrationKey` of Google/WorkOS/Drive account notices to `security-notice:<YYYY-MM>` so they converge onto ONE rolling monthly work item via the existing `work_key` upsert instead of one Urgent ticket each (produced PEC-149…158). Nothing is suppressed — each notice still appends its own audit row.
-- `app/command-center/src/lib/agent-intake-guard.unit.test.ts` **(new)**: 9 tests built from the real historical messages (Maya self-echo, the 6/6 Google cluster, Drive-share + WorkOS senders, monthly bucket rotation, Lucinda/vendor pass-through, unparseable date).
-- `app/command-center/src/pages/api/agent/intake.ts`: guard wired in between validation and row construction; `drop` returns `{status:"ignored", rule, reason}`.
-
-### Investigation — "why is the audit queue empty?" (no code change)
-
-Verified against prod, replicating the surface's exact `pendingLines` rule. Findings in **Decisions** below.
+### Credit-memo re-audit (PEC-221)
+- All 53 open requests re-derived **three times by three independent models** (grok-4.6 / gpt-5.6-sol / claude-opus-5) under Ringer with an executed check. **Unanimous 3/3, zero splits.**
+- **$4,738.22 → $4,653.76** (50 uphold, 1 adjust, 2 withdraw). Drafts in `.cm-reaudit/drafts/`. Docs `docs/93`.
 
 ## Git State
 - **Branch:** `main` (== `origin/main`)
-- **Last commit:** `ed92198` — "docs(memory): 2026-08-18 session 2 — Maya queue P0-P3 wave"
-- **Uncommitted changes:** none at time of writing (this handoff + memory updates commit next)
+- **Last commit:** `b2f602f`
+- **Uncommitted:** none (this handoff commits next)
 
 ## Task Cut Off
-None — session ended at a clean boundary. All code is committed, pushed, and deployed (`/healthz` buildCommit `36227c5`, status ok). Three Linear tickets are deliberately parked on human answers (see Blockers).
+None mid-block. Two things are **staged but deliberately not actioned**: the credit-memo drafts (not sent, not written to `credit_memo_requests`) and the Orgo walker (waiting on a one-time human WorkOS sign-in).
 
 ## Next Task — Start Here
 
-**Task:** Renew the expired Wichita price agreements and work the agreement gap queue by spend.
+**Task:** One-time WorkOS sign-in on the Orgo QA desktop, then schedule the daily walk.
 
-**What to check / do:**
-1. Confirm the coverage hole is still open:
-   `select office, vendor, max(expiry_date) from ...` — as of 2026-08-18 the **SRS Wichita** agreement `0049828559` expired **7/23/26** and **ABC Wichita** `2036874-16` expired **7/31/26**. With no successor loaded, every new Wichita invoice fails closed to No-Price.
-2. Pull the gap queue ranked by spend: `select * from agreement_gap_queue order by spend_ytd desc` — **302 items / 1,707 purchases / $578,950 YTD, all still `status='candidate'`**. The top ~20 items carry most of the dollars.
-3. Load the renewal price sheets as **versioned** agreements (never overwrite): new `price_agreements` row + `price_agreement_items` at `approval_status='pending'`, provenance + effective/expiry dates attached.
-4. Optional but recommended: surface `agreement_gap_queue` count in the Invoice Audit header so "0 to audit" can never read as "all clean" while 302 candidates wait.
+**Steps:**
+1. Open https://www.orgo.ai/desktops/073ff51e
+2. Launch Chrome with `--user-data-dir=/opt/pe-qa/chrome-profile` and sign in to WorkOS at `cc.proexteriorsus.net`. **An agent must not do this step.**
+3. Copy `scripts/orgo-site-walker.mjs` to `/opt/pe-qa/` and run `node orgo-site-walker.mjs`.
+4. Schedule it daily alongside the 06:00 CT sweep.
 
-**If the renewal PDFs aren't available:** do not infer prices from invoices. Leave the office at No-Price (fail closed per silo doctrine) and ask Chris for the source documents — this is exactly how PEC-111 and PEC-177 went wrong.
+**If the walker reports `session expired`:** the profile lost its session — repeat step 2. It stops on purpose rather than reporting every page as broken.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Then pull agreement_gap_queue ranked by spend_ytd and give me the top 20 items with their office, vendor, purchase count and YTD spend, so we can prioritise agreement renewals. Do not promote any prices without source documents."
+**Prompt to use:** "Read docs/handoffs/current.md. I have signed in to WorkOS on the Orgo QA desktop. Deploy scripts/orgo-site-walker.mjs to /opt/pe-qa, run a full walk, and report every finding."
 
 ## Decisions Made This Session
 
-- **PEC-209 — credit NOT supported.** Invoice 2009034778-001 (Winfield KS job, serviced by ABC branch 113 Wichita) was genuinely mis-officed to Richardson, but on every line the May Wichita agreement covers it was billed **at or below** Wichita pricing (net −$188). Only possible overcharge is $35.20 on caps against a quote dated *after* the invoice. The office bug was real; the overbilling was not. Do not re-open as a credit.
-- **PEC-210 — credit SUPPORTED at $40.26, not the $22.30 requested.** Three lines over Wichita terms (caps +$17.40, Pro-Start +$8.70, Anchordeck +$14.16). The $22.30 ask implies a $17.30 cap price that matches no agreement or quote on file; the defensible benchmark is $19.75 (Wichita quote 0049828559). Request references Kansas City, but the servicing branch is Wichita and no KC agreement prices these items.
-- **PEC-111 — HELD, do not promote.** The three "DFW" IKO prices match the **Kansas** book, not DFW (Cambridge $92 = Wichita exactly; DFW is $112. Dynasty $103 ≈ Wichita $102; DFW $117). Writing them as DFW would cut Cambridge 18% and generate **false credit-memo requests against SRS**. Needs Chris to confirm office from the original 7/8 email.
-- **PEC-177 — HELD, do not promote.** Tamko Titan XT at $101/SQ is $21 below the latest Wichita SRS price ($122) and $34 below ABC Wichita ($134.90), against an industry trend that is *rising*. Not promotable on an email figure; needs the source quote document.
-- **Security batch NOT closed** (deliberate deviation from the approved plan). The underlying emails are **6/6, 6/7 and 6/25** — 8/5–8/6 was only the ticket-creation date during backlog intake. Cluster A (6/6, 22:55–23:17) reads as Chris provisioning Maya (two messages name Chris as sender); Cluster B (6/25) pairs a WorkOS OTP with a Linux sign-in, consistent with agent-host bringup. But password-reset / account-recovery / "OTP not initiated by the agent" are also the exact signature of a takeover, and only Chris knows. **Auto-closing security alerts on agent inference is not an agent call** — all ten moved to `Agent Needs Input` with the timeline instead.
-- **"Zero invoices to audit" is real but does NOT mean verified-and-matched.** Of 819 flagged lines on the 135 actionable invoices, **769 (94%) were No-Price** — cleared with no benchmark to compare against; only 47 were genuine over-agreement. ~400 were cleared by the **Alex agent** (129 `auto_match`, 272 `backfill`), 274 by Chris in a bulk `pipeline_v2` pass on 8/6–8/8. This is by design: `alex_no_price_triage()` (mig 229b / PEC-195) stamps pending No-Price lines passed and routes repeats to `agreement_gap_queue`. **The work moved, it did not vanish.** No-Price share is climbing (Apr 73% → May 62% → Jun 65% → **Jul 83% → Aug 83%**) because agreements are expiring unreplaced. An empty audit queue is currently a *symptom of missing price agreements*, not evidence of clean billing.
+- **Phantom row archived, not deleted** — moved to `abc_invoices_quarantine` with its full `raw` payload (hard rule 1). Fixed at the data source rather than in views, because every consumer reads `abc_invoices` and view edits would still leave raw `SUM()` wrong.
+- **Redirect stubs kept** while orphaned pages were deleted — removing them would create the broken links the audit exists to prevent.
+- **Credit memos: nothing sent, nothing written to the ledger.** Four dataset defects surfaced in one corpus; the numbers want human eyes first.
+- **Two invoices withdrawn** (2009034778-001, 2009557754-001) because item `0150080102` has no in-force Wichita agreement price. An earlier hand analysis valued one at $40.26 using a **quote**; the verification used in-force **agreements** only. A quote is not an agreement — the fail-closed answer is the defensible one.
+- **WorkOS Agent Auth deferred, not attempted.** `/agent/auth` and `/oauth2/token` return live **501**; `agent-auth.ts` is discovery-only. Standing it up means building signing keys, a token store, a trusted-issuer list, replay protection and the human-ownership bridge — a security-critical project guarding a financial app, not a provisioning step.
 
 ## Blockers Requiring Human Action
 
-1. **PEC-111 (IKO DFW pricing)** — Confirm from the original 7/8 email whether Cambridge $92 / Dynasty $103 / Nordic $129 are **DFW or Kansas**. Nothing is staged until then.
-2. **PEC-177 (Tamko Titan $101/SQ)** — Provide the source quote document (number, effective/expiry, volume conditions, exact Titan line).
-3. **Security batch PEC-149…158** — One sentence: *"Yes, I provisioned Maya's Google account the evening of 6/6 and brought her up on the agent host 6/25."* That closes nine tickets.
-4. **PEC-172** — Confirm **Billy Cowell (billy@proexteriorsus.com)** should have sub-account access on the Pro Exteriors LLC AIA4 account, or it needs revoking. This is a live third-party access grant, unrelated to Maya.
-5. **PEC-203 catch-up export** — 62-row CSV since 7/1 is previewed; a human fires `mode=export` (it stamps `qb_bank_export_log`) and sends the file to Lucinda for QBO import.
-6. **Wichita price coverage** — SRS expired 7/23/26, ABC expired 7/31/26. Renewal sheets needed; until then all new Wichita invoices are No-Price.
-7. **567 price_agreement_items are all `approval_status='pending'`** — the approval workflow has never been exercised. Decide whether the existing corpus gets a bulk verification pass.
+1. **Orgo WorkOS sign-in** — step 2 above. Everything else is ready.
+2. **Credit-memo drafts** — review `.cm-reaudit/drafts/`, then decide: supersede in the ledger and send, or adjust.
+3. **PEC-220 Maya's Orgo desktop is GONE** — 0 workspaces on the account and her documented desktop 404s. Her Slack loop, mailbox cadence and Linear claimant have been **down**. Decide whether to rebuild.
+4. **All `ORGO_*_ID` secrets are stale** — the account was rebuilt; ids don't survive. Re-verify every one in 1Password `CW_Master`.
+5. **PEC-213 Wichita coverage** — SRS expired 7/23, ABC 7/31; still the root cause of the No-Price rate and of the two withdrawn credits.
+6. Carried over: PEC-111 (IKO office?), PEC-177 (Titan quote), PEC-149…158 (6/6 provisioning confirm), PEC-172 (Billy Cowell access), PEC-203 (fire the export).
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz | python3 -c "import sys,json;print(json.load(sys.stdin)['buildCommit'][:7])"` — should return the head of `origin/main` (was `36227c5`)
-2. `git status --short` — should return empty
-3. `git rev-list --left-right --count HEAD...origin/main` — should return `0	0`
-4. `cd app/command-center && npx vitest run src/lib/agent-intake-guard.unit.test.ts` — should return `9 passed`
-5. `select count(*) from mv_invoice_pricing_office;` — should return `1056` (was 1086 pre-mig-230; 31 fail closed by design)
-6. `select count(*) from agreement_gap_queue where status='candidate';` — should return `302` until renewals are worked
+1. `curl -s https://cc.proexteriorsus.net/healthz | python3 -c "import sys,json;print(json.load(sys.stdin)['buildCommit'][:7])"` — matches `origin/main`
+2. `git status --short` — empty
+3. `cd app/command-center && npx vitest run` — **309 passed**
+4. `node scripts/site-quality-sweep.mjs --static` — 0 errors, 2 warnings
+5. `select count(*) from abc_invoices where coalesce(btrim(invoice_number),'')='';` — **0**
+6. `select round(sum(total_amount),2) from abc_invoices;` — **2197424.94**
 
 ## Full Context
 
-### What was built across ALL sessions (complete feature list)
-See `docs/handoffs/archive/` chain + PEC-199/202 session reports. Prior session added: Slack owner-notice path live, canonical internal-domain rule (4 apexes) across all 5 definition sites, Orgo ship kit, PEC-209 forensic findings, PEC-206 closure, Maya reprocess tasks queued through the Agent Todo gate.
-**This session adds:** Friday WIP/AR frozen-column scroll viewport + AccuLynx-only status column; migration 230 (servicing-branch office derivation + `ack_in_thread` CHECK fix); PEC-208 sloppy-PO job recovery; the agent-intake boundary guard (self-receipt drop + security-notice fold) with 9 tests; verification packets on PEC-209/210/203/111/177; security-batch timeline on PEC-149; queue hygiene (4 artifacts cancelled, 11 tickets → Agent Needs Input); and the audit-queue-empty root-cause analysis.
+### What was built across ALL sessions
+See `docs/handoffs/archive/` chain. **This session adds:** migration 232 (phantom-row quarantine + fail-closed CHECK); PEC-216 completed both halves; PEC-217 deletion of 11 orphaned/dead files; the Layer 2 daily sweep on Hetzner; the Orgo QA desktop + page-by-page walker; and the three-model credit-memo re-audit.
 
 ### Architecture decisions
-- Maya runtime = single supervisord process on Orgo desktop pe-maya-chen (`f914c60c-c7c0-4a5e-b9dd-dd8b9df825f6`, instance c681e86d): Slack conversation loop + mailbox cadence (UTC half-hours) + Linear claimant (5-min). Gmail/Linear/Slack effects via pinned Composio accounts.
-- Release lives root-owned at `/opt/pe-cc-agents/maya-slack-listener`; installer demands root:root:700 staging, no symlinks, verified-stopped supervisor; `tree-integrity.mjs` computes the pinned hash.
-- maya-gate.mjs (Hetzner, 15-min cron) = notices audit + Phase A diagnosis only. **The `ack_in_thread` 23514 bug is FIXED** in migration 230 — the CHECK now accepts it.
-- **Intake classification is caller-supplied** (Maya's runtime posts it), so intake guards must live server-side at `POST /api/agent/intake` — a prompt-level fix would not survive a runtime change. That is why `agent-intake-guard.ts` exists.
-- **The security-notice fold reuses the existing `orchestrationKey` → `work_key` upsert** rather than adding a suppression table. Converging the key is what makes N notices become 1 work item, and every notice still writes its own audit row.
-- **Invoice audit "to audit" = discrepancy lines only.** A line is pending iff auditable, undecided, not disputed, and (UOM mismatch OR No-Price OR billed above agreement). Valid lines are hidden by the audit view. So an empty queue never proves prices matched — check `agreement_gap_queue` and the No-Price rate alongside it.
+- **Quarantine is now the pattern for malformed ingest rows** — `abc_invoices_quarantine` joins `crm_pipeline_orphan_quarantine`. Archive the atom, add a CHECK so the ingest fails closed, never delete.
+- **Sandboxed workers can only write inside their task dir.** Ringer deliverables must land there and be harvested; pointing them elsewhere fails good work.
+- **Never trust a URL alone to detect an auth wall.** WorkOS/AuthKit returns 200 at `<tenant>.authkit.app` with no telltale substring — check title and body too.
+- **The daily sweep cannot see the HTML dashboards** (WorkOS-gated, no agent session). That gap is why the Orgo desktop exists.
 
 ### Key invariants (never violate)
-- **Silo doctrine:** price agreement = (vendor, PE office); unknown office ⇒ No-Price; fail closed. Never join pricing across vendors or offices.
-- **UOM:** compare only in the vendor's pricing UOM via `price_per_uom` + `v_item_uom_map` (docs/46). Never `quantity` / `unit_price` / `pricePerUnitAmount`.
-- Additive migrations only; QBO prod read-only; no secrets in repo; agents never email externally without a human.
-- **A fix isn't fixed until verified through the LIVE call path** (mig-222 landed in dead code; PEC-184 #1). For office pricing that means `mv_invoice_pricing_office`, not just the view.
-- **Never promote a price from an email figure alone.** Verify office + effective dates against source documents; a wrong promotion generates false credit-memo requests against a vendor.
-- **Agents do not close security alerts on inference.** Park them for a human.
+- Silo doctrine: agreement = (vendor, PE office); unknown office ⇒ No-Price, fail closed.
+- UOM: compare only in the vendor's pricing UOM via `price_per_uom` + `v_item_uom_map`.
+- Additive migrations; archive never delete; QBO prod read-only; no secrets in repo.
+- **A fix isn't fixed until verified through the LIVE call path.**
+- **Never promote a price from an email figure alone**; a quote is not an in-force agreement.
+- Agents do not create accounts, enter passwords, or close security alerts on inference.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
 | Live app | cc.proexteriorsus.net via Coolify from origin/main (`/healthz` buildCommit) |
-| Supabase (prod, shared dev/live) | rnhmvcpsvtqjlffpsayu — schemas through **230** |
-| Dev server | port 4399 (`.claude/launch.json` → `command-center`) |
-| Maya Orgo desktop | computer f914c60c…, instance c681e86d, dashboard https://www.orgo.ai/desktops/c681e86d |
-| Orgo API | https://www.orgo.ai/api (`POST /computers/{id}/bash`); keys in 1P CW_Master |
-| Slack | #pe-cc-dev-team C0BNVF99Y74 (private; maya_chen_accounting + openbrain invited 2026-08-11) |
-| Hetzner agent host | PE-US-AGENTS 178.156.203.23 (`~/.ssh/hetzner_office`) — runs maya-gate.mjs cron |
-| Linear | team PE-CC-DevTeam; CAT-* = audit roots, PEC-* = work issues |
+| Supabase (prod) | rnhmvcpsvtqjlffpsayu — schemas through **232** |
+| Dev server | port 4399 (`.claude/launch.json`) |
+| Hetzner agent host | PE-US-AGENTS 178.156.203.23 — abc-sync 03:30 ET, maya-gate /15min, jt-sentinel 10:00 PT, qbo/wip Thursday, **site-sweep 06:00 CT (new)** |
+| Orgo QA desktop | `pe-site-qa` 725ce9d6-… · instance 073ff51e · https://www.orgo.ai/desktops/073ff51e |
+| Orgo workspace | `pro-exteriors-open-brain` ea96d7b0-… (created this session; account had ZERO before) |
+| 1Password | `op` CLI authorised; `CW_Master/ORGO_API_KEY_MASTER`, `ORGO_API_BASE` |
+| Slack | #pe-cc-dev-team C0BNVF99Y74 |
+| Linear | PE-CC-DevTeam — this session: PEC-215/216/217 fixed, PEC-219/220/221 opened |
