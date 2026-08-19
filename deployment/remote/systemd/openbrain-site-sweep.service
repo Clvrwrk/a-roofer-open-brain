@@ -1,0 +1,24 @@
+[Unit]
+Description=Open Brain daily site quality sweep (docs/92, PEC-218)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Repo clone + master.env live on the US agent host (178.156.203.23, PE-US-AGENTS).
+# master.env supplies AGENT_SERVICE_TOKEN (live /api probes), SLACK_BOT_TOKEN
+# (#pe-cc-dev-team alerting) and LINEAR_API_KEY + LINEAR_TEAM_ID (auto-filed issues).
+# Each is optional; the sweep degrades loudly rather than silently skipping.
+EnvironmentFile=-/opt/openbrain/master.env
+WorkingDirectory=/opt/openbrain/a-roofers-open-brain
+ExecStart=/usr/bin/env node /opt/openbrain/a-roofers-open-brain/scripts/site-quality-sweep.mjs
+User=root
+# Static analysis is seconds; live probes are network-bound. 15m is generous.
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+# A failing sweep must NOT wedge the timer — it reports and exits non-zero.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
