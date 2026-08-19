@@ -82,6 +82,12 @@ if (root && dataEl && mount) {
         pb.classList.toggle("is-disabled", n === 0);
         const span = pb.querySelector('[data-kpi-val="auditPending"]');
         if (span) span.textContent = num$(n);
+        // Empty is the normal resting state — label it honestly, not "report empty".
+        pb.querySelector<HTMLElement>("[data-kpi-empty]")?.toggleAttribute("hidden", n !== 0);
+        pb.querySelector<HTMLElement>("[data-kpi-full]")?.toggleAttribute("hidden", n === 0);
+        pb.title = n === 0
+          ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
+          : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)";
       }
       set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
       const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');

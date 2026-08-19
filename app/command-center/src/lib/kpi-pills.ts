@@ -13,6 +13,21 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 import type { RuntimeEnv } from "@lib/runtime-env";
 import { getRuntimeEnv } from "@lib/runtime-env";
 
+// PostgREST caps an un-ranged select at the server's max-rows setting and returns the
+// truncated page WITHOUT an error — a silent undercount. Every list read below is a money
+// number, so page through instead of trusting a .limit() that is only "big enough for now".
+const PAGE = 1000;
+async function fetchAllRows(make: () => any): Promise<any[]> {
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await make().range(from, from + PAGE - 1);
+    if (error) throw new Error(`kpi pill query failed: ${error.message}`);
+    const batch = (data as any[] | null) ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE) return rows;
+  }
+}
+
 export interface KpiVendorCm {
   slug: string;
   acronym: string;
@@ -87,14 +102,17 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
   if (!client) return out;
 
   const nowIso = new Date().toISOString();
-  const [pipe, pay, cms, sent, qbPend, alexQ] = await Promise.all([
+  const [pipe, pay, cmRows, sentRows, qbPendRows, alexQ] = await Promise.all([
     client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
     client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
-    client.from("credit_memo_requests").select("invoice_number, vendor_slug, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"]).limit(1000),
-    client.from("credit_memo_requests").select("expected_credit, follow_up_due_at").eq("request_kind", "requested").eq("status", "sent").limit(2000),
-    client.from("v_qb_export_pending").select("vendor_slug, pending_rows"),
+    fetchAllRows(() => client.from("credit_memo_requests").select("invoice_number, vendor_slug, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"])),
+    fetchAllRows(() => client.from("credit_memo_requests").select("expected_credit, follow_up_due_at").eq("request_kind", "requested").eq("status", "sent")),
+    fetchAllRows(() => client.from("v_qb_export_pending").select("vendor_slug, pending_rows")),
     client.from("agreement_gap_queue").select("id", { count: "exact", head: true }).eq("status", "candidate"),
   ]);
+  const cms = { data: cmRows };
+  const sent = { data: sentRows };
+  const qbPend = { data: qbPendRows };
   out.alexCandidates = alexQ.count ?? 0;
 
   out.auditPendingCount = pipe.count ?? 0;
@@ -123,13 +141,18 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
   // agrees with the checkboxes.
   const cmInvoices = (cms.data ?? []).map((r) => r.invoice_number);
   if (cmInvoices.length) {
-    const { data: lines } = await client
-      .from("invoice_line_reaudit")
-      .select("run_label, invoice_number, variance_ext, reviewed_at, created_at")
-      .in("invoice_number", cmInvoices.slice(0, 500))
-      .eq("classification", "discrepancy")
-      .order("created_at", { ascending: false })
-      .limit(2000);
+    // Chunk the .in() list (a long URL filter is its own truncation trap) and page each
+    // chunk — dropping invoices past #500 silently shrank the claim count.
+    const CHUNK = 200;
+    const lines: any[] = [];
+    for (let i = 0; i < cmInvoices.length; i += CHUNK) {
+      lines.push(...await fetchAllRows(() => client
+        .from("invoice_line_reaudit")
+        .select("run_label, invoice_number, variance_ext, reviewed_at, created_at")
+        .in("invoice_number", cmInvoices.slice(i, i + CHUNK))
+        .eq("classification", "discrepancy")
+        .order("created_at", { ascending: false })));
+    }
     const latestRun = new Map<string, string>();
     for (const l of lines ?? []) if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
     for (const l of lines ?? []) {

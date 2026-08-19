@@ -16,6 +16,24 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const { client } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured" }, { status: 503 });
 
+  // ABC agreements are integer-keyed (abc_price_agreements); every other vendor's live in
+  // the uuid-keyed price_agreements, which stores a source URL rather than a bucket path.
+  // Sending a uuid to the integer column used to blow up as a 500 — answer honestly instead.
+  if (!/^\d+$/.test(agreementId)) {
+    const alt = (await client
+      .from("price_agreements")
+      .select("source_pdf_url,source_file")
+      .eq("id", agreementId)
+      .maybeSingle()).data as { source_pdf_url: string | null; source_file: string | null } | null;
+    if (alt?.source_pdf_url) return new Response(null, { status: 302, headers: { Location: alt.source_pdf_url } });
+    return jsonApiResponse({
+      error: "not_found",
+      error_description: alt
+        ? `No copy of this agreement is stored${alt.source_file ? ` — the record names it as ${alt.source_file}` : ""}.`
+        : "Unknown agreement.",
+    }, { status: 404 });
+  }
+
   const doc = (await client
     .from("abc_price_agreements")
     .select("pdf_storage_bucket,pdf_storage_path")

@@ -97,7 +97,17 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
             );
           })}
         </div>
-        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0} title={auditPendingCount === 0 ? "No data available — report empty" : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)"}>Process <span data-kpi-val="auditPending">{auditPendingCount.toLocaleString()}</span></button>
+        {/* Empty is the NORMAL resting state: invoices only enter 'invoice_audit_pending'
+            when a re-audit or a "Go back" reset produces fresh claim lines. A disabled
+            "Process 0" labelled "report empty" read as a broken control — say what is
+            actually true instead. */}
+        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}
+          title={auditPendingCount === 0
+            ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
+            : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)"}>
+          <span data-kpi-empty hidden={auditPendingCount !== 0}>Nothing to stamp</span>
+          <span data-kpi-full hidden={auditPendingCount === 0}>Process <span data-kpi-val="auditPending">{auditPendingCount.toLocaleString()}</span></span>
+        </button>
       </div>
       <!-- 3 · CMs Awaiting Vendor Credit — the money-chasing queue (NEW) -->
       <div class="iv-kpi">
