@@ -100,8 +100,15 @@ for (const route of ROUTES) {
   }
   const ms = Date.now() - t0;
 
+  // Auth detection must not rely on the URL alone. WorkOS/AuthKit redirects to
+  // <tenant>.authkit.app with a 200 and no "signin"/"workos" substring in the
+  // path, so a URL-only check reports every gated page as a healthy 200 — the
+  // exact failure this walker exists to prevent. Verified live 2026-08-19.
   const url = page.url();
-  if (/workos|sign-?in|login/i.test(url) && !route.includes("auth")) {
+  const looksGated = /authkit\.app|workos|sign-?in|\/login/i.test(url)
+    || /^sign in$/i.test((await page.title().catch(() => "")).trim())
+    || await page.evaluate(() => /continue with|authkit/i.test(document.body?.innerText || "")).catch(() => false);
+  if (looksGated && !route.includes("auth")) {
     sessionLost = true;
     add("error", route, "auth", `redirected to sign-in (${url.slice(0, 120)}) — the WorkOS session on this desktop has expired; a human must sign in once`);
     await page.close();
