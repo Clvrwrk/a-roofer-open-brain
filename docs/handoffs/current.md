@@ -67,8 +67,8 @@ None mid-block. Two things are **staged but deliberately not actioned**: the cre
 
 1. **Orgo WorkOS sign-in** — step 2 above. Everything else is ready.
 2. **Credit-memo drafts** — review `.cm-reaudit/drafts/`, then decide: supersede in the ledger and send, or adjust.
-3. **PEC-220 Maya's Orgo desktop is GONE** — 0 workspaces on the account and her documented desktop 404s. Her Slack loop, mailbox cadence and Linear claimant have been **down**. Decide whether to rebuild.
-4. **All `ORGO_*_ID` secrets are stale** — the account was rebuilt; ids don't survive. Re-verify every one in 1Password `CW_Master`.
+3. **PEC-220 (corrected) — Maya's desktop is HEALTHY, not gone.** I reported an outage; that was wrong. `37b262e0-a915-47e6-8c3b-f180a32ab6fe` / instance `20ee4678`, project `PE-open-brain`, up 16 days, `maya-slack-listener` running 9 days. Remaining work is record hygiene: fix stale ids, and decide whether to consolidate `pe-site-qa` into `PE-open-brain`.
+4. **`GET /api/workspaces` is NOT a desktop inventory** — it returns 0 while desktops exist. Never infer absence from it; probe `GET /api/computers/{id}` against recorded ids.
 5. **PEC-213 Wichita coverage** — SRS expired 7/23, ABC 7/31; still the root cause of the No-Price rate and of the two withdrawn credits.
 6. Carried over: PEC-111 (IKO office?), PEC-177 (Titan quote), PEC-149…158 (6/6 provisioning confirm), PEC-172 (Billy Cowell access), PEC-203 (fire the export).
 

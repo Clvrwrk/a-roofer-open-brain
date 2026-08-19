@@ -22,21 +22,42 @@ API key: 1Password `CW_Master/ORGO_API_KEY_MASTER`. Base `https://www.orgo.ai/ap
 > The desktop's VNC password is returned in the `POST /computers` response body.
 > Treat that response as a secret; do not paste it into docs, tickets or chat.
 
-## ⚠️ Finding: Maya's Orgo desktop no longer exists
+## ✅ Correction: Maya's desktop is HEALTHY (was wrongly reported down)
 
-While provisioning, `GET /workspaces` returned **zero workspaces** and Maya's
-documented desktop 404'd:
+An earlier version of this doc claimed Maya's Orgo desktop no longer existed and
+that her runtime had been down. **That was wrong.** Corrected 2026-08-19:
 
 ```
-GET /computers/f914c60c-c7c0-4a5e-b9dd-dd8b9df825f6 -> 404 {"error":"Desktop not found"}
+GET /api/computers/20ee4678 -> 200
+  id 37b262e0-a915-47e6-8c3b-f180a32ab6fe · name "Maya Chen"
+  project PE-open-brain · status running · created 2026-07-26
+
+on the box:  up 16 days
+  maya-slack-listener  RUNNING  pid 30617, uptime 9 days  (shipped Aug 10)
+  hermes-gateway       RUNNING  uptime 16 days
+  websockify           RUNNING  uptime 16 days
 ```
 
-Maya's runtime (Slack loop + mailbox cadence + Linear claimant) lived there, so
-**it has been down**, and that is very likely why `orgo-ship-maya-listener.sh`
-has sat pending since 2026-08-11. Orgo's own error is explicit: *"Computer ids are
-not stable across rebuilds."* Every `ORGO_*_ID` in 1Password should be treated as
-stale until re-verified. Rebuilding Maya's desktop is separate work — tracked, not
-done here.
+The Slack listener has been up since **Aug 10**, matching the release directory
+mtime — so `orgo-ship-maya-listener.sh` was evidently completed then, and the
+"pending since 08-11" note in memory is stale too.
+
+**Two traps produced the false alarm, both worth remembering:**
+
+1. **`context/MEMORY.md` held stale ids** (`f914c60c…` / `c681e86d`). They 404
+   correctly. The live ids are `37b262e0-…` / instance `20ee4678`.
+2. **`GET /api/workspaces` returns `count: 0` while desktops exist.** Maya's lives
+   under project `PE-open-brain`, which that endpoint does not list. It is **not an
+   inventory endpoint** and must never be used as one. There is also no
+   `GET /api/computers` list (405) — the only reliable probe is
+   `GET /api/computers/{id}` against a correctly-recorded id.
+
+The real lesson is narrower than the one first drawn: the *record* had rotted, not
+the infrastructure. A liveness check keyed on recorded ids belongs in the docs/92
+sweep — it would have surfaced the stale id immediately instead of a false outage.
+
+**Note:** `pe-site-qa` was created in a new project `pro-exteriors-open-brain`
+while the established one is `PE-open-brain`. Consolidating them is open work.
 
 ## The walker
 

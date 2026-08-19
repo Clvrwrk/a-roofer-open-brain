@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/19 (live b2f602f):** mig **232** (phantom $59.6K row quarantined; ABC total $2,197,424.94), PEC-216 done (13.5s→2.9s, 3.77MB→309KB), PEC-217 11 dead files cut, **Layer 2 sweep Hetzner 06:00CT**, **Orgo desktop `pe-site-qa` 725ce9d6 + walker**. CM re-audit **unanimous 3/3**: $4,738→**$4,654**, drafts NOT sent. **NEXT: human WorkOS sign-in at orgo.ai/desktops/073ff51e** then run walker. **PEC-220: Maya's Orgo desktop GONE — runtime down, ORGO_*_IDs stale.** Quarantine = pattern for bad ingest. Never trust URL alone for auth walls.
+**8/19 (live 1f65cf7):** mig **232** (phantom $59.6K row quarantined; ABC total $2,197,424.94), PEC-216 done (13.5s→2.9s, 3.77MB→309KB), PEC-217 11 dead files cut, **Layer 2 sweep Hetzner 06:00CT**, **Orgo QA desktop `pe-site-qa` 725ce9d6 + walker**. CM re-audit **3/3 unanimous**: $4,738→**$4,654**, drafts NOT sent. **NEXT: human WorkOS sign-in at orgo.ai/desktops/073ff51e**, run walker. **Maya HEALTHY** — 37b262e0/inst 20ee4678, proj `PE-open-brain`, listener up 8/10. I wrongly called it dead: `/workspaces` returns 0 even when desktops exist.
 
 
 ## Standing instructions (Chris)
