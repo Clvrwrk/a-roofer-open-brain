@@ -105,16 +105,57 @@ Across the current claim set (`classification = 'discrepancy'`, variance ≥ $0.
 
 Two worked examples, both live:
 
-- **`0050033202-002`** (SRS, $92.25, currently *Approved*) → **Send with caution**.
-  Its price basis re-derives to **quote `0049828559`**, flagged as a quote, not an
-  agreement. This is the same document docs/93 ruled inadmissible when withdrawing
-  an ABC claim ("a quote is not an agreement"). The panel surfaces on the page what
-  previously took a three-model re-audit to find.
+- **`0050033202-002`** (SRS, $92.25, *Approved*) — the panel first flagged its price
+  basis as **quote `0049828559`**, a quote rather than an agreement. Chris ruled
+  (2026-08-19) that **for SRS this quote IS the price agreement**: SRS Wichita prices
+  Pro Exteriors off the branch quote, so the quote is the price book. Recorded on the
+  agreement record via migration 234; the claim now passes the document-type check.
+  See "The SRS quote ruling" below.
 - **`2009557754-001`** (ABC, $22.30) → **Do not send**. The panel independently
   reproduces the docs/93 withdrawal reasoning: agreement priced for **Richardson, TX**
   while the invoice branch is **Wichita, KS** (office-match FAIL), agreement expired
   before the invoice date, and the item matched by description similarity rather than
   item number.
+
+### The SRS quote ruling (Chris, 2026-08-19)
+
+docs/93 established "a quote is not an agreement" and used it to withdraw two ABC claims.
+That rule holds **by default**, but it is not universal: some branches price off a branch
+quote instead of a numbered agreement document. Chris ruled that SRS Wichita is one of
+them — quote `0049828559` **is** the governing price agreement for the Wichita, KS office.
+
+Recorded as a fact about the document, not a rule hard-coded per vendor: migration 234
+sets `ceo_verified` on `price_agreements` id `3e7b261b-…`, the existing "a human confirmed
+this document" flag that docs/82 §6 decision 3 defines as a **display badge, never a
+pricing gate**. No price resolution changes anywhere. The record still reads "quote" in
+`version_label` and `source_file` — the panel shows that a quote was *accepted*, it does
+not hide what the document is.
+
+Effect — all five approved SRS claims price off this quote and now pass 6 of 7 checks:
+
+| invoice | credit | invoice date | verdict |
+|---|---:|---|---|
+| 0050033288-003 | $1,748.00 | 2026-07-07 | 6/7 pass |
+| 0050033202-002 | $92.25 | 2026-07-15 | 6/7 pass |
+| 0050057484-001 | $92.25 | 2026-07-16 | 6/7 pass |
+| 0050252253-002 | $61.50 | 2026-07-20 | 6/7 pass |
+| 0050224831-001 | $30.75 | 2026-07-21 | 6/7 pass |
+
+All five fall inside the quote's 2026-06-23 → 2026-07-23 window. **$2,024.75 total.**
+The one remaining warning on each is *Citation provenance* — the SRS re-audit run never
+recorded which agreement it used, so the panel re-derives it and says so. Fixing the SRS
+writer (follow-up 2) clears the last flag.
+
+**Two things this ruling does NOT do:**
+
+1. **It does not revive the ABC claim on `2009557754-001` ($40.26 / $22.30).** That claim
+   priced an **ABC** invoice off this **SRS** document — a vendor-silo violation
+   (migration 208), independent of the quote-vs-agreement question. docs/93's withdrawal
+   stands on those grounds.
+2. **It does not elevate SRS quotes in general.** The other live SRS quote — `0049345641`,
+   S Denver / Englewood CO, id `7246ed93-…` — is untouched. The two claims resting on it
+   (`0049707508-001` received $793.05, `0050095528-001` cancelled) are already settled, so
+   nothing pending depends on it. Elevate deliberately, one document at a time.
 
 ### Also changed
 
@@ -127,7 +168,8 @@ source file when no copy is stored.
 
 1. **Write docs/93 back to prod.** The two withdrawals ($84.45) and the $204.00 →
    $203.99 adjustment still are not in `credit_memo_requests`; both withdrawn rows
-   remain `status='sent'` at their original amounts.
+   remain `status='sent'` at their original amounts. The SRS quote ruling does not
+   change this — those withdrawals stand on vendor-silo grounds.
 2. **Fix the SRS re-audit writer** so `discrepancy` rows carry office + agreement.
 3. **`credit_memo_amount` is dead too** — it requires `audit_status = 'passed'` AND a
    `credit-flag` decision, but credit-flagged lines are `disputed`, so it sums to $0.00
