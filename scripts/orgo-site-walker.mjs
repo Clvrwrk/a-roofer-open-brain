@@ -31,8 +31,8 @@ import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const SITE = process.env.WALK_SITE || "https://cc.proexteriorsus.net";
-const PROFILE_DIR = process.env.WALK_PROFILE || "/opt/pe-qa/chrome-profile";
-const OUT_DIR = process.env.WALK_OUT || "/opt/pe-qa/reports";
+const PROFILE_DIR = process.env.WALK_PROFILE || "/home/orgo/pe-qa/chrome-profile";
+const OUT_DIR = process.env.WALK_OUT || "/home/orgo/pe-qa/reports";
 const CHROME = process.env.WALK_CHROME || "/usr/bin/google-chrome-stable";
 const HANG_MS = Number(process.env.WALK_HANG_MS || 15000);
 const SLOW_MS = Number(process.env.WALK_SLOW_MS || 4000);

@@ -6,21 +6,31 @@ and surface-level vulnerabilities. Complements the Layer 2 sweep (docs/92),
 which covers the static tree and `/api` but **cannot** reach the WorkOS-gated
 HTML dashboards.
 
-## Provisioned 2026-08-19
+## Provisioned 2026-08-19 (rebuilt into the correct project)
 
 | | |
 |---|---|
-| Workspace | `pro-exteriors-open-brain` — `ea96d7b0-7933-464b-92bf-80826b475fa0` |
-| Computer | `pe-site-qa` — `725ce9d6-2bf7-4f4e-baac-f63b1390c117` |
-| Instance | `073ff51e` · console https://www.orgo.ai/desktops/073ff51e |
-| Spec | linux, 2 cpu, 4 GB, 1280x720 |
-| Toolchain | node 18.19.1, python 3.12.3, google-chrome-stable, xdotool, scrot |
+| Project | **`PE-open-brain`** — `8cf44774-2b46-4089-8bfe-4deb1b078e46` (the established one, where Maya lives) |
+| Computer | **`PE Site QA`** — `3480fa38-35c6-4b86-a5fe-f62d0fb8f028` |
+| Instance | `dac62bd2` · console https://www.orgo.ai/desktops/dac62bd2 |
+| Spec | linux, 2 cpu, 4 GB |
+| Toolchain | node 18.19.1, google-chrome-stable, xdotool, scrot |
+| Working dir | **`/home/orgo/pe-qa`** — per Orgo guidance, keep anything large off the ~8 GB system disk |
+| Credentials | 1Password `CW_Master/ORGO_PE_SITE_QA` (computer id, instance, console url, VNC password) |
 
-API key: 1Password `CW_Master/ORGO_API_KEY_MASTER`. Base `https://www.orgo.ai/api`.
-**Never commit the VNC password** returned by the create call.
+**API base is `https://www.orgo.ai/api`** (not `/api/v1` — the v1 paths 404).
+Key: 1Password `CW_Master/ORGO_API_KEY_MASTER`.
+**Never commit the VNC password**; it is stored in 1Password only.
 
-> The desktop's VNC password is returned in the `POST /computers` response body.
-> Treat that response as a secret; do not paste it into docs, tickets or chat.
+### A first attempt was built in the wrong project
+
+`pe-site-qa` was initially created in a **new** project `pro-exteriors-open-brain`
+because `GET /api/workspaces` returned zero at the time. It does not — it returns
+three, including the pre-existing `PE-open-brain`. A desktop in an API-created
+project the dashboard does not know about is **not reachable from the console UI**,
+which is why its URL 404'd. The misplaced desktop has been deleted; the empty
+project remains because `DELETE /api/projects/{id}` is **405 — not supported** (it
+can be removed from the dashboard by hand).
 
 ## ✅ Correction: Maya's desktop is HEALTHY (was wrongly reported down)
 
@@ -46,11 +56,12 @@ mtime — so `orgo-ship-maya-listener.sh` was evidently completed then, and the
 
 1. **`context/MEMORY.md` held stale ids** (`f914c60c…` / `c681e86d`). They 404
    correctly. The live ids are `37b262e0-…` / instance `20ee4678`.
-2. **`GET /api/workspaces` returns `count: 0` while desktops exist.** Maya's lives
-   under project `PE-open-brain`, which that endpoint does not list. It is **not an
-   inventory endpoint** and must never be used as one. There is also no
-   `GET /api/computers` list (405) — the only reliable probe is
-   `GET /api/computers/{id}` against a correctly-recorded id.
+2. **`GET /api/workspaces` returned `count: 0` when it should have returned 3.**
+   It later returned all three projects including `PE-open-brain`. Whatever caused
+   the empty read — transient or auth-related — a single empty list is **not**
+   evidence that nothing exists. There is also no `GET /api/computers` list (405),
+   so the reliable probe is `GET /api/computers/{id}` against a recorded id, and
+   `GET /api/projects` for inventory.
 
 The real lesson is narrower than the one first drawn: the *record* had rotted, not
 the infrastructure. A liveness check keyed on recorded ids belongs in the docs/92
@@ -76,7 +87,7 @@ issues; a real security review is its own exercise (`/security-review`).
 
 ### The auth model, and why it matters
 
-The walker uses a **persistent Chrome profile** (`/opt/pe-qa/chrome-profile`).
+The walker uses a **persistent Chrome profile** (`/home/orgo/pe-qa/chrome-profile`).
 A human signs in to WorkOS **once** on the desktop; the session persists and every
 later run walks the real app. If a walk lands on the sign-in page the run **stops
 immediately** and reports `session expired` — deliberately, so an expired session
@@ -105,11 +116,12 @@ method that fits — `/auth.md` advertises `anonymous`, `identity_assertion` wit
 
 ## Remaining steps
 
-1. **Finish deps** — `/opt/pe-qa-setup.sh` runs detached on the desktop
-   (apt exceeds Orgo's ~590s per-call limit, so it must be backgrounded).
-   Confirm with `ls /opt/pe-qa/.setup-done`.
-2. **One-time human sign-in** — open https://www.orgo.ai/desktops/073ff51e,
-   launch Chrome with `--user-data-dir=/opt/pe-qa/chrome-profile`, sign in to
-   WorkOS at `cc.proexteriorsus.net`. This is the step an agent must not do.
-3. **Schedule daily** — same systemd pattern as docs/92, or drive it from the
-   Hetzner host via the Orgo bash API on the 06:00 CT timer.
+1. **Deps** — `/home/orgo/pe-qa-setup.sh` runs detached (apt exceeds Orgo's ~590s
+   per-call limit). Confirm with `ls /home/orgo/pe-qa/.setup-done`.
+2. **One-time human sign-in** — open https://www.orgo.ai/desktops/dac62bd2, launch
+   Chrome with `--user-data-dir=/home/orgo/pe-qa/chrome-profile`, sign in to WorkOS
+   at `cc.proexteriorsus.net`. An agent must not do this step.
+3. **Point the walker at the new paths** — `WALK_PROFILE=/home/orgo/pe-qa/chrome-profile`,
+   `WALK_OUT=/home/orgo/pe-qa/reports`.
+4. **Schedule daily** — drive it from the Hetzner host via the Orgo bash API on the
+   06:00 CT timer, alongside the docs/92 sweep.

@@ -46,14 +46,14 @@ None mid-block. Two things are **staged but deliberately not actioned**: the cre
 **Task:** One-time WorkOS sign-in on the Orgo QA desktop, then schedule the daily walk.
 
 **Steps:**
-1. Open https://www.orgo.ai/desktops/073ff51e
-2. Launch Chrome with `--user-data-dir=/opt/pe-qa/chrome-profile` and sign in to WorkOS at `cc.proexteriorsus.net`. **An agent must not do this step.**
-3. Copy `scripts/orgo-site-walker.mjs` to `/opt/pe-qa/` and run `node orgo-site-walker.mjs`.
+1. Open https://www.orgo.ai/desktops/dac62bd2
+2. Launch Chrome with `--user-data-dir=/home/orgo/pe-qa/chrome-profile` and sign in to WorkOS at `cc.proexteriorsus.net`. **An agent must not do this step.**
+3. Copy `scripts/orgo-site-walker.mjs` to `/home/orgo/pe-qa/` and run `node orgo-site-walker.mjs`.
 4. Schedule it daily alongside the 06:00 CT sweep.
 
 **If the walker reports `session expired`:** the profile lost its session — repeat step 2. It stops on purpose rather than reporting every page as broken.
 
-**Prompt to use:** "Read docs/handoffs/current.md. I have signed in to WorkOS on the Orgo QA desktop. Deploy scripts/orgo-site-walker.mjs to /opt/pe-qa, run a full walk, and report every finding."
+**Prompt to use:** "Read docs/handoffs/current.md. I have signed in to WorkOS on the Orgo QA desktop. Deploy scripts/orgo-site-walker.mjs to /home/orgo/pe-qa, run a full walk, and report every finding."
 
 ## Decisions Made This Session
 
@@ -106,8 +106,8 @@ See `docs/handoffs/archive/` chain. **This session adds:** migration 232 (phanto
 | Supabase (prod) | rnhmvcpsvtqjlffpsayu — schemas through **232** |
 | Dev server | port 4399 (`.claude/launch.json`) |
 | Hetzner agent host | PE-US-AGENTS 178.156.203.23 — abc-sync 03:30 ET, maya-gate /15min, jt-sentinel 10:00 PT, qbo/wip Thursday, **site-sweep 06:00 CT (new)** |
-| Orgo QA desktop | `pe-site-qa` 725ce9d6-… · instance 073ff51e · https://www.orgo.ai/desktops/073ff51e |
-| Orgo workspace | `pro-exteriors-open-brain` ea96d7b0-… (created this session; account had ZERO before) |
+| Orgo QA desktop | **`PE Site QA`** 3480fa38-… · instance dac62bd2 · https://www.orgo.ai/desktops/dac62bd2 · project **PE-open-brain** · creds in 1P `CW_Master/ORGO_PE_SITE_QA` |
+| Orgo projects | **`PE-open-brain`** 8cf44774-… (Maya + QA desktop) · `HWAOS` · `pro-exteriors-open-brain` ea96d7b0-… (empty, mine, cannot be deleted via API — remove in dashboard) |
 | 1Password | `op` CLI authorised; `CW_Master/ORGO_API_KEY_MASTER`, `ORGO_API_BASE` |
 | Slack | #pe-cc-dev-team C0BNVF99Y74 |
 | Linear | PE-CC-DevTeam — this session: PEC-215/216/217 fixed, PEC-219/220/221 opened |
