@@ -95,3 +95,6 @@ integrations/bridges/centerpoint/.mirror-runs/
 
 # Client working files — raw spreadsheets/exports, never committed (hard rule 2)
 raw data/
+
+# Credit-memo re-audit working data (business pricing data — never commit)
+.cm-reaudit/

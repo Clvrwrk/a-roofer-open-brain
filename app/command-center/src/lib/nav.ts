@@ -48,9 +48,6 @@ export const navDepartments: NavDepartment[] = [
       // Price Foundation: one-time data-quality migration tool, review queue empty (obsolete).
       // Negotiated Catalog / Price List Coverage: superseded by Agreement Builder + Price Agreement Audit
       // for the go-live audit flow; revisit folding Coverage into Agreement Builder post-launch.
-      // { label: "Price List Coverage", href: "/accounting/vendor-regions", status: "built" },
-      // { label: "Negotiated Catalog", href: "/accounting/price-list/catalog", status: "built" },
-      // { label: "Price Foundation", href: "/data-quality/price-foundation", status: "built" },
     ],
   },
   {
@@ -115,7 +112,7 @@ export const navDepartments: NavDepartment[] = [
 /**
  * Returns the id of the department that owns the current pathname (so the
  * rail can auto-expand it), or null. Uses longest-prefix matching on built
- * leaf hrefs so deep routes (e.g. /accounting/price-list/catalog) resolve.
+ * leaf hrefs so deep routes (e.g. /accounting/price-agreement/builder) resolve.
  */
 export function activeDepartmentId(pathname: string): string | null {
   let best: { id: string; len: number } | null = null;

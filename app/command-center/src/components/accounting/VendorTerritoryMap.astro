@@ -378,7 +378,6 @@ const sourceLabel = deferLoad ? "loading" : surface.source === "snapshot" ? "pre
           kpiCell("Missing pricing", numberText(counts.missingPricing), counts.missingPricing ? "bad" : "ok"),
         ].join("");
         const links = [
-          linkRow(`/accounting/vendor-regions${officeParam}`, "Price List Coverage"),
           linkRow(`/accounting/invoice-audit${officeParam}`, "Invoice Audit"),
           linkRow("", "Proposal / Estimate", true),
         ].join("");
