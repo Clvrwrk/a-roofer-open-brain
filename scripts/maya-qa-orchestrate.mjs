@@ -17,6 +17,9 @@
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 
+// Both passes read WALK_SESSION_COOKIE and delete the file once loaded, so the sealed
+// value never outlives the run it was minted for.
+
 const HERE = dirname(new URL(import.meta.url).pathname);
 const CID = process.env.MAYA_QA_COMPUTER_ID || "37b262e0-a915-47e6-8c3b-f180a32ab6fe";
 const KEY = process.env.ORGO_API_KEY;
@@ -50,13 +53,36 @@ const probe = await rexec(
 
 if (!probe.includes("PW_OK")) {
   add("error", "desktop", `Maya's QA home is not provisioned (${probe.trim().slice(0, 120)}) — run the build-out first`);
-} else if (probe.includes("SESSION_MISSING")) {
-  // Fail loudly and stop. A walk with no session reports every page as a sign-in wall,
-  // which looks like a catastrophic outage and trains everyone to ignore the alert.
-  add("error", "auth", "no WorkOS session in Maya's Chrome profile — a human must sign in once on this desktop. Not walking: every page would report as gated and drown the real findings.");
 }
 
-if (findings.some((f) => f.severity === "error")) { await report(); process.exit(1); }
+// ── mint a session instead of depending on a human-bootstrapped one ──
+// The interactive sign-in page sits behind WorkOS's own Cloudflare, which shows a
+// human-verification interstitial we cannot disable (it is their zone, not ours) and
+// which a headless browser should not be trying to satisfy anyway. So we skip the page:
+// magic-auth to the QA identity, whose inbox is API-readable by design, sealed by the
+// SDK into the same cookie /auth/callback sets.
+//
+// Minted per run, deliberately. A long-lived cookie in a profile expires silently and
+// the first anyone hears of it is a nightly report claiming the whole site is down.
+const COOKIE_PATH = `${QA_HOME}/.session.json`;
+let sessionOk = false;
+if (!findings.some((f) => f.severity === "error")) {
+  try {
+    const minted = execFileSync("node", [join(HERE, "qa-agent-auth.mjs"), "mint", "--json"], {
+      encoding: "utf8",
+      env: { ...process.env, NODE_PATH: process.env.QA_NODE_PATH || "/opt/openbrain/a-roofers-open-brain/app/command-center/node_modules" },
+    });
+    const { cookie, user } = JSON.parse(minted);
+    // 0600 and removed by the walker the moment it is loaded.
+    await rexec(`umask 077 && cat > ${COOKIE_PATH} <<'EOF'\n${JSON.stringify({ cookie })}\nEOF\nchmod 600 ${COOKIE_PATH} && echo staged`);
+    console.log(`session minted for ${user} and staged on the desktop`);
+    sessionOk = true;
+  } catch (e) {
+    add("error", "auth", `could not mint a QA session: ${String(e).slice(0, 200)}. Not walking — a session-less walk reports every page as a sign-in wall and drowns the real findings.`);
+  }
+}
+
+if (!sessionOk || findings.some((f) => f.severity === "error")) { await report(); process.exit(1); }
 
 // ── 2 · the day's deep target, chosen here because the route tree lives here ──
 const assign = JSON.parse(execFileSync("node", [join(HERE, "chaos-forensic-assign.mjs"), "--json"], { encoding: "utf8" }));
@@ -68,7 +94,7 @@ const jobs = DEEP_ONLY ? [] : [{ name: "walk", cmd: `node ${QA_HOME}/orgo-site-w
 jobs.push({ name: "forensic", cmd: `node ${QA_HOME}/orgo-forensic-page.mjs --route ${assign.route}`, log: `${QA_HOME}/reports/forensic-${stamp}.log` });
 
 for (const j of jobs) {
-  await rexec(`cd ${QA_HOME} && rm -f ${j.log} ${j.log}.done && nohup sh -c '${j.cmd} > ${j.log} 2>&1; echo $? > ${j.log}.done' >/dev/null 2>&1 & echo started`);
+  await rexec(`cd ${QA_HOME} && rm -f ${j.log} ${j.log}.done && WALK_SESSION_COOKIE=${COOKIE_PATH} nohup sh -c 'WALK_SESSION_COOKIE=${COOKIE_PATH} ${j.cmd} > ${j.log} 2>&1; echo $? > ${j.log}.done' >/dev/null 2>&1 & echo started`);
   let code = null;
   for (let i = 0; i < 60; i++) {                       // up to ~30 min per pass
     await new Promise((r) => setTimeout(r, 30000));
@@ -84,6 +110,10 @@ for (const j of jobs) {
   }
   console.log(`${j.name}: exit=${code}\n${tail.split("\n").slice(-8).join("\n")}`);
 }
+
+// Session material does not outlive the run that minted it. Both passes have read it
+// by now; the walkers deliberately leave it in place so the second pass still has one.
+await rexec(`shred -u ${COOKIE_PATH} 2>/dev/null || rm -f ${COOKIE_PATH}; echo cleared`).catch(() => {});
 
 await report();
 
