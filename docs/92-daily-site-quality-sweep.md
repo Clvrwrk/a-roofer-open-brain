@@ -101,3 +101,35 @@ Verified 2026-08-19 by reading each unit's `ExecStart`:
 
 Confirming those requires reading the live host's `crontab -l` and
 `systemctl list-timers`; adding units blindly risks running the same job twice.
+
+
+## DB tier (added 2026-08-20)
+
+Layer 2 was HTTP + static only, so it could not see the class of defect that Phase 2
+found: a **money column reading $0 because its predicate was unreachable**. Nobody
+reports a wrong number that looks like a good outcome — $0 at risk reads as success —
+so it has to be a machine that notices.
+
+Gated on `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, skipped under `--static`, and
+loud when unset. Read-only. Every check counts via PostgREST `Content-Range` rather
+than listing rows, because a large select truncates silently.
+
+| # | check | severity | the bug it would have caught |
+|---|---|---|---|
+| 1 | discrepancy re-audit rows with no office/agreement | error | mig 248 — 11 SRS claim lines / $2,879.55 became money with no citation |
+| 2 | received credit memo whose invoice still carries at_risk | error | mig 246 — $997.05 recovered but still reported owed |
+| 3 | at_risk $0 everywhere while disputed lines exist | error | mig 233 — the original "$0 looks like success" |
+| 3b | credit_memo_amount $0 everywhere while credits are received | error | mig 246, the same bug from the other side |
+| 4 | active agreements past expiry | warn | an expired book still pricing invoices |
+| 5 | active agreements with no source PDF | warn | a claim citing a document nobody can produce |
+
+**First prod run, 2026-08-20: 0 errors** — checks 1–3b confirm migrations 246/248 hold.
+Two genuine warnings, both real:
+
+- **6 active agreements past expiry**, including `0049345641` exp **2026-06-27** — the
+  SRS Denver/Colorado book. The tier found the Colorado gap independently, from a
+  different direction than the PEC-211/222 review.
+- **8 active agreements with no source PDF on file.**
+
+Also removed a stale probe: `/api/product-surface.json` was deleted on purpose in
+PEC-217 (docs/91), so probing it was a permanent false warning.

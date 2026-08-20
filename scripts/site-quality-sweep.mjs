@@ -17,6 +17,11 @@
  *   LIVE (against https://cc.proexteriorsus.net)
  *     - /healthz reachable, status ok, and buildCommit matches origin/main
  *     - every agent-reachable /api/* route: HTTP status + response-time budget
+ *   DB (against the prod Supabase, read-only)
+ *     - money columns that can go structurally dead ("$0 looks like success")
+ *     - claim lines that became money without an agreement citation
+ *     - recovered credits still being reported as owed
+ *     - agreements governing prices after expiry, or with no source document
  *
  * WHAT IT DELIBERATELY DOES NOT COVER
  *   The HTML dashboards are WorkOS-gated and an agent has no human session
@@ -26,7 +31,8 @@
  *   page tree instead.
  *
  * ENV: AGENT_SERVICE_TOKEN (or AGENT_SERVICE_TOKENS csv), SLACK_BOT_TOKEN,
- *      LINEAR_API_KEY — each optional; the sweep degrades loudly, never silently.
+ *      LINEAR_API_KEY, SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY — each optional;
+ *      the sweep degrades loudly, never silently.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, relative, extname, dirname } from "node:path";
@@ -164,7 +170,6 @@ if (!STATIC_ONLY) {
       { path: "/api/vendor-territories", budget: 4000 },
       { path: "/api/accounting/kpi-pills", budget: 5000 },
       { path: "/api/credit-memos/pending", budget: 5000 },
-      { path: "/api/product-surface.json", budget: 4000 },
       { path: "/api/agent/work-queue", budget: 5000 },
     ];
     for (const p of PROBES) {
@@ -175,6 +180,74 @@ if (!STATIC_ONLY) {
       if (r.status !== 200) { add("warn", "live", `${p.path} -> ${r.status}`); continue; }
       if (r.ms > p.budget) add("warn", "live", `${p.path} slow: ${r.ms}ms > ${p.budget}ms budget`);
     }
+  }
+}
+
+// ---------- db tier ----------
+// Read-only. Every check here is a defect that actually shipped and was invisible
+// until someone went looking — a money column reading $0 because its predicate was
+// unreachable, recovered credits still counted as owed, claim lines that became money
+// with no agreement behind them. A wrong number that LOOKS like a good outcome is the
+// one nobody reports, so it has to be a machine that notices.
+//
+// Counting, never listing: PostgREST truncates a large select silently, so every check
+// reads an exact count out of Content-Range and only fetches rows to name examples.
+if (!STATIC_ONLY) {
+  const dbUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!dbUrl || !dbKey) {
+    add("warn", "db", "no SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — skipped all DB checks (set them to enable money-truth coverage)");
+  } else {
+    const hdrs = { apikey: dbKey, authorization: `Bearer ${dbKey}`, accept: "application/json" };
+    // exact count via Content-Range; rows[] carries at most `sample` examples
+    const q = async (path, sample = 0) => {
+      try {
+        const res = await fetch(`${dbUrl}/rest/v1/${path}`, {
+          headers: { ...hdrs, prefer: "count=exact", range: `0-${Math.max(sample - 1, 0)}` },
+        });
+        if (!res.ok) return { error: `${res.status} ${(await res.text()).slice(0, 160)}` };
+        const total = Number(String(res.headers.get("content-range") || "").split("/")[1]);
+        return { count: Number.isFinite(total) ? total : 0, rows: sample ? await res.json() : [] };
+      } catch (e) { return { error: String(e) }; }
+    };
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 1 · a claim line that became money with no agreement citation behind it (mig 248)
+    const uncited = await q("invoice_line_reaudit?classification=eq.discrepancy&or=(office_id.is.null,agreement_id.is.null)&select=invoice_number,item_number", 3);
+    if (uncited.error) add("error", "db", `uncited-claim-lines check failed: ${uncited.error}`);
+    else if (uncited.count > 0)
+      add("error", "db", `${uncited.count} discrepancy line(s) carry no office/agreement citation — money without provenance (e.g. ${uncited.rows.map((r) => `${r.invoice_number}/${r.item_number}`).join(", ")})`);
+
+    // 2 · a credit came back but the claim lines never settled, so at_risk still counts it (mig 246)
+    const received = await q("credit_memo_requests?status=eq.received&select=invoice_number", 500);
+    if (received.error) add("error", "db", `received-credit check failed: ${received.error}`);
+    else if (received.rows.length) {
+      const nums = received.rows.map((r) => r.invoice_number).filter(Boolean);
+      const stranded = await q(`v_invoice_audit_invoice?at_risk=gt.0&invoice_number=in.(${nums.map((n) => `"${n}"`).join(",")})&select=invoice_number,at_risk`, 5);
+      if (stranded.error) add("error", "db", `received-credit check failed: ${stranded.error}`);
+      else if (stranded.count > 0)
+        add("error", "db", `${stranded.count} received credit memo(s) still counted as money owed — mark-received did not settle the lines (e.g. ${stranded.rows.map((r) => `${r.invoice_number} $${r.at_risk}`).join(", ")})`);
+    }
+
+    // 3 · a money column reading $0 everywhere while the work that feeds it exists.
+    //     This is the at_risk/credit_memo_amount failure mode: $0 looks like success.
+    const disputed = await q("v_invoice_line_audit_current?audit_status=eq.disputed&select=invoice_line_id");
+    const recovered = await q("v_invoice_audit_invoice?credit_memo_amount=gt.0&select=invoice_number");
+    const atRisk = await q("v_invoice_audit_invoice?at_risk=gt.0&select=invoice_number");
+    if (!disputed.error && !atRisk.error && disputed.count > 0 && atRisk.count === 0)
+      add("error", "db", `at_risk is $0 on every invoice while ${disputed.count} disputed line(s) exist — the column has gone structurally dead`);
+    if (!recovered.error && !received.error && received.rows?.length > 0 && recovered.count === 0)
+      add("error", "db", `credit_memo_amount is $0 on every invoice while ${received.rows.length} credit memo(s) are marked received — recovered money is invisible`);
+
+    // 4 · an expired agreement still flagged active is still pricing invoices today
+    const expired = await q(`price_agreements?is_active=is.true&expiry_date=lt.${today}&select=agreement_number,expiry_date&order=expiry_date.asc`, 5);
+    if (!expired.error && expired.count > 0)
+      add("warn", "db", `${expired.count} active price agreement(s) are past expiry and may still be pricing invoices (oldest: ${expired.rows.map((r) => `${r.agreement_number || "unnumbered"} exp ${r.expiry_date}`).join(", ")})`);
+
+    // 5 · an agreement with no source document cannot be shown to a vendor in a dispute
+    const noPdf = await q("price_agreements?is_active=is.true&source_pdf_url=is.null&select=agreement_number", 5);
+    if (!noPdf.error && noPdf.count > 0)
+      add("warn", "db", `${noPdf.count} active price agreement(s) have no source PDF on file — a claim citing them has no document to show`);
   }
 }
 
