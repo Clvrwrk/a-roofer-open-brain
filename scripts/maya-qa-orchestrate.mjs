@@ -111,6 +111,10 @@ for (const j of jobs) {
   console.log(`${j.name}: exit=${code}\n${tail.split("\n").slice(-8).join("\n")}`);
 }
 
+// Session material does not outlive the run that minted it. Both passes have read it
+// by now; the walkers deliberately leave it in place so the second pass still has one.
+await rexec(`shred -u ${COOKIE_PATH} 2>/dev/null || rm -f ${COOKIE_PATH}; echo cleared`).catch(() => {});
+
 await report();
 
 async function report() {
