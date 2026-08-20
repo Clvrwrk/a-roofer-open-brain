@@ -7,8 +7,12 @@ Wants=network-online.target
 Type=oneshot
 # Repo clone + master.env live on the US agent host (178.156.203.23, PE-US-AGENTS).
 # master.env supplies AGENT_SERVICE_TOKEN (live /api probes), SLACK_BOT_TOKEN
-# (#pe-cc-dev-team alerting) and LINEAR_API_KEY + LINEAR_TEAM_ID (auto-filed issues).
-# Each is optional; the sweep degrades loudly rather than silently skipping.
+# (#pe-cc-dev-team alerting), LINEAR_API_KEY + LINEAR_TEAM_ID (auto-filed issues),
+# and SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (the DB tier — money-truth checks,
+# read-only, added 2026-08-20).
+# Each is optional; the sweep degrades loudly rather than silently skipping. If the
+# DB pair is missing you get a 'db: no SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY'
+# warning, NOT silent green — check for it after any master.env change.
 EnvironmentFile=-/opt/openbrain/master.env
 WorkingDirectory=/opt/openbrain/a-roofers-open-brain
 ExecStart=/usr/bin/env node /opt/openbrain/a-roofers-open-brain/scripts/site-quality-sweep.mjs

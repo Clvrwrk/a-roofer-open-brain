@@ -3,9 +3,20 @@
 --
 -- WHY: migration 252's `needs_ruling` keyed off `live_agreements = 0` — does the PAPERWORK
 -- exist. That is the wrong question. Denver x SRS has a live, in-territory, 22-item
--- agreement (0049345641, S Denver / Englewood) and still prices NOTHING: $17,437.63 audits
--- as no-price. Keying on paperwork hid the single largest un-triaged exposure in the system.
+-- agreement (0049345641, S Denver / Englewood) that the office ring cannot reach, so the
+-- coverage surface reports `priced_items = 0` for the pair. Keying on paperwork hid it.
 -- The right question is whether the pair can actually be AUDITED — `priced_items = 0`.
+--
+-- CORRECTION (2026-08-20, after mig 248 landed from a parallel session): an earlier draft
+-- of this header said the pair "prices NOTHING: $17,437.63 audits as no-price". That
+-- OVERSTATED it. `priced_items = 0` is a fact about the OFFICE-RING path only. A separate
+-- LINE-LEVEL path still prices some lines, and measuring it gives:
+--     34 lines / $15,760.85 of line value on the 4 Denver x SRS invoices
+--     11 lines / $2,296.05  DO carry a negotiated price
+--     23 lines / $13,464.80 carry none          <-- the real un-priced figure
+--      0 lines carry an agreement citation      <-- the defect mig 248 repairs for SRS
+-- So the honest claim is $13,464.80 of line value un-priced, not $17,437.63, and the two
+-- paths disagree with each other — which is itself the thing worth fixing.
 --
 -- ROOT CAUSE (worth reading before touching the agreement path):
 -- `v_office_vendor_branch` still resolves an agreement to a branch by branch-number TEXT:
