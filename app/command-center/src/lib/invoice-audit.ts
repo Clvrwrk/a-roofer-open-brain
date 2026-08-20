@@ -1220,6 +1220,10 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 const DECISION_LABEL: Record<string, string> = {
   "credit-flag": "Hold + credit memo (Casey)",
   "credit-noflag": "Credit memo (no flag)",
+  "credit-received": "Credit memo received — claim settled, released for payment",
+  // Predates migration 246 and was never written: no writer, no reader, zero rows in
+  // prod, and it was not in the credit_memo_amount predicate. Kept so any historical
+  // row would still render a label; 'credit-received' is the live terminal decision.
   "credit-resolved": "Credit memo received — released for payment",
   "accept-svc": "Service fee — auto-approved (weekly review)",
   "gate-negotiated": "Negotiated line + variance — human review required",
