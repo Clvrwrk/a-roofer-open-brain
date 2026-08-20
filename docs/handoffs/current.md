@@ -2,112 +2,125 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-19 11:35 (CT)
+**Date:** 2026-08-19 14:05 (CT)
 **Agent:** Lead Orchestrator (Claude Code)
 **Reason:** User-requested /project-handoff + /wrapup
 
 ---
 
+## ⚠️ Read first — a second session is committing to this repo
+
+Six `PEC-221` commits landed from a **parallel session** during this shift, and its
+`git add` swept one of my staged files into its commit `5c1348c`. Two sessions are
+also both bumping `app/command-center/src/lib/version.ts`, which will collide.
+
+**Before starting work:** confirm whether that session is still running. Have
+whichever session continues stage **specific paths**, never `git add -A`.
+
+Its work materially affects mine — see *Decisions* on the credit-memo re-audit.
+
 ## Accomplished This Session
 
-### Fixes shipped to production
-- `schemas/cleverwork-roofer/232-quarantine-blank-invoice-rows.sql` **(prod)**: quarantined the phantom $59,639.20 CSV-footer row into `abc_invoices_quarantine` (archived, not deleted) + a CHECK so a malformed import fails closed. ABC spend now reads the true **$2,197,424.94**. (PEC-215)
-- `app/command-center/src/lib/price-agreement-management.ts`: chunked `.in()` — was paging **39,984** `v_branch_item_api_price` rows to serve ~593 items. **13.56s → 2.9s**. Equivalence proven in SQL across all 492 needed items, zero mismatches. (PEC-216)
-- `app/command-center/src/pages/accounting/price-agreements/index.astro`: worksheet rows deferred to the client as JSON. **3.77 MB → 309 KB (12x)**. Propose-price handler moved to event delegation. (PEC-216)
-- `app/command-center/src/scripts/invoice-audit-tree.ts`: guard against fetching detail for a blank invoice number.
+### Orgo QA desktop — rebuilt into the correct project (PEC-220)
+- Provisioned `PE Site QA` — computer `3480fa38-35c6-4b86-a5fe-f62d0fb8f028`, instance `dac62bd2`, in the **established `PE-open-brain` project** (`8cf44774-…`) alongside Maya. Console: https://www.orgo.ai/desktops/dac62bd2
+- Deleted the first desktop, which I had wrongly built in a **new** project (`pro-exteriors-open-brain`) — that is why its console URL 404'd. The empty project remains: `DELETE /api/projects/{id}` is **405**, remove it in the dashboard.
+- Deps installed under **`/home/orgo/pe-qa`** (Orgo guidance: keep the ~8 GB system disk for scratch). Credentials in 1Password `CW_Master/ORGO_PE_SITE_QA`.
+- `scripts/orgo-site-walker.mjs` — per-page speed, hangs, console errors, failed requests, click-through validation, surface-level vulnerability checks.
 
-### Site cleanup (PEC-217)
-- Deleted 11 files: the whole `/data-quality/*` Price Foundation stack, Negotiated Catalog, Vendor Regions, and `lib/price-list.ts` (10 invented SKUs + 8 fake branches). Rationale + restore SHA in `docs/91`.
-- Vendor Regions needed companion edits: it linked *from the territory map to itself*, and sat in the service-worker precache — **SW VERSION bumped** so installed workers evict the stale entry instead of serving a cached 404.
-- Kept redirect stubs deliberately: deleting them would *create* broken links.
+### QA agent identity + passwordless sign-in (docs/95)
+- `scripts/qa-agent-auth.mjs` — `status` | `provision` | `login`.
+- Provisioned `site-qa@agentmail.proexteriorsus.net` (AgentMail inbox) + WorkOS user `user_01M0EAPFD0CSBAR0BNV5NXQTSR`. Record in 1Password `PE_CC_DEV_Team/PE-Site-QA-WorkOS`.
+- **Mechanism proven end to end before building:** WorkOS Magic Auth delivers a 6-digit code to the inbox and the code is readable straight out of the AgentMail API.
 
-### Daily automation (Layer 2)
-- `scripts/site-quality-sweep.mjs` + `deployment/remote/systemd/openbrain-site-sweep.{service,timer}` — 06:00 CT on the Hetzner agent host. Static (link graph, fabricated data, orphans) + live (`/healthz`, deploy drift, `/api/*` budgets). Docs `docs/92`.
-- First draft emitted 2 errors + 21 warnings, **all false positives**; detectors tightened to a real baseline of 0 errors / 2 genuine warnings.
-
-### Orgo QA desktop + site walker (PEC-220)
-- Provisioned workspace `pro-exteriors-open-brain` (`ea96d7b0-…`) and desktop `pe-site-qa` (`725ce9d6-2bf7-4f4e-baac-f63b1390c117`, instance `073ff51e`). npm + playwright-core installed; chrome/xdotool/scrot present.
-- `scripts/orgo-site-walker.mjs` — per-page speed, hangs, console errors, failed requests, click-through validation, and surface-level vulnerability checks. Docs `docs/94`.
-
-### Credit-memo re-audit (PEC-221)
-- All 53 open requests re-derived **three times by three independent models** (grok-4.6 / gpt-5.6-sol / claude-opus-5) under Ringer with an executed check. **Unanimous 3/3, zero splits.**
-- **$4,738.22 → $4,653.76** (50 uphold, 1 adjust, 2 withdraw). Drafts in `.cm-reaudit/drafts/`. Docs `docs/93`.
+### Corrections to my own earlier work
+- **Retracted the "Maya's Orgo desktop is gone" finding.** Her desktop (`37b262e0-…` / instance `20ee4678`, project `PE-open-brain`) is **running**, up 16 days, with `maya-slack-listener` up 9 days. Her runtime was never down.
+- **Fixed the walker's auth detection.** It reported gated pages as healthy 200s because WorkOS/AuthKit redirects to `<tenant>.authkit.app` with no `signin`/`workos` substring in the URL. Now checks title and body too — verified live as `GATED`.
 
 ## Git State
 - **Branch:** `main` (== `origin/main`)
-- **Last commit:** `b2f602f`
-- **Uncommitted:** none (this handoff commits next)
+- **Last commit:** `5c1348c` — from the parallel session
+- **Uncommitted changes:** none (this handoff commits next)
 
 ## Task Cut Off
-None mid-block. Two things are **staged but deliberately not actioned**: the credit-memo drafts (not sent, not written to `credit_memo_requests`) and the Orgo walker (waiting on a one-time human WorkOS sign-in).
+None mid-block. One step is **deliberately unfinished**: the QA agent's first sign-in (below).
 
 ## Next Task — Start Here
 
-**Task:** One-time WorkOS sign-in on the Orgo QA desktop, then schedule the daily walk.
+**Task:** Complete the QA agent sign-in, then run the first full site walk.
 
-**Steps:**
-1. Open https://www.orgo.ai/desktops/dac62bd2
-2. Launch Chrome with `--user-data-dir=/home/orgo/pe-qa/chrome-profile` and sign in to WorkOS at `cc.proexteriorsus.net`. **An agent must not do this step.**
-3. Copy `scripts/orgo-site-walker.mjs` to `/home/orgo/pe-qa/` and run `node orgo-site-walker.mjs`.
-4. Schedule it daily alongside the 06:00 CT sweep.
+**What to do:**
+1. `node scripts/qa-agent-auth.mjs login`
+   Expect: code sent → read from inbox → exchanged → `access_token` + `refresh_token` issued.
+2. Sign in once on the QA desktop so the browser profile holds a session: open
+   https://www.orgo.ai/desktops/dac62bd2, launch Chrome with
+   `--user-data-dir=/home/orgo/pe-qa/chrome-profile`, sign in at `cc.proexteriorsus.net`.
+3. Copy `scripts/orgo-site-walker.mjs` to `/home/orgo/pe-qa/` and run it.
+4. Schedule daily alongside the 06:00 CT sweep (docs/92).
 
-**If the walker reports `session expired`:** the profile lost its session — repeat step 2. It stops on purpose rather than reporting every page as broken.
+**If `login` fails with `invalid_client`:** the `client_id` is wrong. The live app uses
+`client_01KTF450QBY957ASEZ8JXZKMV4` — **none** of the three values in 1Password match it.
+Override with `WORKOS_CLIENT_ID=…` rather than "fixing" it back to a stored value.
 
-**Prompt to use:** "Read docs/handoffs/current.md. I have signed in to WorkOS on the Orgo QA desktop. Deploy scripts/orgo-site-walker.mjs to /home/orgo/pe-qa, run a full walk, and report every finding."
+**If the walker reports `session expired`:** repeat step 2. It stops on purpose rather
+than reporting every page as broken.
+
+**Prompt to use:** "Read docs/handoffs/current.md. The QA agent sign-in is done and I have signed in to WorkOS on the Orgo desktop. Deploy scripts/orgo-site-walker.mjs to /home/orgo/pe-qa, run a full walk, and report every finding."
 
 ## Decisions Made This Session
 
-- **Phantom row archived, not deleted** — moved to `abc_invoices_quarantine` with its full `raw` payload (hard rule 1). Fixed at the data source rather than in views, because every consumer reads `abc_invoices` and view edits would still leave raw `SUM()` wrong.
-- **Redirect stubs kept** while orphaned pages were deleted — removing them would create the broken links the audit exists to prevent.
-- **Credit memos: nothing sent, nothing written to the ledger.** Four dataset defects surfaced in one corpus; the numbers want human eyes first.
-- **Two invoices withdrawn** (2009034778-001, 2009557754-001) because item `0150080102` has no in-force Wichita agreement price. An earlier hand analysis valued one at $40.26 using a **quote**; the verification used in-force **agreements** only. A quote is not an agreement — the fail-closed answer is the defensible one.
-- **WorkOS Agent Auth deferred, not attempted.** `/agent/auth` and `/oauth2/token` return live **501**; `agent-auth.ts` is discovery-only. Standing it up means building signing keys, a token store, a trusted-issuer list, replay protection and the human-ownership bridge — a security-critical project guarding a financial app, not a provisioning step.
+- **QA agent email uses `agentmail.proexteriorsus.net`, not `cc.proexteriorsus.net`.** AgentMail serves only four domains and `cc.*` is not one. Making it one means repointing the **MX of the Command Center's own domain**, which already carries the Google Workspace mailboxes for the named agent fleet. The agentmail subdomain is also the *only* option where the agent can **read its own code** — which is the entire point. Same convention the `ob-*` agents already use.
+- **This is WorkOS User Management + Magic Auth, NOT WorkOS Agent Auth.** The latter still returns live **501 not_implemented** (`/agent/auth`, `/oauth2/token`); `src/lib/agent-auth.ts` is discovery-only. Standing it up needs signing keys, a token store, a trusted-issuer list, replay protection and the human-ownership bridge — a security-critical build, not a provisioning step.
+- **No password is set for the QA agent, by design.** Magic Auth means no secret a human must type and none stored to leak.
+- **`GET /api/workspaces` is not an inventory endpoint.** It returned 0 while three projects existed. I acted on that twice — it produced both a false outage report and a desktop in the wrong project. Probe `GET /api/computers/{id}`; use `GET /api/projects` for inventory.
+- **The credit-memo re-audit result may now be stale.** I withdrew two credits *because* the Wichita quote was not an in-force agreement. The parallel session's `22f7a58 accept the SRS Wichita quote as the governing price agreement` changes that premise — **re-run the re-audit before acting on the drafts**.
 
 ## Blockers Requiring Human Action
 
-1. **Orgo WorkOS sign-in** — step 2 above. Everything else is ready.
-2. **Credit-memo drafts** — review `.cm-reaudit/drafts/`, then decide: supersede in the ledger and send, or adjust.
-3. **PEC-220 (corrected) — Maya's desktop is HEALTHY, not gone.** I reported an outage; that was wrong. `37b262e0-a915-47e6-8c3b-f180a32ab6fe` / instance `20ee4678`, project `PE-open-brain`, up 16 days, `maya-slack-listener` running 9 days. Remaining work is record hygiene: fix stale ids, and decide whether to consolidate `pe-site-qa` into `PE-open-brain`.
-4. **`GET /api/workspaces` is NOT a desktop inventory** — it returns 0 while desktops exist. Never infer absence from it; probe `GET /api/computers/{id}` against recorded ids.
-5. **PEC-213 Wichita coverage** — SRS expired 7/23, ABC 7/31; still the root cause of the No-Price rate and of the two withdrawn credits.
-6. Carried over: PEC-111 (IKO office?), PEC-177 (Titan quote), PEC-149…158 (6/6 provisioning confirm), PEC-172 (Billy Cowell access), PEC-203 (fire the export).
+1. **QA agent sign-in** — `node scripts/qa-agent-auth.mjs login`. The harness safety classifier blocks me from performing a credential exchange; that gate is correct and was not worked around.
+2. **One-time WorkOS sign-in on the QA desktop** — step 2 above. An agent must not do this.
+3. **Three stale WorkOS client IDs in 1Password** — `PROEXTERIORS_WORKOS_PRODUCTION_CLIENT_ID`, `PROEXTERIORS_WORKOS_CLIENT_ID`, `WORKOS_CLIENT_ID`. None match the live app. Anything else reading them will fail the same way.
+4. **Credit-memo drafts** (`.cm-reaudit/drafts/`) — re-run the re-audit first given decision 5 above, then decide whether to supersede in the ledger and send. Nothing has been sent.
+5. **Parallel-session collision** — see the banner at the top.
+6. **`master.env` is malformed** — lines 1317/1320 are executed as shell commands (`command not found: Morrison`, `permission denied: /`). Likely an unquoted multi-line value; anything after it may not be loading.
+7. Carried over: PEC-213 Wichita coverage · PEC-111 (IKO office?) · PEC-177 (Titan quote) · PEC-149…158 (6/6 provisioning confirm — note `maya.chen.last_sign_in_at` = `2026-06-25T01:20:51` matches PEC-157 almost exactly, so those were legitimate agent sign-ins) · PEC-172 (Billy Cowell access) · PEC-203 (fire the export).
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz | python3 -c "import sys,json;print(json.load(sys.stdin)['buildCommit'][:7])"` — matches `origin/main`
-2. `git status --short` — empty
-3. `cd app/command-center && npx vitest run` — **309 passed**
+1. `git status --short` — empty
+2. `git rev-list --left-right --count HEAD...origin/main` — `0	0`
+3. `node scripts/qa-agent-auth.mjs status` — inbox EXISTS, WorkOS user EXISTS
 4. `node scripts/site-quality-sweep.mjs --static` — 0 errors, 2 warnings
-5. `select count(*) from abc_invoices where coalesce(btrim(invoice_number),'')='';` — **0**
-6. `select round(sum(total_amount),2) from abc_invoices;` — **2197424.94**
+5. `curl -s https://cc.proexteriorsus.net/healthz` — `status: ok`
 
 ## Full Context
 
 ### What was built across ALL sessions
-See `docs/handoffs/archive/` chain. **This session adds:** migration 232 (phantom-row quarantine + fail-closed CHECK); PEC-216 completed both halves; PEC-217 deletion of 11 orphaned/dead files; the Layer 2 daily sweep on Hetzner; the Orgo QA desktop + page-by-page walker; and the three-model credit-memo re-audit.
+See `docs/handoffs/archive/`. **This session adds:** the Orgo QA desktop rebuilt into `PE-open-brain`; the page-by-page site walker; the QA agent's WorkOS identity with passwordless Magic Auth sign-in; and corrections to two of my own earlier findings.
 
 ### Architecture decisions
-- **Quarantine is now the pattern for malformed ingest rows** — `abc_invoices_quarantine` joins `crm_pipeline_orphan_quarantine`. Archive the atom, add a CHECK so the ingest fails closed, never delete.
-- **Sandboxed workers can only write inside their task dir.** Ringer deliverables must land there and be harvested; pointing them elsewhere fails good work.
-- **Never trust a URL alone to detect an auth wall.** WorkOS/AuthKit returns 200 at `<tenant>.authkit.app` with no telltale substring — check title and body too.
-- **The daily sweep cannot see the HTML dashboards** (WorkOS-gated, no agent session). That gap is why the Orgo desktop exists.
+- **Agent mailboxes: two patterns.** `@cc.proexteriorsus.net` → Google Workspace (named fleet; codes reachable only via the Gmail/Composio path). `@agentmail.proexteriorsus.net` → AgentMail (**API-readable**, so an agent can self-serve its own sign-in code). Choose by whether the agent must read its own mail.
+- **Never trust a URL alone to detect an auth wall.** WorkOS/AuthKit returns **200** at `<tenant>.authkit.app`. Check title and body.
+- **`/user_management/authenticate` is a token endpoint** — `client_id` + `client_secret` go in the **body**; a Bearer header alone yields `invalid_client`.
+- **Orgo:** API base is `/api` (not `/api/v1` — those 404). No `GET /computers` list (405). Bash calls cap at ~590s, so long installs must be backgrounded on the box.
+- **Quarantine is the pattern for malformed ingest rows** — archive the atom, add a CHECK so ingest fails closed, never delete.
 
 ### Key invariants (never violate)
 - Silo doctrine: agreement = (vendor, PE office); unknown office ⇒ No-Price, fail closed.
 - UOM: compare only in the vendor's pricing UOM via `price_per_uom` + `v_item_uom_map`.
-- Additive migrations; archive never delete; QBO prod read-only; no secrets in repo.
+- Additive migrations; archive never delete; QBO prod read-only; no secrets in the repo.
 - **A fix isn't fixed until verified through the LIVE call path.**
-- **Never promote a price from an email figure alone**; a quote is not an in-force agreement.
 - Agents do not create accounts, enter passwords, or close security alerts on inference.
+- **Verify before reporting an outage.** Two confident wrong calls this session both came from trusting a single API signal.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
 | Live app | cc.proexteriorsus.net via Coolify from origin/main (`/healthz` buildCommit) |
 | Supabase (prod) | rnhmvcpsvtqjlffpsayu — schemas through **232** |
-| Dev server | port 4399 (`.claude/launch.json`) |
-| Hetzner agent host | PE-US-AGENTS 178.156.203.23 — abc-sync 03:30 ET, maya-gate /15min, jt-sentinel 10:00 PT, qbo/wip Thursday, **site-sweep 06:00 CT (new)** |
-| Orgo QA desktop | **`PE Site QA`** 3480fa38-… · instance dac62bd2 · https://www.orgo.ai/desktops/dac62bd2 · project **PE-open-brain** · creds in 1P `CW_Master/ORGO_PE_SITE_QA` |
-| Orgo projects | **`PE-open-brain`** 8cf44774-… (Maya + QA desktop) · `HWAOS` · `pro-exteriors-open-brain` ea96d7b0-… (empty, mine, cannot be deleted via API — remove in dashboard) |
-| 1Password | `op` CLI authorised; `CW_Master/ORGO_API_KEY_MASTER`, `ORGO_API_BASE` |
-| Slack | #pe-cc-dev-team C0BNVF99Y74 |
-| Linear | PE-CC-DevTeam — this session: PEC-215/216/217 fixed, PEC-219/220/221 opened |
+| Hetzner agent host | PE-US-AGENTS 178.156.203.23 — abc-sync 03:30 ET, maya-gate /15min, jt-sentinel 10:00 PT, qbo/wip Thursday, site-sweep 06:00 CT |
+| Orgo project | **`PE-open-brain`** `8cf44774-2b46-4089-8bfe-4deb1b078e46` |
+| Orgo — Maya | `Maya Chen` `37b262e0-…` · instance `20ee4678` · **running**, listener up since 8/10 |
+| Orgo — QA | `PE Site QA` `3480fa38-…` · instance `dac62bd2` · https://www.orgo.ai/desktops/dac62bd2 |
+| WorkOS | client_id **`client_01KTF450QBY957ASEZ8JXZKMV4`** (live; 1P copies are stale). Key: 1P `PE_CC_DEV_Team/WorkOS - PE_CC_DEV_TEAM` |
+| QA agent identity | `site-qa@agentmail.proexteriorsus.net` · user `user_01M0EAPFD0CSBAR0BNV5NXQTSR` · 1P `PE_CC_DEV_Team/PE-Site-QA-WorkOS` |
+| AgentMail | 4 domains; `cc.proexteriorsus.net` **not** among them. Key: 1P `CW_Master/AGENTMAIL_API_KEY` |
+| Linear | PE-CC-DevTeam — PEC-220 (corrected), PEC-221 (CM re-audit + parallel session's work) |
