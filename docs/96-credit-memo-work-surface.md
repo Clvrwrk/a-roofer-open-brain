@@ -68,8 +68,9 @@ Every memo row carries the three documents:
 2. **Original invoice** — a link into the Invoice Audit *and* a direct link to the
    original's PDF, so the two documents open side by side.
 3. **Job (Customer PO#)** — deep-links to `my.acculynx.com/jobs/<id>` when an AccuLynx job
-   id is on file (40 memos), otherwise renders the job number as text rather than a dead
-   href, with the PO always shown underneath. 154 of 261 memos land on a job.
+   id is on file, otherwise renders the job number as text rather than a dead href, with
+   the PO always shown underneath. **241 of 261 memos deep-link** after migration 237
+   (below); 254 carry a job label.
 
 The job resolves from the memo's own AccuLynx match, falling back to the **matched original
 invoice's** — a memo with no PO of its own still lands on the job once its original is
@@ -104,6 +105,61 @@ the panel keeps showing that the document is a quote.
    adjustment are still not in `credit_memo_requests`).
 2. Fix the SRS re-audit writer so `discrepancy` rows carry office + agreement.
 3. Decide repair-or-retire on `credit_memo_amount`.
-4. **AccuLynx job-id coverage is thin** — 154 memos resolve a job number but only 40 have
-   an `acculynx_job_id` to deep-link. Improving `v_invoice_acculynx_match` id coverage
-   would make the job column clickable for the other 114.
+4. ~~AccuLynx job-id coverage is thin~~ — **fixed the same day, migration 237.** See below.
+
+## AccuLynx job linking fixed (migration 237)
+
+Only **185 of 1,089** ABC invoices (17%) resolved an `acculynx_job_id`, so most surfaces
+could show a job *number* but had no id to link, and executive job-cost attribution
+dropped most invoice cost on the floor. Two causes, both in the join key:
+
+1. **The invoice side normalised the whole label.** AccuLynx names a job `KS-79: Mark
+   McCall` (norm `KS79`), but the ABC `order_name` is often `KS-79 Mark McCall` with no
+   colon, normalising to `KS79MARKMCCALL` — matching nothing.
+2. **The view only ever read `order_name`.** The job is very often in
+   `purchase_order_number` instead — "Customer PO#" on the printed invoice *is* the job
+   key (`KS-160-1`, `ks158`, `CO-354-1`). That field was never consulted. This was the
+   bulk of the loss.
+
+Fix: keep the exact match as tier 1 unchanged, then fall back to a canonical **job token**
+— the leading `<2 letters><digits>`, e.g. `KS-160-1` → `KS160` (the trailing `-1` is the
+material sequence, not part of the job). Tier 2 takes the token from `order_name`, tier 3
+from `purchase_order_number`. New `link_method` column reports which tier fired.
+
+**The token is collision-free**: all 883 non-temp prefixed AccuLynx jobs produce 883
+distinct tokens, so a token match resolves to exactly one job or none. Verified before
+applying.
+
+| | before | after |
+|---|---:|---:|
+| ABC invoices linked | 185 (17%) | **863 (79%)** |
+| Credit memos deep-linkable | 73 | **241 of 261** |
+| Memos carrying a job label | 154 | **254** |
+
+Tier 1 is provably untouched: the `link_method='job_name'` fingerprint after the migration
+(`md5 7508797978d4ae5f9aec66485757c9ca`, 185 rows) is identical to the pre-migration
+fingerprint over all matched rows. Nothing that linked before links differently now.
+
+### Why 13 memos still have a job label and no link
+
+Because they are not jobs. `DFW Account`, `Denver Co Account`, `Commercial`,
+`Texas Motor Speedway` (POs `CARE CENTER`, `CAFE PVC`), and two whose PO is a street
+address (`869 east rim rd`, `1599 S MACON ST`). These are account-level and commercial
+purchases with no AccuLynx job to point at. "All 154 deep-link" was not achievable; 241 of
+261 is the real ceiling until those purchases are booked against jobs.
+
+### Blast radius, stated
+
+`executive-pipeline.ts` attributes invoice cost to jobs through this view filtered on
+`matched = true`. Going from 185 to 863 matched invoices **moves job-cost and margin
+numbers on the executive dashboard**. That is the correction working — cost that was
+previously unattributed now lands on its job — but it is a visible change to those
+figures, not a silent one.
+
+### Reviewed edge cases
+
+Six links cross a state boundary between the job prefix and the branch. Five are
+legitimate (material bought at a branch outside the job's state; `TX-427` is an
+office-prefixed job physically in Norman, OK, where its branch is). One links two invoices
+to `KS-1: Kansas Temp File`, a catch-all job file — the PO literally reads `KS-1`, so the
+link is what the data says. Left as-is rather than special-casing two rows.
