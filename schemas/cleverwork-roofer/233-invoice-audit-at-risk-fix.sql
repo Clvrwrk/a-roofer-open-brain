@@ -143,12 +143,9 @@ CREATE OR REPLACE VIEW public.v_invoice_audit_invoice AS
            FROM abc_vendor_branches a
           WHERE rb.no IS NOT NULL AND ltrim(a.branch_number, '0'::text) = ltrim(rb.no, '0'::text)
          LIMIT 1) avb ON true
-     LEFT JOIN LATERAL ( SELECT v.branch_name,
-            v.pricing_territory_office_id
-           FROM vendor_branches v
-          WHERE rb.no IS NOT NULL AND ltrim(v.branch_number, '0'::text) = ltrim(rb.no, '0'::text)
-          ORDER BY (v.pricing_territory_office_id IS NOT NULL) DESC
-         LIMIT 1) vb ON true
+     -- 238: vendor-scoped. ABC and QXO share branch numbers, so a bare-number lookup
+     -- here returned QXO's office for 2 ABC invoices. Never hand-roll this lateral.
+     LEFT JOIN LATERAL public.abc_display_branch(rb.no) vb ON true
      LEFT JOIN roll r ON r.invoice_number = i.invoice_number
 UNION ALL
  SELECT vi.invoice_number,

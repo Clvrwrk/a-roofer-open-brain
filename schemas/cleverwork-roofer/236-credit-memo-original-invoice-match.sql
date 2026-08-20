@@ -151,11 +151,10 @@ SELECT m.invoice_number,
                        FROM public.abc_vendor_branches a
                       WHERE m.br_no IS NOT NULL AND ltrim(a.branch_number,'0') = ltrim(m.br_no,'0')
                       LIMIT 1) avb ON true
-  LEFT JOIN LATERAL (SELECT v.branch_name, v.pricing_territory_office_id
-                       FROM public.vendor_branches v
-                      WHERE m.br_no IS NOT NULL AND ltrim(v.branch_number,'0') = ltrim(m.br_no,'0')
-                      ORDER BY (v.pricing_territory_office_id IS NOT NULL) DESC
-                      LIMIT 1) vb ON true
+  -- 238: vendor-scoped. The unscoped version of this lateral (my copy of the one in
+  -- v_invoice_audit_invoice) put memo 2009375632-001 and its $422.14 under Richardson, TX
+  -- because QXO shares ABC's branch number 472.
+  LEFT JOIN LATERAL public.abc_display_branch(m.br_no) vb ON true
   LEFT JOIN public.v_invoice_acculynx_match jc ON jc.invoice_number = m.invoice_number
   LEFT JOIN public.v_invoice_acculynx_match jo ON jo.invoice_number = m.original_invoice_number;
 
