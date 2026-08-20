@@ -126,12 +126,31 @@ async function login() {
   if (!code) { console.error("FAIL: no code arrived within the polling window"); process.exit(1); }
   console.log(`  code retrieved from inbox (${code.slice(0, 2)}****)`);
 
-  const clientId = process.env.WORKOS_CLIENT_ID || op("op://CW_Master/PROEXTERIORS_WORKOS_PRODUCTION_CLIENT_ID/credential");
-  if (!clientId) { console.error("FAIL: no WORKOS_CLIENT_ID available"); process.exit(1); }
-  const a = await api(`${WORKOS}/user_management/authenticate`, wk, {
+  // The client_id MUST be the one cc.proexteriorsus.net actually redirects with.
+  // None of the three stored in 1Password match it (checked 2026-08-19):
+  //   PROEXTERIORS_WORKOS_PRODUCTION_CLIENT_ID = client_01KY4JGZHVPB133A3N3X4FXYG9
+  //   PROEXTERIORS_WORKOS_CLIENT_ID            = client_01KY4JGZ4C28JJT7HATPDHJ3KB
+  //   WORKOS_CLIENT_ID                         = client_01KWQ4C0JW76PS952KGTNAH17W
+  // The live value below was read off the AuthKit redirect the app issues.
+  const clientId = process.env.WORKOS_CLIENT_ID || "client_01KTF450QBY957ASEZ8JXZKMV4";
+
+  // /user_management/authenticate is a token endpoint: it authenticates the
+  // CLIENT via client_id + client_secret in the BODY, not via a Bearer header.
+  // Sending only the Bearer header yields 400 invalid_client "Invalid client secret."
+  const res = await fetch(`${WORKOS}/user_management/authenticate`, {
     method: "POST",
-    body: JSON.stringify({ client_id: clientId, grant_type: "urn:workos:oauth:grant-type:magic-auth:code", code, email: QA_EMAIL }),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: wk,
+      grant_type: "urn:workos:oauth:grant-type:magic-auth:code",
+      code,
+      email: QA_EMAIL,
+    }),
   });
+  const txt = await res.text();
+  let parsed; try { parsed = JSON.parse(txt); } catch { parsed = txt; }
+  const a = { ok: res.ok, status: res.status, body: parsed };
   if (!a.ok) { console.error("FAIL exchanging code:", a.status, JSON.stringify(a.body).slice(0, 400)); process.exit(1); }
   console.log(`  authenticated as ${a.body?.user?.email} (user ${a.body?.user?.id})`);
   console.log(`  access_token: ${a.body?.access_token ? "issued" : "absent"} · refresh_token: ${a.body?.refresh_token ? "issued" : "absent"}`);
