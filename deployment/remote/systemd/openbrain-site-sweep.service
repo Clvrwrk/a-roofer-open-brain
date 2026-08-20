@@ -13,9 +13,12 @@ Type=oneshot
 # Each is optional; the sweep degrades loudly rather than silently skipping. If the
 # DB pair is missing you get a 'db: no SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY'
 # warning, NOT silent green — check for it after any master.env change.
-EnvironmentFile=-/opt/openbrain/master.env
+# Env is sourced by the wrapper, not by systemd: the repo .env has quoted and
+# multi-line values systemd's EnvironmentFile parser cannot read. The previous
+# `EnvironmentFile=-/opt/openbrain/master.env` pointed at a path that does not
+# exist on this host, and the leading `-` made that failure silent.
 WorkingDirectory=/opt/openbrain/a-roofers-open-brain
-ExecStart=/usr/bin/env node /opt/openbrain/a-roofers-open-brain/scripts/site-quality-sweep.mjs
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/site-sweep.sh
 User=root
 # Static analysis is seconds; live probes are network-bound. 15m is generous.
 TimeoutStartSec=900
