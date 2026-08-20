@@ -1,9 +1,10 @@
--- 246 — put DOLLARS on the coverage gaps.
+-- 250 — put DOLLARS on the coverage gaps.
 --
--- NUMBERING NOTE: applied to prod under the label `245_office_vendor_spend_exposure`
--- (2026-08-20 10:57 UTC) before a parallel session's `office_closure_and_agreement_status_245`
--- (10:55 UTC) was seen. That one owns 245; this file is renumbered to 246. The DB records
--- migrations by timestamp, so the stale label is cosmetic — the applied order is unchanged.
+-- NUMBERING NOTE: applied to prod as `245_office_vendor_spend_exposure` at 2026-08-20
+-- 10:57 UTC. Renumbered twice as parallel sessions claimed numbers on main first — 245
+-- (office closure, 10:55 UTC) then 246 (settle received credit memo). Main is canonical, so
+-- this branch yields. The DB keys migrations by TIMESTAMP, not by this label: 250/251/252/253
+-- were all applied BEFORE the file numbered 246, and the applied order is unchanged.
 --
 -- Context: v_office_vendor_inheritance already tells us which (office x vendor) pairs have
 -- no price agreement — `priced_items = 0`. The Command Center renders that as a gap count.

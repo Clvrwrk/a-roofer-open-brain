@@ -1,6 +1,6 @@
 # 99 — Rank coverage gaps by dollars, not by branch count
 
-**Date:** 2026-08-20 · **Migrations:** 245, 246 · **Ticket:** PEC-221
+**Date:** 2026-08-20 · **Migrations:** 250, 251, 252, 253 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -48,7 +48,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 246 — the address was never missing
+## Migration 250 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -76,7 +76,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 246 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 250 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -106,19 +106,22 @@ memo that nets rather than adds).
 ## Addendum — reconciling with migration 245, and what it uncovered
 
 Migration 245 (`office_closure_and_agreement_status`) landed from a parallel session two
-minutes before this work, and answers the other half of the question. Mine were renumbered to
-246/247 around it; the applied labels in the DB still read `245_…`/`246_…`, which is cosmetic
-(Supabase keys migrations by timestamp, so the applied order is unchanged).
+minutes before this work, and answers the other half of the question. Parallel sessions then
+also claimed **246** (`settle-received-credit-memo-lines`), so this work was renumbered to
+**250–253**; main is canonical and a feature branch yields. The applied labels in the DB still
+read `245_…`/`246_…`/`248_…`/`249_…`, which is cosmetic — Supabase keys migrations by
+**timestamp**, and 250–253 were all applied (10:57–11:11 UTC) *before* the file numbered 246
+existed. Applied order is unchanged.
 
 - **245 says WHY** a pair has no agreement — `no_book | pending | not_pursued | unrecorded`
 - **246 says HOW MUCH** it costs — `invoice_count`, `spend`
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 248** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 252** joins the two so the
 surface can never make that mistake.
 
-### Migration 249 — the gate was asking the wrong question
+### Migration 253 — the gate was asking the wrong question
 
 248's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the single largest un-triaged exposure in the system:
@@ -157,7 +160,7 @@ Different numbers, so the join never meets.
 
 ### The latent risk is bigger than the one office
 
-`v_agreement_unreachable` (migration 249) shows **all three live numbered SRS agreements —
+`v_agreement_unreachable` (migration 253) shows **all three live numbered SRS agreements —
 136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |

@@ -1,10 +1,10 @@
--- 248 — join the dollars (246) to Chris's rulings (245). One decision surface.
+-- 252 — join the dollars (250) to Chris's rulings (245). One decision surface.
 -- Applied to prod 2026-08-20.
 --
--- 245 and 246 landed within two minutes of each other from parallel sessions and answer
+-- 245 and 250 landed within two minutes of each other from parallel sessions and answer
 -- DIFFERENT halves of the same question:
 --   245 says WHY a pair has no agreement  (no_book | pending | not_pursued | unrecorded)
---   246 says HOW MUCH that pair costs     (invoice_count, spend)
+--   250 says HOW MUCH that pair costs     (invoice_count, spend)
 -- Neither alone supports a decision. Ranked by dollars alone, Wichita x QXO ($5,697.47)
 -- looks like work to chase — but Chris ruled QXO `no_book` on 2026-08-20: those lines price
 -- as no-price BY DESIGN. Ranked by ruling alone, every `unrecorded` pair looks equal, and
@@ -52,6 +52,6 @@ SELECT c.office_id,
  WHERE c.office_active;
 
 COMMENT ON VIEW public.v_office_vendor_gap_exposure IS
-  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 246). Filter on '
+  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 250). Filter on '
   'needs_ruling to get only pairs where spend has occurred and no human has decided — '
   'never rank on spend alone, or accepted no_book vendors (QXO) resurface as false work.';
