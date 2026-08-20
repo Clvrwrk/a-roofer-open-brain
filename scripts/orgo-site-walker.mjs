@@ -66,6 +66,21 @@ const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
 
+// ── session: injected, not browser-bootstrapped ──
+// A minted sealed session (qa-agent-auth.mjs mint --json) is dropped in as the
+// wos-session cookie, so the nightly run needs no human sign-in and cannot be taken
+// down by a browser-bootstrapped cookie quietly expiring.
+if (process.env.WALK_SESSION_COOKIE) {
+  try {
+    const { readFileSync, unlinkSync } = await import("node:fs");
+    const payload = JSON.parse(readFileSync(process.env.WALK_SESSION_COOKIE, "utf8"));
+    await ctx.addCookies([payload.cookie ?? payload]);
+    try { unlinkSync(process.env.WALK_SESSION_COOKIE); } catch { /* best effort */ }
+  } catch (e) {
+    add("error", "auth", `could not inject the minted session: ${String(e).slice(0, 160)}`);
+  }
+}
+
 const pageResults = [];
 let sessionLost = false;
 

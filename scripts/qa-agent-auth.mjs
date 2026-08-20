@@ -40,8 +40,10 @@ const op = (ref) => {
   try { return execFileSync("op", ["read", ref], { encoding: "utf8" }).trim(); }
   catch { return ""; }
 };
-const wkKey = () => op("op://PE_CC_DEV_Team/WorkOS - PE_CC_DEV_TEAM/credential");
-const amKey = () => op("op://CW_Master/AGENTMAIL_API_KEY/credential");
+// Env first, 1Password second: the Hetzner agent host has no `op` binary, and the
+// nightly QA orchestrator runs there. Locally, `op` still fills the gap.
+const wkKey = () => process.env.WORKOS_API_KEY || op("op://PE_CC_DEV_Team/WorkOS - PE_CC_DEV_TEAM/credential");
+const amKey = () => process.env.AGENTMAIL_API_KEY || op("op://CW_Master/AGENTMAIL_API_KEY/credential");
 
 const api = async (url, key, opts = {}) => {
   const res = await fetch(url, {
@@ -157,8 +159,76 @@ async function login() {
   console.log("SUCCESS — full passwordless loop verified.");
 }
 
+// ── mint ────────────────────────────────────────────────────────────────────
+// Produce the SAME sealed session cookie /auth/callback sets, with no browser —
+// and therefore without the Cloudflare human-verification interstitial that sits
+// in front of api.workos.com and *.authkit.app. That Cloudflare is WorkOS's, not
+// ours; there is no setting on our side that disables it.
+//
+// Why this works: the SDK's authenticateWithMagicAuth accepts the same
+// `session: { sealSession, cookiePassword }` option as authenticateWithCode and
+// runs it through the same prepareAuthenticationResponse, so it returns a
+// `sealedSession` of the same kind. The raw REST /user_management/authenticate
+// CANNOT — sealing is SDK-side only, which is why `login` yields tokens and never
+// a cookie.
+//
+// WORKOS_COOKIE_PASSWORD must be byte-identical to the app's. A different value
+// seals a cookie the app cannot decrypt, and every page 302s to /auth/login while
+// looking exactly like an auth outage.
+async function mint() {
+  const wk = wkKey(), am = amKey();
+  const clientId = process.env.WORKOS_CLIENT_ID || "client_01KTF450QBY957ASEZ8JXZKMV4";
+  const cookiePassword = process.env.WORKOS_COOKIE_PASSWORD || "";
+  if (!wk) { console.error("FAIL: WORKOS_API_KEY unavailable (env or 1Password)"); process.exit(1); }
+  if (!am) { console.error("FAIL: AGENTMAIL_API_KEY unavailable (env or 1Password)"); process.exit(1); }
+  if (cookiePassword.length < 32) {
+    console.error("FAIL: WORKOS_COOKIE_PASSWORD missing or <32 chars. It must be the SAME value the app uses.");
+    process.exit(1);
+  }
+
+  const mod = await import("@workos-inc/node").catch(() => null);
+  if (!mod?.WorkOS) {
+    console.error("FAIL: @workos-inc/node not resolvable — run from app/command-center or set NODE_PATH to its node_modules");
+    process.exit(1);
+  }
+
+  const sent = Date.now();
+  const s = await api(`${WORKOS}/user_management/magic_auth/send`, wk, {
+    method: "POST", body: JSON.stringify({ email: QA_EMAIL }),
+  });
+  if (!s.ok) { console.error("FAIL sending magic auth:", s.status, JSON.stringify(s.body).slice(0, 200)); process.exit(1); }
+
+  const code = await readCode(am, sent);
+  if (!code) { console.error("FAIL: no magic-auth code arrived within the polling window"); process.exit(1); }
+
+  let resp;
+  try {
+    const workos = new mod.WorkOS(wk, { clientId });
+    resp = await workos.userManagement.authenticateWithMagicAuth({
+      clientId, code, email: QA_EMAIL,
+      session: { sealSession: true, cookiePassword },
+    });
+  } catch (e) {
+    console.error("FAIL authenticateWithMagicAuth:", String(e).slice(0, 300));
+    process.exit(1);
+  }
+  if (!resp?.sealedSession) { console.error("FAIL: no sealedSession returned — check sealSession/cookiePassword"); process.exit(1); }
+
+  // The sealed value is session material. It goes to stdout only under --json, for
+  // the caller to inject straight into a browser context; it is never logged.
+  const cookie = {
+    name: "wos-session", value: resp.sealedSession,
+    domain: process.env.QA_COOKIE_DOMAIN || "cc.proexteriorsus.net",
+    path: "/", httpOnly: true, secure: true, sameSite: "Lax",
+  };
+  if (process.argv.includes("--json")) { console.log(JSON.stringify({ cookie, user: resp.user?.email ?? null })); return; }
+  console.log(`minted wos-session for ${resp.user?.email ?? "unknown"} (${resp.sealedSession.length} bytes sealed)`);
+  console.log("  pass --json to emit it for injection; the value is not printed here.");
+}
+
 const cmd = process.argv[2] || "status";
 if (cmd === "status") await status();
 else if (cmd === "provision") await provision();
 else if (cmd === "login") await login();
-else { console.error(`unknown command ${cmd}; use status|provision|login`); process.exit(1); }
+else if (cmd === "mint") await mint();
+else { console.error(`unknown command ${cmd}; use status|provision|login|mint`); process.exit(1); }
