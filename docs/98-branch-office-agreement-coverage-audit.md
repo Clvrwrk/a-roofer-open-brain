@@ -123,8 +123,48 @@ Gaps queue exists to work.
 2. **Decide what QXO is.** 59 covered branches, 6 PDF-extracted invoices, no agreements, no
    branch FK. Either it is a real vendor to negotiate and wire up, or its branches should not
    be marked covered.
-3. **Populate `vendor_branch_id` on QXO invoices**, or QXO can never price.
-4. **Give SRS the same version-supersession rule as ABC**, so a superseded agreement cannot
-   win on lowest price.
+3. ~~Populate `vendor_branch_id` on QXO invoices~~ — **done, migrations 240/242.** All 3
+   resolve: DENTON → Denton Branch (Richardson, TX), SALINA → Salina Branch- Mw
+   (Wichita, KS), WICHITA → 986 Wichita Branch (Wichita, KS), the last by Chris's decision
+   over an ambiguous pair.
+4. ~~Give SRS the same version-supersession rule as ABC~~ — **done, migration 241.** Guard
+   only; SRS has one version per number today, fingerprint unchanged.
 5. **Euless, TX has no branches** — confirm the office is real and in use.
 6. Re-run this audit whenever a branch is added; the queries are in this doc's git history.
+
+
+## Addendum — branch identity is now resolved at ingest (migrations 240–244)
+
+Chris asked whether to mint a PE UUID per branch. **We already have one:**
+`vendor_branches.id`. A second PE-side uuid would be pure indirection and would not have
+prevented any bug found this week. The defect was never a missing identifier — it was
+resolving vendor **text** at **query time**. The data made the case:
+
+| vendor | resolved to our uuid... | identity bugs |
+|---|---|---|
+| SRS | at **ingest** (FK on 90/90 invoices) | **none** |
+| ABC | at **query time**, by branch number | bled into QXO's rows (mig 238) |
+| QXO | never — only a scraped city string | could not resolve at all |
+
+So the work was to give ABC and QXO what SRS already had:
+
+- **`vendor_branch_alias`** (240) — a vendor's label → `vendor_branches.id`, resolved once
+  and recorded. A CHECK enforces `status='resolved' ⇒ FK NOT NULL`, so a guess cannot
+  become a fact. Ambiguity is stored *as* ambiguity with the candidates attached.
+- **`abc_invoices.vendor_branch_id`** (243) — the FK ABC never had; 1,089 of 1,089 backfilled.
+- **Ingest triggers** (243) on `abc_invoices` and `vendor_invoices` — a new invoice resolves
+  its branch on the way in. An unknown label leaves the FK NULL → no office → no price,
+  which is correct fail-closed behaviour and visible, instead of silently borrowing
+  whichever vendor's row shared the number.
+  *Trap:* `branch_number_extracted` is a STORED generated column and is not populated during
+  a BEFORE trigger — the trigger reads `raw->'branch'->>'number'` directly.
+- **Views switched to the FK** (244), after proving equivalence: the FK yields the identical
+  office as the old text join on all 1,089 invoices, 0 disagreements. `at_risk` and row count
+  unchanged; the only display delta is the 3 QXO invoices gaining a real branch and office.
+
+**Nothing joins on a vendor's branch text any more.** Adding a new vendor that reuses ABC's
+numbering is now a data problem (rows in `vendor_branch_alias`), not a correctness risk.
+
+Where a *new* identifier would earn its keep — and it is not a branch uuid — is a **physical
+location** entity that several vendor branches map to (a site changing hands between vendors,
+or two vendors' branches treated as one supply point). Nothing in the data needs that today.
