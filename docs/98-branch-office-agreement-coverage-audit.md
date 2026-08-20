@@ -109,7 +109,8 @@ Two headlines:
 - **Atlanta has zero agreements for any vendor** — 42 covered branches. $5,226.90 of ABC
   spend across 5 invoices already sits there and cannot be audited.
 
-Also: the **Euless, TX** office has **0 branches assigned** to it at all.
+Also: the **Euless, TX** office has **0 branches assigned** to it at all. *(Resolved
+2026-08-20: permanently closed — see the addendum.)*
 
 The four newly-covered branches still price as no-price, and correctly so: Atlanta has no
 agreement, and the Lenexa invoice's three items (`02MLVIA3HE`, `GGA2620TB`, `SGDE185TB`) are
@@ -168,3 +169,50 @@ numbering is now a data problem (rows in `vendor_branch_alias`), not a correctne
 Where a *new* identifier would earn its keep — and it is not a branch uuid — is a **physical
 location** entity that several vendor branches map to (a site changing hands between vendors,
 or two vendors' branches treated as one supply point). Nothing in the data needs that today.
+
+
+## Addendum 2 — decisions recorded 2026-08-20 (migration 245)
+
+Chris ruled on three of the open items. They are now **data, not report text** — the audit
+above is a standing view, `v_office_vendor_agreement_coverage`.
+
+### Euless, TX is permanently closed
+
+Richardson, TX is the only DFW office. `office.is_active = false`; the isochrone is retained
+so history still resolves. Safe to close: 0 branches assigned, 0 suggested, 0 agreements, and
+of the 51 branches inside its boundary, 49 are also inside Richardson's.
+
+Nothing in the codebase gated on `office.is_active`, so closure alone would not have stopped
+a future assignment picking Euless. Added `office_for_point(lon, lat)` — **active offices
+only** — as the one way to ask the containment question from now on.
+
+**One consequence, flagged rather than decided.** The two **Wichita Falls, TX** branches
+(ABC + QXO 249) were auto-assigned to Richardson *through the Euless isochrone* and carry no
+human territory decision. With Euless closed they sit inside no active 2-hour boundary. Their
+assignment is left as-is — no coverage change today — but an automated re-sweep would drop
+them to `out_of_boundary`. **Needs a keep-or-drop ruling.** Both rows are annotated in
+`vendor_branches.notes`.
+
+(The two **Austin, TX** ABC branches are also outside every boundary, but they carry
+`territory_decided_by = 'Chris Hussey'` from 2026-06-10 — deliberate overrides, unaffected by
+this closure.)
+
+### Posture recorded per (office, vendor)
+
+New table `office_vendor_agreement_status`: `active` · `pending` · `no_book` · `not_pursued`.
+
+- **Atlanta × ABC → `pending`.** 19 covered branches; $5,226.90 already invoiced and
+  un-auditable until a book exists.
+- **QXO × all 5 active offices → `no_book`.** 12 + 14 + 13 + 15 + 5 = **59 covered branches**,
+  known and accepted. QXO lines price as no-price **by design, not by defect** — that
+  distinction is now recorded, so the surface stops reading as a bug.
+
+### Still unruled
+
+Eight pairs remain `unrecorded`. Six of them have a live agreement and only need the status
+backfilled for tidiness. **Two have no book and no ruling:**
+
+| office | vendor | covered branches | live agreements |
+|---|---|---:|---:|
+| Atlanta (Jonesboro), GA | SRS | 11 | 0 |
+| Kansas City, MO | SRS | 3 | 0 |
