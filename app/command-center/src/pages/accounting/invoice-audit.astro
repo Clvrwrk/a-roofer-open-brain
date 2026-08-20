@@ -78,7 +78,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <span class="iv-kpi-lab">Claims to Review</span>
         <span class="iv-kpi-val" data-kpi-val="claims">{kpi.claimsUnreviewed.toLocaleString()}</span>
         <span class="iv-kpi-sub" data-kpi-sub="claims">of {kpi.claimsTotal.toLocaleString()} claim lines · {money(kpi.atRisk)} at risk</span>
-        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review →</a>
+        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review in Weekly CM</a>
       </div>
       <!-- 2 · CM Requests — Approve & Send (merges old CM Requested + Invoice Audit Pending) -->
       <div class="iv-kpi">
@@ -90,10 +90,10 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
             if (v.cmStatus === "coming_soon")
               return <span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon">{v.acronym}</span>;
             if (v.count === 0)
-              return <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">{v.acronym}</span>;
+              return <span class="iv-process-btn iv-secondary iv-vendor-off" title={`No ${v.label} request is drafted or approved — nothing to send`}>{v.acronym}</span>;
             return (
               <a class="iv-process-btn iv-secondary" href={`/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}`}
-                title={`Open the ${v.label} credit memo email + downloads`}>{v.acronym} →</a>
+                title={`Open the ${v.label} credit memo email + downloads in Weekly CM`}>{v.acronym} →</a>
             );
           })}
         </div>
@@ -114,7 +114,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <span class="iv-kpi-lab">CMs Awaiting Vendor Credit</span>
         <span class="iv-kpi-val" data-kpi-val="awaiting">{kpi.awaitingCount.toLocaleString()}</span>
         <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} requested · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
-        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Sent requests not yet received — pairs with the QB CM-TBD QA lines">Chase →</a>
+        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Sent requests not yet received — pairs with the QB CM-TBD QA lines">Chase in Weekly CM</a>
       </div>
       <!-- 4 · Due Now — Pay -->
       <div class="iv-kpi">
@@ -128,7 +128,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <span class="iv-kpi-lab">Paid — Pending Verification</span>
         <span class="iv-kpi-val" data-kpi-val="verify">{kpi.pendingVerification.toLocaleString()}</span>
         <span class="iv-kpi-sub">60+ days past invoice date · verify paid</span>
-        <button type="button" class="iv-process-btn iv-secondary" id="iv-payments">Manage</button>
+        <button type="button" class="iv-process-btn iv-secondary" id="iv-payments" title="Open the payments panel — verify paid invoices against the AR report">Manage</button>
       </div>
       <!-- 6 · QB Export Pending — un-exported bank-ledger rows per vendor (NEW, mig 228) -->
       <div class="iv-kpi">
@@ -136,8 +136,8 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <span class="iv-kpi-val" data-kpi-val="qb">{kpi.qbPendingTotal.toLocaleString()}</span>
         <span class="iv-kpi-sub" data-kpi-sub="qb">{kpi.qbPendingByVendor.length ? kpi.qbPendingByVendor.map((r) => `${r.slug} ${r.pending}`).join(" · ") : "all ledgers exported"}</span>
         {kpi.qbPendingTotal > 0
-          ? <a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export →</a>
-          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>}
+          ? <a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export in QB Bank Export</a>
+          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="Every vendor ledger is already exported — nothing to export">Export in QB Bank Export</span>}
       </div>
       <!-- 7 · Agreement Gaps (Alex queue) — LIVE (PEC-195): repeat-purchase No-Price
            items per (vendor, office) queued as global product file candidates -->
@@ -146,8 +146,8 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <span class="iv-kpi-val" data-kpi-val="alex">{kpi.alexCandidates.toLocaleString()}</span>
         <span class="iv-kpi-sub" data-kpi-sub="alex">repeat-purchase items → global product file · Alex auto-clears the rest</span>
         {kpi.alexCandidates > 0
-          ? <a class="iv-process-btn iv-secondary" href="/accounting/price-agreement/builder#agreement-gaps" title="Review the repeat-purchase candidates in the Agreement Builder">Review →</a>
-          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Review →</span>}
+          ? <a class="iv-process-btn iv-secondary" href="/accounting/price-agreement/builder#agreement-gaps" title="Review the repeat-purchase candidates in the Agreement Builder">Review in Agreement Builder</a>
+          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No repeat-purchase candidates are queued — nothing to review">Review in Agreement Builder</span>}
       </div>
     </div>
 

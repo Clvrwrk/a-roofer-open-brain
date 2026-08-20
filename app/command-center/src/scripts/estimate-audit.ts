@@ -10,6 +10,7 @@
 // primitive). Everything renders at once, so scope totals are DOM-counted (no declared total).
 
 import { initProgressTree } from "./progress-checklist";
+import { initThemePref } from "./theme-pref";
 
 interface Line { lineId: string; description: string; qty: number; uom: string; unitCost: number; lineCost: number; linePrice: number; categoryKey: string; abcItemNumber: string; apiPrice: number | null; apiUom: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -307,20 +308,8 @@ if (root && dataEl && mount) {
   }
   [search, officeSel].forEach((el) => el.addEventListener("input", applyFilter));
 
-  /* ---- theme toggle ---- */
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  function applyTheme(pref: string) {
-    root!.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-    root!.dataset.pref = pref;
-    root!.querySelectorAll<HTMLButtonElement>(".ea-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-  }
-  let pref = "system";
-  try { pref = localStorage.getItem("eaTheme") || "system"; } catch {}
-  applyTheme(pref);
-  root.querySelectorAll<HTMLButtonElement>(".ea-theme button").forEach((b) =>
-    b.addEventListener("click", () => { try { localStorage.setItem("eaTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }),
-  );
-  mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+  /* ---- theme toggle (shared preference — see scripts/theme-pref.ts) ---- */
+  initThemePref(root, ".ea-theme button");
 
   /* ---- toast ---- */
   let timer: number | undefined;

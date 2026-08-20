@@ -1,3 +1,4 @@
+import { initThemePref } from "./theme-pref";
 // Agreement Builder — PE Office → Vendor → Vendor/Branch → Category → Item → Variation.
 // Office/Vendor/Branch skeleton renders from the overview payload (with cost roll-ups);
 // each branch's negotiable catalog loads lazily from /api/price-agreement/branch-detail on
@@ -364,17 +365,6 @@ if (root && dataEl && mount) {
     requestAnimationFrame(() => det.scrollIntoView({ behavior: "smooth", block: "start" }));
   })();
 
-  /* ---------- theme ---------- */
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  function applyTheme(pref: string) {
-    root!.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-    root!.dataset.pref = pref;
-    root!.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-  }
-  let pref = "system";
-  try { pref = localStorage.getItem("ivTheme") || "system"; } catch {}
-  applyTheme(pref);
-  root.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) =>
-    b.addEventListener("click", () => { try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
-  mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+  /* ---------- theme (shared preference — see scripts/theme-pref.ts) ---------- */
+  initThemePref(root, ".iv-theme button");
 }
