@@ -1,0 +1,21 @@
+[Unit]
+Description=Maya nightly QA of cc.proexteriorsus.net (wide walk + chaos forensic pass)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Env sourced by the wrapper, not systemd: the repo .env carries quoted/multi-line
+# values EnvironmentFile cannot parse. Same pattern as maya-gate.sh and site-sweep.sh.
+WorkingDirectory=/opt/openbrain/a-roofers-open-brain
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/maya-qa.sh
+User=root
+# Two passes, each polled up to 30 min, plus slack. 80 min is generous but bounded.
+TimeoutStartSec=4800
+StandardOutput=journal
+StandardError=journal
+# A failing QA run reports; it must not wedge the timer.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
