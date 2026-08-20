@@ -57,6 +57,10 @@ export interface CoverageVendor {
   allVerified: boolean;
   pricedItems: number;
   hasGap: boolean;
+  /** Invoices booked against this office x vendor (v_office_vendor_spend). */
+  invoiceCount: number;
+  /** Spend booked against this office x vendor. With hasGap, this is un-audited exposure. */
+  spend: number;
   branches: CoverageBranch[];
 }
 
@@ -81,6 +85,12 @@ export interface PriceAgreementCoverage {
     pricedItems: number;
     gaps: number;
     lapsedVendors: number;
+    /** Gaps carrying real spend — the ones that cost money today. */
+    gapsWithSpend: number;
+    /** Total spend sitting in office x vendor pairs with no priced items. */
+    unauditedSpend: number;
+    /** Spend that resolves to no office at all (v_unresolved_branch_spend). */
+    unresolvedSpend: number;
   };
 }
 
@@ -105,6 +115,24 @@ function branchRole(row: any): CoverageRole {
 
 const ROLE_ORDER: Record<CoverageRole, number> = { Primary: 0, "Region-covered": 1, Inherits: 2 };
 
+/**
+ * Split coverage gaps into the ones that cost money and the ones that are territory-only.
+ *
+ * A gap means "no branch in this ring holds an agreement with this vendor". That says nothing
+ * about whether we actually BUY there. On 2026-08-20, 9 of 9 gaps were flagged identically but
+ * 6 had never seen a single invoice — ranking by branch count put a $0 gap above a $17k one.
+ * Exposure is spend, not branch count.
+ */
+export function gapExposure(
+  vendors: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "spend">[],
+): { gapsWithSpend: number; unauditedSpend: number } {
+  const gaps = vendors.filter((v) => v.hasGap);
+  return {
+    gapsWithSpend: gaps.filter((v) => v.invoiceCount > 0).length,
+    unauditedSpend: gaps.reduce((s, v) => s + v.spend, 0),
+  };
+}
+
 export async function loadPriceAgreementCoverage(
   env: RuntimeEnv = getRuntimeEnv(),
 ): Promise<PriceAgreementCoverage> {
@@ -115,12 +143,13 @@ export async function loadPriceAgreementCoverage(
     totals: {
       offices: 0, vendors: 0, branchRows: 0, primaryBranches: 0, regionCoveredBranches: 0,
       branchesInheriting: 0, pricedItems: 0, gaps: 0, lapsedVendors: 0,
+      gapsWithSpend: 0, unauditedSpend: 0, unresolvedSpend: 0,
     },
   };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [inhRows, branchRows] = await Promise.all([
+  const [inhRows, branchRows, spendRows, unresolvedRows] = await Promise.all([
     selectAll<any>(
       client,
       "v_office_vendor_inheritance",
@@ -131,6 +160,8 @@ export async function loadPriceAgreementCoverage(
       "v_office_vendor_branch",
       "office_id,office_name,office_state,vendor_id,vendor_slug,vendor_name,vendor_branch_id,branch_key,branch_number_raw,branch_name,city,state,address,phone,manager_name,manager_email,sales_rep_name,miles_from_office,agreement_id,agreement_number,agreement_source,agreement_scope,effective_date,expiry_date,is_lapsed,ceo_verified,holds_agreement,is_primary_branch",
     ),
+    selectAll<any>(client, "v_office_vendor_spend", "office_id,vendor_id,invoice_count,spend"),
+    selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend"),
   ]);
   if (inhRows.length === 0) return empty;
 
@@ -177,6 +208,15 @@ export async function loadPriceAgreementCoverage(
     });
   }
 
+  // office+vendor -> spend. A gap with no spend is theoretical; a gap with spend costs money.
+  const spendByOfficeVendor = new Map<string, { invoiceCount: number; spend: number }>();
+  for (const r of spendRows) {
+    spendByOfficeVendor.set(`${str(r.office_id)}::${str(r.vendor_id)}`, {
+      invoiceCount: num(r.invoice_count),
+      spend: num(r.spend),
+    });
+  }
+
   const officeMap = new Map<string, CoverageOffice>();
   for (const r of inhRows) {
     const officeId = str(r.office_id);
@@ -200,6 +240,8 @@ export async function loadPriceAgreementCoverage(
       allVerified: r.all_verified === true,
       pricedItems: num(r.priced_items),
       hasGap: primaryBranches + regionCoveredBranches === 0,
+      invoiceCount: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.invoiceCount ?? 0,
+      spend: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.spend ?? 0,
       branches: byOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? [],
     });
   }
@@ -226,6 +268,8 @@ export async function loadPriceAgreementCoverage(
       pricedItems: allVendors.reduce((s, v) => s + v.pricedItems, 0),
       gaps: allVendors.filter((v) => v.hasGap).length,
       lapsedVendors: allVendors.filter((v) => v.anyLapsed).length,
+      ...gapExposure(allVendors),
+      unresolvedSpend: unresolvedRows.reduce((s, r) => s + num(r.spend), 0),
     },
   };
 }
