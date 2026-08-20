@@ -100,3 +100,87 @@ invoices attach to the right row, and enriching one row cannot corrupt the other
 
 `gapExposure()` is exported as a pure function and unit-tested (5 cases, including the credit
 memo that nets rather than adds).
+
+---
+
+## Addendum — reconciling with migration 245, and what it uncovered
+
+Migration 245 (`office_closure_and_agreement_status`) landed from a parallel session two
+minutes before this work, and answers the other half of the question. Mine were renumbered to
+246/247 around it; the applied labels in the DB still read `245_…`/`246_…`, which is cosmetic
+(Supabase keys migrations by timestamp, so the applied order is unchanged).
+
+- **245 says WHY** a pair has no agreement — `no_book | pending | not_pursued | unrecorded`
+- **246 says HOW MUCH** it costs — `invoice_count`, `spend`
+
+Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
+2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
+($5,697.47) reads as work to chase — it is not. **Migration 248** joins the two so the
+surface can never make that mistake.
+
+### Migration 249 — the gate was asking the wrong question
+
+248's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
+wrong, and it hid the single largest un-triaged exposure in the system:
+
+> **Denver × SRS has a live, in-territory, 22-item agreement — and prices nothing.
+> $17,437.63 audits as no-price.**
+
+249 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
+that matters. The queue is now two rows: Denver × SRS ($17,437.63, `unrecorded`) and
+Atlanta × ABC ($5,226.90, `pending`).
+
+### Root cause: the last text-based branch match
+
+`v_office_vendor_branch` still resolves agreements by branch-number **text**:
+
+```sql
+JOIN vendor_branches vb ON vb.geom IS NOT NULL AND st_contains(o.boundary, vb.geom)
+LEFT JOIN v_vendor_agreement_current ag
+       ON ag.vendor_id  = vb.vendor_id
+      AND ag.branch_key = NULLIF(regexp_replace(vb.branch_number,'^0+',''),'')
+```
+
+This is the last survivor of the text matching migration 244 removed from the pricing and
+display paths, and it needs **both** halves to line up: the branch must be geocoded to appear
+in the ring at all, *and* the agreement's `branch_key` must equal that geocoded row's
+`branch_number`.
+
+SRS South Denver exists as **two rows for one physical branch**:
+
+| Row | Address | Geocoded | Holds agreement |
+|---|---|---|---|
+| `AMSDE` | none | ✗ (pending) | ✓ the 22-item book |
+| `SBP-SOUTHDENVER` | 4393 S. Santa Fe Drive | ✓ 6.1 mi | ✗ |
+
+Different numbers, so the join never meets.
+
+### The latent risk is bigger than the one office
+
+`v_agreement_unreachable` (migration 249) shows **all three live numbered SRS agreements —
+136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
+
+| Agreement | Items | Held by | Likely canonical |
+|---|---:|---|---|
+| SRS-MELISSA-L4 | 97 | `SSMEL` | `SBP-MELISSA` |
+| 0049345641 | 22 | `AMSDE` | `SBP-SOUTHDENVER` |
+| 0049828559 | 17 | `DJWIC` | `SBP-WICHITA` |
+
+Richardson and Wichita still price **only because archived duplicate agreement rows**
+(`[ARCHIVED 2026-08-05: duplicate of the numbered agreement row]`) happen to reach the ring.
+Denver is not a special case — it is the one where that accidental crutch is missing. **If
+those archived rows were ever tidied up, Richardson and Wichita SRS would silently stop
+pricing too: 114 further items.**
+
+**Trap for whoever fixes this:** `v_office_vendor_branch.agreement_id` is a mixed-type text
+column — ABC agreements appear as legacy **integer** ids (`'105'`, `'8'`), SRS as uuids.
+Casting either direction throws `invalid input syntax for type uuid: "105"`. Compare as text
+against both `price_agreements.id` and `price_agreements.legacy_id`.
+
+### Deliberately not fixed here
+
+Repointing the agreement join to `vendor_branch_id` is pricing-affecting and earns the same
+equivalence proof migration 244 ran before switching (FK == text on every row, 0
+disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
+decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
+a guess cannot become a fact. 249 only makes the failure visible.

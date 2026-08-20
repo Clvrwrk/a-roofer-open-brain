@@ -1,4 +1,9 @@
--- 245 — put DOLLARS on the coverage gaps.
+-- 246 — put DOLLARS on the coverage gaps.
+--
+-- NUMBERING NOTE: applied to prod under the label `245_office_vendor_spend_exposure`
+-- (2026-08-20 10:57 UTC) before a parallel session's `office_closure_and_agreement_status_245`
+-- (10:55 UTC) was seen. That one owns 245; this file is renumbered to 246. The DB records
+-- migrations by timestamp, so the stale label is cosmetic — the applied order is unchanged.
 --
 -- Context: v_office_vendor_inheritance already tells us which (office x vendor) pairs have
 -- no price agreement — `priced_items = 0`. The Command Center renders that as a gap count.
