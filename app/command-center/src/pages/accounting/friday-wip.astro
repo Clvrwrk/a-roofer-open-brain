@@ -6,7 +6,7 @@ import { loadFridayWipBoard } from "@lib/friday-wip";
 // 11_Friday_Meeting sheet as a living surface. Data: wip_ar_master (migs
 // 215/216), rebuilt nightly from the AccuLynx mirror + QBO job costs; the
 // yellow columns (expected dates, Estimated $, collected?, notes) save inline
-// and survive every refresh. Theming shares the `ivTheme` preference with the
+// and survive every refresh. Theming shares the `cc.theme` preference with the
 // other audit tabs (System/Light/Dark), zebra rows use the brand navy/gold.
 const board = await loadFridayWipBoard();
 const k = board.kpis;
@@ -250,24 +250,12 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
   </style>
 
   <script>
-    // Theme toggle — same mechanism + `ivTheme` localStorage key as Invoice
-    // Audit, so the light/dark preference is shared across tabs.
+    import { initThemePref } from "../../scripts/theme-pref";
+
+    // Theme toggle — shared preference across every audit surface.
+    // See src/scripts/theme-pref.ts.
     const fwRoot = document.getElementById("fw")!;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    function applyTheme(pref: string) {
-      fwRoot.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-      fwRoot.dataset.pref = pref;
-      fwRoot.querySelectorAll<HTMLButtonElement>(".fw-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-    }
-    let themePref = "system";
-    try { themePref = localStorage.getItem("ivTheme") || "system"; } catch { /* private mode */ }
-    applyTheme(themePref);
-    fwRoot.querySelectorAll<HTMLButtonElement>(".fw-theme button").forEach((b) =>
-      b.addEventListener("click", () => {
-        try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch { /* private mode */ }
-        applyTheme(b.dataset.setTheme!);
-      }));
-    mq.addEventListener("change", () => { if (fwRoot.dataset.pref === "system") applyTheme("system"); });
+    initThemePref(fwRoot, ".fw-theme button");
 
     // Inline saves: change → POST /api/accounting/friday-wip/update.
     // Green flash = persisted (survives the nightly rebuild); red = rejected.

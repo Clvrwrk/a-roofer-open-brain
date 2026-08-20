@@ -2,6 +2,7 @@
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
 import { priceListUrl } from "./price-list-url";
+import { initThemePref } from "./theme-pref";
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -70,8 +71,8 @@ if (root && dataEl && mount) {
       if (vend && Array.isArray(k.cmByVendor)) {
         vend.innerHTML = k.cmByVendor.map((v: any) => {
           if (v.cmStatus === "coming_soon") return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon">${esc(v.acronym)}</span>`;
-          if (!v.count) return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">${esc(v.acronym)}</span>`;
-          return `<a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}" title="Open the ${esc(v.label)} credit memo email + downloads">${esc(v.acronym)} →</a>`;
+          if (!v.count) return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No ${esc(v.label)} request is drafted or approved — nothing to send">${esc(v.acronym)}</span>`;
+          return `<a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}" title="Open the ${esc(v.label)} credit memo email + downloads in Weekly CM">${esc(v.acronym)} →</a>`;
         }).join("");
       }
       const pb = document.getElementById("iv-process") as HTMLButtonElement | null;
@@ -103,8 +104,8 @@ if (root && dataEl && mount) {
         const qbBtn = qbSub.closest(".iv-kpi")?.querySelector<HTMLElement>(".iv-process-btn");
         if (qbBtn) {
           qbBtn.outerHTML = Number(k.qbPendingTotal) > 0
-            ? `<a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export →</a>`
-            : `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No data available — report empty">Export →</span>`;
+            ? `<a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export in QB Bank Export</a>`
+            : `<span class="iv-process-btn iv-secondary iv-vendor-off" title="Every vendor ledger is already exported — nothing to export">Export in QB Bank Export</span>`;
         }
       }
       set('[data-kpi-val="alex"]', num$(k.alexCandidates));
@@ -432,7 +433,7 @@ if (root && dataEl && mount) {
     // No data → greyed with tooltip, pointer events kept alive (Chris 2026-08-09).
     const priceListBtn = hasPriceList
       ? `<a class="iv-rowbtn" href="${priceListUrl({ branch: inv.branchCode, vendor: inv.vendor || "abc-supply", invoice: inv.invoiceNumber, office: inv.office })}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
-      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No data available — report empty" onclick="event.stopPropagation()">📋 Price List</span>`;
+      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list is on file for this branch and vendor" onclick="event.stopPropagation()">📋 Price List</span>`;
     // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
     // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
     // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
@@ -899,19 +900,8 @@ if (root && dataEl && mount) {
     }
   }
 
-  /* ---- theme toggle ---- */
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  function applyTheme(pref: string) {
-    root!.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-    root!.dataset.pref = pref;
-    root!.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-  }
-  let pref = "system";
-  try { pref = localStorage.getItem("ivTheme") || "system"; } catch {}
-  applyTheme(pref);
-  root.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) =>
-    b.addEventListener("click", () => { try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
-  mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+  /* ---- theme toggle (shared preference — see scripts/theme-pref.ts) ---- */
+  initThemePref(root, ".iv-theme button");
 
   /* ---- toast ---- */
   let timer: number | undefined;

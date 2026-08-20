@@ -63,6 +63,37 @@ export const POST: APIRoute = async ({ request, locals }) => {
         invalidateInvoiceAuditSummaryCache();
       } catch (err) { console.error("mark-sent auto process-stamp failed:", err instanceof Error ? err.message : err); }
     }
+    // Marking a credit RECEIVED is the moment the money came back — settle the claim
+    // lines too (migration 246). Without this the lines stay 'disputed' forever, so
+    // at_risk keeps counting money already recovered and credit_memo_amount, which
+    // needs a 'passed' + credit-* pair, reads $0.00. Append-only: a new ledger row
+    // supersedes by decided_at; nothing is updated or deleted.
+    if (status === "received") {
+      try {
+        const { data: openLines } = await client
+          .from("v_invoice_line_audit_current")
+          .select("invoice_line_id,invoice_number,item_number")
+          .eq("invoice_number", invoiceNumber)
+          .eq("audit_status", "disputed");
+        const rows = ((openLines as any[] | null) ?? []).map((l) => ({
+          invoice_line_id: l.invoice_line_id,
+          invoice_number: l.invoice_number,
+          item_number: l.item_number,
+          audit_status: "passed",
+          decision: "credit-received",
+          approved_by: who,
+          approval_note: `Credit received ${nowIso.slice(0, 10)} — claim settled, line leaves at-risk`,
+          source: "credit-memo-reconcile",
+          decided_at: nowIso,
+          vendor_slug: vendorSlug,
+        }));
+        if (rows.length) {
+          const { error: settleErr } = await client.from("invoice_line_audit").insert(rows);
+          if (settleErr) throw new Error(settleErr.message);
+          invalidateInvoiceAuditSummaryCache();
+        }
+      } catch (err) { console.error("mark-received line settle failed:", err instanceof Error ? err.message : err); }
+    }
     return jsonApiResponse({ ok: true, record: data });
   }
 
