@@ -1,0 +1,34 @@
+-- 241 — give the non-ABC (SRS/QXO) pricing arm the same version-supersession rule ABC has.
+-- Additive (CREATE OR REPLACE VIEW). Applied to prod 2026-08-19.
+--
+-- ABC picks the LATEST NON-SUPERSEDED version of an agreement number for the office as at
+-- the invoice date. The vendor_invoices arm had no such rule: it took ANY active agreement
+-- with effective_date <= invoice_date, ordered by UOM match then LOWEST PRICE. A superseded
+-- version could therefore win purely by being cheaper — and a cheaper agreement price means
+-- a LARGER claimed variance, so the failure mode was over-claiming against the vendor.
+--
+-- The added predicate, mirroring the ABC rule:
+--
+--   AND NOT EXISTS (
+--         SELECT 1 FROM price_agreements p2
+--           JOIN vendor_branches vb3 ON vb3.id = p2.vendor_branch_id
+--                AND vb3.pricing_territory_office_id = vb2.pricing_territory_office_id
+--          WHERE p2.vendor_id = pa.vendor_id
+--            AND pa.agreement_number IS NOT NULL      -- unnumbered rows are never superseded
+--            AND p2.agreement_number = pa.agreement_number
+--            AND p2.is_active IS NOT FALSE
+--            AND p2.id <> pa.id
+--            AND p2.effective_date IS NOT NULL AND pa.effective_date IS NOT NULL
+--            AND (vi.invoice_date IS NULL OR p2.effective_date <= vi.invoice_date)
+--            AND p2.effective_date > pa.effective_date)
+--
+-- Scoped to the same vendor AND the same office, so it can never reach across a silo.
+--
+-- IMPACT TODAY: none. SRS currently has exactly one version per agreement number, so this
+-- is a GUARD, not a correction. Verified by fingerprint over the whole vendor_invoices arm
+-- before and after: 33 rows, 192 no-price lines, 12 flagged, $2,817.80 at risk,
+-- md5 2724a35c63473b84d69e6465c62eb9c1 — identical. It closes the hole before the second
+-- version of an SRS agreement lands.
+--
+-- The full view body is the one in migrations 233 (at_risk) + 238 (vendor-scoped display
+-- lateral) with this predicate added to the vendor arm's `g` lateral.
