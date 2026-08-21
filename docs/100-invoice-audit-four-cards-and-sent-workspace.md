@@ -1,4 +1,4 @@
-# 99 — Invoice Audit: 4 controls + 4 cards, and the Sent CM workspace (2026-08-21)
+# 100 — Invoice Audit: 4 controls + 4 cards, and the Sent CM workspace (2026-08-21)
 
 Executes the redesign proposed in the Invoice Audit teardown (docs/95 addendum), plus the
 territory drops Chris ruled on.
