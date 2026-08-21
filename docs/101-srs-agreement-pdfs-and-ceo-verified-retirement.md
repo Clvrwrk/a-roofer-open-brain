@@ -137,3 +137,66 @@ and when. The column simply stops being consulted.
 - **Close the $49,018.94 `no_price` gap** — decide between item-number backfill and a
   vendor-side trigram arm (§2). This is the real money on the table.
 - The 9 `$0.00`/`CALL` Colorado items need prices from Blake Wells before they can be loaded.
+
+---
+
+## Addendum — 2026-08-21: five SRS documents ingested, and the gap made concrete
+
+Chris supplied five SRS PDFs. They went in through a new `--pdf` arm on the **existing**
+`integrations/bridges/ingest-vendor-invoice-csv.mjs`, reusing the same
+`upsertInvoice`/`replaceLines`/`upsertUomEvidence` writers so there is one contract, not two.
+
+| document | type | branch → office | lines | total |
+|---|---|---|---:|---:|
+| `0050577193-001` | invoice | DJWIC → Wichita, KS | 17 | $4,492.54 |
+| `0050634181-001` | invoice | SSMEL → Richardson, TX | 15 | $6,911.92 |
+| `0050692264-001` | **credit** | SSMEL → Richardson, TX | 1 | −$379.43 |
+| `0050471744-001` | invoice | DJWIC → Wichita, KS | 13 | $4,486.26 |
+| `0050708886-001` | invoice | SSCOP → Richardson, TX | 1 | $91.47 |
+
+**Reconciliation gate.** A parsed PDF is only written if the vendor's own printed arithmetic
+reproduces: parsed lines must sum to the printed `SUB-TOTAL`, and `SUB-TOTAL + delivery +
+freight + restock + tax` must equal the printed `BALANCE`. All five reconcile to the cent.
+The gate earned itself immediately — SRS prints a 0.01 converted qty as `.01 /BD`
+(`0050471744-001`, item `TOP4X4X8SFTER`), and the first regex required a digit before the
+decimal, so it silently dropped that line and the invoice missed SUB-TOTAL by exactly its
+$0.89. Without the gate that becomes an understated invoice nobody ever notices.
+
+**Migration 253 — branch aliases.** Migration 243 made branch resolution fail *closed*:
+`branch_key → vendor_branch_id` runs only through `vendor_branch_alias`, and there were
+**zero SRS alias rows** — the 28 SRS invoices already on file had been resolved by the
+one-off backfills in 240/242, not by the trigger. The next SRS invoice would have landed
+with no branch, no office and no price, silently. Seeded `DJWIC, SSMEL, SSCOP, AMDEN,
+SHCOL`, vendor-scoped, pointing at the same branch rows their predecessors already use.
+`SSCOP` (Coppell, TX) is a new code, first seen on `0050708886-001`.
+
+### What the batch proves about §2
+
+| office | priced lines | unpriced lines | unpriced value |
+|---|---:|---:|---:|
+| Wichita, KS (quote — has item numbers) | 8 | 22 | $7,449.04 |
+| Richardson, TX (Melissa sheet — description-only) | **0** | 16 | $6,119.11 |
+
+The Wichita lines that *did* price came back at **zero variance** — SRS billed the quote
+correctly. Richardson priced **nothing at all**, because its only book is the inert Melissa
+Level 4 sheet. This is §2 happening in real time, not a hypothetical.
+
+**Live SRS totals after this batch: 73 priced lines / $16,990.55 against 216 unpriced /
+$63,642.53.** Only 21% of SRS line value can be checked against an agreement. (The earlier
+§2 figure of 155 lines / $49,018.94 came from the `invoice_line_reaudit` snapshot of
+2026-08-05; this one is the live view including the new documents. Both are correct for what
+they measure.)
+
+### Two items for a human
+
+1. **`0050708886-001` PO reads `tx-4555`** and matches no AccuLynx job. `TX-455`
+   (Debra Moore) exists and is referenced by the other two documents in this same batch, so
+   `tx-4555` is plausibly a typo — but that is an inference about which job $91.47 of
+   material belongs to, so it was **left unmatched** rather than guessed.
+2. **`0050471744-001` PO reads `216 SOUTH MADISO`** — the PDF truncates PO NUMBER at 16
+   characters. Here it is an address rather than a job code, so nothing was lost, but the
+   truncation is real: **prefer the portal CSV when it is available**, because PO NUMBER is
+   the AccuLynx job key. Ingested rows carry `raw.po_number_may_be_truncated`.
+
+3 of 5 matched AccuLynx jobs on the PO token (`KS-209` → Rojelio Moreno; `TX-455-2` → Debra
+Moore, both invoice and credit).
