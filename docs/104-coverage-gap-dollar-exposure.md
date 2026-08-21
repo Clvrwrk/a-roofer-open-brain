@@ -353,7 +353,13 @@ data and does it still lack a geom":
    become geocodable stayed marked `no_address` and was never picked up. This matches
    **0 rows in prod today**, so it is latent, not active.
 
-The file is corrected to gate on `vb.geom IS NULL` plus "we supplied a city or an address".
+The file is corrected to gate on `vb.geom IS NULL` plus the **same per-field replacement
+condition the `WHERE` clause uses** — city, state or address individually. An earlier pass at
+this fix used a looser `(city IS NULL OR address IS NULL)`, which still missed **state-only**
+recovery: a branch with city and address but a NULL state would gain a state and never be
+queued. Keeping the CASE textually identical to the WHERE, plus the geom guard, is what makes
+that class of gap impossible — anything that qualifies a row for update is exactly what should
+queue the geocode.
 **The corrected statement matches 0 rows against current prod data** — verified before
 committing — so it is a proven no-op and was not re-applied. It changes behaviour only for
 future reruns, which is the point: the migration is meant to be rerunnable.

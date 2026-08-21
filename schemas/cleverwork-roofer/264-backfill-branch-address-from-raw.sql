@@ -37,12 +37,12 @@
 WITH raw_best AS (
     -- Richest payload per branch, with a deterministic tiebreak. Ordering by address length
     -- alone leaves ties unresolved, so two runs could pick different payloads (and so
-    -- different city/state) for the same branch -- not idempotent. `i.id` breaks the tie
+    -- different city/state) for the same branch -- not idempotent. `invoice_number` breaks the tie
     -- stably. Added 2026-08-21 after review.
     SELECT i.vendor_branch_id,
            (array_agg(i.raw->'branch'
                       ORDER BY length(NULLIF(i.raw->'branch'->>'addressLine1','')) DESC NULLS LAST,
-                               i.id))[1] AS b
+                               i.invoice_number))[1] AS b
       FROM public.abc_invoices i
      WHERE i.vendor_branch_id IS NOT NULL
        AND NULLIF(i.raw->'branch'->>'city','') IS NOT NULL
@@ -58,12 +58,16 @@ UPDATE public.vendor_branches vb
              -- Corrected 2026-08-21 after review. The original keyed on `vb.city IS NULL`,
              -- which (a) demoted already-geocoded rows to 'pending' when their city
              -- happened to be NULL -- branches 21 and 684 were demoted from 'ok' by the
-             -- applied run -- and (b) missed address-only recovery, leaving a branch that
-             -- gained an address still marked 'no_address' and so never re-geocoded.
-             -- (b) matches 0 rows in prod today; (a) matched 2.
-             WHEN vb.geom IS NULL
-              AND (vb.city IS NULL OR vb.address IS NULL)
-              AND (NULLIF(rb.b->>'city','') IS NOT NULL OR NULLIF(rb.b->>'addressLine1','') IS NOT NULL)
+             -- applied run -- and (b) missed recovery of any field other than city.
+             -- (a) matched 2 rows in prod; (b) matches 0 today.
+             -- The predicate below is deliberately IDENTICAL to the WHERE clause, plus the
+             -- geom guard: anything that qualifies the row for an update is exactly what
+             -- should queue the geocode. Keep the two in sync if either changes.
+             WHEN vb.geom IS NULL AND (
+                    (vb.city    IS NULL AND NULLIF(rb.b->>'city','')         IS NOT NULL)
+                 OR (vb.state   IS NULL AND NULLIF(rb.b->>'state','')        IS NOT NULL)
+                 OR (vb.address IS NULL AND NULLIF(rb.b->>'addressLine1','') IS NOT NULL)
+               )
              THEN 'pending'
              ELSE vb.geocode_status END,
        updated_at = now()
