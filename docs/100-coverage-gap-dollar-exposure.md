@@ -32,8 +32,13 @@ agreement to chase. Denver × SRS is 3.3× larger and was not on that list at al
 | Richardson, TX × QXO | 1 | −$3,723.59 (net credit) |
 | *five other pairs* | 0 | $0.00 |
 
-Plus **$26,848.33 across 24 invoices** on branches with **no pricing territory** — outside
-the audit entirely, and previously invisible in any surface.
+Plus spend on branches with **no pricing territory** — outside the audit entirely, and
+previously invisible in any surface. **$26,848.33 across 24 invoices** when first measured;
+**$27,566.56 across 26 invoices** after migration 249 (a parallel session) dropped Wichita
+Falls and Austin out of boundary. The delta is exactly the two Austin invoices leaving
+Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost — the money moved
+from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
+working as intended.
 
 ## Migration 250 — the two views
 
