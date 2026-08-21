@@ -162,6 +162,16 @@ const reasonFor = (l: CmLine) => {
             {approvedFor(vendor).length} approved invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
             {draftFor(vendor).length > 0 && <span class="cmw-draft-pill">{draftFor(vendor).length} draft awaiting approval</span>}
           </span>
+          {/* Records that THIS vendor's email went out. No external send happens here
+              (SOUL: nothing leaves the building without a human) — it moves the requests
+              from Claim it to Chase it and stamps the audit complete. */}
+          {approvedFor(vendor).length > 0 && (
+            <button class="cmw-approve cmw-marksent" type="button"
+              data-cm-mark-sent={vendor}
+              data-invoices={approvedFor(vendor).map((r) => r.invoice_number).join(",")}
+              data-total={money(vendorTotal(vendor))}
+              title="Record that this vendor's email has been sent — these requests move to the Sent CM chase queue">Mark sent →</button>
+          )}
         </summary>
         {approvedFor(vendor).length === 0 ? (
           <p class="cmw-empty">Nothing approved for {vendor} yet.</p>
@@ -174,7 +184,10 @@ const reasonFor = (l: CmLine) => {
             <p>Please issue the credits against the original invoice numbers and confirm.</p>
             {approvedFor(vendor).map((r) => (
               <div class="cmw-invoice">
-                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a></p>
+                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
+                  <button class="cmw-approve cmw-marksent" type="button" data-cm-mark-sent={vendor}
+                    data-invoices={r.invoice_number} data-total={money(r.expected_credit)}
+                    title="Record this one invoice as sent — it moves to the Sent CM chase queue">Mark sent →</button></p>
                 <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
                 {m.lead} · {m.jobNumber
                   ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
@@ -284,6 +297,7 @@ const reasonFor = (l: CmLine) => {
   .cmw-rerequest{margin-left:6px;font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer}
   .cmw-approve:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
   .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
+  .cmw-marksent{margin-left:8px;border-color:#5b46d8;background:#efecfd;color:#5b46d8}
 </style>
 
 <script>
@@ -330,6 +344,41 @@ const reasonFor = (l: CmLine) => {
       else { rbtn.disabled = false; window.alert("Review failed: " + (res?.error_description || res?.error || "network error")); }
       return;
     }
+    // Mark sent — records the vendor email as sent and moves the request to Chase it.
+    const sbtn = (ev.target as HTMLElement)?.closest?.("[data-cm-mark-sent]") as HTMLButtonElement | null;
+    if (sbtn) {
+      ev.preventDefault();
+      ev.stopPropagation(); // the vendor button lives inside <summary>
+      const vendor = sbtn.dataset.cmMarkSent!;
+      const invoices = (sbtn.dataset.invoices || "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (!invoices.length) return;
+      const ok = window.confirm(
+        `Mark ${invoices.length} ${vendor} request(s) — ${sbtn.dataset.total} — as SENT?\n\n` +
+        `This does not email anything. It records that you sent the email, moves these to the Sent CM chase queue, ` +
+        `and starts the 14-day follow-up clock.`);
+      if (!ok) return;
+      const label = sbtn.textContent;
+      sbtn.disabled = true;
+      const failed: string[] = [];
+      for (let i = 0; i < invoices.length; i += 1) {
+        sbtn.textContent = `Sending ${i + 1}/${invoices.length}…`;
+        const res = await fetch("/api/credit-memos/disposition", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ invoiceNumber: invoices[i], decision: "mark-sent" }),
+        }).then((r) => r.json()).catch(() => null);
+        if (res?.record?.status !== "sent") failed.push(invoices[i]);
+      }
+      if (failed.length) {
+        sbtn.disabled = false;
+        sbtn.textContent = label;
+        window.alert(`${invoices.length - failed.length} of ${invoices.length} marked sent. Failed: ${failed.join(", ")}`);
+      }
+      window.location.reload();
+      return;
+    }
+
     const btn = (ev.target as HTMLElement)?.closest?.("[data-cm-approve]") as HTMLButtonElement | null;
     if (!btn) return;
     btn.disabled = true;

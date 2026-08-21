@@ -110,6 +110,15 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         </div>
         <div class="iv-btnrow">
           <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review in Weekly CM</a>
+          {/* Moves APPROVED requests out of this card and into Chase it. Records that the
+              vendor email went out — it does not send anything (SOUL: nothing leaves the
+              building without a human). Explicit data hook, never a positional selector. */}
+          <button type="button" data-kpi-btn="marksent"
+            class:list={["iv-process-btn", "iv-secondary", kpi.cmApprovedCount === 0 && "is-disabled"]}
+            disabled={kpi.cmApprovedCount === 0}
+            title={kpi.cmApprovedCount === 0
+              ? "Nothing is approved yet — approve a request in Weekly CM before marking it sent."
+              : "Record the vendor email as sent — approved requests move to Chase it"}>Mark sent →</button>
           {/* Empty is the NORMAL resting state: invoices only enter 'invoice_audit_pending'
               when a re-audit or a "Go back" reset produces fresh claim lines. */}
           <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}

@@ -90,6 +90,15 @@ if (root && dataEl && mount) {
           ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
           : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)";
       }
+      const msBtn = document.querySelector<HTMLButtonElement>('[data-kpi-btn="marksent"]');
+      if (msBtn) {
+        const n = Number(k.cmApprovedCount || 0);
+        msBtn.disabled = n === 0;
+        msBtn.classList.toggle("is-disabled", n === 0);
+        msBtn.title = n === 0
+          ? "Nothing is approved yet — approve a request in Weekly CM before marking it sent."
+          : "Record the vendor email as sent — approved requests move to Chase it";
+      }
       set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
       const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');
       if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} sent · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
@@ -1046,6 +1055,45 @@ if (root && dataEl && mount) {
 
   /* ---- PEC-197/198 wiring ---- */
   // Due Now — Pay pill: the Filter button toggles the toolbar's Due-now scope.
+  /* ---- Card 1 "Mark sent": approved requests -> Chase it ---- */
+  document.querySelector<HTMLButtonElement>('[data-kpi-btn="marksent"]')?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget as HTMLButtonElement;
+    const res = await fetch("/api/credit-memos/pending", { credentials: "same-origin", cache: "no-store" })
+      .then((r) => r.json()).catch(() => null);
+    const approved = (res?.requests ?? []).filter((r: any) => r.status === "approved");
+    if (!approved.length) { toast("Nothing approved to mark sent."); return; }
+    // Name every vendor in the confirm — this can span vendors, and you may only have
+    // emailed one of them.
+    const byVendor = new Map<string, { n: number; total: number }>();
+    for (const r of approved) {
+      const cur = byVendor.get(r.vendor) ?? { n: 0, total: 0 };
+      cur.n += 1; cur.total += Number(r.expectedCredit || 0);
+      byVendor.set(r.vendor, cur);
+    }
+    const lines = [...byVendor.entries()].map(([v, x]) => `  • ${v}: ${x.n} request(s), $${Math.round(x.total).toLocaleString("en-US")}`).join("\n");
+    if (!window.confirm(
+      `Mark these approved requests as SENT?\n\n${lines}\n\n` +
+      `This does not email anything. It records that you sent the email, moves them to Chase it, ` +
+      `and starts the 14-day follow-up clock.`)) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    const failed: string[] = [];
+    for (let i = 0; i < approved.length; i += 1) {
+      btn.textContent = `Sending ${i + 1}/${approved.length}…`;
+      const r = await fetch("/api/credit-memos/disposition", {
+        method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin",
+        body: JSON.stringify({ invoiceNumber: approved[i].invoiceNumber, decision: "mark-sent" }),
+      }).then((x) => x.json()).catch(() => null);
+      if (r?.record?.status !== "sent") failed.push(approved[i].invoiceNumber);
+    }
+    btn.textContent = label;
+    btn.disabled = false;
+    toast(failed.length ? `${approved.length - failed.length}/${approved.length} marked sent — failed: ${failed.join(", ")}`
+                        : `${approved.length} request(s) marked sent — now in Chase it.`);
+    await refreshKpiPills();
+    void loadCreditMemoRequests();
+  });
+
   document.getElementById("iv-kpi-duenow")?.addEventListener("click", () => {
     if (!dueNowBox) return;
     // Setting .checked in code does not fire "change", so drive the scope switch

@@ -213,3 +213,56 @@ convention is `<city>-<vendor|agreement>-<period>.pdf`.
 Note from commit `ed792ce`: the two SRS **Colorado** sheets were delivered to the Pro
 Exteriors accounting mailbox and are **not reachable from `chussey@cleverwork.io`** —
 someone with that mailbox has to export them first.
+
+
+## "Mark sent" — moving a request from Claim it to Chase it
+
+### First, the SRS re-audit writer needed no work
+
+Asked to fix it so the panel shows recorded citations. **It is already fixed.** Another
+session backfilled it (docs/95 follow-up 2) and the current state is clean:
+
+| vendor | classification | rows | with agreement | missing |
+|---|---|---:|---:|---:|
+| abc-supply | discrepancy | 128 | 128 | 0 |
+| **srs** | **discrepancy** | **11** | **11** | **0** |
+| srs | valid / engine_resolved / uom_review | 76 | 76 | 0 |
+| both | no_price | 1,342 | 0 | *correct — no price matched, so no agreement to cite* |
+
+What was actually missing was the panel **displaying** it: the recorded branch only enriched
+ABC integer ids, so a uuid citation lost `version_label`, `source_file` and `ceo_verified`.
+Fixed in the previous commit (`dbe0e1f`). Verified across all five approved SRS claims —
+every one now reports `source: recorded`, `isQuote: true`, `ceoVerified: true`, with both
+the Document-type and Citation-provenance checks passing.
+
+### The button
+
+`mark-sent` already existed in `/api/credit-memos/disposition` (sets `status='sent'`,
+`sent_by`, `sent_at`, `follow_up_due_at` = +14 days, and auto-fires the per-invoice Process
+stamp). It had no entry point outside the single-invoice detail page. Now:
+
+**Weekly CM (the request worksurface)** — two granularities:
+- **Per vendor**, in the vendor summary: marks every approved invoice for that vendor.
+  This is the natural unit, because you send one email per vendor.
+- **Per invoice**, beside `detail →`, for a one-off.
+
+**Invoice Audit, Card 1** — one `Mark sent →` button beside Review and Process. It reads
+`/api/credit-memos/pending`, takes the `approved` set, and **names every vendor in the
+confirm** because the set can span vendors and you may only have emailed one:
+
+> Mark these approved requests as SENT?
+>   • SRS Distribution: 5 request(s), $2,025
+> This does not email anything. It records that you sent the email, moves them to Chase it,
+> and starts the 14-day follow-up clock.
+
+Disabled with an honest tooltip when nothing is approved, and its state is kept in sync by
+the 60-second poll through an **explicit `[data-kpi-btn="marksent"]` hook** — not a
+positional selector, per the lesson earlier in this doc.
+
+Nothing is emailed. Per SOUL, no message leaves the building without a human; the button
+only records that a human sent it. Each write is individually vendor-scoped by the existing
+endpoint, so a colliding invoice number cannot advance another vendor's request.
+
+Verified by stubbing `window.confirm` to decline: the confirm text is correct on both
+surfaces, the vendor `<summary>` does not collapse when its button is clicked, and
+declining leaves every row untouched.
