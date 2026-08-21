@@ -92,7 +92,7 @@ if (root && dataEl && mount) {
       }
       set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
       const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');
-      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} requested · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
+      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} sent · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
       set('[data-kpi-val="dueNow"]', num$(k.dueNow));
       set('[data-kpi-val="verify"]', num$(k.pendingVerification));
       set('[data-kpi-val="qb"]', num$(k.qbPendingTotal));
@@ -101,11 +101,14 @@ if (root && dataEl && mount) {
         qbSub.textContent = Array.isArray(k.qbPendingByVendor) && k.qbPendingByVendor.length
           ? k.qbPendingByVendor.map((r: any) => `${r.slug} ${r.pending}`).join(" · ")
           : "all ledgers exported";
-        const qbBtn = qbSub.closest(".iv-kpi")?.querySelector<HTMLElement>(".iv-process-btn");
+        // Target the button EXPLICITLY. This used to grab the first .iv-process-btn in
+        // the card, which silently swallowed the Due-Now "Filter" button once the pay
+        // steps were merged into one card.
+        const qbBtn = document.querySelector<HTMLElement>('[data-kpi-btn="qb"]');
         if (qbBtn) {
           qbBtn.outerHTML = Number(k.qbPendingTotal) > 0
-            ? `<a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export in QB Bank Export</a>`
-            : `<span class="iv-process-btn iv-secondary iv-vendor-off" title="Every vendor ledger is already exported — nothing to export">Export in QB Bank Export</span>`;
+            ? `<a class="iv-process-btn iv-secondary" data-kpi-btn="qb" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export</a>`
+            : `<span class="iv-process-btn iv-secondary iv-vendor-off" data-kpi-btn="qb" title="Every vendor ledger is already exported — nothing to export">Export</span>`;
         }
       }
       set('[data-kpi-val="alex"]', num$(k.alexCandidates));
@@ -839,10 +842,54 @@ if (root && dataEl && mount) {
       setBar(oEl, offRoll.audited, offRoll.auditable);
     });
   }
-  [search, officeSel, tolSel, date1El, date2El, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("input", applyFilter));
-  showAllBox?.addEventListener("change", () => { syncDateBounds(); applyFilter(); });
+  /* ---- empty state: never render a blank page ---- */
+  function paintEmptyState() {
+    const el = document.getElementById("iv-noresults");
+    if (!el) return;
+    const shown = Array.from(mount.querySelectorAll<HTMLElement>(".iv-office")).some((o) => o.style.display !== "none");
+    el.hidden = shown;
+    if (!shown) {
+      const scope = dueNowBox?.checked ? "due" : showAllBox?.checked ? "all" : "audit";
+      const filtered = !!(search?.value.trim() || officeSel?.value || tolSel?.value);
+      el.textContent = filtered
+        ? "No invoices match these filters. Clear the search, office or More-filters selection to widen it."
+        : scope === "audit"
+          ? "Nothing left to audit — every open invoice has had its lines audited. Switch to Due now or All to see them."
+          : scope === "due"
+            ? "No invoice is payment-due yet (invoice date + 60 days)."
+            : "No invoices to show.";
+    }
+  }
+  const applyFilterAndPaint = () => { applyFilter(); paintEmptyState(); };
+
+  [search, officeSel, tolSel, date1El, date2El, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("input", applyFilterAndPaint));
+  showAllBox?.addEventListener("change", () => { syncDateBounds(); applyFilterAndPaint(); });
+
+  /* ---- scope switch: one control over the three checkboxes it replaced ----
+     The checkboxes still exist (hidden) and stay the single source of truth for
+     applyFilter(), so the tree logic, the Due-Now card button and deep links are
+     untouched — this only drives them. */
+  const scopeBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".iv-scope [data-scope]"));
+  function paintScope() {
+    const active = dueNowBox?.checked ? "due" : showAllBox?.checked ? "all" : "audit";
+    scopeBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.scope === active));
+  }
+  function setScope(scope: string) {
+    if (showAllBox) showAllBox.checked = scope === "all";
+    if (pendingBox) pendingBox.checked = scope === "audit";
+    if (dueNowBox) dueNowBox.checked = scope === "due";
+    paintScope();
+    syncDateBounds();
+    applyFilterAndPaint();
+  }
+  scopeBtns.forEach((b) => b.addEventListener("click", () => setScope(b.dataset.scope ?? "audit")));
+  // Keep the switch honest when something else moves the checkboxes (Due-Now button).
+  [showAllBox, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("change", paintScope));
+
   syncDateBounds();
   applyFilter();
+  paintScope();
+  paintEmptyState();
   filtersReady = true;
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */
@@ -1001,8 +1048,10 @@ if (root && dataEl && mount) {
   // Due Now — Pay pill: the Filter button toggles the toolbar's Due-now scope.
   document.getElementById("iv-kpi-duenow")?.addEventListener("click", () => {
     if (!dueNowBox) return;
-    dueNowBox.checked = !dueNowBox.checked;
-    applyFilter();
+    // Setting .checked in code does not fire "change", so drive the scope switch
+    // explicitly — otherwise the toolbar would disagree with the tree.
+    const turningOn = !dueNowBox.checked;
+    document.querySelector<HTMLButtonElement>(`.iv-scope [data-scope="${turningOn ? "due" : "audit"}"]`)?.click();
   });
   // Gentle multi-user freshness: re-pull the pill numbers every 60s while visible.
   window.setInterval(() => { if (!document.hidden) void refreshKpiPills(); }, 60_000);
