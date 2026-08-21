@@ -165,7 +165,6 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
                   {vendor.hasGap && <span class="pill pill-red">No agreement — gap</span>}
                   {vendor.anyLapsed && <span class="pill pill-yellow">Extended (awaiting replacement)</span>}
                   {vendor.competingAgreements > 1 && <span class="pill pill-brand">{vendor.competingAgreements} competing lists — lowest price per item</span>}
-                  {vendor.allVerified && <span class="pill pill-green">CEO verified</span>}
                 </div>
               </summary>
               <div class="iv-vendor-body">
