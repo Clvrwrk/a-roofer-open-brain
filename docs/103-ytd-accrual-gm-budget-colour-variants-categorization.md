@@ -255,3 +255,104 @@ Bootstrap order: colour terms → colour keys → candidates.
   of a classification drift, and the drift is silent.
 - **Never put a STABLE SQL function in a join predicate over large inputs** —
   it will be inlined and evaluated per pair. Materialise it.
+
+---
+
+## 5 · Why 230 jobs showed $0 Balance Due — and the three fixes (migration 263)
+
+Chris asked the question; the answer was **two unrelated causes**, which is why
+it needed three fixes rather than one.
+
+### Cause A — 225 jobs of finished work (self-inflicted, migration 258)
+
+The signed-contract gate admits any prospect/approved/completed/invoiced job
+with a contract over $1. It says **nothing about whether money is outstanding**,
+so jobs that were contracted, invoiced and **paid in full** still qualified. The
+existing drop rule only fires on `milestone = 'closed'` — and these were never
+advanced to Closed in AccuLynx.
+
+| milestone | jobs | contract | avg days | over a year |
+|---|---:|---:|---:|---:|
+| invoiced | 189 | $8,102,097 | 161 | **26** |
+| completed | 31 | $902,520 | 116 | 3 |
+| approved | 5 | $154,512 | 436 | 3 |
+
+Oldest: **job 10, Neomie Vincent (TX) — 1,576 days at `invoiced`**, $14,500
+contracted, billed and collected. Also TX-253 at 841 days, TX-296 at 667.
+
+So the real finding was AccuLynx hygiene: **$9.16M of completed, fully-collected
+work sitting in stages that say it is still in flight.**
+
+### Cause B — 5 jobs where AccuLynx contradicts itself
+
+$195,098.53 of open invoice balance absent from the job-level Balance Due.
+
+| job | client | open invoice | job balance |
+|---|---|---:|---:|
+| **5** | Brian Buege (CO) | **$136,892.90** (inv 5-4) | $0 |
+| MC-74 | JPMC #143923 | $51,525.03 | $0 |
+| KS-188 | Rhonda & John Riekenberg | $7,982.48 | $7,482.48 |
+| KC-12 | Bryce Gonzalez | $5,785.62 | $0 |
+| CO-357 | Charli Ramer | $394.98 | $0 |
+
+Job 5 is the clearest: invoices 5-1/5-2/5-3 are Paid and total $61,894.89 —
+**exactly** the contract — then 5-4 is Unpaid at $136,892.90 dated 2026-07-03
+and the job balance never moved.
+
+> KS-188 only became visible once Draft invoices were excluded. It is not a
+> zero-balance job, so it never appeared in the original "why is Balance Due
+> $0" list — but it is the same defect.
+
+### The three fixes
+
+1. **Draft invoices excluded from AR.** The filter — from migration 215, and
+   preserved byte-identical through 258 and 260 — excluded only `void`. A draft
+   has not been issued, so it cannot be a receivable. MC-76's $36,000 was the
+   only one; with it excluded that job has no contract and no issued invoice, so
+   it correctly leaves the board entirely.
+2. **Finished work off the working board.** 225 jobs flagged `stale_closeout`:
+   excluded from every money KPI, hidden from the default view, and reachable
+   only through their own pill. **Not deleted** — they are the AccuLynx
+   housekeeping list the Friday meeting wants to work.
+3. **Contradictions flagged, not hidden.** `balance_contradiction` rows **stay
+   in the money KPIs** — that AR is real — they just also need a look.
+
+### The two new pills, and the "Our Best Guess" popout
+
+- **Stale — close in AccuLynx** · 225 · $9,159,129 contracted
+- **Balance contradiction** · 5 · $195,099 invoiced but not in job balance
+
+Every flagged row carries a plain-language note **generated from its own numbers
+on each rebuild**, so the explanation cannot drift from the data it describes.
+A row that gets fixed clears its own flag on the next rebuild — nobody has to
+un-flag anything.
+
+The board pops the note out from the **client name**, deliberately: the job
+number is already the AccuLynx deep link, and overloading it would make the
+cleanup action fight the navigation.
+
+> Job 10: *"Our best guess: this job is finished. It was contracted at
+> $14,500.00, invoiced $14,500.00 and collected in full … but it is still
+> sitting at "invoiced" in AccuLynx, 1576 days now. The close-out step was
+> skipped once the payment landed … At over a year, this is almost certainly
+> abandoned rather than pending. Action: advance the job to Closed in AccuLynx
+> and it will drop off this board on the next rebuild."*
+
+### What moved
+
+| | before | after |
+|---|---:|---:|
+| jobs on the ledger | 346 | **120** |
+| Billed AR | $1,087,819 | **$1,056,535** |
+| Expense realized | $8,900,089 | **$2,549,960** |
+| Expense outstanding | $2,382,336 | **$1,865,515** |
+
+Expense Realized falls because $6.35M of it belonged to finished jobs. That
+cost is real history, but it is not work in progress — it is still reachable
+through the stale pill.
+
+### Invariant this adds
+
+- **A row that needs a system fix is not the same as a row that needs a phone
+  call.** Mixing them makes the board look like it has 346 problems when it has
+  120 — and buries a $136,892.90 invoice among 225 finished jobs.
