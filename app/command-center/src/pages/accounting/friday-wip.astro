@@ -212,8 +212,7 @@ const gmBasisLabel: Record<string, string> = {
                 <th class="fw-fill" data-col="cash" data-more>Expected invoice/cash</th>
                 <th class="fw-num fw-fill" data-col="cash" title="Cash the team expects to collect at the invoice/cash date">To Collect</th>
                 <th class="fw-fill" data-col="cash" data-more>Expected paid-in-full</th>
-                <th class="fw-num fw-fill" data-col="cash" title="Open balance on issued invoices — what must be paid to close the job out">Balance to Pay</th>
-                <th class="fw-fill" data-col="cash" data-more>Collected?</th>
+                <th class="fw-num fw-fill" data-col="cash" title="Balance Due minus To Collect — what is still owed after the cash the team expects to collect. Updates as you type.">Balance to Pay</th>
                 <th class="fw-fill" data-col="cash" data-more>Notes</th>
               </tr>
             </thead>
@@ -245,23 +244,20 @@ const gmBasisLabel: Record<string, string> = {
                   <td class="fw-num" data-col="money" data-more title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated expenses outstanding: estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
                   <td class="fw-num" data-col="money">{money(j.outstandingAr)}</td>
 
-                  <td data-col="cash" data-more><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
+                  <td data-col="cash" data-more><input class="fw-edit fw-date" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
                   <td data-col="cash"><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
-                  <td data-col="cash" data-more><input class="fw-edit" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
-                  <td class="fw-num" data-col="cash">{money(j.billedAr)}</td>
-                  <td data-col="cash" data-more>
-                    <select class="fw-edit" data-field="collected_since">
-                      <option value="" selected={!j.collectedSince}></option>
-                      <option value="Y" selected={j.collectedSince === "Y"}>Y</option>
-                      <option value="N" selected={j.collectedSince === "N"}>N</option>
-                    </select>
-                  </td>
+                  <td data-col="cash" data-more><input class="fw-edit fw-date" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
+                  {/* Derived, never stored: what is still owed after the cash the
+                      team expects to collect. Recomputed live as To Collect is
+                      typed — data-balance-due carries the figure it subtracts from. */}
+                  <td class="fw-num fw-balance-pay" data-col="cash" data-balance-due={j.outstandingAr}>{money(Math.max(0, j.outstandingAr - (j.expectedCashAmount ?? 0)))}</td>
                   <td data-col="cash" data-more><input class="fw-edit fw-notes" type="text" maxlength="1000" data-field="notes" value={j.notes ?? ""} placeholder="…" /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <button type="button" class="fw-showmore" hidden></button>
       </details>
     ))}
 
@@ -360,6 +356,43 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-gh-chev { display: inline-block; margin-right: 5px; transition: transform 0.12s ease; }
     .fw[data-money="open"] .fw-gh-money .fw-gh-chev,
     .fw[data-cash="open"]  .fw-gh-cash  .fw-gh-chev { transform: rotate(90deg); }
+    /* ── Overdue estimate ─────────────────────────────────────────────────
+       A planned date that has already passed: bold red text, and a slow navy
+       tracer travelling the border. Deliberately restrained — one rotation
+       every 3.6s at low alpha, so it reads as a quiet flag on a dense sheet
+       rather than an alarm. Honours prefers-reduced-motion. */
+    @property --fw-ang { syntax: "<angle>"; initial-value: 0turn; inherits: false; }
+    @keyframes fw-tracer { to { --fw-ang: 1turn; } }
+    .fw .fw-edit.is-overdue {
+      color: var(--red); font-weight: 700;
+      border-color: transparent;
+      background-image:
+        linear-gradient(var(--fill-cell), var(--fill-cell)),
+        conic-gradient(from var(--fw-ang),
+          transparent 0turn, transparent 0.58turn,
+          color-mix(in srgb, var(--navy) 62%, transparent) 0.76turn,
+          transparent 0.92turn, transparent 1turn);
+      background-origin: border-box;
+      background-clip: padding-box, border-box;
+      animation: fw-tracer 3.6s linear infinite;
+    }
+    .fw[data-theme="dark"] .fw-edit.is-overdue {
+      background-image:
+        linear-gradient(var(--fill-cell), var(--fill-cell)),
+        conic-gradient(from var(--fw-ang),
+          transparent 0turn, transparent 0.58turn,
+          color-mix(in srgb, var(--gold) 70%, transparent) 0.76turn,
+          transparent 0.92turn, transparent 1turn);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .fw .fw-edit.is-overdue { animation: none; border-color: var(--navy); background-image: none; }
+      .fw[data-theme="dark"] .fw-edit.is-overdue { border-color: var(--gold); background-image: none; }
+    }
+    .fw .fw-over-collect { color: var(--red); font-weight: 700; }
+    .fw .fw-showmore { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; padding: 7px 14px; cursor: pointer; text-align: left; }
+    .fw .fw-showmore:hover { color: var(--ink); background: var(--zebra); }
+    /* Only a fully-expanded office gets an internal scroller. */
+    .fw .fw-tablewrap.is-capped { max-height: 58vh; overflow-y: auto; }
     .fw .fw-rep { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fw .fw-action { white-space: nowrap; font-size: 11.5px; }
     .fw .fw-kpi-warn { border-color: var(--gold); }
@@ -448,7 +481,45 @@ const gmBasisLabel: Record<string, string> = {
 
     // Inline saves: change → POST /api/accounting/friday-wip/update.
     // Green flash = persisted (survives the nightly rebuild); red = rejected.
+    // ── Derived cash figures ─────────────────────────────────────────────
+    // Balance to Pay is Balance Due − To Collect. It is never stored: storing
+    // it would let it drift from the two numbers it comes from.
+    const fmtMoney = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+    const recalcRow = (row: HTMLElement) => {
+      const cell = row.querySelector<HTMLElement>(".fw-balance-pay");
+      if (!cell) return;
+      const due = Number(cell.dataset.balanceDue ?? "0");
+      const raw = row.querySelector<HTMLInputElement>('[data-field="expected_cash_amount"]')?.value ?? "";
+      const collect = raw === "" ? 0 : Number(raw);
+      const rest = due - (Number.isFinite(collect) ? collect : 0);
+      cell.textContent = fmtMoney(Math.max(0, rest));
+      // Expecting to collect more than is owed is a typo, not a plan.
+      cell.classList.toggle("fw-over-collect", rest < -0.5);
+      cell.title = rest < -0.5
+        ? `To Collect exceeds Balance Due of ${fmtMoney(due)} by ${fmtMoney(-rest)}`
+        : `Balance Due ${fmtMoney(due)} − To Collect ${fmtMoney(collect)}`;
+    };
+
+    // A date the team is still planning against but which has already passed is
+    // the thing this board exists to catch, so it is marked rather than silently
+    // cleared — the estimate stays, it just stops looking fine.
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const markOverdue = (input: HTMLInputElement) => {
+      const overdue = !!input.value && input.value < todayKey;
+      input.classList.toggle("is-overdue", overdue);
+      if (overdue) input.title = "This date has passed — re-plan it or mark the job collected";
+      else input.removeAttribute("title");
+    };
+
+    document.querySelectorAll<HTMLElement>("tr[data-job]").forEach((row) => recalcRow(row));
+    document.querySelectorAll<HTMLInputElement>(".fw-date").forEach(markOverdue);
+
     document.querySelectorAll<HTMLElement>(".fw-edit").forEach((el) => {
+      el.addEventListener("input", () => {
+        const row = el.closest<HTMLElement>("tr");
+        if (row) recalcRow(row);
+        if (el.classList.contains("fw-date")) markOverdue(el as HTMLInputElement);
+      });
       el.addEventListener("change", async () => {
         const row = el.closest("tr");
         const jobId = row?.getAttribute("data-job");
@@ -486,6 +557,14 @@ const gmBasisLabel: Record<string, string> = {
 
     let activeKpi: string | null = null;
 
+    // How many jobs an office shows before you ask for the rest.
+    const PAGE_SIZE = 10;
+    const expandedOffices = new Set<string>();
+
+    const groupKey = (d: HTMLElement) =>
+      d.querySelector<HTMLElement>(".fw-gm")?.dataset.location ??
+      d.querySelector<HTMLElement>(".fw-group-name")?.textContent?.replace("▸ ", "").trim() ?? "";
+
     const applyFilters = () => {
       const rep = repSelect?.value ?? "";
       const office = officeSelect?.value ?? "";
@@ -506,11 +585,35 @@ const gmBasisLabel: Record<string, string> = {
         if (visible) shown += 1;
       });
 
-      // Collapse location groups that have nothing left in them, and re-open
-      // the ones that do — a filtered-to-empty group is noise.
+      // An office opens showing PAGE_SIZE jobs. The rest are one click away.
+      // Ten rows is roughly what a person can hold in mind while talking
+      // through a job; 63 is not.
       document.querySelectorAll<HTMLElement>(".fw-group").forEach((group) => {
-        const visible = group.querySelectorAll<HTMLTableRowElement>("tr[data-job]:not([hidden])").length;
-        group.hidden = visible === 0;
+        const rows = Array.from(group.querySelectorAll<HTMLTableRowElement>("tr[data-job]"))
+          .filter((r) => !r.hidden);
+        group.hidden = rows.length === 0;
+
+        const key = groupKey(group as HTMLDetailsElement);
+        const showAll = expandedOffices.has(key);
+        rows.forEach((r, i) => { if (!showAll && i >= PAGE_SIZE) r.hidden = true; });
+
+        const more = group.querySelector<HTMLButtonElement>(".fw-showmore");
+        const hidden = Math.max(0, rows.length - PAGE_SIZE);
+        if (more) {
+          if (hidden === 0 && !showAll) {
+            more.hidden = true;
+          } else {
+            more.hidden = false;
+            more.textContent = showAll
+              ? `Show first ${PAGE_SIZE} only  ▴`
+              : `Show all ${rows.length} jobs  ▾  (${hidden} more)`;
+          }
+        }
+        // The internal scroller exists ONLY once you have asked for the full
+        // list. Capped at 10 rows there is nothing to scroll, so the wheel
+        // stays with the page — which is what made the old board unnavigable.
+        const wrap = group.querySelector<HTMLElement>(".fw-tablewrap");
+        if (wrap) wrap.classList.toggle("is-capped", showAll && rows.length > PAGE_SIZE);
       });
 
       kpiButtons.forEach((b) => {
@@ -595,16 +698,17 @@ const gmBasisLabel: Record<string, string> = {
     });
 
     // ── View state ───────────────────────────────────────────────────────
-    // sessionStorage, deliberately: expansions survive moving around the app
-    // and the reload a GM% save triggers, but a new tab — next Friday — opens
-    // fully collapsed. Nothing here is shared between people or persisted to
-    // the server; it is one operator's place in the page.
+    // localStorage, not session: this board is weekly planning, so the way you
+    // left it on Friday is the way it should look when you come back. Which
+    // offices are open, which are showing their full list, and which column
+    // groups are expanded all persist. Per-browser only — nothing here is
+    // shared between people or written to the server.
     const VIEW_KEY = "fw.view.v1";
     const readView = () => {
-      try { return JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? "{}"); } catch { return {}; }
+      try { return JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}"); } catch { return {}; }
     };
     const writeView = (patch: Record<string, unknown>) => {
-      try { sessionStorage.setItem(VIEW_KEY, JSON.stringify({ ...readView(), ...patch })); } catch { /* private mode */ }
+      try { localStorage.setItem(VIEW_KEY, JSON.stringify({ ...readView(), ...patch })); } catch { /* private mode */ }
     };
 
     // Column groups: collapsed by default, state global across every office so
@@ -628,12 +732,21 @@ const gmBasisLabel: Record<string, string> = {
 
     // Offices: closed on load, reopened from the session, one write per change.
     const groups = Array.from(document.querySelectorAll<HTMLDetailsElement>(".fw-group"));
-    const groupKey = (d: HTMLDetailsElement) =>
-      d.querySelector<HTMLElement>(".fw-gm")?.dataset.location ??
-      d.querySelector<HTMLElement>(".fw-group-name")?.textContent?.replace("▸ ", "").trim() ?? "";
     groups.forEach((d) => {
       d.addEventListener("toggle", () => {
         writeView({ offices: groups.filter((g) => g.open).map(groupKey) });
+      });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>(".fw-showmore").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const group = btn.closest<HTMLElement>(".fw-group");
+        if (!group) return;
+        const key = groupKey(group);
+        if (expandedOffices.has(key)) expandedOffices.delete(key);
+        else expandedOffices.add(key);
+        writeView({ expanded: [...expandedOffices] });
+        applyFilters();
       });
     });
 
@@ -643,6 +756,7 @@ const gmBasisLabel: Record<string, string> = {
     if (Array.isArray(view.offices)) {
       groups.forEach((d) => { if (view.offices.includes(groupKey(d))) d.open = true; });
     }
+    if (Array.isArray(view.expanded)) view.expanded.forEach((k: string) => expandedOffices.add(k));
 
     // Run once at load: the default view is "not stale", and without this the
     // 225 stale close-outs render until the first filter event fires.
