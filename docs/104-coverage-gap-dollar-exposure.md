@@ -332,3 +332,47 @@ or — most likely — both. Worth noting before anyone re-runs the backfill exp
 different result: exact-token on description-only sheets is close to a no-op, and the
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
+
+## Addendum — 2026-08-21: a defect migration 264 introduced, and 4 rows a human should look at
+
+Migration 264's `geocode_status` assignment was keyed on the wrong condition. It read:
+
+```sql
+WHEN vb.city IS NULL AND rb.b->>'addressLine1' IS NOT NULL THEN 'pending'
+```
+
+Two problems, both from testing `vb.city IS NULL` rather than "did this row gain location
+data and does it still lack a geom":
+
+1. **It demoted already-geocoded rows.** A branch that had a `geom` but a NULL `city` was
+   flipped from `ok` to `pending` — re-queueing a perfectly good geocode. The applied run
+   did this to **branches 21 (Raleigh NC) and 684 (Norman OK)**, both stamped
+   `2026-08-20 10:59:17+00`, which is migration 264's run.
+2. **It missed address-only recovery.** A branch whose `city` was already set but whose
+   `address` was NULL would gain an address and keep its old status — so a row that had
+   become geocodable stayed marked `no_address` and was never picked up. This matches
+   **0 rows in prod today**, so it is latent, not active.
+
+The file is corrected to gate on `vb.geom IS NULL` plus "we supplied a city or an address".
+**The corrected statement matches 0 rows against current prod data** — verified before
+committing — so it is a proven no-op and was not re-applied. It changes behaviour only for
+future reruns, which is the point: the migration is meant to be rerunnable.
+
+### Not repaired: 4 geocoded rows marked `pending`
+
+The invariant everywhere else is `geom IS NOT NULL` ⇒ `geocode_status = 'ok'` (1,752 rows).
+Four rows violate it:
+
+| Branch | City | `updated_at` | Attributable to |
+|---|---|---|---|
+| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 264 |
+| 684 | Norman OK | 2026-08-20 10:59:17 | migration 264 |
+| 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
+| 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
+
+**Deliberately left alone.** `pending` on a geocoded row is ambiguous: it can mean "demoted
+by the bug above", or it can mean "a process deliberately queued this for re-geocoding
+because its address changed". For 39 and 465 — touched at 13:04 by something this session
+does not own — flipping them back to `ok` could silently cancel a queued re-geocode. Per
+migration 240's boundary, *a guess cannot become a fact*. Resolving these is a human call:
+confirm whether the 13:04 run intended a re-geocode, then set all four to `ok` if not.

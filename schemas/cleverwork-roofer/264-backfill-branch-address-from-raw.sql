@@ -48,7 +48,18 @@ UPDATE public.vendor_branches vb
        state   = COALESCE(vb.state,   rb.b->>'state'),
        address = COALESCE(vb.address, rb.b->>'addressLine1'),
        geocode_status = CASE
-             WHEN vb.city IS NULL AND rb.b->>'addressLine1' IS NOT NULL THEN 'pending'
+             -- Queue a geocode only for a branch that does not already have one, and key
+             -- it on "did we supply location data", not on city alone.
+             -- Corrected 2026-08-21 after review. The original keyed on `vb.city IS NULL`,
+             -- which (a) demoted already-geocoded rows to 'pending' when their city
+             -- happened to be NULL -- branches 21 and 684 were demoted from 'ok' by the
+             -- applied run -- and (b) missed address-only recovery, leaving a branch that
+             -- gained an address still marked 'no_address' and so never re-geocoded.
+             -- (b) matches 0 rows in prod today; (a) matched 2.
+             WHEN vb.geom IS NULL
+              AND (vb.city IS NULL OR vb.address IS NULL)
+              AND (rb.b->>'city' IS NOT NULL OR rb.b->>'addressLine1' IS NOT NULL)
+             THEN 'pending'
              ELSE vb.geocode_status END,
        updated_at = now()
   FROM raw_best rb
