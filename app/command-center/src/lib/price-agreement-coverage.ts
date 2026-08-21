@@ -57,9 +57,21 @@ export interface CoverageVendor {
   allVerified: boolean;
   pricedItems: number;
   hasGap: boolean;
+  /** Chris's ruling for this pair, from office_vendor_agreement_status via mig 265. */
+  agreementStatus: string;
+  /**
+   * The pair's no-price behaviour is ACCEPTED, so it is not work to chase.
+   * QXO is no_book at every office by Chris's 2026-08-20 ruling.
+   */
+  isAccepted: boolean;
   /** Invoices booked against this office x vendor (v_office_vendor_spend). */
   invoiceCount: number;
-  /** Spend booked against this office x vendor. With hasGap, this is un-audited exposure. */
+  /**
+   * Invoice TOTAL booked against this office x vendor. Note this is not the same as
+   * un-audited value: it includes tax, freight, and lines the separate line-level path
+   * does price. Denver x SRS reads $17,437.63 here while only $13,464.80 of line value is
+   * actually unpriced. Label it as spend, never as "un-audited".
+   */
   spend: number;
   branches: CoverageBranch[];
 }
@@ -85,10 +97,14 @@ export interface PriceAgreementCoverage {
     pricedItems: number;
     gaps: number;
     lapsedVendors: number;
-    /** Gaps carrying real spend — the ones that cost money today. */
+    /** Gaps carrying real spend, including ones whose no-price state is accepted. */
     gapsWithSpend: number;
-    /** Total spend sitting in office x vendor pairs with no priced items. */
-    unauditedSpend: number;
+    /** Gaps with spend that nobody has accepted — the actual chase queue. */
+    gapsToChase: number;
+    /** Invoice total at gap pairs. NOT the un-audited figure; see CoverageVendor.spend. */
+    gapSpend: number;
+    /** Invoice total at gap pairs excluding accepted (no_book) rulings. */
+    chaseSpend: number;
     /** Spend that resolves to no office at all (v_unresolved_branch_spend). */
     unresolvedSpend: number;
   };
@@ -116,20 +132,35 @@ function branchRole(row: any): CoverageRole {
 const ROLE_ORDER: Record<CoverageRole, number> = { Primary: 0, "Region-covered": 1, Inherits: 2 };
 
 /**
- * Split coverage gaps into the ones that cost money and the ones that are territory-only.
+ * Rulings whose no-price behaviour is ACCEPTED. A pair carrying one of these is not work,
+ * regardless of how much money runs through it — QXO is `no_book` at every office by Chris's
+ * 2026-08-20 ruling, so surfacing it as a gap to chase is a false alarm every single week.
+ */
+const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
+
+/**
+ * Split coverage gaps into what is actually actionable.
  *
- * A gap means "no branch in this ring holds an agreement with this vendor". That says nothing
- * about whether we actually BUY there. On 2026-08-20, 9 of 9 gaps were flagged identically but
- * 6 had never seen a single invoice — ranking by branch count put a $0 gap above a $17k one.
- * Exposure is spend, not branch count.
+ * Three distinctions matter, and conflating any two of them produces a misleading number:
+ *
+ *  1. A gap with no invoices is theoretical — branches sit in the ring, nothing was bought.
+ *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work.
+ *  3. `spend` is the invoice TOTAL, which includes tax, freight, and lines the separate
+ *     line-level path does price. It is NOT the un-audited figure and must not be labelled
+ *     as one — Denver x SRS reads $17,437.63 of spend against $13,464.80 of unpriced line
+ *     value.
  */
 export function gapExposure(
-  vendors: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "spend">[],
-): { gapsWithSpend: number; unauditedSpend: number } {
+  vendors: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "spend" | "isAccepted">[],
+): { gapsWithSpend: number; gapsToChase: number; gapSpend: number; chaseSpend: number } {
   const gaps = vendors.filter((v) => v.hasGap);
+  const withSpend = gaps.filter((v) => v.invoiceCount > 0);
+  const toChase = withSpend.filter((v) => !v.isAccepted);
   return {
-    gapsWithSpend: gaps.filter((v) => v.invoiceCount > 0).length,
-    unauditedSpend: gaps.reduce((s, v) => s + v.spend, 0),
+    gapsWithSpend: withSpend.length,
+    gapsToChase: toChase.length,
+    gapSpend: gaps.reduce((s, v) => s + v.spend, 0),
+    chaseSpend: toChase.reduce((s, v) => s + v.spend, 0),
   };
 }
 
@@ -143,13 +174,13 @@ export async function loadPriceAgreementCoverage(
     totals: {
       offices: 0, vendors: 0, branchRows: 0, primaryBranches: 0, regionCoveredBranches: 0,
       branchesInheriting: 0, pricedItems: 0, gaps: 0, lapsedVendors: 0,
-      gapsWithSpend: 0, unauditedSpend: 0, unresolvedSpend: 0,
+      gapsWithSpend: 0, gapsToChase: 0, gapSpend: 0, chaseSpend: 0, unresolvedSpend: 0,
     },
   };
   const { client } = createServerSupabaseClient(env);
   if (!client) return empty;
 
-  const [inhRows, branchRows, spendRows, unresolvedRows] = await Promise.all([
+  const [inhRows, branchRows, spendRows, unresolvedRows, rulingRows] = await Promise.all([
     selectAll<any>(
       client,
       "v_office_vendor_inheritance",
@@ -162,6 +193,7 @@ export async function loadPriceAgreementCoverage(
     ),
     selectAll<any>(client, "v_office_vendor_spend", "office_id,vendor_id,invoice_count,spend"),
     selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend"),
+    selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status"),
   ]);
   if (inhRows.length === 0) return empty;
 
@@ -217,6 +249,13 @@ export async function loadPriceAgreementCoverage(
     });
   }
 
+  // office+vendor -> Chris's ruling. A pair ruled no_book prices as no-price BY DESIGN and
+  // must never appear in a "chase this" queue, however many dollars it carries.
+  const rulingByOfficeVendor = new Map<string, string>();
+  for (const r of rulingRows) {
+    rulingByOfficeVendor.set(`${str(r.office_id)}::${str(r.vendor_id)}`, str(r.agreement_status));
+  }
+
   const officeMap = new Map<string, CoverageOffice>();
   for (const r of inhRows) {
     const officeId = str(r.office_id);
@@ -240,6 +279,8 @@ export async function loadPriceAgreementCoverage(
       allVerified: r.all_verified === true,
       pricedItems: num(r.priced_items),
       hasGap: primaryBranches + regionCoveredBranches === 0,
+      agreementStatus: rulingByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? "unrecorded",
+      isAccepted: ACCEPTED_STATUSES.has(rulingByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? ""),
       invoiceCount: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.invoiceCount ?? 0,
       spend: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.spend ?? 0,
       branches: byOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? [],
