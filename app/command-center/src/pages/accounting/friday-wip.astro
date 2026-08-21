@@ -126,7 +126,7 @@ const gmBasisLabel: Record<string, string> = {
       <button type="button" class="fw-kpi" data-kpi="criticalArTier1" aria-pressed="false"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></button>
       <button type="button" class="fw-kpi" data-kpi="tier2NeverInvoiced" aria-pressed="false"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></button>
       <button type="button" class="fw-kpi" data-kpi="costsIncurred" aria-pressed="false"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></button>
-      <button type="button" class="fw-kpi" data-kpi="expenseOutstanding" aria-pressed="false"><span class="fw-kpi-lab">Expense outstanding</span><span class="fw-kpi-val">{money(k.expenseOutstandingTotal)}</span><span class="fw-kpi-sub">budget left to spend — est. total {money(k.estTotalCostsTotal)}</span></button>
+      <button type="button" class="fw-kpi" data-kpi="expenseOutstanding" aria-pressed="false"><span class="fw-kpi-lab">Est. expenses outstanding</span><span class="fw-kpi-val">{money(k.expenseOutstandingTotal)}</span><span class="fw-kpi-sub">estimated budget left to spend — est. total {money(k.estTotalCostsTotal)}</span></button>
       <button type="button" class="fw-kpi fw-kpi-warn" data-kpi="staleCloseout" aria-pressed="false"><span class="fw-kpi-lab">Stale — close in AccuLynx</span><span class="fw-kpi-val">{k.staleCloseoutJobs}</span><span class="fw-kpi-sub">paid in full, never closed · {money(k.staleCloseoutContract)} contracted</span></button>
       <button type="button" class="fw-kpi fw-kpi-warn" data-kpi="contradiction" aria-pressed="false"><span class="fw-kpi-lab">Balance contradiction</span><span class="fw-kpi-val">{k.contradictionJobs}</span><span class="fw-kpi-sub">{money(k.contradictionAr)} invoiced but not in job balance</span></button>
       <button type="button" class="fw-kpi" data-kpi="signedContract" aria-pressed="false"><span class="fw-kpi-lab">Signed contract, no AR</span><span class="fw-kpi-val">{k.signedContractJobs}</span><span class="fw-kpi-sub">work in progress, nothing invoiced yet</span></button>
@@ -162,7 +162,9 @@ const gmBasisLabel: Record<string, string> = {
                 <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
                 <th class="fw-num" title="AccuLynx job balance due (N)">Balance Due</th>
                 <th class="fw-num" title="QBO job-tagged bills + purchases to date">Expense Realized</th>
-                <th class="fw-num" title="Budget remaining: contract × (1 − office GM%) − expense realized, floored at 0. A budgeting estimate, not a takeoff.">Expense Outstanding</th>
+                {/* Abbreviated deliberately — the full name would widen the
+                    column well past its numbers. Spelled out in the tooltip. */}
+                <th class="fw-num" title="Estimated Expenses Outstanding — budget remaining on the job: contract × (1 − office GM%) − expense realized, floored at 0. A budgeting estimate, not a takeoff.">Est Exp Outstanding</th>
                 <th title="Days in current AccuLynx status (green 0 → red 365+)">Days in Status</th>
                 <th>Action</th>
                 <th class="fw-fill">Expected invoice/cash</th>
@@ -195,7 +197,7 @@ const gmBasisLabel: Record<string, string> = {
                   <td class="fw-num">{money(j.collectedRevenue)}</td>
                   <td class="fw-num">{money(j.outstandingAr)}</td>
                   <td class="fw-num">{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
-                  <td class="fw-num" title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-num" title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated expenses outstanding: estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
                   <td class="fw-days">{j.daysInStatus == null ? "—" : <span class="fw-days-chip" style={daysChipStyle(j.daysInStatus)}>{j.daysInStatus}d</span>}</td>
                   <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")}>{j.action}</td>
                   <td><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
