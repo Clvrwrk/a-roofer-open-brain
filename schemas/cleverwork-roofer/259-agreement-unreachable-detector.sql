@@ -1,7 +1,7 @@
--- 257 — an agreement that exists but reaches nothing. Detector + a corrected exposure gate.
+-- 259 — an agreement that exists but reaches nothing. Detector + a corrected exposure gate.
 -- Applied to prod 2026-08-20.
 --
--- WHY: migration 256's `needs_ruling` keyed off `live_agreements = 0` — does the PAPERWORK
+-- WHY: migration 258's `needs_ruling` keyed off `live_agreements = 0` — does the PAPERWORK
 -- exist. That is the wrong question. Denver x SRS has a live, in-territory, 22-item
 -- agreement (0049345641, S Denver / Englewood) that the office ring cannot reach, so the
 -- coverage surface reports `priced_items = 0` for the pair. Keying on paperwork hid it.
@@ -90,10 +90,10 @@ SELECT pa.id                AS agreement_id,
 
 COMMENT ON VIEW public.v_agreement_unreachable IS
   'Active agreements that reach no branch in any active office ring, so their items price '
-  'nothing. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 257 '
+  'nothing. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 259 '
   'header). Non-empty means money is auditing as no-price despite a signed book existing.';
 
--- Corrected gate: auditability, not paperwork. Supersedes migration 256's predicate.
+-- Corrected gate: auditability, not paperwork. Supersedes migration 258's predicate.
 CREATE OR REPLACE VIEW public.v_office_vendor_gap_exposure AS
 SELECT c.office_id,
        c.office            AS office_name,
@@ -122,7 +122,7 @@ SELECT c.office_id,
  WHERE c.office_active;
 
 COMMENT ON VIEW public.v_office_vendor_gap_exposure IS
-  'Coverage gaps with the ruling (mig 245) AND the dollars (mig 254), gated on whether the '
+  'Coverage gaps with the ruling (mig 245) AND the dollars (mig 256), gated on whether the '
   'pair can actually be audited (priced_items), not on whether paperwork exists. '
   'needs_ruling = spend occurred, nothing prices, nobody has accepted it. '
   'agreement_not_reaching = a signed book exists and still prices nothing (see '

@@ -200,3 +200,60 @@ they measure.)
 
 3 of 5 matched AccuLynx jobs on the PO token (`KS-209` → Rojelio Moreno; `TX-455-2` → Debra
 Moore, both invoice and credit).
+
+---
+
+## Addendum 2 — 2026-08-21: `po_number` becomes the AccuLynx job number
+
+Chris: *"review and pull acculynx job# and replace the PO Number."*
+
+Vendors type the PE job code by hand, so the printed PO drifts — `co-356`, `CO357`,
+`KS 147`, `KS189`, `TX-455-2`. `v_vendor_invoice_acculynx_match` already tolerated that (it
+tokenizes on `^[A-Za-z]{2}\s*-?\s*[0-9]+`), but every **other** reader of `po_number` saw the
+raw string, so the job key was only ever as good as the vendor's typing.
+
+**Migration 254** normalized 9 rows to the job number AccuLynx actually holds. The printed
+value is preserved at `raw.po_number_as_printed` — it is what you cite back to the vendor in
+a dispute, and hard rule 1 is archive-never-delete.
+
+| invoice | printed | → job | client |
+|---|---|---|---|
+| `0049707508-001` | `co-356` | CO-356 | Deborah Nanney |
+| `0050095528-001` | `co-356` | CO-356 | Deborah Nanney |
+| `0050222357-001` | `CO357` | CO-357 | Charli Ramer |
+| `0050634181-001` | `TX-455-2` | TX-455 | Debra Moore |
+| `0050692264-001` | `TX-455-2` | TX-455 | Debra Moore |
+| `UY48909` | `KS 147` | KS-147 | Steve Watkins |
+| `UZ11902` | `KS189` | KS-189 | Tony Wynn |
+| `0050471744-001` | `216 SOUTH MADISO` | **KS-208** | Elaine Suderman |
+| `0050708886-001` | `tx-4555` | **TX-455** | Debra Moore |
+
+The last two were resolved individually:
+
+- **`0050471744-001` → KS-208, on address evidence.** The PDF truncates PO NUMBER at 16
+  characters and its JOB NUMBER column carried a street rather than a code, so the token
+  matcher had nothing to bite on. AccuLynx KS-208 (Elaine Suderman) is at **216 South
+  Madison Street, Hillsboro, KS 67063** — an exact street/city/state match to this invoice's
+  SHIP TO. Evidence, not a guess.
+- **`0050708886-001` → TX-455, on Chris's instruction.** The vendor typed `tx-4555`; no such
+  job exists, and TX-455 is referenced by the other two documents in the same delivery batch.
+  Recorded in the migration as a human decision so a later reader does not mistake it for an
+  inference the system made.
+
+**Migration 255** keeps it canonical on the way in, mirroring migration 243's branch trigger,
+so the next ingested document cannot reintroduce the drift.
+
+It **fails OPEN**, deliberately unlike the branch trigger: a PO whose token resolves to no
+AccuLynx job is left **exactly as printed**. "This delivery is not tied to a job yet" is real
+information, and blanking it would destroy the only clue to which job it belongs to. Verified
+both directions against live data — `ks 189` canonicalized to `KS-189`, `216 SOUTH MADISO`
+was left untouched — with the test rows removed afterwards.
+
+**Result: every vendor invoice carrying a PO now matches an AccuLynx job.** The single
+remaining unmatched row is a cancelled credit memo with no PO at all, which is correct.
+
+### Tracked in Linear
+- **PEC-224** — agreement PDFs stored, `ceo_verified` retired (Done)
+- **PEC-225** — SRS invoice PDF ingest, branch aliases, PO canonicalization (Done)
+- **PEC-226** — ⚠ description-only sheets price nothing; $63,642.53 unauditable (Todo, Urgent)
+- **PEC-222 / PEC-211** — Maya Colorado-pricing intakes, closed out (8-13 superseded by 8-14)

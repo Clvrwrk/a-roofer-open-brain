@@ -1,11 +1,11 @@
--- 255 — recover branch addresses that were already sitting in the invoice payload.
+-- 257 — recover branch addresses that were already sitting in the invoice payload.
 --
 -- NUMBERING NOTE: applied to prod as `246_backfill_branch_address_from_raw` at 2026-08-20
 -- 10:59 UTC. Renumbered to 251 after parallel sessions claimed 245 and 246 on main. The DB
 -- keys on timestamp, so the applied order is unchanged.
 -- Applied to prod 2026-08-20.
 --
--- Found while putting dollars on the coverage gaps (migration 254). The largest single
+-- Found while putting dollars on the coverage gaps (migration 256). The largest single
 -- un-audited bucket in the system is ABC branch 176: 11 invoices, $19,356.94 — on a branch
 -- row with NO city and NO state, so it can never geocode, never land in a territory ring,
 -- and never get priced. Same shape for branches 183 and 305.
