@@ -37,6 +37,15 @@ const daysChipStyle = (days: number) => {
 };
 
 const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salesperson)))].sort((a, b) => a.localeCompare(b));
+// Offices that actually have jobs on the board, with their margin basis.
+const boardLocations = new Set(board.groups.map((g) => g.location));
+const offices = board.offices.filter((o) => boardLocations.has(o.location));
+const officeLabel = (loc: string) => loc.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const gmBasisLabel: Record<string, string> = {
+  override: "hard-set",
+  office_trailing_12mo: "office, trailing 12mo",
+  company_trailing_12mo: "company avg — office sample too thin",
+};
 ---
 
 <AppShell title="Friday WIP/AR" eyebrow="Accounting" activePage="accounting">
@@ -45,6 +54,33 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
       <h2 class="fw-title">Friday AR Meeting board</h2>
       <span class="fw-sub">Set expected cash dates · 3-week cash map</span>
       <span class="fw-spacer"></span>
+      <label class="fw-filter">Office
+        <select id="fw-office" class="fw-select">
+          <option value="">All offices</option>
+          {offices.map((o) => (
+            <option
+              value={o.location}
+              data-gm={o.effectiveGmPct}
+              data-basis={o.gmBasis}
+              data-office-gm={o.gmPctOffice ?? ""}
+              data-company-gm={o.gmPctCompany ?? ""}
+              data-override={o.gmPctOverride ?? ""}
+              data-sample-jobs={o.sampleJobs ?? ""}
+              data-set-by={o.setBy ?? ""}
+            >{officeLabel(o.location)} · GM {o.effectiveGmPct}%</option>
+          ))}
+        </select>
+      </label>
+      {/* Margin control appears only with an office selected — the rate is
+          per-office, so there is nothing coherent to set across "All". */}
+      <span class="fw-margin" id="fw-margin" hidden>
+        <label class="fw-filter">GM %
+          <input id="fw-margin-input" class="fw-select fw-margin-input" type="number" min="-50" max="90" step="0.1" placeholder="—" />
+        </label>
+        <button type="button" class="fw-btn" id="fw-margin-save">Set</button>
+        <button type="button" class="fw-btn" id="fw-margin-clear" title="Clear the override and go back to the computed rate">Reset</button>
+        <span class="fw-margin-note" id="fw-margin-note"></span>
+      </span>
       <label class="fw-filter">Rep
         <select id="fw-rep" class="fw-select">
           <option value="">All reps</option>
@@ -81,6 +117,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
       <button type="button" class="fw-kpi" data-kpi="criticalArTier1" aria-pressed="false"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></button>
       <button type="button" class="fw-kpi" data-kpi="tier2NeverInvoiced" aria-pressed="false"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></button>
       <button type="button" class="fw-kpi" data-kpi="costsIncurred" aria-pressed="false"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></button>
+      <button type="button" class="fw-kpi" data-kpi="expenseOutstanding" aria-pressed="false"><span class="fw-kpi-lab">Expense outstanding</span><span class="fw-kpi-val">{money(k.expenseOutstandingTotal)}</span><span class="fw-kpi-sub">budget left to spend — est. total {money(k.estTotalCostsTotal)}</span></button>
       <button type="button" class="fw-kpi" data-kpi="signedContract" aria-pressed="false"><span class="fw-kpi-lab">Signed contract, no AR</span><span class="fw-kpi-val">{k.signedContractJobs}</span><span class="fw-kpi-sub">work in progress, nothing invoiced yet</span></button>
     </div>
 
@@ -114,7 +151,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
                 <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
                 <th class="fw-num" title="AccuLynx job balance due (N)">Balance Due</th>
                 <th class="fw-num" title="QBO job-tagged bills + purchases to date">Expense Realized</th>
-                <th class="fw-num" title="Estimated total costs − expense realized (needs AccuLynx worksheet costs — docs/85 gap)">Expense Outstanding</th>
+                <th class="fw-num" title="Budget remaining: contract × (1 − office GM%) − expense realized, floored at 0. A budgeting estimate, not a takeoff.">Expense Outstanding</th>
                 <th title="Days in current AccuLynx status (green 0 → red 365+)">Days in Status</th>
                 <th>Action</th>
                 <th class="fw-fill">Expected invoice/cash</th>
@@ -126,7 +163,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""}>
+                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""} data-location={j.location}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
                   <td class="fw-client" title={j.client}>{j.client}</td>
                   <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}${j.populationReason === "signed_contract" ? " · on the board as a signed contract (no AR yet)" : ""}`}>
@@ -139,7 +176,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
                   <td class="fw-num">{money(j.collectedRevenue)}</td>
                   <td class="fw-num">{money(j.outstandingAr)}</td>
                   <td class="fw-num">{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
-                  <td class="fw-num">{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-num" title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
                   <td class="fw-days">{j.daysInStatus == null ? "—" : <span class="fw-days-chip" style={daysChipStyle(j.daysInStatus)}>{j.daysInStatus}d</span>}</td>
                   <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")}>{j.action}</td>
                   <td><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
@@ -223,6 +260,11 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     .fw .fw-clear { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 3px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
     .fw .fw-clear:hover { border-color: var(--muted); }
     .fw .fw-wip-dot { color: var(--gold); font-weight: 700; margin-left: 4px; }
+    .fw .fw-margin { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--gold); border-radius: 9px; background: var(--fill-cell); }
+    .fw .fw-margin-input { width: 78px; text-align: right; }
+    .fw .fw-margin-note { font-size: 11.5px; color: var(--muted); max-width: 260px; }
+    .fw .fw-margin-note[data-tone="saved"] { color: var(--green); }
+    .fw .fw-margin-note[data-tone="failed"] { color: var(--red); }
     /* Filtering hides via [hidden]. Table rows carry a UA display that can
        outrank the UA [hidden] rule, so state it explicitly. */
     .fw [hidden] { display: none !important; }
@@ -321,6 +363,7 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     const filterBar = document.getElementById("fw-filterbar") as HTMLElement | null;
     const filterLabel = document.getElementById("fw-filter-label") as HTMLElement | null;
     const clearBtn = document.getElementById("fw-clear") as HTMLButtonElement | null;
+    const officeSelect = document.getElementById("fw-office") as HTMLSelectElement | null;
     const kpiButtons = Array.from(
       document.querySelectorAll<HTMLButtonElement>("button.fw-kpi[data-kpi], button.fw-week[data-kpi]"),
     );
@@ -329,13 +372,15 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
 
     const applyFilters = () => {
       const rep = repSelect?.value ?? "";
+      const office = officeSelect?.value ?? "";
       let shown = 0;
 
       document.querySelectorAll<HTMLTableRowElement>("tr[data-job]").forEach((row) => {
         const repOk = !rep || row.getAttribute("data-rep") === rep;
+        const officeOk = !office || row.getAttribute("data-location") === office;
         const kpiOk =
           !activeKpi || (row.getAttribute("data-kpi") ?? "").split(" ").includes(activeKpi);
-        const visible = repOk && kpiOk;
+        const visible = repOk && officeOk && kpiOk;
         row.hidden = !visible;
         if (visible) shown += 1;
       });
@@ -353,9 +398,13 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
 
       const active = activeKpi ? kpiButtons.find((b) => b.dataset.kpi === activeKpi) : null;
       const name = active?.querySelector(".fw-kpi-lab, .fw-week-lab")?.textContent?.trim() ?? "";
-      if (activeKpi || rep) {
+      if (activeKpi || rep || office) {
         if (filterLabel) {
-          const parts = [activeKpi ? `KPI: ${name}` : null, rep ? `Rep: ${rep}` : null].filter(Boolean);
+          const parts = [
+            activeKpi ? `KPI: ${name}` : null,
+            office ? `Office: ${office.replace(/_/g, " ")}` : null,
+            rep ? `Rep: ${rep}` : null,
+          ].filter(Boolean);
           filterLabel.textContent = `${parts.join(" · ")} — ${shown} job${shown === 1 ? "" : "s"}`;
         }
         filterBar?.removeAttribute("hidden");
@@ -365,6 +414,75 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     };
 
     repSelect?.addEventListener("change", applyFilters);
+
+    // ── Per-office gross margin (mig 260) ────────────────────────────────
+    // The margin drives Estimated total expense for every job in the office,
+    // so the control shows what the current rate rests on before it is
+    // changed — a rate carried by 1 job reads very differently from 107.
+    const marginBox = document.getElementById("fw-margin") as HTMLElement | null;
+    const marginInput = document.getElementById("fw-margin-input") as HTMLInputElement | null;
+    const marginNote = document.getElementById("fw-margin-note") as HTMLElement | null;
+    const marginSave = document.getElementById("fw-margin-save") as HTMLButtonElement | null;
+    const marginClear = document.getElementById("fw-margin-clear") as HTMLButtonElement | null;
+    const BASIS_LABEL: Record<string, string> = {
+      override: "hard-set",
+      office_trailing_12mo: "office, trailing 12mo",
+      company_trailing_12mo: "company avg — office sample too thin",
+    };
+
+    const syncMarginBox = () => {
+      const opt = officeSelect?.selectedOptions?.[0];
+      if (!officeSelect?.value || !opt) {
+        marginBox?.setAttribute("hidden", "");
+        return;
+      }
+      marginBox?.removeAttribute("hidden");
+      if (marginInput) marginInput.value = opt.dataset.gm ?? "";
+      if (marginNote) {
+        const basis = BASIS_LABEL[opt.dataset.basis ?? ""] ?? (opt.dataset.basis ?? "");
+        const jobs = opt.dataset.sampleJobs;
+        const by = opt.dataset.setBy;
+        marginNote.removeAttribute("data-tone");
+        marginNote.textContent =
+          `${basis}${jobs ? ` · ${jobs} completed job${jobs === "1" ? "" : "s"}` : ""}${by ? ` · set by ${by}` : ""}`;
+      }
+    };
+
+    officeSelect?.addEventListener("change", () => { syncMarginBox(); applyFilters(); });
+
+    const postMargin = async (gmPct: string | null) => {
+      const location = officeSelect?.value;
+      if (!location) return;
+      if (marginNote) { marginNote.removeAttribute("data-tone"); marginNote.textContent = "Saving…"; }
+      if (marginSave) marginSave.disabled = true;
+      try {
+        const resp = await fetch("/api/accounting/friday-wip/margin", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ location, gmPct }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (marginNote) {
+            marginNote.setAttribute("data-tone", "failed");
+            marginNote.textContent = result.error_description ?? result.error ?? `Failed (${resp.status})`;
+          }
+          return;
+        }
+        // The estimates for every job in this office just changed, so the
+        // page is stale — reload rather than patch cells one by one.
+        if (marginNote) { marginNote.setAttribute("data-tone", "saved"); marginNote.textContent = "Saved — reloading…"; }
+        window.location.reload();
+      } catch (err) {
+        if (marginNote) { marginNote.setAttribute("data-tone", "failed"); marginNote.textContent = String(err); }
+      } finally {
+        if (marginSave) marginSave.disabled = false;
+      }
+    };
+
+    marginSave?.addEventListener("click", () => postMargin(marginInput?.value ?? null));
+    marginClear?.addEventListener("click", () => postMargin(null));
+    syncMarginBox();
 
     kpiButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -378,6 +496,8 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     clearBtn?.addEventListener("click", () => {
       activeKpi = null;
       if (repSelect) repSelect.value = "";
+      if (officeSelect) officeSelect.value = "";
+      syncMarginBox();
       applyFilters();
     });
 
