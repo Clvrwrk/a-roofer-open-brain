@@ -63,6 +63,8 @@ export interface FridayWipGroup {
   totalAr: number;
   totalBilledAr: number;
   totalUnbilled: number;
+  /** The office's gross margin, so the header can show and edit it in place. */
+  margin: OfficeMargin | null;
 }
 
 export interface FridayWipKpis {
@@ -326,6 +328,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     .map(([location, list]) => ({
       location,
       jobs: list,
+      margin: offices.find((o) => o.location === location) ?? null,
       activeJobs: list.filter((j) => j.attentionFlag !== "stale_closeout").length,
       staleJobs: list.filter((j) => j.attentionFlag === "stale_closeout").length,
       totalAr: Math.round(list.reduce((s, j) => s + j.outstandingAr, 0) * 100) / 100,

@@ -71,16 +71,6 @@ const gmBasisLabel: Record<string, string> = {
           ))}
         </select>
       </label>
-      {/* Margin control appears only with an office selected — the rate is
-          per-office, so there is nothing coherent to set across "All". */}
-      <span class="fw-margin" id="fw-margin" hidden>
-        <label class="fw-filter">GM %
-          <input id="fw-margin-input" class="fw-select fw-margin-input" type="number" min="-50" max="90" step="0.1" placeholder="—" />
-        </label>
-        <button type="button" class="fw-btn" id="fw-margin-save">Set</button>
-        <button type="button" class="fw-btn" id="fw-margin-clear" title="Clear the override and go back to the computed rate">Reset</button>
-        <span class="fw-margin-note" id="fw-margin-note"></span>
-      </span>
       <label class="fw-filter">Rep
         <select id="fw-rep" class="fw-select">
           <option value="">All reps</option>
@@ -150,6 +140,33 @@ const gmBasisLabel: Record<string, string> = {
         <summary class="fw-group-head">
           <span class="fw-group-name">▸ {g.location}</span>
           <span class="fw-group-count">{g.activeJobs} jobs{g.staleJobs ? ` · ${g.staleJobs} stale` : ""}</span>
+          {/* The office's gross margin lives with the office, so every rate is
+              readable at a glance instead of one at a time behind a filter.
+              Calculated value always shown; the override sits beside it so it
+              is obvious which number is driving Est Exp Outstanding. */}
+          {g.margin && (
+            <span class="fw-gm" data-location={g.location} data-basis={g.margin.gmBasis}>
+              <span class="fw-gm-lab">AVG GM%</span>
+              <span
+                class="fw-gm-calc"
+                title={g.margin.gmBasis === "company_trailing_12mo"
+                  ? `Company average — ${g.location.replace(/_/g, " ")} has only ${g.margin.sampleJobs ?? 0} completed job${g.margin.sampleJobs === 1 ? "" : "s"} in the last 12 months, too thin to trust`
+                  : `Office rate — ${g.margin.sampleJobs} completed jobs, ${money(g.margin.sampleBilled ?? 0)} billed, trailing 12 months`}
+              >{(g.margin.gmPctOverride != null ? (g.margin.gmPctOffice ?? g.margin.gmPctCompany) : g.margin.effectiveGmPct)}%{g.margin.gmBasis === "company_trailing_12mo" ? " co." : ""}</span>
+              <span class="fw-gm-dash">−</span>
+              <input
+                class="fw-gm-input"
+                type="number" min="-50" max="90" step="0.1"
+                placeholder="set %"
+                value={g.margin.gmPctOverride ?? ""}
+                aria-label={`Gross margin override for ${g.location}`}
+                title={g.margin.setBy ? `Hard-set by ${g.margin.setBy}` : "No override — the calculated rate applies"}
+              />
+              <button type="button" class="fw-gm-btn fw-gm-save" title="Save this override and recompute the office">Set</button>
+              <button type="button" class="fw-gm-btn fw-gm-reset" title="Clear the override and go back to the calculated rate">Reset</button>
+              <span class="fw-gm-note"></span>
+            </span>
+          )}
           <span class="fw-group-money">billed {money(g.totalBilledAr)} · unbilled {money(g.totalUnbilled)} · total {money(g.totalAr)}</span>
         </summary>
         <div class="fw-tablewrap">
@@ -281,11 +298,21 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-clear { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 3px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
     .fw .fw-clear:hover { border-color: var(--muted); }
     .fw .fw-wip-dot { color: var(--gold); font-weight: 700; margin-left: 4px; }
-    .fw .fw-margin { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--gold); border-radius: 9px; background: var(--fill-cell); }
-    .fw .fw-margin-input { width: 78px; text-align: right; }
-    .fw .fw-margin-note { font-size: 11.5px; color: var(--muted); max-width: 260px; }
-    .fw .fw-margin-note[data-tone="saved"] { color: var(--green); }
-    .fw .fw-margin-note[data-tone="failed"] { color: var(--red); }
+    /* GM% control, inline in the office header. Sits inside a <summary>, so
+       every interactive part must stop the click from toggling the group. */
+    .fw .fw-gm { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid var(--gold); border-radius: 999px; background: var(--fill-cell); font-size: 12px; white-space: nowrap; }
+    .fw .fw-gm-lab { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; }
+    .fw .fw-gm-calc { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .fw .fw-gm[data-basis="company_trailing_12mo"] .fw-gm-calc { color: var(--muted); font-style: italic; }
+    .fw .fw-gm-dash { color: var(--muted); }
+    .fw .fw-gm-input { width: 62px; text-align: right; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font-size: 12px; font-family: inherit; background: var(--panel); color: var(--ink); }
+    .fw .fw-gm[data-basis="override"] .fw-gm-input { border-color: var(--gold); font-weight: 700; }
+    .fw .fw-gm-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 2px 6px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+    .fw .fw-gm-btn:hover { border-color: var(--gold); }
+    .fw .fw-gm-btn[disabled] { opacity: 0.5; cursor: wait; }
+    .fw .fw-gm-note { font-size: 11px; color: var(--muted); }
+    .fw .fw-gm-note[data-tone="failed"] { color: var(--red); }
+    .fw .fw-gm-note[data-tone="saved"] { color: var(--green); }
     /* Filtering hides via [hidden]. Table rows carry a UA display that can
        outrank the UA [hidden] rule, so state it explicitly. */
     .fw [hidden] { display: none !important; }
@@ -316,10 +343,14 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-week-val { font-weight: 700; font-variant-numeric: tabular-nums; }
     .fw .fw-week-sub { font-size: 10.5px; color: var(--muted); }
     .fw .fw-group { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); min-width: 0; }
-    .fw .fw-group-head { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px; cursor: pointer; list-style: none; border-left: 3px solid var(--gold); border-radius: 10px 0 0 10px; }
-    .fw .fw-group-name { font-weight: 700; }
-    .fw .fw-group-count { color: var(--muted); font-size: 12.5px; }
-    .fw .fw-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+    /* The header now carries the office, its counts, its GM% control and its
+       money. Wrap as whole items rather than mid-phrase when it runs out of
+       room — a long office name like multi_family_commercial otherwise splits
+       "11 jobs · 45 stale" across two lines. */
+    .fw .fw-group-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; row-gap: 6px; padding: 10px 14px; cursor: pointer; list-style: none; border-left: 3px solid var(--gold); border-radius: 10px 0 0 10px; }
+    .fw .fw-group-name { font-weight: 700; white-space: nowrap; }
+    .fw .fw-group-count { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+    .fw .fw-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
     /* Expanded office = a fixed 70vh spreadsheet pane: rows scroll vertically,
        the yellow columns scroll horizontally, the header row and the first two
        columns (Job # · Client) stay frozen. Sticky cells need border-collapse:
@@ -452,46 +483,18 @@ const gmBasisLabel: Record<string, string> = {
 
     repSelect?.addEventListener("change", applyFilters);
 
-    // ── Per-office gross margin (mig 260) ────────────────────────────────
-    // The margin drives Estimated total expense for every job in the office,
-    // so the control shows what the current rate rests on before it is
-    // changed — a rate carried by 1 job reads very differently from 107.
-    const marginBox = document.getElementById("fw-margin") as HTMLElement | null;
-    const marginInput = document.getElementById("fw-margin-input") as HTMLInputElement | null;
-    const marginNote = document.getElementById("fw-margin-note") as HTMLElement | null;
-    const marginSave = document.getElementById("fw-margin-save") as HTMLButtonElement | null;
-    const marginClear = document.getElementById("fw-margin-clear") as HTMLButtonElement | null;
-    const BASIS_LABEL: Record<string, string> = {
-      override: "hard-set",
-      office_trailing_12mo: "office, trailing 12mo",
-      company_trailing_12mo: "company avg — office sample too thin",
-    };
-
-    const syncMarginBox = () => {
-      const opt = officeSelect?.selectedOptions?.[0];
-      if (!officeSelect?.value || !opt) {
-        marginBox?.setAttribute("hidden", "");
-        return;
-      }
-      marginBox?.removeAttribute("hidden");
-      if (marginInput) marginInput.value = opt.dataset.gm ?? "";
-      if (marginNote) {
-        const basis = BASIS_LABEL[opt.dataset.basis ?? ""] ?? (opt.dataset.basis ?? "");
-        const jobs = opt.dataset.sampleJobs;
-        const by = opt.dataset.setBy;
-        marginNote.removeAttribute("data-tone");
-        marginNote.textContent =
-          `${basis}${jobs ? ` · ${jobs} completed job${jobs === "1" ? "" : "s"}` : ""}${by ? ` · set by ${by}` : ""}`;
-      }
-    };
-
-    officeSelect?.addEventListener("change", () => { syncMarginBox(); applyFilters(); });
-
-    const postMargin = async (gmPct: string | null) => {
-      const location = officeSelect?.value;
+    // ── Per-office gross margin (mig 260), inline in each office header ──
+    // The control lives inside a <summary>, so EVERY interactive part has to
+    // stop the click reaching it — otherwise typing a rate collapses the group
+    // you are looking at.
+    const postMargin = async (box: HTMLElement, gmPct: string | null) => {
+      const location = box.dataset.location;
+      const note = box.querySelector<HTMLElement>(".fw-gm-note");
+      const buttons = box.querySelectorAll<HTMLButtonElement>(".fw-gm-btn");
       if (!location) return;
-      if (marginNote) { marginNote.removeAttribute("data-tone"); marginNote.textContent = "Saving…"; }
-      if (marginSave) marginSave.disabled = true;
+      note?.removeAttribute("data-tone");
+      if (note) note.textContent = "saving…";
+      buttons.forEach((b) => (b.disabled = true));
       try {
         const resp = await fetch("/api/accounting/friday-wip/margin", {
           method: "POST",
@@ -500,26 +503,43 @@ const gmBasisLabel: Record<string, string> = {
         });
         const result = await resp.json().catch(() => ({}));
         if (!resp.ok) {
-          if (marginNote) {
-            marginNote.setAttribute("data-tone", "failed");
-            marginNote.textContent = result.error_description ?? result.error ?? `Failed (${resp.status})`;
-          }
+          note?.setAttribute("data-tone", "failed");
+          if (note) note.textContent = result.error_description ?? result.error ?? `failed (${resp.status})`;
+          buttons.forEach((b) => (b.disabled = false));
           return;
         }
-        // The estimates for every job in this office just changed, so the
-        // page is stale — reload rather than patch cells one by one.
-        if (marginNote) { marginNote.setAttribute("data-tone", "saved"); marginNote.textContent = "Saved — reloading…"; }
+        // Est Exp Outstanding just changed for every job in this office, so
+        // the page is stale — reload rather than patch cells one by one.
+        note?.setAttribute("data-tone", "saved");
+        if (note) note.textContent = "saved — reloading…";
         window.location.reload();
       } catch (err) {
-        if (marginNote) { marginNote.setAttribute("data-tone", "failed"); marginNote.textContent = String(err); }
-      } finally {
-        if (marginSave) marginSave.disabled = false;
+        note?.setAttribute("data-tone", "failed");
+        if (note) note.textContent = String(err);
+        buttons.forEach((b) => (b.disabled = false));
       }
     };
 
-    marginSave?.addEventListener("click", () => postMargin(marginInput?.value ?? null));
-    marginClear?.addEventListener("click", () => postMargin(null));
-    syncMarginBox();
+    document.querySelectorAll<HTMLElement>(".fw-gm").forEach((box) => {
+      // Clicks anywhere in the control are the user editing a rate, never
+      // asking to open or close the office.
+      box.addEventListener("click", (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+      });
+
+      const input = box.querySelector<HTMLInputElement>(".fw-gm-input");
+      // Enter saves; the summary would otherwise swallow the keystroke.
+      input?.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") { event.preventDefault(); postMargin(box, input.value); }
+      });
+
+      box.querySelector<HTMLButtonElement>(".fw-gm-save")
+        ?.addEventListener("click", () => postMargin(box, input?.value ?? null));
+      box.querySelector<HTMLButtonElement>(".fw-gm-reset")
+        ?.addEventListener("click", () => postMargin(box, null));
+    });
 
     // Run once at load: the default view is "not stale", and without this the
     // 225 stale close-outs render until the first filter event fires.
@@ -538,7 +558,6 @@ const gmBasisLabel: Record<string, string> = {
       activeKpi = null;
       if (repSelect) repSelect.value = "";
       if (officeSelect) officeSelect.value = "";
-      syncMarginBox();
       applyFilters();
     });
 
