@@ -162,8 +162,10 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     ))}
 
     <p class="fw-foot">
-      Yellow columns save automatically and survive the nightly rebuild. Nightly: AccuLynx sync (hourly) + ABC (3:30a) +
-      QBO → <code>refresh_wip_ar_master()</code> at ~4:45a CT, pack publish at 6a CT. Thursday: week roll, then this board is the meeting.
+      Yellow columns save automatically and survive the nightly rebuild. Feeds, all verified running 2026-08-21:
+      AccuLynx sync hourly · QBO mirror daily 01:00 UTC · ABC mirror daily 07:30 UTC (3:30a ET) →
+      <code>refresh_wip_ar_master()</code> daily 10:45 UTC (5:45a CT), pack publish 6a CT. Thursday: week roll, then this board is the meeting.
+      Population: jobs carrying AR, plus signed contracts (<span class="fw-wip-dot">•</span>) — prospect/approved/completed/invoiced over $1.
     </p>
   </section>
 
