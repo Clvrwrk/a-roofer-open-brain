@@ -38,6 +38,10 @@ export interface FridayWipJob {
   computedAt: string | null;
   /** Why this job is on the board — 'ar_balance' | 'signed_contract' | 'both' (mig 258). */
   populationReason: string | null;
+  /** Budgeting estimate: contract × (1 − office GM%). NOT a takeoff (mig 260). */
+  estTotalCosts: number | null;
+  /** How est_total_costs was derived, e.g. 'gm:office_trailing_12mo:27.60'. */
+  estCostsSource: string | null;
   /**
    * Which KPI pills / cash-map cells this row is counted in. The board's
    * filters are driven off exactly these keys, so a pill can never select a
@@ -70,6 +74,22 @@ export interface FridayWipKpis {
   costsIncurredTotal: number;
   arJobs: number; // jobs admitted by an AR balance
   signedContractJobs: number; // signed contracts carrying no AR yet (mig 258)
+  estTotalCostsTotal: number; // Σ budgeting estimate of total cost (mig 260)
+  expenseOutstandingTotal: number; // Σ estimated remaining spend
+}
+
+/** Per-office gross margin behind the budgeting estimates (mig 260). */
+export interface OfficeMargin {
+  location: string;
+  sampleJobs: number | null;
+  sampleBilled: number | null;
+  gmPctOffice: number | null;
+  gmPctCompany: number | null;
+  gmPctOverride: number | null;
+  gmBasis: string;
+  effectiveGmPct: number;
+  setBy: string | null;
+  setAt: string | null;
 }
 
 export interface FridayWipBoard {
@@ -77,6 +97,7 @@ export interface FridayWipBoard {
   generatedAt: string;
   kpis: FridayWipKpis;
   groups: FridayWipGroup[];
+  offices: OfficeMargin[];
   error: string | null;
 }
 
@@ -100,8 +121,10 @@ function emptyBoard(error: string): FridayWipBoard {
       criticalArTier1: 0, tier2NeverInvoiced: 0, billedArNoDate: 0,
       week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
       costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
+      estTotalCostsTotal: 0, expenseOutstandingTotal: 0,
     },
     groups: [],
+    offices: [],
     error,
   };
 }
@@ -117,7 +140,8 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
         "contract_amount,billed_total,collected_revenue,outstanding_ar,billed_ar,unbilled," +
         "days_in_status,action,acculynx_url,costs_incurred_to_date,expense_outstanding," +
         "change_order_total,expected_invoice_cash_date,expected_paid_full_date,expected_cash_amount," +
-        "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at,population_reason",
+        "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at,population_reason," +
+        "est_total_costs,est_costs_source",
     )
     .eq("in_ar_population", true)
     .order("location", { ascending: true })
@@ -125,6 +149,28 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     .limit(2000);
 
   if (error) return emptyBoard(error.message);
+
+  // Per-office gross margin (mig 260) — what the budgeting estimates rest on.
+  // Read alongside the jobs so the board can show the rate, its sample, and
+  // whether it fell back to the company average.
+  const { data: marginRows } = await client
+    .from("v_wip_office_margin")
+    .select("location,sample_jobs,sample_billed,gm_pct_office,gm_pct_company,gm_pct_override,gm_basis,effective_gm_pct,set_by,set_at");
+
+  const offices: OfficeMargin[] = (marginRows ?? [])
+    .map((r: Record<string, unknown>) => ({
+      location: String(r.location),
+      sampleJobs: r.sample_jobs == null ? null : num(r.sample_jobs),
+      sampleBilled: r.sample_billed == null ? null : num(r.sample_billed),
+      gmPctOffice: r.gm_pct_office == null ? null : num(r.gm_pct_office),
+      gmPctCompany: r.gm_pct_company == null ? null : num(r.gm_pct_company),
+      gmPctOverride: r.gm_pct_override == null ? null : num(r.gm_pct_override),
+      gmBasis: String(r.gm_basis ?? ""),
+      effectiveGmPct: num(r.effective_gm_pct),
+      setBy: (r.set_by as string) ?? null,
+      setAt: (r.set_at as string) ?? null,
+    }))
+    .sort((a, b) => a.location.localeCompare(b.location));
 
   const jobs: FridayWipJob[] = (data ?? []).map((r: Record<string, unknown>) => ({
     jobId: String(r.acculynx_job_id),
@@ -156,6 +202,8 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     notes: (r.notes as string) ?? null,
     computedAt: (r.computed_at as string) ?? null,
     populationReason: (r.population_reason as string) ?? null,
+    estTotalCosts: r.est_total_costs == null ? null : num(r.est_total_costs),
+    estCostsSource: (r.est_costs_source as string) ?? null,
     kpiKeys: [],
   }));
 
@@ -169,6 +217,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     criticalArTier1: 0, tier2NeverInvoiced: 0, billedArNoDate: 0,
     week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
     costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
+    estTotalCostsTotal: 0, expenseOutstandingTotal: 0,
   };
   // Every KPI is accumulated and TAGGED in the same pass. `mark` is the only
   // place a job is counted, so a pill's filter and the number printed on it
@@ -188,6 +237,12 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     if (j.costsIncurred != null) {
       kpis.costsIncurredTotal += j.costsIncurred;
       if (j.costsIncurred !== 0) mark("costsIncurred");
+    }
+
+    if (j.estTotalCosts != null) kpis.estTotalCostsTotal += j.estTotalCosts;
+    if (j.expenseOutstanding != null) {
+      kpis.expenseOutstandingTotal += j.expenseOutstanding;
+      if (j.expenseOutstanding > 0) mark("expenseOutstanding");
     }
 
     if (j.populationReason === "signed_contract") { kpis.signedContractJobs += 1; mark("signedContract"); }
@@ -247,6 +302,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     generatedAt: new Date().toISOString(),
     kpis,
     groups,
+    offices,
     error: null,
   };
 }

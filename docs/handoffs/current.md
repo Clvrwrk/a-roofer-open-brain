@@ -64,9 +64,9 @@ Chris: *"once a price agreement is added it is approved and active."* Finished w
 
 ### Open branch not on main — PR #9 (draft)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**259-262** (already applied to prod, all additive) plus `docs/103`. It is 0 behind main and
+**263-266** (already applied to prod, all additive) plus `docs/104`. It is 0 behind main and
 kept merged with it. **It is not merged and not deployed.** Numbering note: parallel sessions
-claimed 245-258 and both `docs/99` and `docs/100` while it was in flight, so it yielded six
+claimed 245-262 and both `docs/99` and `docs/100` while it was in flight, so it yielded seven
 times — its applied
 Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
 timestamp; all four applied before the files numbered 246-248 existed).
@@ -175,7 +175,7 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
   left as printed). Losing a branch silently corrupts pricing; losing a PO silently destroys
   the only job clue.
 - **`vendor_invoices` has two BEFORE triggers** now — branch resolution (243) and PO
-  canonicalization (260). Anything writing to that table gets both.
+  canonicalization (264). Anything writing to that table gets both.
 
 ### Key invariants (never violate)
 - **Never resolve a branch from a vendor's text label** — always `vendor_branch_id` /

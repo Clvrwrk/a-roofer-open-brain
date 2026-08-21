@@ -1,6 +1,6 @@
-# 103 — Rank coverage gaps by dollars, not by branch count
+# 104 — Rank coverage gaps by dollars, not by branch count
 
-**Date:** 2026-08-20 · **Migrations:** 259, 260, 261, 262 · **Ticket:** PEC-221
+**Date:** 2026-08-20 · **Migrations:** 263, 264, 265, 266 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -40,7 +40,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 259 — the two views
+## Migration 263 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -53,7 +53,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 260 — the address was never missing
+## Migration 264 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -81,7 +81,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 259 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 263 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -123,10 +123,10 @@ existed. Applied order is unchanged.
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 261** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 265** joins the two so the
 surface can never make that mistake.
 
-### Migration 262 — the gate was asking the wrong question
+### Migration 266 — the gate was asking the wrong question
 
 252's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
@@ -189,7 +189,7 @@ Different numbers, so the join never meets.
 
 ### The latent risk is bigger than the one office
 
-`v_agreement_unreachable` (migration 262) shows **all three live numbered SRS agreements —
+`v_agreement_unreachable` (migration 266) shows **all three live numbered SRS agreements —
 136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |

@@ -1,4 +1,4 @@
--- 259 — put DOLLARS on the coverage gaps.
+-- 263 — put DOLLARS on the coverage gaps.
 --
 -- NUMBERING NOTE: applied to prod as `245_office_vendor_spend_exposure` at 2026-08-20
 -- 10:57 UTC. Renumbered twice as parallel sessions claimed numbers on main first — 245
