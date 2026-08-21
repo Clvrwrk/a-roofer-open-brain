@@ -1,0 +1,272 @@
+---
+// Sent credit memo workspace — the chase surface. An exact replica of the Weekly CM
+// workspace (weekly.astro), scoped to requests already WITH the vendor
+// (status = 'sent') instead of the ones still being assembled (draft/approved), with
+// the language moved from "Request" to "Sent".
+//
+// Why it re-renders rather than replays: nothing stores the email body that was
+// actually sent — `packet` on all 44 sent rows carries provenance keys only
+// (source / line_added_at / line_added_by), no HTML. So this composes the email from
+// TODAY's audit lines. That matters: docs/93's re-audit revised some sent figures, so a
+// line here can differ from what the vendor received. The page says so on its face
+// rather than implying it is a copy of the outbound mail.
+import AppShell from "../../../layouts/AppShell.astro";
+import { cmVendorBySlug, cmVendorLabel } from "@lib/cm-vendor-roster";
+import { createServerSupabaseClient } from "@lib/supabase.server";
+
+const vendorParam = cmVendorBySlug(Astro.url.searchParams.get("vendor"))?.slug ?? null;
+
+interface CmLine {
+  id: number; invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
+  office_price: number; variance_ext: number; office_name: string; agreement_number: string | null;
+  agreement_effective: string | null; agreement_expiry: string | null; match_method: string; paexp_tag: string | null;
+  run_label: string; created_at: string; reviewed_by: string | null; reviewed_at: string | null;
+}
+
+const { client } = createServerSupabaseClient();
+let requests: { invoice_number: string; status: string; expected_credit: number; vendor: string; sent_at: string | null; follow_up_due_at: string | null }[] = [];
+const linesByInvoice = new Map<string, CmLine[]>();
+interface CmReceipt {
+  cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
+  match_state: string; original_invoice_number: string | null; expected_credit: number | null;
+}
+let pendingReceipts: CmReceipt[] = [];
+if (client) {
+  let receiptQuery = client
+    .from("credit_memo_receipts")
+    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
+    .eq("review_status", "pending");
+  if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
+  const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
+  pendingReceipts = (receiptRows ?? []) as CmReceipt[];
+
+  let reqQuery = client
+    .from("credit_memo_requests")
+    .select("invoice_number, vendor_slug, status, expected_credit, packet, sent_at, follow_up_due_at")
+    .eq("request_kind", "requested")
+    .eq("status", "sent");
+  if (vendorParam) reqQuery = reqQuery.eq("vendor_slug", vendorParam);
+  const { data: reqRows } = await reqQuery.order("invoice_number").limit(1000);
+  requests = (reqRows ?? []).map((r) => ({
+    invoice_number: r.invoice_number,
+    status: r.status,
+    expected_credit: Number(r.expected_credit ?? 0),
+    // vendor_slug is the silo key (docs/87); packet.vendor is only a legacy fallback.
+    vendor: cmVendorLabel((r as any).vendor_slug) ?? (((r.packet as Record<string, unknown> | null)?.vendor as string) ?? "ABC Supply"),
+    sent_at: (r as any).sent_at ?? null,
+    follow_up_due_at: (r as any).follow_up_due_at ?? null,
+  }));
+  const invoiceNumbers = requests.map((r) => r.invoice_number);
+  if (invoiceNumbers.length) {
+    // Chunked .in() — a long URL filter is its own truncation trap.
+    const CHUNK = 200;
+    const lineRows: CmLine[] = [];
+    for (let i = 0; i < invoiceNumbers.length; i += CHUNK) {
+      let lineQuery = client
+        .from("invoice_line_reaudit")
+        .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
+        .in("invoice_number", invoiceNumbers.slice(i, i + CHUNK))
+        .eq("classification", "discrepancy");
+      // Silo (docs/87): a colliding invoice number must not pull another vendor's lines.
+      if (vendorParam) lineQuery = lineQuery.eq("vendor_slug", vendorParam);
+      const { data } = await lineQuery.order("created_at", { ascending: false }).limit(2000);
+      lineRows.push(...((data ?? []) as CmLine[]));
+    }
+    const latestRun = new Map<string, string>();
+    for (const l of lineRows) if (!latestRun.has(l.invoice_number)) latestRun.set(l.invoice_number, l.run_label);
+    for (const l of lineRows) {
+      if (latestRun.get(l.invoice_number) !== l.run_label) continue;
+      if (Number(l.variance_ext ?? 0) < 0.05) continue;
+      (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
+    }
+  }
+}
+
+const vendors = [...new Set(requests.map((r) => r.vendor))].sort();
+const money = (n: number) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sentFor = (vendor: string) => requests.filter((r) => r.vendor === vendor);
+const vendorTotal = (vendor: string) => sentFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
+const vendorLineCount = (vendor: string) => sentFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+const day = (iso: string | null) => (iso ? String(iso).slice(0, 10) : null);
+const nowIso = new Date().toISOString();
+const isOverdue = (r: { follow_up_due_at: string | null }) => !!r.follow_up_due_at && String(r.follow_up_due_at) < nowIso;
+const overdueFor = (vendor: string) => sentFor(vendor).filter(isOverdue).length;
+const reasonFor = (l: CmLine) => {
+  const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
+  const agreement = l.agreement_number
+    ? `agreement ${l.agreement_number}${l.agreement_effective ? ` (eff. ${l.agreement_effective}${l.agreement_expiry ? ` to ${l.agreement_expiry}` : ""})` : ""}`
+    : "negotiated price list on file";
+  const office = l.office_name ? `the ${l.office_name} office ` : "our ";
+  let r = `Billed ${money(Number(l.invoiced_price))} against ${money(Number(l.office_price))} on ${office}${agreement} - overcharge ${pct}%.`;
+  if (l.paexp_tag) r += ` The agreement had lapsed without a successor and remains in force (${l.paexp_tag}).`;
+  return r;
+};
+---
+
+<AppShell title="Sent Credit Memo Requests" eyebrow="Accounting" activePage="accounting">
+  <section class="cmw">
+    <div class="cmw-bar">
+      <h1>Sent Credit Memo Requests{vendorParam ? ` — ${cmVendorLabel(vendorParam)}` : ""}</h1>
+      <div class="cmw-actions">
+        <a class="cmw-btn" href={`/api/credit-memos/weekly-csv?kind=detail&status=sent${vendorParam ? `&vendor=${encodeURIComponent(vendorParam)}` : ""}`} download>⬇ Reconciliation spreadsheet</a>
+        <a class="cmw-btn" href={`/api/credit-memos/weekly-csv?kind=tracker&status=sent${vendorParam ? `&vendor=${encodeURIComponent(vendorParam)}` : ""}`} download>⬇ Tracker CSV</a>
+        {vendorParam && <a class="cmw-btn cmw-secondary" href="/accounting/credit-memos/sent">All vendors</a>}
+        <a class="cmw-btn cmw-secondary" href="/accounting/credit-memos/weekly">Weekly CM →</a>
+        <a class="cmw-btn cmw-secondary" href="/accounting/invoice-audit">← Invoice Audit</a>
+      </div>
+    </div>
+    <p class="cmw-note">Requests already <b>sent</b> to the vendor and awaiting credit — this is the chase queue. Mark received when the credit lands; the invoice then leaves this page. Use <a href="/accounting/credit-memos/weekly">Weekly CM</a> for requests still being assembled.</p>
+    <p class="cmw-note cmw-warn">The email below is <b>rebuilt from today's audit lines</b> — no copy of the outbound message is stored, so a figure here can differ from what the vendor actually received if the line was re-audited after sending.</p>
+
+    {pendingReceipts.length > 0 && (
+      <div class="cmw-vendor cmw-receipts">
+        <p class="cmw-drafts-title">Credit memos received — review required ({pendingReceipts.length}). A vendor credit arrived that does not exactly match an open request: Approve accepts it as satisfying the closest request; Re-request keeps our request open.</p>
+        <table>
+          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Closest request</th><th class="num">Expected</th><th></th></tr></thead>
+          <tbody>
+            {pendingReceipts.map((r) => (
+              <tr data-receipt={r.cm_invoice_number}>
+                <td>{r.cm_invoice_number}</td>
+                <td class="num">{money(Number(r.cm_total))}</td>
+                <td>{r.cm_invoice_date ?? ""}</td>
+                <td>{r.match_state.replace(/_/g, " ")}</td>
+                <td>{r.original_invoice_number ?? "—"}</td>
+                <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
+                <td>
+                  <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
+                  <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {requests.length === 0 && <p class="cmw-empty">No sent credit memo requests are awaiting credit.</p>}
+
+    {vendors.map((vendor) => (
+      <details class="cmw-vendor" open>
+        <summary>
+          <b>{vendor}</b>
+          <span class="cmw-sum">
+            {sentFor(vendor).length} sent invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
+            {overdueFor(vendor) > 0 && <span class="cmw-overdue-pill">{overdueFor(vendor)} overdue (+14d)</span>}
+          </span>
+        </summary>
+        <div class="cmw-email">
+          <p class="cmw-email-meta">Subject: Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>sent</b></p>
+          <p>We requested credit memos on {vendorLineCount(vendor)} lines across {sentFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
+          <p>Total credit sent: <b>{money(vendorTotal(vendor))}</b>.</p>
+          <p>Where an agreement lapsed with no successor in place we priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
+          <p>Please issue the credits against the original invoice numbers and confirm.</p>
+          {sentFor(vendor).map((r) => (
+            <div class="cmw-invoice" data-invoice={r.invoice_number}>
+              <p class="cmw-inv-head">
+                <b>Invoice {r.invoice_number}</b> — credit sent: <b>{money(r.expected_credit)}</b>
+                {day(r.sent_at) && <span class="cmw-sent-meta"> · sent {day(r.sent_at)}</span>}
+                {r.follow_up_due_at && <span class:list={["cmw-sent-meta", isOverdue(r) && "cmw-overdue"]}> · follow-up {day(r.follow_up_due_at)}{isOverdue(r) ? " (overdue)" : ""}</span>}
+                {" · "}<a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
+                <button class="cmw-approve cmw-received" data-cm-received={r.invoice_number} type="button" title="The vendor credit landed — close this request">Mark received</button>
+              </p>
+              <table>
+                <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
+                <tbody>
+                  {(linesByInvoice.get(r.invoice_number) ?? []).map((l) => (
+                    <tr>
+                      <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
+                      <td class="num">{Number(l.quantity)}</td>
+                      <td class="num">{money(Number(l.invoiced_price))}</td>
+                      <td class="num">{money(Number(l.office_price))}</td>
+                      <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {(linesByInvoice.get(r.invoice_number) ?? []).length === 0 && (
+                <p class="cmw-noclaims">No claim lines are on file for this invoice's latest re-audit run — the request was sent from an earlier run.</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </details>
+    ))}
+  </section>
+</AppShell>
+
+<style>
+  .cmw{padding:8px 4px 40px;max-width:900px}
+  .cmw-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .cmw-bar h1{font-size:22px;margin:0}
+  .cmw-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .cmw-btn{border:1px solid #5b46d8;background:#5b46d8;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;text-decoration:none}
+  .cmw-btn.cmw-secondary{background:transparent;color:#5b46d8}
+  .cmw-note{font-size:13px;color:#6b7886;margin:10px 0 8px}
+  .cmw-note a{color:#5b46d8}
+  .cmw-warn{background:#fbf0d4;color:#946400;border:1px solid #f0dca4;border-radius:8px;padding:8px 11px;margin-bottom:18px}
+  .cmw-empty{color:#6b7886;font-size:13px;padding:10px 2px}
+  .cmw-vendor{border:1px solid #e3e8ef;border-radius:12px;margin-bottom:14px;background:#fff}
+  .cmw-vendor>summary{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;font-size:15px;flex-wrap:wrap}
+  .cmw-sum{color:#6b7886;font-size:13px;display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cmw-overdue-pill{background:#fbe2e2;color:#a51f1f;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700}
+  .cmw-email{padding:6px 16px 16px;font-size:14px;line-height:1.5}
+  .cmw-email-meta{color:#888;font-size:12.5px}
+  .cmw-invoice{margin:18px 0 6px}
+  .cmw-inv-head{margin:0 0 6px;font-size:14px}
+  .cmw-sent-meta{color:#6b7886;font-size:12.5px}
+  .cmw-overdue{color:#a51f1f;font-weight:700}
+  .cmw-invoice table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #d0d0d0}
+  .cmw-invoice th,.cmw-invoice td{border:1px solid #d0d0d0;padding:6px;text-align:left}
+  .cmw-invoice th.num,.cmw-invoice td.num{text-align:right}
+  .cmw-reason{color:#666;font-size:12px}
+  .cmw-drafts-title{font-size:12px;color:#6b7886;font-weight:700;margin:0 0 6px}
+  .cmw-noclaims{color:#6b7886;font-size:12px;margin:6px 0 0}
+  .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
+  .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
+  .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
+  .cmw-receipts th.num,.cmw-receipts td.num{text-align:right}
+  .cmw-rerequest{margin-left:6px;font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer}
+  .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
+  .cmw-approve:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
+  .cmw-received{margin-left:8px}
+</style>
+
+<script>
+  document.addEventListener("click", async (ev) => {
+    // Received-credit triage — identical contract to the Weekly CM page.
+    const rbtn = (ev.target as HTMLElement)?.closest?.("[data-receipt-review]") as HTMLButtonElement | null;
+    if (rbtn) {
+      const row = rbtn.closest("[data-receipt]") as HTMLElement;
+      rbtn.disabled = true;
+      const res = await fetch("/api/credit-memos/receipt-review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ cmInvoiceNumber: row.dataset.receipt, action: rbtn.dataset.receiptReview }),
+      }).then((r) => r.json()).catch(() => null);
+      if (res?.cmInvoiceNumber) row.remove();
+      else { rbtn.disabled = false; window.alert("Review failed: " + (res?.error_description || res?.error || "network error")); }
+      return;
+    }
+
+    // Mark received — the sent page's equivalent of Weekly's Approve: it closes the
+    // request, so the invoice drops off this chase queue.
+    const btn = (ev.target as HTMLElement)?.closest?.("[data-cm-received]") as HTMLButtonElement | null;
+    if (!btn) return;
+    const invoiceNumber = btn.dataset.cmReceived!;
+    if (!window.confirm(`Mark ${invoiceNumber} as received? It leaves the chase queue.`)) return;
+    btn.disabled = true;
+    const res = await fetch("/api/credit-memos/disposition", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ invoiceNumber, decision: "mark-received" }),
+    }).then((r) => r.json()).catch(() => null);
+    if (res?.record?.status === "received") {
+      btn.closest(".cmw-invoice")?.remove();
+    } else {
+      btn.disabled = false;
+      window.alert("Mark received failed: " + (res?.error_description || res?.error || "network error"));
+    }
+  });
+</script>

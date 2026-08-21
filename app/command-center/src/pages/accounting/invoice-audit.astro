@@ -43,22 +43,38 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         <option value="">All PE offices</option>
         {offices.map((o) => <option value={o}>{o}</option>)}
       </select>
-      <label class="iv-daterange" title="Invoice date range (defaults to the oldest open invoice date → today)">
-        <span class="iv-daterange-lab">Invoice date</span>
-        <input class="iv-date" id="iv-date1" type="date" value={data.scope.defaultFrom} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultFrom} aria-label="From date" />
-        <span class="iv-daterange-sep">→</span>
-        <input class="iv-date" id="iv-date2" type="date" value={data.scope.defaultTo} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultTo} aria-label="To date" />
-      </label>
-      <label class="iv-toggle"><input type="checkbox" id="iv-showall" /> Show all</label>
-      <select class="iv-select" id="iv-tol">
-        <option value="">All tolerance</option>
-        <option value="0.01">Flagged ≥ Minor</option>
-        <option value="3">Moderate +</option>
-        <option value="6">Major only</option>
-        <option value="noprice">No-Price lines</option>
-      </select>
-      <label class="iv-toggle"><input type="checkbox" id="iv-pending" checked /> To-audit only</label>
-      <label class="iv-toggle"><input type="checkbox" id="iv-duenow" /> Due now</label>
+      {/* ONE scope control, not three checkboxes. "Show all", "To-audit only" and
+          "Due now" were three ways of answering the same question — which slice of
+          invoices am I looking at — and you had to read all three states and know how
+          they composed. The hidden inputs below stay so the tree script, the Due-Now
+          card button and any deep link keep working unchanged. */}
+      <div class="iv-scope" role="group" aria-label="Invoice scope">
+        <button type="button" data-scope="audit" class="is-active" title="Open, unpaid invoices that still have lines to audit">To audit</button>
+        <button type="button" data-scope="due" title="Payment due — invoice date + 60 days or older">Due now</button>
+        <button type="button" data-scope="all" title="Every invoice, including paid and credit memos">All</button>
+      </div>
+      <input type="checkbox" id="iv-showall" hidden />
+      <input type="checkbox" id="iv-pending" checked hidden />
+      <input type="checkbox" id="iv-duenow" hidden />
+
+      <details class="iv-more">
+        <summary title="Invoice date range and variance tolerance">More filters</summary>
+        <div class="iv-more-body">
+          <label class="iv-daterange" title="Invoice date range (defaults to the oldest open invoice date → today)">
+            <span class="iv-daterange-lab">Invoice date</span>
+            <input class="iv-date" id="iv-date1" type="date" value={data.scope.defaultFrom} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultFrom} aria-label="From date" />
+            <span class="iv-daterange-sep">→</span>
+            <input class="iv-date" id="iv-date2" type="date" value={data.scope.defaultTo} max={data.scope.defaultTo} data-cap={data.scope.defaultTo} data-default={data.scope.defaultTo} aria-label="To date" />
+          </label>
+          <select class="iv-select" id="iv-tol">
+            <option value="">All tolerance</option>
+            <option value="0.01">Flagged ≥ Minor</option>
+            <option value="3">Moderate +</option>
+            <option value="6">Major only</option>
+            <option value="noprice">No-Price lines</option>
+          </select>
+        </div>
+      </details>
       <span class="iv-spacer"></span>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="iv-count">{generatedAt}</span>
@@ -69,22 +85,17 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
       </div>
     </div>
 
-    <p class="iv-kpis-scope">Every pill is a <strong>work queue</strong> — count + button (PEC-198). Scope: open, unpaid, excluding credit memos.
+    <p class="iv-kpis-scope">Four cards, grouped by the question you are answering — <strong>claim it · chase it · pay it · fix it</strong>.
+      Scope: open, unpaid, excluding credit memos.
       Context: <span data-kpi-sub="scope">{kpi.openInvoices.toLocaleString()} open invoices · {kpi.paidInvoices.toLocaleString()} paid/closed · {kpi.creditMemosOpen.toLocaleString()} credit memos open</span>.
-      Use <strong>Due&nbsp;now</strong> / <strong>Show all</strong> in the toolbar for scope changes.</p>
+      Use the <strong>To&nbsp;audit / Due&nbsp;now / All</strong> switch above to change scope.</p>
     <div class="iv-kpis">
-      <!-- 1 · Claims to Review — the human review gate ($ at risk folded into subtext) -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">Claims to Review</span>
-        <span class="iv-kpi-val" data-kpi-val="claims">{kpi.claimsUnreviewed.toLocaleString()}</span>
-        <span class="iv-kpi-sub" data-kpi-sub="claims">of {kpi.claimsTotal.toLocaleString()} claim lines · {money(kpi.atRisk)} at risk</span>
-        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review in Weekly CM</a>
-      </div>
-      <!-- 2 · CM Requests — Approve & Send (merges old CM Requested + Invoice Audit Pending) -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">CM Requests — Approve &amp; Send</span>
+      {/* ── 1 · CLAIM IT — money we are owed but have not asked for ───────────── */}
+      <div class="iv-kpi iv-acc-claim">
+        <span class="iv-kpi-lab">1 · Claim it — owed but not yet asked for</span>
         <span class="iv-kpi-val" data-kpi-val="cm">{money(kpi.cmApprovedTotal + kpi.cmDraftTotal)}</span>
         <span class="iv-kpi-sub" data-kpi-sub="cm">{kpi.cmApprovedCount} approved ({money(kpi.cmApprovedTotal)}) · {kpi.cmDraftCount} draft ({money(kpi.cmDraftTotal)})</span>
+        <span class="iv-kpi-sub"><span data-kpi-val="claims">{kpi.claimsUnreviewed.toLocaleString()}</span> claim lines to review · <span data-kpi-sub="claims">of {kpi.claimsTotal.toLocaleString()} claim lines · {money(kpi.atRisk)} at risk</span></span>
         <div class="iv-cm-vendors" data-kpi-vendors>
           {kpi.cmByVendor.map((v) => {
             if (v.cmStatus === "coming_soon")
@@ -97,61 +108,72 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
             );
           })}
         </div>
-        {/* Empty is the NORMAL resting state: invoices only enter 'invoice_audit_pending'
-            when a re-audit or a "Go back" reset produces fresh claim lines. A disabled
-            "Process 0" labelled "report empty" read as a broken control — say what is
-            actually true instead. */}
-        <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}
-          title={auditPendingCount === 0
-            ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
-            : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)"}>
-          <span data-kpi-empty hidden={auditPendingCount !== 0}>Nothing to stamp</span>
-          <span data-kpi-full hidden={auditPendingCount === 0}>Process <span data-kpi-val="auditPending">{auditPendingCount.toLocaleString()}</span></span>
-        </button>
+        <div class="iv-btnrow">
+          <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Review claim lines on the weekly credit-memo page">Review in Weekly CM</a>
+          {/* Empty is the NORMAL resting state: invoices only enter 'invoice_audit_pending'
+              when a re-audit or a "Go back" reset produces fresh claim lines. */}
+          <button type="button" class:list={["iv-process-btn", auditPendingCount === 0 && "is-disabled"]} id="iv-process" data-count={auditPendingCount} disabled={auditPendingCount === 0}
+            title={auditPendingCount === 0
+              ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
+              : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)"}>
+            <span data-kpi-empty hidden={auditPendingCount !== 0}>Nothing to stamp</span>
+            <span data-kpi-full hidden={auditPendingCount === 0}>Process <span data-kpi-val="auditPending">{auditPendingCount.toLocaleString()}</span></span>
+          </button>
+        </div>
       </div>
-      <!-- 3 · CMs Awaiting Vendor Credit — the money-chasing queue (NEW) -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">CMs Awaiting Vendor Credit</span>
+
+      {/* ── 2 · CHASE IT — asked for, not yet credited ────────────────────────── */}
+      <div class="iv-kpi iv-acc-chase">
+        <span class="iv-kpi-lab">2 · Chase it — asked for, not yet credited</span>
+        {/* The refresh script REPLACES the innerHTML of [data-kpi-sub="awaiting"], so the
+            count must live outside it or it gets wiped on the first poll. */}
         <span class="iv-kpi-val" data-kpi-val="awaiting">{kpi.awaitingCount.toLocaleString()}</span>
-        <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} requested · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
-        <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly" title="Sent requests not yet received — pairs with the QB CM-TBD QA lines">Chase in Weekly CM</a>
+        <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} sent · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
+        <div class="iv-btnrow">
+          <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/sent" title="The sent credit-memo workspace — every request already with a vendor, awaiting credit">Chase in Sent CM</a>
+        </div>
       </div>
-      <!-- 4 · Due Now — Pay -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">Due Now — Pay</span>
-        <span class="iv-kpi-val" data-kpi-val="dueNow">{kpi.dueNow.toLocaleString()}</span>
-        <span class="iv-kpi-sub">payment due · invoice + 60 days</span>
-        <button type="button" class="iv-process-btn iv-secondary" id="iv-kpi-duenow" title="Filter the tree to payment-due invoices">Filter ↓</button>
-      </div>
-      <!-- 5 · Paid — Pending Verification -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">Paid — Pending Verification</span>
-        <span class="iv-kpi-val" data-kpi-val="verify">{kpi.pendingVerification.toLocaleString()}</span>
-        <span class="iv-kpi-sub">60+ days past invoice date · verify paid</span>
-        <button type="button" class="iv-process-btn iv-secondary" id="iv-payments" title="Open the payments panel — verify paid invoices against the AR report">Manage</button>
-      </div>
-      <!-- 6 · QB Export Pending — un-exported bank-ledger rows per vendor (NEW, mig 228) -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">QB Export Pending</span>
-        <span class="iv-kpi-val" data-kpi-val="qb">{kpi.qbPendingTotal.toLocaleString()}</span>
+
+      {/* ── 3 · PAY IT — the three-step payment loop, in order ────────────────── */}
+      <div class="iv-kpi iv-acc-pay">
+        <span class="iv-kpi-lab">3 · Pay it — due → verify → export</span>
+        <span class="iv-kpi-val iv-kpi-flow">
+          <span data-kpi-val="dueNow">{kpi.dueNow.toLocaleString()}</span>
+          <span class="iv-flow-arrow" aria-hidden="true">→</span>
+          <span data-kpi-val="verify">{kpi.pendingVerification.toLocaleString()}</span>
+          <span class="iv-flow-arrow" aria-hidden="true">→</span>
+          <span data-kpi-val="qb">{kpi.qbPendingTotal.toLocaleString()}</span>
+        </span>
+        <span class="iv-kpi-sub">due now (invoice + 60d) → paid, awaiting verification → awaiting QB export</span>
         <span class="iv-kpi-sub" data-kpi-sub="qb">{kpi.qbPendingByVendor.length ? kpi.qbPendingByVendor.map((r) => `${r.slug} ${r.pending}`).join(" · ") : "all ledgers exported"}</span>
-        {kpi.qbPendingTotal > 0
-          ? <a class="iv-process-btn iv-secondary" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export in QB Bank Export</a>
-          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="Every vendor ledger is already exported — nothing to export">Export in QB Bank Export</span>}
+        <div class="iv-btnrow">
+          <button type="button" class="iv-process-btn iv-secondary" id="iv-kpi-duenow" title="Filter the tree to payment-due invoices">Filter ↓</button>
+          <button type="button" class="iv-process-btn iv-secondary" id="iv-payments" title="Open the payments panel — verify paid invoices against the AR report">Manage</button>
+          {kpi.qbPendingTotal > 0
+            ? <a class="iv-process-btn iv-secondary" data-kpi-btn="qb" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export</a>
+            : <span class="iv-process-btn iv-secondary iv-vendor-off" data-kpi-btn="qb" title="Every vendor ledger is already exported — nothing to export">Export</span>}
+        </div>
       </div>
-      <!-- 7 · Agreement Gaps (Alex queue) — LIVE (PEC-195): repeat-purchase No-Price
-           items per (vendor, office) queued as global product file candidates -->
-      <div class="iv-kpi">
-        <span class="iv-kpi-lab">Agreement Gaps — Alex Queue</span>
+
+      {/* ── 4 · FIX IT — why the audit cannot price a line ────────────────────── */}
+      <div class="iv-kpi iv-acc-fix">
+        <span class="iv-kpi-lab">4 · Fix it — why a line cannot be priced</span>
         <span class="iv-kpi-val" data-kpi-val="alex">{kpi.alexCandidates.toLocaleString()}</span>
         <span class="iv-kpi-sub" data-kpi-sub="alex">repeat-purchase items → global product file · Alex auto-clears the rest</span>
-        {kpi.alexCandidates > 0
-          ? <a class="iv-process-btn iv-secondary" href="/accounting/price-agreement/builder#agreement-gaps" title="Review the repeat-purchase candidates in the Agreement Builder">Review in Agreement Builder</a>
-          : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No repeat-purchase candidates are queued — nothing to review">Review in Agreement Builder</span>}
+        <span class="iv-kpi-sub">Data coverage, not a work queue — every gap here is a line the audit had no price to compare against.</span>
+        <div class="iv-btnrow">
+          {kpi.alexCandidates > 0
+            ? <a class="iv-process-btn iv-secondary" href="/accounting/price-agreement/builder#agreement-gaps" title="Review the repeat-purchase candidates in the Agreement Builder">Review in Agreement Builder</a>
+            : <span class="iv-process-btn iv-secondary iv-vendor-off" title="No repeat-purchase candidates are queued — nothing to review">Review in Agreement Builder</span>}
+        </div>
       </div>
     </div>
 
     {data.totals.invoices === 0 && <p class="iv-empty">No invoices found in the live pipeline.</p>}
+    {/* The tree had no empty state, so a filter that matched nothing rendered a blank
+        page that read as broken. "To audit" legitimately empties out once every open
+        invoice has been audited — say that instead of showing nothing. */}
+    <p class="iv-empty" id="iv-noresults" hidden></p>
     <div id="iv-tree"></div>
   </section>
 
@@ -199,6 +221,25 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-theme button.is-active{background:var(--brand);color:#fff}
 
   .iv-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer}
+
+  /* One scope switch replaces the Show all / To-audit only / Due now checkbox trio. */
+  .iv-scope{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+  .iv-scope button{appearance:none;border:none;border-right:1px solid var(--line);background:transparent;color:var(--muted);
+    font-size:12.5px;font-weight:650;padding:8px 13px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .iv-scope button:last-child{border-right:none}
+  .iv-scope button.is-active{background:var(--brand);color:#fff}
+  .iv-scope button:hover:not(.is-active){background:var(--brand-bg);color:var(--brand)}
+
+  /* Date range + tolerance live behind a disclosure — real controls, just not the
+     first thing competing for attention. */
+  .iv-more{position:relative}
+  .iv-more>summary{list-style:none;cursor:pointer;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:8px 11px;font-size:12.5px;font-weight:650;color:var(--muted);white-space:nowrap}
+  .iv-more>summary::-webkit-details-marker{display:none}
+  .iv-more>summary::after{content:" ▾"}
+  .iv-more[open]>summary{background:var(--brand-bg);color:var(--brand);border-color:var(--brand)}
+  .iv-more-body{position:absolute;z-index:20;top:calc(100% + 6px);left:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:var(--shadow)}
   .iv-daterange{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
   .iv-daterange-lab{white-space:nowrap}
   .iv-daterange-sep{color:var(--muted)}
@@ -210,6 +251,16 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
   .iv-overdue{color:var(--red);font-weight:700}
   .iv-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
   .iv-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  /* Each card carries its own left edge so the four groups read apart at a glance. */
+  .iv-acc-claim{border-left:3px solid var(--brand)}
+  .iv-acc-chase{border-left:3px solid var(--yellow)}
+  .iv-acc-pay{border-left:3px solid var(--green)}
+  .iv-acc-fix{border-left:3px solid var(--grey)}
+  .iv-btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .iv-btnrow .iv-process-btn{margin-top:0}
+  /* 51 → 32 → 3 is a pipeline with a direction, not three unrelated backlogs. */
+  .iv-kpi-flow{display:inline-flex;align-items:baseline;gap:7px}
+  .iv-flow-arrow{font-size:14px;color:var(--muted);font-weight:600}
   .iv-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
   .iv-kpi-sub{font-size:11px;color:var(--muted)}
   .iv-process-btn{align-self:flex-start;margin-top:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:750;text-decoration:none;cursor:pointer;font-family:inherit}

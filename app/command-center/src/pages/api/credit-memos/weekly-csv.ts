@@ -28,6 +28,9 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const kind = url.searchParams.get("kind") === "tracker" ? "tracker" : "detail";
   // Multi-vendor pill (docs/88): ?vendor=<slug> scopes both downloads to one vendor.
   const vendorParam = cmVendorBySlug(url.searchParams.get("vendor"))?.slug ?? null;
+  // ?status=sent serves the Sent CM workspace (already with the vendor, awaiting credit).
+  // Default stays 'approved' so the Weekly CM downloads are byte-for-byte unchanged.
+  const statusParam = url.searchParams.get("status") === "sent" ? "sent" : "approved";
 
   const { client, config } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
@@ -36,7 +39,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
     .from("credit_memo_requests")
     .select("vendor_slug,invoice_number, expected_credit, packet")
     .eq("request_kind", "requested")
-    .eq("status", "approved");
+    .eq("status", statusParam);
   if (vendorParam) reqQuery = reqQuery.eq("vendor_slug", vendorParam);
   const { data: requests, error: reqError } = await reqQuery.limit(1000);
   if (reqError) return jsonApiResponse({ error: "credit_memo_requests", error_description: reqError.message }, { status: 409 });
