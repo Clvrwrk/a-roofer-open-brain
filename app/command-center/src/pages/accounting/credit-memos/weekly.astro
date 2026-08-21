@@ -5,6 +5,7 @@
 // excluded from the email) with downloads for the reconciliation spreadsheet + tracker.
 import AppShell from "../../../layouts/AppShell.astro";
 import { cmVendorBySlug, cmVendorLabel } from "@lib/cm-vendor-roster";
+import { acculynxJobHref, loadCmRequestHeaders, type CmRequestHeader } from "@lib/cm-request-header";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 // Multi-vendor pill (docs/88): ?vendor=<slug> scopes this page (and its downloads)
@@ -21,6 +22,8 @@ interface CmLine {
 const { client } = createServerSupabaseClient();
 let requests: { invoice_number: string; status: string; expected_credit: number; vendor: string; invoice_date?: string }[] = [];
 const linesByInvoice = new Map<string, CmLine[]>();
+// PE office / vendor / vendor branch / job / invoice date for each claim header.
+let headers = new Map<string, CmRequestHeader>();
 interface CmReceipt {
   cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
   match_state: string; original_invoice_number: string | null; expected_credit: number | null;
@@ -69,6 +72,7 @@ if (client) {
       if (Number(l.variance_ext ?? 0) < 0.05) continue;
       (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
     }
+    headers = await loadCmRequestHeaders(client, invoiceNumbers);
   }
 }
 
@@ -78,6 +82,23 @@ const approvedFor = (vendor: string) => requests.filter((r) => r.vendor === vend
 const draftFor = (vendor: string) => requests.filter((r) => r.vendor === vendor && r.status === "draft");
 const vendorTotal = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
 const vendorLineCount = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+// PE Office · Vendor · Vendor branch (id) · Job# · Invoice date — the context a human
+// (or the vendor) needs before acting on a claim. Missing pieces are named, not blanked.
+// PE Office · Vendor · Vendor branch (id) · Job# · Invoice date. Split so the job can be
+// a real AccuLynx link; missing pieces are NAMED, never blanked, so a gap is visible.
+const headerParts = (invoiceNumber: string, vendor: string) => {
+  const h = headers.get(invoiceNumber);
+  const branch = h?.branchName || h?.branchNumber
+    ? (h.branchNumber ? `${h.branchName} (${h.branchNumber})` : h.branchName)
+    : "branch not resolved";
+  return {
+    lead: [h?.office || "office not resolved", vendor, branch].join(" · "),
+    jobNumber: h?.jobNumber ?? "",
+    jobHref: acculynxJobHref(h?.acculynxJobId ?? null),
+    clientName: h?.clientName ?? "",
+    invoiced: h?.invoiceDate ? `Invoiced ${h.invoiceDate}` : "invoice date unknown",
+  };
+};
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   // Every claim names the agreement it challenges the billed amount against
@@ -146,7 +167,7 @@ const reasonFor = (l: CmLine) => {
           <p class="cmw-empty">Nothing approved for {vendor} yet.</p>
         ) : (
           <div class="cmw-email">
-            <p class="cmw-email-meta">Subject: Credit memo request - Pro Exteriors LLC - {approvedFor(vendor).length} invoices, {money(vendorTotal(vendor))}</p>
+            <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {approvedFor(vendor).length} invoices, {money(vendorTotal(vendor))}</p>
             <p>We are requesting credit memos on {vendorLineCount(vendor)} lines across {approvedFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
             <p>Total credit requested: <b>{money(vendorTotal(vendor))}</b>.</p>
             <p>Where an agreement lapsed with no successor in place we have priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
@@ -154,6 +175,11 @@ const reasonFor = (l: CmLine) => {
             {approvedFor(vendor).map((r) => (
               <div class="cmw-invoice">
                 <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a></p>
+                <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
+                {m.lead} · {m.jobNumber
+                  ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
+                  : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
+              </>); })()}</p>
                 <table>
                   <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
                   <tbody>
@@ -233,7 +259,10 @@ const reasonFor = (l: CmLine) => {
   .cmw-email{padding:6px 16px 16px;font-size:14px;line-height:1.5}
   .cmw-email-meta{color:#888;font-size:12.5px}
   .cmw-invoice{margin:18px 0 6px}
-  .cmw-inv-head{margin:0 0 6px;font-size:14px}
+  .cmw-inv-head{margin:0 0 2px;font-size:14px}
+  .cmw-inv-meta{margin:0 0 6px;font-size:12px;color:#6b7886}
+  .cmw-inv-meta a{color:#5b46d8;text-decoration:none}
+  .cmw-inv-meta a:hover{text-decoration:underline}
   .cmw-invoice table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #d0d0d0}
   .cmw-invoice th,.cmw-invoice td{border:1px solid #d0d0d0;padding:6px;text-align:left}
   .cmw-invoice th.num,.cmw-invoice td.num{text-align:right}

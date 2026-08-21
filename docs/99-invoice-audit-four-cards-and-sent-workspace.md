@@ -106,3 +106,49 @@ on **six** surfaces (invoice-audit, friday-wip, price-agreement/builder, order-a
 estimate-audit, AuditQueue) and `AppShell` has no theme control at all, so removing it here
 alone would strand this page. It stays, moved into the right-hand chrome cluster. Promoting
 theme to the shell is a six-surface change and belongs in its own pass.
+
+
+## Header enhancements to both CM workspaces (2026-08-21, same day)
+
+Chris marked up the Weekly CM page asking for two things, applied to **both** Weekly and
+Sent so the surfaces cannot drift.
+
+### 1. Vendor in the subject line
+
+`Subject: Credit memo request - Pro Exteriors LLC - 5 invoices, $2,024.75`
+→ `Subject: **[SRS Distribution]** Credit memo request - Pro Exteriors LLC - 5 invoices, $2,024.75`
+
+### 2. Context on every claim header
+
+Was just `Invoice 0050033202-002 — credit requested: $92.25 · detail →`. Now carries a
+second line with the five fields asked for:
+
+> Wichita, KS · SRS Distribution · SRS BUILDING PRODUCTS - WICHITA (DJWIC) ·
+> **Job KS-189 ↗** (Tony Wynn) · Invoiced 2026-07-15
+
+PE office · vendor · vendor branch (name + id) · job · invoice date. The job is a live
+AccuLynx deep link when an id exists, plain text when only a number does, and the client
+name rides along. Both pages load it through one shared helper
+(`lib/cm-request-header.ts`), so they cannot diverge. Missing pieces are **named** —
+"office not resolved", "branch not resolved" — never blanked, so a gap is visible.
+
+Perf: `v_invoice_audit_invoice` is the heavy pricing view, but a filtered
+`invoice_number IN (...)` pushes down to an index scan — **55ms** for a page's worth.
+
+### The bug this surfaced — migration 250
+
+The first render showed **"no job on the PO"** against every SRS claim. Those POs plainly
+read `KS-189`, `KS-188`, `KS-184`, `KS-194`, `KS-198`. The label was not missing data, it
+was **wrong**: `v_invoice_acculynx_match` is built `FROM abc_invoices` and has never covered
+the `vendor_invoices` side at all.
+
+Migration 250 adds `v_vendor_invoice_acculynx_match`, applying migration 237's canonical
+job token to `vendor_invoices.po_number`. **32 of 33 vendor invoices resolve a job.** The
+header loader now reads both matchers, ABC winning on a collision because its matcher has
+three tiers to the vendor one's single PO-token tier.
+
+Result on the Sent page: 44 of 44 headers enriched, **zero** false "no job" labels, 43 live
+job links.
+
+This one was only findable by rendering the page — the build was green and the label was a
+plausible-looking sentence.
