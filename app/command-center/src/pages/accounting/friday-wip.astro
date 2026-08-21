@@ -29,6 +29,15 @@ const MILESTONE_LABELS: Record<string, string> = {
 };
 const milestoneLabel = (m: string) => MILESTONE_LABELS[m] ?? (m ? m[0].toUpperCase() + m.slice(1) : "—");
 
+// Action text is the tallest thing in a row — "Collect + invoice rest" wraps to
+// two lines and sets the row height for every other cell. Shortened here; the
+// full wording stays in the cell's title.
+const ACTION_SHORT: Record<string, string> = {
+  "Collect + invoice rest": "COLLECT + INV",
+  "INVOICE FIRST": "INVOICE",
+  COLLECT: "COLLECT",
+};
+
 // Days-in-status chip: green (0d) → red (365d+), clamped.
 const daysChipStyle = (days: number) => {
   const t = Math.min(Math.max(days, 0), 365) / 365;
@@ -123,7 +132,7 @@ const gmBasisLabel: Record<string, string> = {
     </div>
 
     <div class="fw-cashmap">
-      <span class="fw-cashmap-title">3-week cash map — billed AR only. Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.</span>
+      <span class="fw-cashmap-title" title="Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.">3-week cash map — billed AR only</span>
       <div class="fw-cashmap-cells" role="group" aria-label="Filter the board by cash week">
         <button type="button" class="fw-week" data-kpi="week1" aria-pressed="false"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></button>
         <button type="button" class="fw-week" data-kpi="week2" aria-pressed="false"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></button>
@@ -136,7 +145,7 @@ const gmBasisLabel: Record<string, string> = {
     </div>
 
     {board.groups.map((g) => (
-      <details class="fw-group" open>
+      <details class="fw-group">
         <summary class="fw-group-head">
           <span class="fw-group-name">▸ {g.location}</span>
           <span class="fw-group-count">{g.activeJobs} jobs{g.staleJobs ? ` · ${g.staleJobs} stale` : ""}</span>
@@ -172,23 +181,40 @@ const gmBasisLabel: Record<string, string> = {
         <div class="fw-tablewrap">
           <table class="fw-table">
             <thead>
+              {/* Two header rows. The top one is the column-group control:
+                  MONEY and EST. CASH FLOW each show two summary columns when
+                  collapsed and their full set when expanded. Group state is
+                  GLOBAL, not per-office, so every table stays the same width
+                  and the eye can track a column down the page. */}
+              <tr class="fw-grouprow">
+                <th class="fw-gh-spacer" colspan="6"></th>
+                <th class="fw-gh fw-gh-money" colspan="2" data-colgroup-toggle="money" title="Contract value and what is still owed. Click to expand: invoiced, collected, expense realized, estimated expenses outstanding.">
+                  <span class="fw-gh-chev">▸</span>Money
+                </th>
+                <th class="fw-gh fw-gh-cash" colspan="2" data-colgroup-toggle="cash" title="What is expected to land. Click to expand: expected invoice/cash date, expected paid-in-full date, collected?, notes.">
+                  <span class="fw-gh-chev">▸</span>Est. Cash Flow
+                </th>
+              </tr>
               <tr>
-                <th>Job #</th><th>Client</th><th>Status (AccuLynx)</th><th>Rep</th>
-                <th class="fw-num" title="AccuLynx approved job value (L)">Contract Total</th>
-                <th class="fw-num" title="Σ non-void invoices issued (P)">Invoiced Total</th>
-                <th class="fw-num" title="Invoiced − open invoice balance (R)">Monies Collected</th>
-                <th class="fw-num" title="AccuLynx job balance due (N)">Balance Due</th>
-                <th class="fw-num" title="QBO job-tagged bills + purchases to date">Expense Realized</th>
-                {/* Abbreviated deliberately — the full name would widen the
-                    column well past its numbers. Spelled out in the tooltip. */}
-                <th class="fw-num" title="Estimated Expenses Outstanding — budget remaining on the job: contract × (1 − office GM%) − expense realized, floored at 0. A budgeting estimate, not a takeoff.">Est Exp Outstanding</th>
+                <th>Job #</th><th>Client</th><th title="AccuLynx job milestone">Status</th><th>Rep</th>
                 <th title="Days in current AccuLynx status (green 0 → red 365+)">Days in Status</th>
                 <th>Action</th>
-                <th class="fw-fill">Expected invoice/cash</th>
-                <th class="fw-fill" title="Cash the team expects to collect at that date">Estimated $</th>
-                <th class="fw-fill">Expected paid-in-full</th>
-                <th class="fw-fill">Collected?</th>
-                <th class="fw-fill">Notes</th>
+
+                <th class="fw-num" data-col="money" title="AccuLynx approved job value (L)">Contract Value</th>
+                <th class="fw-num" data-col="money" data-more title="Σ non-void invoices issued (P)">Invoiced Total</th>
+                <th class="fw-num" data-col="money" data-more title="Invoiced − open invoice balance (R)">Monies Collected</th>
+                <th class="fw-num" data-col="money" data-more title="QBO job-tagged bills + purchases to date">Expense Realized</th>
+                {/* Abbreviated deliberately — the full name would widen the
+                    column well past its numbers. Spelled out in the tooltip. */}
+                <th class="fw-num" data-col="money" data-more title="Estimated Expenses Outstanding — budget remaining on the job: contract × (1 − office GM%) − expense realized, floored at 0. A budgeting estimate, not a takeoff.">Est Exp Outstanding</th>
+                <th class="fw-num" data-col="money" title="AccuLynx job balance due (N)">Balance Due</th>
+
+                <th class="fw-fill" data-col="cash" data-more>Expected invoice/cash</th>
+                <th class="fw-num fw-fill" data-col="cash" title="Cash the team expects to collect at the invoice/cash date">To Collect</th>
+                <th class="fw-fill" data-col="cash" data-more>Expected paid-in-full</th>
+                <th class="fw-num fw-fill" data-col="cash" title="Open balance on issued invoices — what must be paid to close the job out">Balance to Pay</th>
+                <th class="fw-fill" data-col="cash" data-more>Collected?</th>
+                <th class="fw-fill" data-col="cash" data-more>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -208,26 +234,29 @@ const gmBasisLabel: Record<string, string> = {
                     <strong>{milestoneLabel(j.milestone)}</strong>
                     {j.populationReason === "signed_contract" && <span class="fw-wip-dot" aria-label="Signed contract, no AR yet">•</span>}
                   </td>
-                  <td>{j.salesperson}</td>
-                  <td class="fw-num">{money(j.contractAmount)}</td>
-                  <td class="fw-num">{money(j.billedTotal)}</td>
-                  <td class="fw-num">{money(j.collectedRevenue)}</td>
-                  <td class="fw-num">{money(j.outstandingAr)}</td>
-                  <td class="fw-num">{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
-                  <td class="fw-num" title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated expenses outstanding: estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-rep" title={j.salesperson}>{j.salesperson}</td>
                   <td class="fw-days">{j.daysInStatus == null ? "—" : <span class="fw-days-chip" style={daysChipStyle(j.daysInStatus)}>{j.daysInStatus}d</span>}</td>
-                  <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")}>{j.action}</td>
-                  <td><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
-                  <td><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
-                  <td><input class="fw-edit" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
-                  <td>
+                  <td class={"fw-action" + (j.action === "INVOICE FIRST" ? " fw-action-invoice" : j.action === "COLLECT" ? " fw-action-collect" : "")} title={j.action}>{ACTION_SHORT[j.action] ?? j.action}</td>
+
+                  <td class="fw-num" data-col="money">{money(j.contractAmount)}</td>
+                  <td class="fw-num" data-col="money" data-more>{money(j.billedTotal)}</td>
+                  <td class="fw-num" data-col="money" data-more>{money(j.collectedRevenue)}</td>
+                  <td class="fw-num" data-col="money" data-more>{j.costsIncurred == null ? "—" : money(j.costsIncurred)}</td>
+                  <td class="fw-num" data-col="money" data-more title={j.estTotalCosts == null ? "No contract value — nothing to estimate against" : `Estimated expenses outstanding: estimated total cost ${money(j.estTotalCosts)} (${j.estCostsSource ?? ""}) − expense realized`}>{j.expenseOutstanding == null ? "—" : money(j.expenseOutstanding)}</td>
+                  <td class="fw-num" data-col="money">{money(j.outstandingAr)}</td>
+
+                  <td data-col="cash" data-more><input class="fw-edit" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
+                  <td data-col="cash"><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
+                  <td data-col="cash" data-more><input class="fw-edit" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
+                  <td class="fw-num" data-col="cash">{money(j.billedAr)}</td>
+                  <td data-col="cash" data-more>
                     <select class="fw-edit" data-field="collected_since">
                       <option value="" selected={!j.collectedSince}></option>
                       <option value="Y" selected={j.collectedSince === "Y"}>Y</option>
                       <option value="N" selected={j.collectedSince === "N"}>N</option>
                     </select>
                   </td>
-                  <td><input class="fw-edit fw-notes" type="text" maxlength="1000" data-field="notes" value={j.notes ?? ""} placeholder="…" /></td>
+                  <td data-col="cash" data-more><input class="fw-edit fw-notes" type="text" maxlength="1000" data-field="notes" value={j.notes ?? ""} placeholder="…" /></td>
                 </tr>
               ))}
             </tbody>
@@ -286,10 +315,10 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-btn-primary:hover { background: var(--teal-dark); }
     .fw .fw-btn-primary[disabled] { opacity: 0.6; cursor: wait; }
     .fw .fw-error { color: var(--red); font-size: 13px; }
-    .fw .fw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .fw .fw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr)); gap: 7px; }
     /* KPI pills and cash-map cells are buttons that filter the board. They keep
        the card look; only the affordances (cursor, hover, pressed) are added. */
-    .fw .fw-kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--panel); text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+    .fw .fw-kpi { border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; display: grid; gap: 1px; background: var(--panel); text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
     .fw .fw-kpi:hover { border-color: var(--gold); }
     .fw .fw-kpi:focus-visible, .fw .fw-week:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
     .fw .fw-kpi[aria-pressed="true"] { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); background: var(--fill-cell); }
@@ -316,6 +345,23 @@ const gmBasisLabel: Record<string, string> = {
     /* Filtering hides via [hidden]. Table rows carry a UA display that can
        outrank the UA [hidden] rule, so state it explicitly. */
     .fw [hidden] { display: none !important; }
+    /* ── Column groups ────────────────────────────────────────────────────
+       Collapsed, each group shows only its two summary columns; the rest
+       carry data-more and are hidden. Expanding is per-group and global. */
+    .fw .fw-table [data-more] { display: none; }
+    .fw[data-money="open"]  .fw-table [data-col="money"][data-more] { display: table-cell; }
+    .fw[data-cash="open"]   .fw-table [data-col="cash"][data-more]  { display: table-cell; }
+    .fw .fw-grouprow th { padding: 3px 8px; font-size: 10.5px; border-bottom: none; }
+    .fw .fw-gh-spacer { background: var(--panel); }
+    .fw .fw-gh { cursor: pointer; text-align: left; user-select: none; border-radius: 7px 7px 0 0; }
+    .fw .fw-gh:hover { color: var(--ink); }
+    .fw .fw-gh-money { background: var(--zebra); }
+    .fw .fw-gh-cash  { background: var(--fill-bg); }
+    .fw .fw-gh-chev { display: inline-block; margin-right: 5px; transition: transform 0.12s ease; }
+    .fw[data-money="open"] .fw-gh-money .fw-gh-chev,
+    .fw[data-cash="open"]  .fw-gh-cash  .fw-gh-chev { transform: rotate(90deg); }
+    .fw .fw-rep { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-action { white-space: nowrap; font-size: 11.5px; }
     .fw .fw-kpi-warn { border-color: var(--gold); }
     /* "Our Best Guess" — hangs off the client name because the job number is
        already the AccuLynx deep link. */
@@ -327,13 +373,13 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-guess-head strong { font-size: 13px; }
     .fw .fw-guess-close { margin-left: auto; appearance: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
     .fw .fw-guess-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
-    .fw .fw-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-    .fw .fw-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .fw .fw-kpi-sub { font-size: 11.5px; color: var(--muted); }
-    .fw .fw-cashmap { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--panel); }
+    .fw .fw-kpi-lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); line-height: 1.25; }
+    .fw .fw-kpi-val { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fw .fw-kpi-sub { font-size: 10.5px; color: var(--muted); line-height: 1.3; }
+    .fw .fw-cashmap { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; display: grid; gap: 5px; background: var(--panel); }
     .fw .fw-cashmap-title { font-size: 12px; color: var(--muted); }
     .fw .fw-cashmap-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-    .fw .fw-week { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--zebra); border: 1px solid transparent; text-align: left; font-family: inherit; color: inherit; font-size: 12.5px; cursor: pointer; }
+    .fw .fw-week { display: grid; gap: 0; padding: 4px 8px; border-radius: 8px; background: var(--zebra); border: 1px solid transparent; text-align: left; font-family: inherit; color: inherit; font-size: 12.5px; cursor: pointer; }
     .fw .fw-week-static { cursor: default; }
     button.fw-week:hover { border-color: var(--gold); }
     .fw .fw-week[aria-pressed="true"] { border-color: var(--navy); background: var(--fill-cell); }
@@ -356,21 +402,28 @@ const gmBasisLabel: Record<string, string> = {
        columns (Job # · Client) stay frozen. Sticky cells need border-collapse:
        separate (collapsed borders don't travel with sticky cells) and their own
        opaque backgrounds, so zebra/hover paint on td, not tr. */
-    .fw .fw-tablewrap { overflow: auto; max-height: 70vh; }
+    /* No max-height: each office table used to be its own 70vh scroll window
+       over ~3,300px of rows, so the wheel drove the table instead of the page
+       and you could not reach the next office without leaving the pane. The
+       page is now the only vertical scroller; overflow-x stays for the case
+       where both column groups are expanded. */
+    .fw .fw-tablewrap { overflow-x: auto; overflow-y: visible; }
     .fw .fw-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
     .fw .fw-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
-    .fw .fw-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    .fw .fw-table thead th { position: sticky; top: 0; z-index: 3; background: var(--panel); }
+    .fw .fw-table td { padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+    .fw .fw-table thead th { position: sticky; z-index: 3; background: var(--panel); }
+    .fw .fw-table thead tr.fw-grouprow th { top: 0; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th { top: 26px; }
     .fw .fw-table th:nth-child(-n + 2), .fw .fw-table td:nth-child(-n + 2) { position: sticky; z-index: 2; background: var(--panel); }
     .fw .fw-table th:nth-child(1), .fw .fw-table td:nth-child(1) { left: 0; width: 72px; min-width: 72px; max-width: 72px; white-space: nowrap; }
     .fw .fw-table th:nth-child(2), .fw .fw-table td:nth-child(2) { left: 72px; box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.28); }
-    .fw .fw-table thead th:nth-child(-n + 2) { z-index: 4; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(-n + 2) { z-index: 4; }
     .fw .fw-table tbody tr:nth-child(even) td { background: var(--zebra); }
     .fw .fw-table tbody tr:hover td { background: var(--fill-bg); }
     .fw .fw-table th.fw-fill { background: var(--fill-bg); }
     .fw .fw-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .fw .fw-client { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fw .fw-bucket { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-client { max-width: 168px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-bucket { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fw .fw-days { text-align: center; }
     .fw .fw-days-chip { display: inline-block; min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .fw .fw-action-invoice { color: var(--red); font-weight: 600; }
@@ -540,6 +593,56 @@ const gmBasisLabel: Record<string, string> = {
       box.querySelector<HTMLButtonElement>(".fw-gm-reset")
         ?.addEventListener("click", () => postMargin(box, null));
     });
+
+    // ── View state ───────────────────────────────────────────────────────
+    // sessionStorage, deliberately: expansions survive moving around the app
+    // and the reload a GM% save triggers, but a new tab — next Friday — opens
+    // fully collapsed. Nothing here is shared between people or persisted to
+    // the server; it is one operator's place in the page.
+    const VIEW_KEY = "fw.view.v1";
+    const readView = () => {
+      try { return JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? "{}"); } catch { return {}; }
+    };
+    const writeView = (patch: Record<string, unknown>) => {
+      try { sessionStorage.setItem(VIEW_KEY, JSON.stringify({ ...readView(), ...patch })); } catch { /* private mode */ }
+    };
+
+    // Column groups: collapsed by default, state global across every office so
+    // the tables stay the same width and a column can be tracked down the page.
+    const setGroup = (group: "money" | "cash", open: boolean) => {
+      fwRoot.dataset[group] = open ? "open" : "closed";
+      fwRoot.querySelector(`[data-colgroup-toggle="${group}"]`)?.setAttribute("aria-expanded", String(open));
+      writeView({ [group]: open });
+    };
+
+    document.querySelectorAll<HTMLElement>("[data-colgroup-toggle]").forEach((th) => {
+      const group = th.dataset.colgroupToggle as "money" | "cash";
+      th.setAttribute("role", "button");
+      th.setAttribute("tabindex", "0");
+      const toggle = () => setGroup(group, fwRoot.dataset[group] !== "open");
+      th.addEventListener("click", toggle);
+      th.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+      });
+    });
+
+    // Offices: closed on load, reopened from the session, one write per change.
+    const groups = Array.from(document.querySelectorAll<HTMLDetailsElement>(".fw-group"));
+    const groupKey = (d: HTMLDetailsElement) =>
+      d.querySelector<HTMLElement>(".fw-gm")?.dataset.location ??
+      d.querySelector<HTMLElement>(".fw-group-name")?.textContent?.replace("▸ ", "").trim() ?? "";
+    groups.forEach((d) => {
+      d.addEventListener("toggle", () => {
+        writeView({ offices: groups.filter((g) => g.open).map(groupKey) });
+      });
+    });
+
+    const view = readView();
+    setGroup("money", view.money === true);
+    setGroup("cash", view.cash === true);
+    if (Array.isArray(view.offices)) {
+      groups.forEach((d) => { if (view.offices.includes(groupKey(d))) d.open = true; });
+    }
 
     // Run once at load: the default view is "not stale", and without this the
     // 225 stale close-outs render until the first filter event fires.
