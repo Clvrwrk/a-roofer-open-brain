@@ -95,9 +95,9 @@
 
 ### Open branch not on main — PR #9 (draft)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**253-256** (already applied to prod, all additive) plus `docs/102`. It is 0 behind main and
+**254-257** (already applied to prod, all additive) plus `docs/102`. It is 0 behind main and
 kept merged with it. **It is not merged and not deployed.** Numbering note: parallel sessions
-claimed 245-252 and both `docs/99` and `docs/100` while it was in flight, so it yielded three
+claimed 245-253 and both `docs/99` and `docs/100` while it was in flight, so it yielded four
 times — its applied
 Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
 timestamp; all four applied before the files numbered 246-248 existed).

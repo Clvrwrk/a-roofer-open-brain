@@ -1,6 +1,6 @@
 # 102 — Rank coverage gaps by dollars, not by branch count
 
-**Date:** 2026-08-20 · **Migrations:** 253, 254, 255, 256 · **Ticket:** PEC-221
+**Date:** 2026-08-20 · **Migrations:** 254, 255, 256, 257 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -40,7 +40,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 253 — the two views
+## Migration 254 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -53,7 +53,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 254 — the address was never missing
+## Migration 255 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -81,7 +81,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 253 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 254 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -123,10 +123,10 @@ existed. Applied order is unchanged.
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 255** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 256** joins the two so the
 surface can never make that mistake.
 
-### Migration 256 — the gate was asking the wrong question
+### Migration 257 — the gate was asking the wrong question
 
 252's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
@@ -189,7 +189,7 @@ Different numbers, so the join never meets.
 
 ### The latent risk is bigger than the one office
 
-`v_agreement_unreachable` (migration 256) shows **all three live numbered SRS agreements —
+`v_agreement_unreachable` (migration 257) shows **all three live numbered SRS agreements —
 136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
@@ -252,3 +252,20 @@ work should plan both, or the fresh sheet keeps looking like it did nothing.
 This is the detector doing its job: a correct business action (load the price list Chris
 asked for) ran straight into an unfixed identity defect, and the failure was visible
 immediately instead of being discovered later as "why is Colorado still no-price".
+
+### Note — migration 253's SRS branch aliases do NOT fix this
+
+Migration 253 (a parallel session) seeded `vendor_branch_alias` with SRS branch codes for the
+first time. It is easy to read that as "branch identity is handled now". It is not, for two
+reasons, both verified after merging:
+
+1. **`AMSDE` is not in the seed.** It covers `DJWIC`, `SSMEL`, `SSCOP`, `AMDEN`, `SHCOL`.
+2. **It is a different mechanism.** `vendor_branch_alias` resolves an *invoice's* branch code
+   to a canonical branch row at ingest (mig 243's fail-closed path). The defect in this
+   document is in the *agreement* → branch join inside `v_office_vendor_branch`, which reads
+   `vendor_branches.branch_number` as text and never consults the alias table at all.
+
+Re-measured after the merge: Denver × SRS still `priced_items = 0`, `needs_ruling` and
+`agreement_not_reaching` both true; `v_agreement_unreachable` still returns **6 agreements /
+237 items**. Unchanged.
+

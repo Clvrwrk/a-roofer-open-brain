@@ -1,4 +1,4 @@
--- 255 — join the dollars (253) to Chris's rulings (245). One decision surface.
+-- 256 — join the dollars (254) to Chris's rulings (245). One decision surface.
 -- Applied to prod 2026-08-20.
 --
 -- 245 and 250 landed within two minutes of each other from parallel sessions and answer
@@ -52,6 +52,6 @@ SELECT c.office_id,
  WHERE c.office_active;
 
 COMMENT ON VIEW public.v_office_vendor_gap_exposure IS
-  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 253). Filter on '
+  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 254). Filter on '
   'needs_ruling to get only pairs where spend has occurred and no human has decided — '
   'never rank on spend alone, or accepted no_book vendors (QXO) resurface as false work.';
