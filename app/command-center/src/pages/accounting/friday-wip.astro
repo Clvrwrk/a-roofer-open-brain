@@ -106,6 +106,15 @@ const gmBasisLabel: Record<string, string> = {
       <button type="button" class="fw-clear" id="fw-clear">Clear filter ✕</button>
     </p>
 
+    {/* Single popout reused by every row — one node, not one per job. */}
+    <div class="fw-guess" id="fw-guess" role="dialog" aria-modal="false" aria-labelledby="fw-guess-title" hidden>
+      <div class="fw-guess-head">
+        <strong id="fw-guess-title"></strong>
+        <button type="button" class="fw-guess-close" id="fw-guess-close" aria-label="Close">✕</button>
+      </div>
+      <p class="fw-guess-body" id="fw-guess-body"></p>
+    </div>
+
     {/* Every pill is a filter. data-kpi matches the keys the loader tagged each
         row with, so clicking a pill shows exactly the rows its number was
         summed from. "Total job balance" selects every row, so it doubles as
@@ -118,6 +127,8 @@ const gmBasisLabel: Record<string, string> = {
       <button type="button" class="fw-kpi" data-kpi="tier2NeverInvoiced" aria-pressed="false"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></button>
       <button type="button" class="fw-kpi" data-kpi="costsIncurred" aria-pressed="false"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></button>
       <button type="button" class="fw-kpi" data-kpi="expenseOutstanding" aria-pressed="false"><span class="fw-kpi-lab">Expense outstanding</span><span class="fw-kpi-val">{money(k.expenseOutstandingTotal)}</span><span class="fw-kpi-sub">budget left to spend — est. total {money(k.estTotalCostsTotal)}</span></button>
+      <button type="button" class="fw-kpi fw-kpi-warn" data-kpi="staleCloseout" aria-pressed="false"><span class="fw-kpi-lab">Stale — close in AccuLynx</span><span class="fw-kpi-val">{k.staleCloseoutJobs}</span><span class="fw-kpi-sub">paid in full, never closed · {money(k.staleCloseoutContract)} contracted</span></button>
+      <button type="button" class="fw-kpi fw-kpi-warn" data-kpi="contradiction" aria-pressed="false"><span class="fw-kpi-lab">Balance contradiction</span><span class="fw-kpi-val">{k.contradictionJobs}</span><span class="fw-kpi-sub">{money(k.contradictionAr)} invoiced but not in job balance</span></button>
       <button type="button" class="fw-kpi" data-kpi="signedContract" aria-pressed="false"><span class="fw-kpi-lab">Signed contract, no AR</span><span class="fw-kpi-val">{k.signedContractJobs}</span><span class="fw-kpi-sub">work in progress, nothing invoiced yet</span></button>
     </div>
 
@@ -138,7 +149,7 @@ const gmBasisLabel: Record<string, string> = {
       <details class="fw-group" open>
         <summary class="fw-group-head">
           <span class="fw-group-name">▸ {g.location}</span>
-          <span class="fw-group-count">{g.jobs.length} jobs</span>
+          <span class="fw-group-count">{g.activeJobs} jobs{g.staleJobs ? ` · ${g.staleJobs} stale` : ""}</span>
           <span class="fw-group-money">billed {money(g.totalBilledAr)} · unbilled {money(g.totalUnbilled)} · total {money(g.totalAr)}</span>
         </summary>
         <div class="fw-tablewrap">
@@ -163,9 +174,17 @@ const gmBasisLabel: Record<string, string> = {
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""} data-location={j.location}>
+                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""} data-location={j.location} data-attention={j.attentionFlag ?? ""}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
-                  <td class="fw-client" title={j.client}>{j.client}</td>
+                  {/* The job number is already the AccuLynx deep link, so the
+                      "Our Best Guess" popout hangs off the client name instead. */}
+                  <td class="fw-client">
+                    {j.attentionNote ? (
+                      <button type="button" class="fw-guess-trigger" data-guess={j.attentionNote} data-guess-title={`${j.jobNumber} · ${j.client}`} aria-haspopup="dialog">
+                        <span class="fw-guess-dot" aria-hidden="true">?</span>{j.client}
+                      </button>
+                    ) : (<span title={j.client}>{j.client}</span>)}
+                  </td>
                   <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}${j.populationReason === "signed_contract" ? " · on the board as a signed contract (no AR yet)" : ""}`}>
                     <strong>{milestoneLabel(j.milestone)}</strong>
                     {j.populationReason === "signed_contract" && <span class="fw-wip-dot" aria-label="Signed contract, no AR yet">•</span>}
@@ -268,6 +287,17 @@ const gmBasisLabel: Record<string, string> = {
     /* Filtering hides via [hidden]. Table rows carry a UA display that can
        outrank the UA [hidden] rule, so state it explicitly. */
     .fw [hidden] { display: none !important; }
+    .fw .fw-kpi-warn { border-color: var(--gold); }
+    /* "Our Best Guess" — hangs off the client name because the job number is
+       already the AccuLynx deep link. */
+    .fw .fw-guess-trigger { appearance: none; border: none; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; display: inline-flex; align-items: center; gap: 5px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fw .fw-guess-trigger:hover { text-decoration: underline; text-decoration-color: var(--gold); }
+    .fw .fw-guess-dot { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 999px; background: var(--gold); color: #1c2733; font-size: 10px; font-weight: 800; }
+    .fw .fw-guess { position: fixed; z-index: 50; max-width: 460px; background: var(--panel); color: var(--ink); border: 1px solid var(--gold); border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,0.28); padding: 12px 14px; display: grid; gap: 6px; }
+    .fw .fw-guess-head { display: flex; align-items: baseline; gap: 10px; }
+    .fw .fw-guess-head strong { font-size: 13px; }
+    .fw .fw-guess-close { margin-left: auto; appearance: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
+    .fw .fw-guess-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
     .fw .fw-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .fw .fw-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .fw .fw-kpi-sub { font-size: 11.5px; color: var(--muted); }
@@ -380,7 +410,12 @@ const gmBasisLabel: Record<string, string> = {
         const officeOk = !office || row.getAttribute("data-location") === office;
         const kpiOk =
           !activeKpi || (row.getAttribute("data-kpi") ?? "").split(" ").includes(activeKpi);
-        const visible = repOk && officeOk && kpiOk;
+        // Stale close-outs are off the working board by default. They are
+        // finished, paid work — an AccuLynx housekeeping list — and are
+        // reachable only through their own pill.
+        const stale = row.getAttribute("data-attention") === "stale_closeout";
+        const staleOk = activeKpi === "staleCloseout" ? stale : !stale;
+        const visible = repOk && officeOk && kpiOk && staleOk;
         row.hidden = !visible;
         if (visible) shown += 1;
       });
@@ -484,6 +519,10 @@ const gmBasisLabel: Record<string, string> = {
     marginClear?.addEventListener("click", () => postMargin(null));
     syncMarginBox();
 
+    // Run once at load: the default view is "not stale", and without this the
+    // 225 stale close-outs render until the first filter event fires.
+    applyFilters();
+
     kpiButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         // Clicking the active pill clears it, so a pill is a toggle rather
@@ -500,6 +539,41 @@ const gmBasisLabel: Record<string, string> = {
       syncMarginBox();
       applyFilters();
     });
+
+    // ── "Our Best Guess" popout ──────────────────────────────────────────
+    // One dialog node reused by every row. Positioned next to whichever
+    // client name was clicked, clamped into the viewport.
+    const guess = document.getElementById("fw-guess") as HTMLElement | null;
+    const guessTitle = document.getElementById("fw-guess-title") as HTMLElement | null;
+    const guessBody = document.getElementById("fw-guess-body") as HTMLElement | null;
+    const closeGuess = () => guess?.setAttribute("hidden", "");
+
+    document.querySelectorAll<HTMLButtonElement>(".fw-guess-trigger").forEach((trigger) => {
+      trigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!guess || !guessTitle || !guessBody) return;
+        guessTitle.textContent = trigger.dataset.guessTitle ?? "Our Best Guess";
+        guessBody.textContent = trigger.dataset.guess ?? "";
+        guess.removeAttribute("hidden");
+        const r = trigger.getBoundingClientRect();
+        const w = guess.offsetWidth;
+        const h = guess.offsetHeight;
+        // The dialog is position:fixed, so these are viewport coordinates —
+        // clamp BOTH axes or a row near an edge puts the popout off-screen.
+        guess.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+        const below = r.bottom + 6;
+        const above = r.top - h - 8;
+        const top = r.bottom + h + 12 > window.innerHeight ? above : below;
+        guess.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + "px";
+      });
+    });
+
+    document.getElementById("fw-guess-close")?.addEventListener("click", closeGuess);
+    document.addEventListener("click", (event) => {
+      if (guess && !guess.hidden && !guess.contains(event.target as Node)) closeGuess();
+    });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGuess(); });
+    window.addEventListener("scroll", closeGuess, true);
 
     // Maya send button — confirms, then POSTs; reports the outcome inline.
     const sendBtn = document.getElementById("fw-send") as HTMLButtonElement | null;
