@@ -203,6 +203,27 @@ async function loadProvenance(
         agreement.isQuote = QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`);
         if (a.pdf_storage_path) agreement.pdfUrl = `/api/price-agreement/pdf/${encodeURIComponent(agreement.id!)}`;
       }
+    } else {
+      // Non-ABC ids are uuids into price_agreements. The SRS re-audit writer now records
+      // them (it used to leave discrepancy rows NULL), so this branch went live — and
+      // without it the panel silently dropped version_label, source_file and ceo_verified,
+      // which made isQuote default to false and the Document-type check report
+      // "Priced from an agreement" for what is actually an ACCEPTED QUOTE. docs/93 is
+      // explicit that a quote must never be hidden; enrich it the same way as ABC.
+      const { data: pa } = await client.from("price_agreements")
+        .select("agreement_number,version_label,effective_date,expiry_date,ceo_verified,source_file,source_pdf_url")
+        .eq("id", agreement.id).maybeSingle();
+      const a = pa as any;
+      if (a) {
+        agreement.number = a.agreement_number ?? agreement.number;
+        agreement.versionLabel = a.version_label ?? null;
+        agreement.effective = a.effective_date ? String(a.effective_date).slice(0, 10) : agreement.effective;
+        agreement.expiry = a.expiry_date ? String(a.expiry_date).slice(0, 10) : agreement.expiry;
+        agreement.ceoVerified = a.ceo_verified ?? null;
+        agreement.sourceFile = a.source_file ?? null;
+        agreement.isQuote = QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`);
+        if (a.source_pdf_url) agreement.pdfUrl = `/api/price-agreement/pdf/${encodeURIComponent(agreement.id!)}`;
+      }
     }
   } else if (itemNumbers.length) {
     const derived = await deriveVendorAgreement(client, invoiceNumber, invoiceDate, itemNumbers);
@@ -337,7 +358,10 @@ async function deriveVendorAgreement(
     sourceFile: a.source_file ?? null,
     ceoVerified: a.ceo_verified ?? null,
     isQuote: QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`),
-    pdfUrl: a.source_pdf_url ? String(a.source_pdf_url) : null,
+    // Route through the endpoint, never the raw column: source_pdf_url holds a
+    // BUCKET-RELATIVE path ("agreements/x.pdf"), which as an href would resolve against
+    // the app host and 404. The endpoint signs it.
+    pdfUrl: a.source_pdf_url ? `/api/price-agreement/pdf/${encodeURIComponent(String(a.id))}` : null,
   };
 }
 

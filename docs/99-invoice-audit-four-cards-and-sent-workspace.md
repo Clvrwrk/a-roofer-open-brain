@@ -152,3 +152,64 @@ job links.
 
 This one was only findable by rendering the page — the build was green and the label was a
 plausible-looking sentence.
+
+
+## SRS agreement PDFs — the link path, and what is actually missing
+
+Ask: make the agreement PDF link active on `/accounting/credit-memos/<invoice>` for SRS.
+
+**The PDFs are not in the system.** The `agreements` bucket holds 7 objects, all ABC
+(Dallas, Denver, Kansas City, three Wichita ABC sheets). All three active SRS agreements
+name a file and have no copy stored, and none is on this machine either:
+
+| agreement | names | stored? |
+|---|---|---|
+| `0049828559` SRS Wichita KS quote | `Wichita_Quote0049828559.pdf` | **no** |
+| `0049345641` SRS Englewood CO quote | `Englewood_co_Revised Pro Exteriors Quote 06.01.26 mo (1).pdf` | **no** |
+| `SRS-MELISSA-L4` SRS Melissa TX Level 4 | `Richardson_MELESSA_PRICE_SHEET- LEVEL 4 (1).pdf` | **no** |
+
+No code change can conjure them. What I did instead was **fix the path so the link goes
+live the moment a file is uploaded** — because it would not have, even then. Two bugs sat
+between an uploaded PDF and a working link:
+
+1. **`scripts/upload-agreement-pdf.mjs` binds `source_pdf_url` to a bucket-relative path**
+   (`agreements/x.pdf`), but the endpoint redirected to that value verbatim as a
+   `Location`. A relative Location resolves against the app host and 404s. The endpoint now
+   detects a bucket path, splits bucket from key, and returns a **signed URL** — absolute
+   URLs still pass straight through.
+2. **The evidence panel rendered `source_pdf_url` directly as an `href`**, with the same
+   result. It now routes through `/api/price-agreement/pdf/<id>`, as the ABC path always did.
+
+The 404 also now names the fix: *"No copy of this agreement is stored — the record names it
+as 'Wichita_Quote0049828559.pdf'. Upload it with scripts/upload-agreement-pdf.mjs
+--agreement <id>"*.
+
+### A truthfulness regression caught in the same pass
+
+Another session backfilled the SRS re-audit writer (docs/95 follow-up 2), so
+`invoice_line_reaudit` discrepancy rows now carry a uuid `agreement_id`. That flipped the
+evidence panel from its *derived* path to its *recorded* path — and the recorded path only
+enriched **ABC integer ids**. For a uuid it left `version_label`, `source_file` and
+`ceo_verified` null, so `isQuote` defaulted to false and the Document-type check reported
+a flat **"Priced from an agreement"** for what is actually an accepted *quote*.
+
+docs/93 is explicit that a quote must never be hidden. The recorded branch now enriches
+uuids from `price_agreements` exactly as it does ABC, restoring:
+
+> **Quote 0049828559 is accepted as the governing price agreement for Wichita, KS —
+> confirmed on the agreement record, not assumed.**
+
+### To finish this, upload the three files
+
+```
+node scripts/upload-agreement-pdf.mjs <file.pdf> \
+  --as wichita-srs-quote-0049828559.pdf \
+  --agreement 3e7b261b-533d-4df5-aa3f-94bef11f9868
+```
+
+(`--dry-run` first; the script refuses to overwrite an existing object.) Bucket naming
+convention is `<city>-<vendor|agreement>-<period>.pdf`.
+
+Note from commit `ed792ce`: the two SRS **Colorado** sheets were delivered to the Pro
+Exteriors accounting mailbox and are **not reachable from `chussey@cleverwork.io`** —
+someone with that mailbox has to export them first.
