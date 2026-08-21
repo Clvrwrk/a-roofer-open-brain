@@ -44,6 +44,7 @@ export const navDepartments: NavDepartment[] = [
       { label: "Price Agreements", href: "/accounting/price-agreements", status: "built", note: "Coverage · Gap Worksheet (bought 2+ times, no negotiated price) · Renewal Worksheet (docs/83)" },
       { label: "Price List Review", href: "/accounting/price-agreement/review", status: "built", note: "Confirm item-id matches for family-level PDFs (Denver/Dallas), then promote to agreements" },
       { label: "Agreement Builder", href: "/accounting/price-agreement/builder", status: "built", note: "Per-branch negotiable worksheet (A+B), prefilled from prior agreements" },
+      { label: "Categorize Price Lines", href: "/accounting/price-agreement/categorize", status: "built", note: "Bind every vendor price line to the PE product file; category is inherited from the product, never typed twice (docs/103)" },
       // Retired from go-live nav 2026-06-19 (pages kept, just unlinked) — see docs/49.
       // Price Foundation: one-time data-quality migration tool, review queue empty (obsolete).
       // Negotiated Catalog / Price List Coverage: superseded by Agreement Builder + Price Agreement Audit
