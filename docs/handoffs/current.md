@@ -72,7 +72,13 @@ head). **It is not merged and not deployed.**
 Two items on that branch need a human, both recorded in `docs/104`:
 1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
    approve repointing the agreement join to `vendor_branch_id` with mig 244's proof.
-2. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
+2. **One-minute cleanup in an external tool:** CodeRabbit stored a learning during PR #9's
+   review saying to use `abc_invoices.id` as a tiebreak. That column does not exist. It has
+   since stored a corrected learning that contradicts it, so the risk is mostly neutralised,
+   but the stale entry can only be deleted from the CodeRabbit learnings UI
+   (app.coderabbit.ai/learnings) — not from a PR thread. Worth removing next time someone is
+   in there.
+3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
    against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 264
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
    where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
