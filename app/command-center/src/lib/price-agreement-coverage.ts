@@ -57,11 +57,11 @@ export interface CoverageVendor {
   allVerified: boolean;
   pricedItems: number;
   hasGap: boolean;
-  /** Chris's ruling for this pair, from office_vendor_agreement_status via mig 265. */
+  /** The recorded ruling for this pair, from office_vendor_agreement_status via mig 265. */
   agreementStatus: string;
   /**
    * The pair's no-price behaviour is ACCEPTED, so it is not work to chase.
-   * QXO is no_book at every office by Chris's 2026-08-20 ruling.
+   * QXO carries a recorded no_book ruling at every office (2026-08-20).
    */
   isAccepted: boolean;
   /** Invoices booked against this office x vendor (v_office_vendor_spend). */
@@ -144,8 +144,8 @@ const ROLE_ORDER: Record<CoverageRole, number> = { Primary: 0, "Region-covered":
 
 /**
  * Rulings whose no-price behaviour is ACCEPTED. A pair carrying one of these is not work,
- * regardless of how much money runs through it — QXO is `no_book` at every office by Chris's
- * 2026-08-20 ruling, so surfacing it as a gap to chase is a false alarm every single week.
+ * regardless of how much money runs through it — QXO carries a recorded `no_book` ruling at
+ * every office (2026-08-20), so surfacing it as a gap to chase is a false alarm every week.
  */
 const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
 
@@ -267,7 +267,7 @@ export async function loadPriceAgreementCoverage(
     });
   }
 
-  // office+vendor -> Chris's ruling. A pair ruled no_book prices as no-price BY DESIGN and
+  // office+vendor -> the recorded ruling. A pair ruled no_book prices as no-price BY DESIGN and
   // must never appear in a "chase this" queue, however many dollars it carries.
   const rulingByOfficeVendor = new Map<string, string>();
   for (const r of rulingRows) {

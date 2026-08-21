@@ -22,7 +22,7 @@ describe("gapExposure", () => {
   });
 
   it("excludes accepted no_book rulings from the chase queue but keeps them in gapSpend", () => {
-    // Chris ruled QXO no_book at every office on 2026-08-20: those lines price as no-price
+    // QXO carries a recorded no_book ruling at every office (2026-08-20): those lines price as no-price
     // BY DESIGN. Counting them as work would cry wolf every week.
     const out = gapExposure([
       v(true, 2, 5697.47, true),   // Wichita x QXO   — accepted
