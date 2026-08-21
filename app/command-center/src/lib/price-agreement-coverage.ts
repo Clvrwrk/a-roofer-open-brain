@@ -110,6 +110,13 @@ export interface PriceAgreementCoverage {
   };
 }
 
+/**
+ * Read an entire table or view, paging past PostgREST's row cap.
+ *
+ * These coverage views are small (hundreds of rows) but unbounded in principle, and a silent
+ * truncation here would understate coverage rather than fail — so page until a short batch
+ * proves the end was reached.
+ */
 async function selectAll<T = any>(client: SupabaseClient, table: string, columns: string): Promise<T[]> {
   const rows: T[] = [];
   let from = 0;
@@ -123,6 +130,10 @@ async function selectAll<T = any>(client: SupabaseClient, table: string, columns
   }
 }
 
+/**
+ * Label how a branch comes by its price list: it holds the agreement itself (Primary), it is
+ * covered by a region-scoped agreement, or it inherits one from elsewhere in the ring.
+ */
 function branchRole(row: any): CoverageRole {
   if (row.is_primary_branch === true) return "Primary";
   if (row.agreement_scope === "region") return "Region-covered";
@@ -195,7 +206,14 @@ export async function loadPriceAgreementCoverage(
     selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend"),
     selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status"),
   ]);
-  if (inhRows.length === 0) return empty;
+  const unresolvedSpend = unresolvedRows.reduce((sum, r) => sum + num(r.spend), 0);
+
+  // No inheritance rows means no office x vendor coverage to report — but spend on branches
+  // with no pricing territory is a fact about the invoices, not about coverage, and stays
+  // true either way. Dropping it here would hide money precisely when coverage looks empty.
+  if (inhRows.length === 0) {
+    return { ...empty, status: "live", totals: { ...empty.totals, unresolvedSpend } };
+  }
 
   // office+vendor → branch list
   const byOfficeVendor = new Map<string, CoverageBranch[]>();
@@ -310,7 +328,7 @@ export async function loadPriceAgreementCoverage(
       gaps: allVendors.filter((v) => v.hasGap).length,
       lapsedVendors: allVendors.filter((v) => v.anyLapsed).length,
       ...gapExposure(allVendors),
-      unresolvedSpend: unresolvedRows.reduce((s, r) => s + num(r.spend), 0),
+      unresolvedSpend,
     },
   };
 }

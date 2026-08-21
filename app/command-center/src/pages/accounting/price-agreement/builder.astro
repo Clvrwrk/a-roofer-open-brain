@@ -148,10 +148,14 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
         <small>Figures are invoice <b>totals</b>, which include tax, freight, and lines the line-level path does price —
         they are not the un-audited amount. Denver × SRS reads {money(17437.63)} of spend against $13,464.80 of
         genuinely unpriced line value.</small>
-        {coverage.totals.unresolvedSpend !== 0 && (
-          <> A further <b>{money(coverage.totals.unresolvedSpend)}</b> sits on branches with <b>no pricing territory</b>, so it
-          is outside this audit entirely.</>
-        )}
+      </p>
+    )}
+
+    {coverage.totals.unresolvedSpend !== 0 && (
+      <p class="iv-note">
+        <b>{money(coverage.totals.unresolvedSpend)}</b> sits on branches with <b>no pricing territory</b>, so it is
+        outside this audit entirely. Shown independently of the gap count — it is still true when every
+        office × vendor pair is covered.
       </p>
     )}
 

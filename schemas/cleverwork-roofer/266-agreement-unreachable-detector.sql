@@ -89,9 +89,11 @@ SELECT pa.id                AS agreement_id,
             OR (pa.legacy_id IS NOT NULL AND b.agreement_id = pa.legacy_id::text));
 
 COMMENT ON VIEW public.v_agreement_unreachable IS
-  'Active agreements that reach no branch in any active office ring, so their items price '
-  'nothing. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 266 '
-  'header). Non-empty means money is auditing as no-price despite a signed book existing.';
+  'Active agreements that reach no branch in any active office ring, so the OFFICE-RING path '
+  'cannot price from them and the pair reads priced_items = 0. This is a ring-coverage '
+  'failure, not proof the items price nothing — a separate line-level path may still price '
+  'some lines. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 266 '
+  'header).';
 
 -- Corrected gate: auditability, not paperwork. Supersedes migration 265's predicate.
 CREATE OR REPLACE VIEW public.v_office_vendor_gap_exposure AS

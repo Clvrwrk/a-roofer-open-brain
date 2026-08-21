@@ -53,4 +53,13 @@ UPDATE public.vendor_branches vb
        updated_at = now()
   FROM raw_best rb
  WHERE rb.vendor_branch_id = vb.id
-   AND (vb.city IS NULL OR vb.state IS NULL OR vb.address IS NULL);
+   -- A row qualifies only when a NULL field has a real replacement waiting. Matching on
+   -- "any field is NULL" alone would re-stamp updated_at on every rerun for branches raw
+   -- cannot help, which is not idempotent even though COALESCE preserves the values.
+   -- Added 2026-08-21 after review; the applied run's effect is unchanged, since the rows
+   -- it would newly exclude were no-ops anyway.
+   AND (
+        (vb.city    IS NULL AND rb.b->>'city'         IS NOT NULL)
+     OR (vb.state   IS NULL AND rb.b->>'state'        IS NOT NULL)
+     OR (vb.address IS NULL AND rb.b->>'addressLine1' IS NOT NULL)
+   );

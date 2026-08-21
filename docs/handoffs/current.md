@@ -62,10 +62,10 @@ Chris: *"once a price agreement is added it is approved and active."* Finished w
 - **Live `buildCommit`:** `fbb32d1` (verify with `/healthz` after the wrap-up push)
 - **Uncommitted changes:** none
 
-### Open branch not on main — PR #9 (draft)
+### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
 **263-266** (already applied to prod, all additive) plus `docs/104`. It is 0 behind main and
-kept merged with it. **It is not merged and not deployed.** Numbering note: parallel sessions
+kept merged with it. Marked **ready for review** on 2026-08-21. **It is not merged and not deployed.** Numbering note: parallel sessions
 claimed 245-262 and both `docs/99` and `docs/100` while it was in flight, so it yielded seven
 times — its applied
 Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
@@ -77,11 +77,17 @@ browser or through the live API.
 
 ## Next Task — Start Here
 
-**Task: PEC-226 — decide how the SRS description-only price sheets start pricing.**
+**Task: PEC-226 follow-up — the exact-token backfill ran and barely moved the number.**
+
+Migration 256 executed the backfill on 2026-08-21. Measured immediately after (PR #9):
+Colorado matched **4 of 101** items, Melissa **4 of 97** — 8 in total. SRS unpriced lines went
+**216 → 211**. Exact-token matching on description-only sheets is close to a no-op, so the
+decision PEC-226 framed is still live; it just now has evidence that option 1 alone is not
+enough.
 
 **What to check / do:**
-1. Confirm the gap is still real:
-   `select count(*) from price_agreement_items pai join price_agreements pa on pa.id=pai.agreement_id where pa.version_label like '%Melissa%' and pai.raw_item_number is not null;` → expect **0**.
+1. Confirm the post-backfill state rather than the pre-backfill one:
+   `select pa.version_label, count(pai.id) items, count(pai.raw_item_number) matched from price_agreements pa left join price_agreement_items pai on pai.agreement_id=pa.id where pa.version_label like '%Melissa%' or pa.version_label like '%Colorado%' group by 1;` → expect **4 / 97** and **4 / 101**.
 2. Read `docs/101-…md` §2 and PEC-226 for the two options.
 3. If Chris picks **backfill** (recommended): map sheet descriptions → SRS item numbers from
    `vendor_invoice_lines` history, write to `price_agreement_items.raw_item_number`, and hold
@@ -167,6 +173,11 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
 - **Agreements resolve at the OFFICE level**, never the branch: a branch's
   `pricing_territory_office_id` decides. Anchor a new agreement to any branch in the right
   territory and it covers all of them.
+  **⚠️ CORRECTED 2026-08-21 (PR #9): this is not sufficient.** Reachability also requires the
+  branch to be **geocoded** — `v_office_vendor_branch` joins on
+  `vb.geom IS NOT NULL AND st_contains(o.boundary, vb.geom)` and *then* matches the agreement
+  by branch-number **text**. `AMSDE` and `SSMEL` both carry the correct territory and are both
+  invisible to the ring. Do not plan work on the original wording.
 - **The vendor price path is EXACT-match only** — `raw_item_number = item_number OR
   raw_description_normalized = lower(item_description)`. No trigram arm; ABC has one. This is
   the root of PEC-226.
@@ -191,7 +202,7 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
 | Service | Detail |
 |---------|--------|
 | Live app | https://cc.proexteriorsus.net (Coolify, builds `app/command-center/Dockerfile` from `origin/main`) |
-| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **255** |
+| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **266** (263-266 applied from PR #9's branch) |
 | Storage | `agreements` (11 objects: 7 ABC + 4 SRS), `invoices`, `wip-packs`, `slack-attachments`, `product-images`, `impact-reports` |
 | Local dev | `.claude/launch.json` → `command-center` on port 4399 |
 | Linear | PE-CC-DevTeam — **PEC-224/225** (Done), **PEC-226** (Urgent, Todo) |

@@ -4,8 +4,13 @@
 
 ## The problem
 
-`v_office_vendor_inheritance` already knows which (office × vendor) pairs hold no price
-agreement — `priced_items = 0` — and the Agreement Builder renders that as a gap count.
+`v_office_vendor_inheritance` already knows which (office × vendor) pairs have **zero priced
+items** — `priced_items = 0` — and the Agreement Builder renders that as a gap count.
+
+Read that metric precisely: it means the pair **cannot be audited through the office-ring
+path**, not that no agreement exists. Denver × SRS carries two live agreements and still reads
+zero, because neither is reachable. Whether an agreement exists, and whether a human has
+accepted its absence, are separate facts held in `office_vendor_agreement_status`.
 But the count treats every gap alike, and they are not alike.
 
 ```
@@ -81,7 +86,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 263 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 264 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
