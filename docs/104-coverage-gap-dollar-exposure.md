@@ -1,6 +1,6 @@
 # 104 — Rank coverage gaps by dollars, not by branch count
 
-**Date:** 2026-08-20 · **Migrations:** 263, 264, 265, 266 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-08-21 · **Migrations:** 263, 264, 265, 266 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -13,7 +13,7 @@ zero, because neither is reachable. Whether an agreement exists, and whether a h
 accepted its absence, are separate facts held in `office_vendor_agreement_status`.
 But the count treats every gap alike, and they are not alike.
 
-```
+```text
 9 coverage gaps          <-- what the dashboard said
    |
    +-- 6 with ZERO invoices ever      $0        territory-only, nothing to chase
