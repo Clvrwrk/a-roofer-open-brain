@@ -53,7 +53,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   } else {
     const { data: ins, error: aerr } = await client.from("abc_price_agreements").insert({
       agreement_number: meta.agreement_number, effective_date: meta.effective, expiry_date: meta.expiry,
-      source_file: meta.pdf, pdf_storage_bucket: "agreements", pdf_storage_path: meta.pdf, ceo_verified: false,
+      // ceo_verified true on arrival: adding an agreement IS the approval (Chris,
+      // 2026-08-21 — migration 252 retired the gate). Stamping false here used to make
+      // every freshly promoted book start life flagged on the gaps and evidence panels.
+      source_file: meta.pdf, pdf_storage_bucket: "agreements", pdf_storage_path: meta.pdf, ceo_verified: true,
     }).select("id").single();
     if (aerr || !ins) return jsonApiResponse({ error: "agreement_insert_failed", error_description: aerr?.message }, { status: 500 });
     agreementId = (ins as any).id;

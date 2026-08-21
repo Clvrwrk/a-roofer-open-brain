@@ -12,6 +12,7 @@
 // rather than implying it is a copy of the outbound mail.
 import AppShell from "../../../layouts/AppShell.astro";
 import { cmVendorBySlug, cmVendorLabel } from "@lib/cm-vendor-roster";
+import { acculynxJobHref, loadCmRequestHeaders, type CmRequestHeader } from "@lib/cm-request-header";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 const vendorParam = cmVendorBySlug(Astro.url.searchParams.get("vendor"))?.slug ?? null;
@@ -26,6 +27,8 @@ interface CmLine {
 const { client } = createServerSupabaseClient();
 let requests: { invoice_number: string; status: string; expected_credit: number; vendor: string; sent_at: string | null; follow_up_due_at: string | null }[] = [];
 const linesByInvoice = new Map<string, CmLine[]>();
+// PE office / vendor / vendor branch / job / invoice date for each claim header.
+let headers = new Map<string, CmRequestHeader>();
 interface CmReceipt {
   cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
   match_state: string; original_invoice_number: string | null; expected_credit: number | null;
@@ -79,6 +82,7 @@ if (client) {
       if (Number(l.variance_ext ?? 0) < 0.05) continue;
       (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
     }
+    headers = await loadCmRequestHeaders(client, invoiceNumbers);
   }
 }
 
@@ -91,6 +95,23 @@ const day = (iso: string | null) => (iso ? String(iso).slice(0, 10) : null);
 const nowIso = new Date().toISOString();
 const isOverdue = (r: { follow_up_due_at: string | null }) => !!r.follow_up_due_at && String(r.follow_up_due_at) < nowIso;
 const overdueFor = (vendor: string) => sentFor(vendor).filter(isOverdue).length;
+// Same header contract as Weekly CM — loaded through the shared helper so the two
+// surfaces cannot drift apart.
+// PE Office · Vendor · Vendor branch (id) · Job# · Invoice date. Split so the job can be
+// a real AccuLynx link; missing pieces are NAMED, never blanked, so a gap is visible.
+const headerParts = (invoiceNumber: string, vendor: string) => {
+  const h = headers.get(invoiceNumber);
+  const branch = h?.branchName || h?.branchNumber
+    ? (h.branchNumber ? `${h.branchName} (${h.branchNumber})` : h.branchName)
+    : "branch not resolved";
+  return {
+    lead: [h?.office || "office not resolved", vendor, branch].join(" · "),
+    jobNumber: h?.jobNumber ?? "",
+    jobHref: acculynxJobHref(h?.acculynxJobId ?? null),
+    clientName: h?.clientName ?? "",
+    invoiced: h?.invoiceDate ? `Invoiced ${h.invoiceDate}` : "invoice date unknown",
+  };
+};
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   const agreement = l.agreement_number
@@ -155,7 +176,7 @@ const reasonFor = (l: CmLine) => {
           </span>
         </summary>
         <div class="cmw-email">
-          <p class="cmw-email-meta">Subject: Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>sent</b></p>
+          <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>sent</b></p>
           <p>We requested credit memos on {vendorLineCount(vendor)} lines across {sentFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
           <p>Total credit sent: <b>{money(vendorTotal(vendor))}</b>.</p>
           <p>Where an agreement lapsed with no successor in place we priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
@@ -169,6 +190,11 @@ const reasonFor = (l: CmLine) => {
                 {" · "}<a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
                 <button class="cmw-approve cmw-received" data-cm-received={r.invoice_number} type="button" title="The vendor credit landed — close this request">Mark received</button>
               </p>
+              <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
+                {m.lead} · {m.jobNumber
+                  ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
+                  : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
+              </>); })()}</p>
               <table>
                 <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
                 <tbody>
@@ -212,7 +238,10 @@ const reasonFor = (l: CmLine) => {
   .cmw-email{padding:6px 16px 16px;font-size:14px;line-height:1.5}
   .cmw-email-meta{color:#888;font-size:12.5px}
   .cmw-invoice{margin:18px 0 6px}
-  .cmw-inv-head{margin:0 0 6px;font-size:14px}
+  .cmw-inv-head{margin:0 0 2px;font-size:14px}
+  .cmw-inv-meta{margin:0 0 6px;font-size:12px;color:#6b7886}
+  .cmw-inv-meta a{color:#5b46d8;text-decoration:none}
+  .cmw-inv-meta a:hover{text-decoration:underline}
   .cmw-sent-meta{color:#6b7886;font-size:12.5px}
   .cmw-overdue{color:#a51f1f;font-weight:700}
   .cmw-invoice table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #d0d0d0}

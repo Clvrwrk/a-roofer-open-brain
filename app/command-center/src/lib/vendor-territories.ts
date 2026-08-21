@@ -348,7 +348,7 @@ export interface VendorBranchMapNode {
   suggestedOfficeName: string | null;
   candidateOffices: CandidateOffice[];
   currentAgreement: PriceAgreementSummary | null;
-  // Best CEO-verified agreement on file for this branch regardless of expiry — drives the
+  // Best agreement on file for this branch regardless of expiry — drives the
   // PA-number + expiry pills on the map (currentAgreement excludes lapsed agreements).
   agreementOnFile: PriceAgreementSummary | null;
   pricingWaterfall: PriceWaterfallSummary;
@@ -1135,10 +1135,11 @@ function findCurrentAgreement(
   return regionAgreement ? agreementSummary(regionAgreement, vendorById, regionById, "region") : null;
 }
 
-// Display-only: the best CEO-verified agreement on file, INCLUDING lapsed ones, so the map
-// can show the PA number and (expired) date. Unlike findCurrentAgreement it ignores expiry.
+// Display-only: the best agreement on file, INCLUDING lapsed ones, so the map can show the
+// PA number and (expired) date. Unlike findCurrentAgreement it ignores expiry.
 function isAgreementOnFile(agreement: PriceAgreementRow) {
-  // v2: ceo_verified is a display badge, never a gate (docs/82 §6 decision 3).
+  // ceo_verified is not consulted — it was retired as a gate on 2026-08-21 (migration
+  // 252) and was already only a display badge before that (docs/82 §6 decision 3).
   return agreement.is_active !== false;
 }
 

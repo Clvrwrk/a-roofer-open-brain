@@ -1,6 +1,6 @@
-# 100 — Rank coverage gaps by dollars, not by branch count
+# 102 — Rank coverage gaps by dollars, not by branch count
 
-**Date:** 2026-08-20 · **Migrations:** 250, 251, 252, 253 · **Ticket:** PEC-221
+**Date:** 2026-08-20 · **Migrations:** 253, 254, 255, 256 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -40,7 +40,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 250 — the two views
+## Migration 253 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -53,7 +53,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 251 — the address was never missing
+## Migration 254 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -81,7 +81,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 250 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 253 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -123,10 +123,10 @@ existed. Applied order is unchanged.
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 252** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 255** joins the two so the
 surface can never make that mistake.
 
-### Migration 253 — the gate was asking the wrong question
+### Migration 256 — the gate was asking the wrong question
 
 252's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
@@ -189,7 +189,7 @@ Different numbers, so the join never meets.
 
 ### The latent risk is bigger than the one office
 
-`v_agreement_unreachable` (migration 253) shows **all three live numbered SRS agreements —
+`v_agreement_unreachable` (migration 256) shows **all three live numbered SRS agreements —
 136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
@@ -216,3 +216,39 @@ equivalence proof migration 244 ran before switching (FK == text on every row, 0
 disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
 decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
 a guess cannot become a fact. 253 only makes the failure visible.
+
+---
+
+## Addendum — 2026-08-21: the fresh Colorado book landed, and still does not price
+
+Migration 251 (a parallel session) stored the **SRS Colorado price list, effective 2026-08-14,
+101 items** — the book that handoff blocker 1 had been waiting on. It is now the recorded
+governing book for the Denver office. **Denver × SRS still reports `priced_items = 0`.**
+
+It attached to **`AMSDE`** — the same branch row this document identified as unreachable by
+the office ring. `v_agreement_unreachable` picked it up on the first run after the merge:
+
+| Agreement | Items | Held by | Likely canonical |
+|---|---:|---|---|
+| SRS Colorado price list 2026-08-14 | **101** | `AMSDE` | `SBP-SOUTHDENVER` |
+| SRS-MELISSA-L4 | 97 | `SSMEL` | `SBP-MELISSA` |
+| 0049345641 (Englewood quote) | 22 | `AMSDE` | `SBP-SOUTHDENVER` |
+| 0049828559 | 17 | `DJWIC` | `SBP-WICHITA` |
+
+Ring-unreachable SRS items: **136 → 237**.
+
+### There are TWO independent reasons it does not price
+
+The migration's own note records the first: *"Description-only — carries no SRS item numbers,
+so it does not yet resolve invoice lines."* True, and it concerns the **line-level** path.
+
+The second is the one this document is about: the **office-ring** path cannot reach `AMSDE` at
+all, so the pair reads `priced_items = 0` regardless of what the book contains.
+
+**Fixing either one alone leaves the book inert.** Add item numbers and the ring still cannot
+see it; repoint the branch and it still has no item numbers to match. Anyone scheduling this
+work should plan both, or the fresh sheet keeps looking like it did nothing.
+
+This is the detector doing its job: a correct business action (load the price list Chris
+asked for) ran straight into an unfixed identity defect, and the failure was visible
+immediately instead of being discovered later as "why is Colorado still no-price".

@@ -203,6 +203,27 @@ async function loadProvenance(
         agreement.isQuote = QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`);
         if (a.pdf_storage_path) agreement.pdfUrl = `/api/price-agreement/pdf/${encodeURIComponent(agreement.id!)}`;
       }
+    } else {
+      // Non-ABC ids are uuids into price_agreements. The SRS re-audit writer now records
+      // them (it used to leave discrepancy rows NULL), so this branch went live — and
+      // without it the panel silently dropped version_label, source_file and ceo_verified,
+      // which made isQuote default to false and the Document-type check report
+      // "Priced from an agreement" for what is actually an ACCEPTED QUOTE. docs/93 is
+      // explicit that a quote must never be hidden; enrich it the same way as ABC.
+      const { data: pa } = await client.from("price_agreements")
+        .select("agreement_number,version_label,effective_date,expiry_date,ceo_verified,source_file,source_pdf_url")
+        .eq("id", agreement.id).maybeSingle();
+      const a = pa as any;
+      if (a) {
+        agreement.number = a.agreement_number ?? agreement.number;
+        agreement.versionLabel = a.version_label ?? null;
+        agreement.effective = a.effective_date ? String(a.effective_date).slice(0, 10) : agreement.effective;
+        agreement.expiry = a.expiry_date ? String(a.expiry_date).slice(0, 10) : agreement.expiry;
+        agreement.ceoVerified = a.ceo_verified ?? null;
+        agreement.sourceFile = a.source_file ?? null;
+        agreement.isQuote = QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`);
+        if (a.source_pdf_url) agreement.pdfUrl = `/api/price-agreement/pdf/${encodeURIComponent(agreement.id!)}`;
+      }
     }
   } else if (itemNumbers.length) {
     const derived = await deriveVendorAgreement(client, invoiceNumber, invoiceDate, itemNumbers);
@@ -238,17 +259,16 @@ async function loadProvenance(
       checks.push({ label: "In force on the invoice date", state: "pass", detail: `Invoice dated ${invoiceDate} falls inside ${agreement.effective} → ${agreement.expiry ?? "open-ended"}.` });
     }
 
-    // A quote is not an agreement BY DEFAULT (docs/93) — but some branches price off a
-    // branch quote rather than a numbered agreement, and a human can accept one as the
-    // governing price book. That acceptance lives on the agreement record (ceo_verified,
-    // a display badge and never a pricing gate, docs/82 §6 decision 3), so it is a fact
-    // about the document rather than a rule hard-coded per vendor. The panel still says
-    // the document is a quote — it shows that a human accepted it, it does not hide it.
+    // docs/93 still governs what the panel SAYS: it must never hide that the cited
+    // document is a quote. What it no longer does is gate on acceptance. Chris retired
+    // the ceo_verified requirement on 2026-08-21 — "once a price agreement is added it is
+    // approved and active" — finishing the direction docs/82 §6 decision 3 already set
+    // when it ruled ceo_verified a display badge and never a pricing gate. So a quote on
+    // file is the governing book for its office; the check reports the document type as
+    // the fact it is, and stops asking a human to re-confirm what adding it already said.
     checks.push(!agreement.isQuote
       ? { label: "Document type", state: "pass", detail: `Priced from an agreement${agreement.sourceFile ? ` (${agreement.sourceFile})` : ""}.` }
-      : agreement.ceoVerified === true
-        ? { label: "Document type", state: "pass", detail: `Quote ${agreement.number ?? agreement.id} is accepted as the governing price agreement for ${agreement.officeName ?? "this office"} — confirmed on the agreement record, not assumed.` }
-        : { label: "Document type", state: "warn", detail: "The cited document is a QUOTE and has not been accepted as a price agreement. A quote is not an agreement by default (docs/93) — confirm it on the agreement record before claiming against it." });
+      : { label: "Document type", state: "pass", detail: `Quote ${agreement.number ?? agreement.id} is the price book on file for ${agreement.officeName ?? "this office"} — the vendor prices Pro Exteriors off a branch quote pending a countersigned agreement. The document is a quote, not a signed agreement.` });
   }
 
   const m = method?.match_method ?? null;
@@ -337,7 +357,10 @@ async function deriveVendorAgreement(
     sourceFile: a.source_file ?? null,
     ceoVerified: a.ceo_verified ?? null,
     isQuote: QUOTE_RE.test(`${a.version_label ?? ""} ${a.source_file ?? ""}`),
-    pdfUrl: a.source_pdf_url ? String(a.source_pdf_url) : null,
+    // Route through the endpoint, never the raw column: source_pdf_url holds a
+    // BUCKET-RELATIVE path ("agreements/x.pdf"), which as an href would resolve against
+    // the app host and 404. The endpoint signs it.
+    pdfUrl: a.source_pdf_url ? `/api/price-agreement/pdf/${encodeURIComponent(String(a.id))}` : null,
   };
 }
 
