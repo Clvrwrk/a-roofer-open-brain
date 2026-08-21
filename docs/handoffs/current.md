@@ -65,7 +65,19 @@ Chris: *"once a price agreement is added it is approved and active."* Finished w
 ### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
 **263-266** (already applied to prod, all additive) plus `docs/104`. It is 0 behind main and
-kept merged with it. Marked **ready for review** on 2026-08-21. **It is not merged and not deployed.** Numbering note: parallel sessions
+kept merged with it. Marked **ready for review** on 2026-08-21; head is now `f291a90` after
+a round of review fixes (CodeRabbit + Greptile + Cursor Security, all green on the reviewed
+head). **It is not merged and not deployed.**
+
+Two items on that branch need a human, both recorded in `docs/104`:
+1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
+   approve repointing the agreement join to `vendor_branch_id` with mig 244's proof.
+2. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
+   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 264
+   demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
+   where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
+
+Numbering note: parallel sessions
 claimed 245-262 and both `docs/99` and `docs/100` while it was in flight, so it yielded seven
 times — its applied
 Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
