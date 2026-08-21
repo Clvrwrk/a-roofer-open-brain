@@ -1,9 +1,15 @@
 -- 264 — recover branch addresses that were already sitting in the invoice payload.
 --
--- NUMBERING NOTE: applied to prod as `246_backfill_branch_address_from_raw` at 2026-08-20
--- 10:59 UTC. Renumbered to 251 after parallel sessions claimed 245 and 246 on main. The DB
--- keys on timestamp, so the applied order is unchanged.
--- Applied to prod 2026-08-20.
+-- NUMBERING NOTE — two identities, both authoritative in their own place:
+--   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.
+--     That label is fixed and will not change; Supabase keys on timestamp, not on the
+--     number, so the applied order is unaffected by anything below.
+--   * IN THIS REPO: the file is `264-...`. It was renumbered seven times (245 -> 251 ->
+--     ... -> 264) as parallel sessions claimed numbers on main while this work was in
+--     flight. Main is canonical, so this branch yielded each time. Earlier revisions of
+--     this header stopped at the 246 -> 251 step and were stale; do not use intermediate
+--     numbers to find anything.
+-- The sibling migrations of this set are 263, 265 and 266, all applied to prod.
 --
 -- Found while putting dollars on the coverage gaps (migration 263). The largest single
 -- un-audited bucket in the system is ABC branch 176: 11 invoices, $19,356.94 — on a branch

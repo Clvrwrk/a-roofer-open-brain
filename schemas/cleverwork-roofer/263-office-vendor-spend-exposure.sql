@@ -1,10 +1,14 @@
 -- 263 — put DOLLARS on the coverage gaps.
 --
--- NUMBERING NOTE: applied to prod as `245_office_vendor_spend_exposure` at 2026-08-20
--- 10:57 UTC. Renumbered twice as parallel sessions claimed numbers on main first — 245
--- (office closure, 10:55 UTC) then 246 (settle received credit memo). Main is canonical, so
--- this branch yields. The DB keys migrations by TIMESTAMP, not by this label: 250/251/252/253
--- were all applied BEFORE the file numbered 246, and the applied order is unchanged.
+-- NUMBERING NOTE — two identities, both authoritative in their own place:
+--   * IN PROD: applied as `245_office_vendor_spend_exposure`, 2026-08-20 10:57 UTC. Fixed;
+--     Supabase keys on TIMESTAMP, not on this label, so the applied order is unaffected by
+--     any renumbering below. This set applied BEFORE the file numbered 246 existed.
+--   * IN THIS REPO: the file is `263-...`, renumbered seven times as parallel sessions
+--     claimed numbers on main while this work was in flight (245 office closure at 10:55,
+--     then 246 settle-received-credit-memo, and on). Main is canonical, so this branch
+--     yielded each time. Intermediate numbers (250/251/252/253) no longer name any file.
+-- The sibling migrations of this set are 264, 265 and 266, all applied to prod.
 --
 -- Context: v_office_vendor_inheritance already tells us which (office x vendor) pairs have
 -- no price agreement — `priced_items = 0`. The Command Center renders that as a gap count.

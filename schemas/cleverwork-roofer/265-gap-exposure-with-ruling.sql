@@ -1,12 +1,14 @@
--- 265 — join the dollars (263) to Chris's rulings (245). One decision surface.
+-- 265 — join the dollars (263) to the recorded rulings in office_vendor_agreement_status
+--       (245). One decision surface.
 -- Applied to prod 2026-08-20.
 --
--- 245 and 250 landed within two minutes of each other from parallel sessions and answer
--- DIFFERENT halves of the same question:
+-- 245 and this set's spend view (the file now numbered 263) landed within two minutes of
+-- each other from parallel sessions and answer DIFFERENT halves of the same question:
 --   245 says WHY a pair has no agreement  (no_book | pending | not_pursued | unrecorded)
---   250 says HOW MUCH that pair costs     (invoice_count, spend)
+--   263 says HOW MUCH that pair costs     (invoice_count, spend)
 -- Neither alone supports a decision. Ranked by dollars alone, Wichita x QXO ($5,697.47)
--- looks like work to chase — but Chris ruled QXO `no_book` on 2026-08-20: those lines price
+-- looks like work to chase — but QXO carries a recorded `no_book` ruling at every office
+-- (office_vendor_agreement_status, 2026-08-20): those lines price
 -- as no-price BY DESIGN. Ranked by ruling alone, every `unrecorded` pair looks equal, and
 -- three of them have never seen an invoice.
 --
