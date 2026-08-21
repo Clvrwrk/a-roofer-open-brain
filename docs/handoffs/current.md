@@ -49,6 +49,14 @@
 - **Deployed:** `eeb51d5`, `/healthz` status ok
 - **Uncommitted changes:** none (this handoff commits next)
 
+### Open branch not on main — PR #9 (draft)
+`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
+**250-253** (already applied to prod, all additive) plus `docs/100`. It is 0 behind main and
+kept merged with it. **It is not merged and not deployed.** Numbering note: parallel sessions
+claimed 245-248 and `docs/99` while it was in flight, so it yielded twice — its applied
+Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
+timestamp; all four applied before the files numbered 246-248 existed).
+
 ## Task Cut Off
 
 None mid-block. One thing is **diagnosed but unproven**: the nightly QA walk injects its minted cookie and is still redirected to sign-in. See Next Task.
@@ -85,10 +93,12 @@ None mid-block. One thing is **diagnosed but unproven**: the nightly QA walk inj
 1. **`WORKOS_COOKIE_PASSWORD` comparison** — step 1 above. I was blocked from reading the app's env out of Coolify (correct gate).
 2. **Live credential exchanges** — the harness blocks me from running `qa-agent-auth.mjs mint`. Chris ran the first one successfully; the orchestrator now mints its own per run, so this should not recur.
 3. **Colorado SRS price sheets** — `Pro Exteriors Colorado Price Sheet 8-13.pdf` (PEC-211) and `Pro Exteriors Colorado Pricing 8-14.pdf` (PEC-222) are in **no** store. Export them from the accounting mailbox; `scripts/upload-agreement-pdf.mjs` puts them away. Colorado still prices off quote `0049345641`, **expired 2026-06-27**.
-4. **A3 owed** — the nightly QA loop is a new agent capability (hard rule 9).
-5. **Two unidentified desktops** in PE-open-brain (`c5a0c869`, `5a9542cf`), both running — not touched.
-6. **`~/.config/cleverwork/master.env` is malformed** on Chris's Mac, lines 1317/1320 execute as shell commands. (Distinct from the Hetzner path, which simply does not exist.)
-7. Carried over: PEC-213 Wichita · PEC-111 · PEC-177 · PEC-172 · PEC-203.
+   - **Related, and worse than the expiry** (PR #9, mig 253): the office-ring path cannot reach `0049345641` *at all*, so `v_office_vendor_inheritance` reports `priced_items = 0` for Denver x SRS while the line-level path prices 11 of its 34 lines. **The two pricing paths disagree.** Cause: `v_office_vendor_branch` still joins agreements to branches by branch-number TEXT — the last survivor of what mig 244 removed — and SRS South Denver exists as two rows, `AMSDE` (no address, no geom, holds the book) and `SBP-SOUTHDENVER` (geocoded, 6.1 mi, holds nothing). Fresh sheets will not fix this by themselves.
+4. **Denver x SRS branch identity — needs Chris** (PR #9). Confirm `AMSDE` and `SBP-SOUTHDENVER` are the same physical branch so the agreement can be repointed, **or** approve repointing the agreement join to `vendor_branch_id` with mig 244's equivalence proof. Deliberately not decided by an agent: mig 240's rule is that a guess cannot become a fact. `v_agreement_unreachable` shows all three live SRS agreements (136 items) are ring-unreachable; Richardson and Wichita only reach via *archived duplicate* rows, so tidying those would silently unprice 114 more items.
+5. **A3 owed** — the nightly QA loop is a new agent capability (hard rule 9).
+6. **Two unidentified desktops** in PE-open-brain (`c5a0c869`, `5a9542cf`), both running — not touched.
+7. **`~/.config/cleverwork/master.env` is malformed** on Chris's Mac, lines 1317/1320 execute as shell commands. (Distinct from the Hetzner path, which simply does not exist.)
+8. Carried over: PEC-213 Wichita · PEC-111 · PEC-177 · PEC-172 · PEC-203.
 
 ## Verification Commands
 1. `git status --short` — empty
