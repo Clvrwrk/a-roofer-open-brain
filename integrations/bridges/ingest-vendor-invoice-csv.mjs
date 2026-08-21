@@ -8,8 +8,18 @@
 //   node integrations/bridges/ingest-vendor-invoice-csv.mjs --vendor=srs --file=<detail.csv>
 //   node integrations/bridges/ingest-vendor-invoice-csv.mjs --vendor=qxo --file=<detail.csv>
 //   node integrations/bridges/ingest-vendor-invoice-csv.mjs --vendor=qxo --statement --file=<statement.csv>
+//   node integrations/bridges/ingest-vendor-invoice-csv.mjs --vendor=srs --pdf --file=<invoice.pdf>
+//
+// The --pdf arm exists because the SRS portal CSV is a bulk export; single invoices also
+// arrive as PDFs in the accounting mailbox. It parses to the SAME normalized rows and
+// writes through the SAME upsertInvoice/replaceLines/upsertUomEvidence, so there is one
+// writer and one contract (docs/80). It is STRICTLY reconciled: the parsed lines must sum
+// to the printed SUB-TOTAL and SUB-TOTAL + charges + tax must equal the printed BALANCE,
+// or nothing is written. Prefer the CSV when you have it — the PDF truncates PO NUMBER to
+// 16 characters, and that field is the AccuLynx job key.
 
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { basename, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,6 +190,189 @@ async function ingestSrsDetail(vendorId, file) {
   return { invoices: n };
 }
 
+// ── SRS invoice PDF ────────────────────────────────────────────────────────────
+// Same output shape as ingestSrsDetail. Layout text from `pdftotext -layout`.
+
+// Centered fixed-width header tables ("PO NUMBER / REFERENCE NUMBER / JOB NUMBER / ...")
+// are sliced on midpoints between header-token centres; splitting on whitespace
+// misaligns the moment a column is blank, which is common (no REFERENCE, no JOB).
+function sliceByHeader(headerLine, valueLine, tokens) {
+  const centers = [];
+  let from = 0;
+  for (const t of tokens) {
+    const i = headerLine.indexOf(t, from);
+    if (i < 0) { centers.push(null); continue; }
+    centers.push(i + t.length / 2);
+    from = i + t.length;
+  }
+  const out = {};
+  tokens.forEach((t, k) => {
+    if (centers[k] === null) { out[t] = ""; return; }
+    const prev = centers.slice(0, k).filter((c) => c !== null).pop();
+    const next = centers.slice(k + 1).find((c) => c !== null);
+    const lo = prev === undefined ? 0 : Math.ceil((prev + centers[k]) / 2);
+    const hi = next === undefined ? valueLine.length : Math.floor((centers[k] + next) / 2);
+    out[t] = valueLine.slice(lo, hi).trim();
+  });
+  return out;
+}
+
+// SRS prints a 0.01 converted qty as ".01 /BD" (invoice 0050471744-001, TOP4X4X8SFTER).
+// Requiring a digit before the decimal silently drops that line — the invoice then misses
+// SUB-TOTAL by exactly its $0.89, which is why the reconciliation gate below exists.
+const PDF_N = String.raw`-?[\d,]*\.?\d+`;
+const PDF_LINE_RE = new RegExp(String.raw`^\s*(-?\d+)\s+(-?\d+)\s+([A-Z]{2,3})\s+(\S+)\s+.*?(${PDF_N})\s*\/\s*([A-Z]+)\s+(${PDF_N})\s*\/\s*([A-Z]+)\s+(${PDF_N})\s*$`);
+const PDF_CHARGE_RE = /^\s*(\*+SUB-TOTAL\*+|DELIVERY CHARGE|FREIGHT CHARGE|Sales Tax|RESTOCK[^\d]*)\s+.*?(-?[\d,]+\.\d{2})\s*$/i;
+const PDF_NOISE = /^\s*(Page \d+ of \d+|TO VIEW AND PAY|TERMS:|BALANCE|QTY|ORDERED\s+SHIPPED|UOM\s+ITEM|Invoice # :|Invoice Date :|Account # :|Branch :|Phone # :|Fax # :|Delivery # :|REMIT TO:|BILL TO:|SHIP TO:|PO NUMBER|AGENTS|SRS BUILDING|P\.O\. BOX|DALLAS, TX 75284|PRO EXTERIORS|FAX|Phone:|INVOICE\s*$|CREDIT MEMO\s*$)/i;
+
+function parseSrsInvoicePdf(file) {
+  const text = execFileSync("pdftotext", ["-layout", file, "-"], { encoding: "utf8", maxBuffer: 64e6 });
+  const lines = text.split("\n");
+  const grab = (re) => { for (const l of lines) { const m = l.match(re); if (m) return m[1].trim(); } return null; };
+
+  const terms = grab(/^TERMS:\s*(.+)$/);
+  const head = {
+    docType: /CREDIT\s+MEMO/i.test(text) ? "credit" : "invoice",
+    invoiceNumber: grab(/Invoice #\s*:\s*(\S+)/),
+    invoiceDate: usDate(grab(/Invoice Date\s*:\s*(\S+)/)),
+    account: grab(/Account #\s*:\s*(\S+)/),
+    branch: grab(/Branch\s*:\s*(\S+)/),
+    terms,
+    dueDate: usDate((String(terms ?? "").match(/Due Date:\s*([\d/]+)/) || [])[1]),
+    balance: num((text.match(/BALANCE\s+(-?\$[\d,]+\.\d{2})/) || [])[1]?.replace("$", "")),
+  };
+
+  // Header tables repeat on every page; take the first and remember the value-line indices
+  // so they are not mistaken for line-item descriptions.
+  const valueLineIdx = new Set();
+  const table = (probe, tokens) => {
+    const i = lines.findIndex(probe);
+    if (i < 0) return {};
+    lines.forEach((l, k) => { if (probe(l, k)) valueLineIdx.add(k + 1); });
+    return sliceByHeader(lines[i], lines[i + 1] ?? "", tokens);
+  };
+  const t1 = table((l) => /PO NUMBER/.test(l) && /ORDER DATE/.test(l),
+    ["PO NUMBER", "REFERENCE NUMBER", "JOB NUMBER", "ORDER DATE", "SHIP DATE", "SALES"]);
+  const t2 = table((l) => /AGENTS/.test(l) && /ORDER TYPE/.test(l),
+    ["AGENTS", "ORDER TYPE", "ORDERED BY", "SHIP VIA", "FREIGHT TERM", "CREATED BY"]);
+
+  const shipTo = (() => {
+    const i = lines.findIndex((l) => /SHIP TO:/.test(l));
+    if (i < 0) return null;
+    const at = lines[i].indexOf("SHIP TO:");
+    return lines.slice(i + 1, i + 6).map((l) => l.slice(at).trim()).filter(Boolean).join(", ") || null;
+  })();
+
+  const items = [], notes = [], charges = {};
+  lines.forEach((raw, k) => {
+    const m = raw.match(PDF_LINE_RE);
+    if (m) {
+      items.push({
+        qtyOrdered: num(m[1]), shipQty: num(m[2]), shipUom: m[3], itemNumber: m[4],
+        priceQty: num(m[5]), priceQtyUom: m[6], pricePerUom: num(m[7]), priceUom: m[8],
+        extended: num(m[9]), desc: [],
+      });
+      return;
+    }
+    const c = raw.match(PDF_CHARGE_RE);
+    if (c) {
+      const k2 = /SUB-TOTAL/i.test(c[1]) ? "subTotal" : /DELIVERY/i.test(c[1]) ? "delivery"
+        : /FREIGHT/i.test(c[1]) ? "freight" : /Sales Tax/i.test(c[1]) ? "tax" : "restock";
+      charges[k2] = num(c[2]);
+      return;
+    }
+    const t = raw.trim();
+    if (!t || PDF_NOISE.test(raw) || valueLineIdx.has(k)) return;
+    if (items.length) items[items.length - 1].desc.push(t);
+    else if (/Order Notes:|^DROP /i.test(t)) notes.push(t);
+  });
+
+  return { ...head, poNumber: t1["PO NUMBER"] || null, referenceNumber: t1["REFERENCE NUMBER"] || null,
+    jobNumber: t1["JOB NUMBER"] || null, orderDate: usDate(t1["ORDER DATE"]), shipDate: usDate(t1["SHIP DATE"]),
+    salesperson: t1["SALES"] || null, agents: t2["AGENTS"] || null, orderType: t2["ORDER TYPE"] || null,
+    orderedBy: t2["ORDERED BY"] || null, shipVia: t2["SHIP VIA"] || null, createdBy: t2["CREATED BY"] || null,
+    shipTo, items, charges, notes };
+}
+
+// A parsed PDF is only trustworthy if the vendor's own printed arithmetic reproduces.
+// Both checks must hold or the document is refused — a silently dropped line is a silently
+// understated invoice, and this pipeline feeds price audits and credit-memo claims.
+function reconcileSrsPdf(p) {
+  const cents = (n) => Math.round((n ?? 0) * 100);
+  const lineSum = cents(p.items.reduce((s, i) => s + (i.extended ?? 0), 0));
+  const sub = cents(p.charges.subTotal);
+  const total = sub + cents(p.charges.delivery) + cents(p.charges.freight)
+    + cents(p.charges.restock) + cents(p.charges.tax);
+  const problems = [];
+  if (!p.invoiceNumber) problems.push("no invoice number found");
+  if (!p.items.length) problems.push("no line items parsed");
+  if (p.charges.subTotal === undefined) problems.push("no SUB-TOTAL printed");
+  else if (lineSum !== sub) problems.push(`lines ${(lineSum / 100).toFixed(2)} != SUB-TOTAL ${(sub / 100).toFixed(2)}`);
+  if (p.balance === null || p.balance === undefined) problems.push("no BALANCE printed");
+  else if (total !== cents(p.balance)) problems.push(`SUB-TOTAL+charges ${(total / 100).toFixed(2)} != BALANCE ${Number(p.balance).toFixed(2)}`);
+  return problems;
+}
+
+async function ingestSrsPdfInvoice(vendorId, file) {
+  const p = parseSrsInvoicePdf(file);
+  const problems = reconcileSrsPdf(p);
+  if (problems.length) throw new Error(`${basename(file)} did not reconcile — refusing to write: ${problems.join("; ")}`);
+
+  const shipCost = (p.charges.delivery ?? 0) + (p.charges.freight ?? 0);
+  const origInv = (p.items.flatMap((i) => i.desc).join(" ").match(/Orig Inv#:\s*(\S+)/) || [])[1] ?? null;
+
+  const invoice = await upsertInvoice({
+    vendor_id: vendorId,
+    account_number: p.account,
+    invoice_number: p.invoiceNumber,
+    doc_type: p.docType,
+    invoice_date: p.invoiceDate,
+    due_date: p.dueDate,
+    order_date: p.orderDate,
+    ship_date: p.shipDate,
+    branch_key: p.branch || null,
+    po_number: p.poNumber || null,
+    job_name: p.jobNumber || null,
+    ship_to_text: p.shipTo || null,
+    salesperson: p.salesperson || null,
+    terms: p.terms || null,
+    ship_via: p.shipVia || null,
+    order_type: p.orderType || null,
+    sub_total: p.charges.subTotal ?? null,
+    sales_tax: p.charges.tax ?? null,
+    restock_fee: p.charges.restock ?? null,
+    ship_cost: shipCost || null,
+    total_due: p.balance,
+    raw: {
+      source_file: basename(file), source_kind: "invoice_pdf", notes: p.notes,
+      reference_number: p.referenceNumber, job_number: p.jobNumber, agents: p.agents,
+      ordered_by: p.orderedBy, created_by: p.createdBy,
+      delivery_charge: p.charges.delivery ?? null, freight_charge: p.charges.freight ?? null,
+      orig_invoice_number: origInv, reconciled: true,
+      po_number_may_be_truncated: (p.poNumber ?? "").length >= 16,
+    },
+    updated_at: new Date().toISOString(),
+  });
+
+  const lines = [];
+  for (const [i, it] of p.items.entries()) {
+    lines.push({
+      vendor_id: vendorId, invoice_id: invoice.id, invoice_number: p.invoiceNumber, line_number: i + 1,
+      item_number: it.itemNumber,
+      item_description: it.desc.join(" | ") || null,
+      ship_qty: it.shipQty, ship_uom: it.shipUom,
+      price_qty: it.priceQty ?? it.shipQty, price_uom: it.priceUom ?? it.shipUom,
+      price_per_uom: it.pricePerUom,
+      unit_price: it.pricePerUom,
+      extended_price: it.extended,
+      uom_source: "vendor_native",
+    });
+    if (it.priceQty) await upsertUomEvidence(vendorId, it.itemNumber, it.shipUom, it.priceUom, it.shipQty / it.priceQty);
+  }
+  await replaceLines(invoice.id, lines);
+  return { invoices: 1, lines: lines.length, invoice_number: p.invoiceNumber, doc_type: p.docType, balance: p.balance };
+}
+
 async function ingestQxoDetail(vendorId, file) {
   const rows = parseCsv(readFileSync(file, "utf8"));
   const header = rows.shift();
@@ -293,12 +486,13 @@ async function ingestQxoStatement(vendorId, file) {
 async function main() {
   const slug = args.vendor;
   const file = args.file;
-  if (!slug || !file) { console.error("--vendor=qxo|srs --file=<csv> [--statement]"); process.exit(1); }
+  if (!slug || !file) { console.error("--vendor=qxo|srs --file=<csv|pdf> [--statement] [--pdf]"); process.exit(1); }
   const [vendor] = await rest(`vendors?select=id,slug&slug=eq.${slug}`);
   if (!vendor) throw new Error(`vendor ${slug} not found`);
   let result, kind;
   try {
     if (args.statement) { kind = "statement_csv"; result = await ingestQxoStatement(vendor.id, file); }
+    else if (args.pdf) { kind = "invoice_pdf"; result = await ingestSrsPdfInvoice(vendor.id, file); }
     else if (slug === "srs") { kind = "invoice_csv"; result = await ingestSrsDetail(vendor.id, file); }
     else { kind = "invoice_csv"; result = await ingestQxoDetail(vendor.id, file); }
     await registerUpload(vendor.id, file, kind, result.invoices, "parsed", null);
