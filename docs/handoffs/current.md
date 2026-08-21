@@ -152,7 +152,7 @@ invoice history, holding anything below an exact-token match for my review."
 ## Verification Commands
 1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` should be this session's HEAD
 2. `git status --short` — empty
-3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
+3. `cd app/command-center && npm run build && npm test` — Complete, **315 passed**
 4. SQL: `select count(*) from price_agreements where ceo_verified is distinct from true;` → **0**
 5. SQL: `select count(*) from price_agreement_items where agreement_id='9f2c4d10-7a3b-4c6e-9d51-0b8e2f5a6c34';` → **101**
 6. SQL: `select count(*) from v_vendor_invoice_acculynx_match where matched and purchase_order_number is distinct from pe_job_number;` → **0**

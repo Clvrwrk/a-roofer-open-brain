@@ -117,11 +117,20 @@ export interface PriceAgreementCoverage {
  * truncation here would understate coverage rather than fail — so page until a short batch
  * proves the end was reached.
  */
-async function selectAll<T = any>(client: SupabaseClient, table: string, columns: string): Promise<T[]> {
+async function selectAll<T = any>(
+  client: SupabaseClient,
+  table: string,
+  columns: string,
+  orderBy: string[],
+): Promise<T[]> {
   const rows: T[] = [];
   let from = 0;
   for (;;) {
-    const { data, error } = await client.from(table).select(columns).range(from, from + PAGE_SIZE - 1);
+    // Offset paging without a total order is undefined: Postgres may return a row twice, or
+    // never, across two ranges. Every caller passes a key that is unique for its view.
+    let q = client.from(table).select(columns);
+    for (const col of orderBy) q = q.order(col);
+    const { data, error } = await q.range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(`${table}: ${error.message}`);
     const batch = (data ?? []) as T[];
     rows.push(...batch);
@@ -196,15 +205,19 @@ export async function loadPriceAgreementCoverage(
       client,
       "v_office_vendor_inheritance",
       "office_id,office_name,office_state,vendor_id,vendor_slug,vendor_name,branches_in_territory,primary_branches,region_covered_branches,branches_inheriting,competing_agreements,any_lapsed,all_verified,priced_items",
+      ["office_id", "vendor_id"],
     ),
     selectAll<any>(
       client,
       "v_office_vendor_branch",
       "office_id,office_name,office_state,vendor_id,vendor_slug,vendor_name,vendor_branch_id,branch_key,branch_number_raw,branch_name,city,state,address,phone,manager_name,manager_email,sales_rep_name,miles_from_office,agreement_id,agreement_number,agreement_source,agreement_scope,effective_date,expiry_date,is_lapsed,ceo_verified,holds_agreement,is_primary_branch",
+      // A branch can appear more than once per office x vendor (one row per agreement),
+      // so agreement_id is part of what makes this row unique.
+      ["office_id", "vendor_id", "vendor_branch_id", "agreement_id"],
     ),
-    selectAll<any>(client, "v_office_vendor_spend", "office_id,vendor_id,invoice_count,spend"),
-    selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend"),
-    selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status"),
+    selectAll<any>(client, "v_office_vendor_spend", "office_id,vendor_id,invoice_count,spend", ["office_id", "vendor_id"]),
+    selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend", ["reason"]),
+    selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status", ["office_id", "vendor_id"]),
   ]);
   const unresolvedSpend = unresolvedRows.reduce((sum, r) => sum + num(r.spend), 0);
 

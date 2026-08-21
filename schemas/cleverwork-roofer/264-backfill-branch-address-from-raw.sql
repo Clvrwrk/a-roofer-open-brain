@@ -35,18 +35,23 @@
 -- first anyway.
 
 WITH raw_best AS (
+    -- Richest payload per branch, with a deterministic tiebreak. Ordering by address length
+    -- alone leaves ties unresolved, so two runs could pick different payloads (and so
+    -- different city/state) for the same branch -- not idempotent. `i.id` breaks the tie
+    -- stably. Added 2026-08-21 after review.
     SELECT i.vendor_branch_id,
            (array_agg(i.raw->'branch'
-                      ORDER BY length(i.raw->'branch'->>'addressLine1') DESC NULLS LAST))[1] AS b
+                      ORDER BY length(NULLIF(i.raw->'branch'->>'addressLine1','')) DESC NULLS LAST,
+                               i.id))[1] AS b
       FROM public.abc_invoices i
      WHERE i.vendor_branch_id IS NOT NULL
-       AND i.raw->'branch'->>'city' IS NOT NULL
+       AND NULLIF(i.raw->'branch'->>'city','') IS NOT NULL
      GROUP BY i.vendor_branch_id
 )
 UPDATE public.vendor_branches vb
-   SET city    = COALESCE(vb.city,    rb.b->>'city'),
-       state   = COALESCE(vb.state,   rb.b->>'state'),
-       address = COALESCE(vb.address, rb.b->>'addressLine1'),
+   SET city    = COALESCE(vb.city,    NULLIF(rb.b->>'city','')),
+       state   = COALESCE(vb.state,   NULLIF(rb.b->>'state','')),
+       address = COALESCE(vb.address, NULLIF(rb.b->>'addressLine1','')),
        geocode_status = CASE
              -- Queue a geocode only for a branch that does not already have one, and key
              -- it on "did we supply location data", not on city alone.
@@ -58,7 +63,7 @@ UPDATE public.vendor_branches vb
              -- (b) matches 0 rows in prod today; (a) matched 2.
              WHEN vb.geom IS NULL
               AND (vb.city IS NULL OR vb.address IS NULL)
-              AND (rb.b->>'city' IS NOT NULL OR rb.b->>'addressLine1' IS NOT NULL)
+              AND (NULLIF(rb.b->>'city','') IS NOT NULL OR NULLIF(rb.b->>'addressLine1','') IS NOT NULL)
              THEN 'pending'
              ELSE vb.geocode_status END,
        updated_at = now()
@@ -70,7 +75,7 @@ UPDATE public.vendor_branches vb
    -- Added 2026-08-21 after review; the applied run's effect is unchanged, since the rows
    -- it would newly exclude were no-ops anyway.
    AND (
-        (vb.city    IS NULL AND rb.b->>'city'         IS NOT NULL)
-     OR (vb.state   IS NULL AND rb.b->>'state'        IS NOT NULL)
-     OR (vb.address IS NULL AND rb.b->>'addressLine1' IS NOT NULL)
+        (vb.city    IS NULL AND NULLIF(rb.b->>'city','')         IS NOT NULL)
+     OR (vb.state   IS NULL AND NULLIF(rb.b->>'state','')        IS NOT NULL)
+     OR (vb.address IS NULL AND NULLIF(rb.b->>'addressLine1','') IS NOT NULL)
    );
