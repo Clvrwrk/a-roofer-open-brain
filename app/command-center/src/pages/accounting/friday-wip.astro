@@ -65,24 +65,35 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
 
     {board.error && <p class="fw-error">{board.error}</p>}
 
-    <div class="fw-kpis">
-      <div class="fw-kpi"><span class="fw-kpi-lab">Billed AR (bankable)</span><span class="fw-kpi-val">{money(k.billedAr)}</span><span class="fw-kpi-sub">open balance on issued invoices</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Unbilled contract</span><span class="fw-kpi-val">{money(k.unbilled)}</span><span class="fw-kpi-sub">approved work never invoiced — backlog, not AR</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Total job balance</span><span class="fw-kpi-val">{money(k.totalBalance)}</span><span class="fw-kpi-sub">{k.ledgerJobs} jobs on the ledger</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></div>
-      <div class="fw-kpi"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></div>
+    <p class="fw-filterbar" id="fw-filterbar" hidden>
+      <span id="fw-filter-label"></span>
+      <button type="button" class="fw-clear" id="fw-clear">Clear filter ✕</button>
+    </p>
+
+    {/* Every pill is a filter. data-kpi matches the keys the loader tagged each
+        row with, so clicking a pill shows exactly the rows its number was
+        summed from. "Total job balance" selects every row, so it doubles as
+        the clear-filter control. */}
+    <div class="fw-kpis" role="group" aria-label="Filter the board by KPI">
+      <button type="button" class="fw-kpi" data-kpi="billedAr" aria-pressed="false"><span class="fw-kpi-lab">Billed AR (bankable)</span><span class="fw-kpi-val">{money(k.billedAr)}</span><span class="fw-kpi-sub">open balance on issued invoices</span></button>
+      <button type="button" class="fw-kpi" data-kpi="unbilled" aria-pressed="false"><span class="fw-kpi-lab">Unbilled contract</span><span class="fw-kpi-val">{money(k.unbilled)}</span><span class="fw-kpi-sub">approved work never invoiced — backlog, not AR</span></button>
+      <button type="button" class="fw-kpi" data-kpi="totalBalance" aria-pressed="false"><span class="fw-kpi-lab">Total job balance</span><span class="fw-kpi-val">{money(k.totalBalance)}</span><span class="fw-kpi-sub">{k.ledgerJobs} jobs on the ledger</span></button>
+      <button type="button" class="fw-kpi" data-kpi="criticalArTier1" aria-pressed="false"><span class="fw-kpi-lab">Critical AR — Tier 1</span><span class="fw-kpi-val">{money(k.criticalArTier1)}</span><span class="fw-kpi-sub">delivered · invoiced · unpaid</span></button>
+      <button type="button" class="fw-kpi" data-kpi="tier2NeverInvoiced" aria-pressed="false"><span class="fw-kpi-lab">Tier 2 — never invoiced</span><span class="fw-kpi-val">{money(k.tier2NeverInvoiced)}</span><span class="fw-kpi-sub">delivered, no invoice raised — raise it</span></button>
+      <button type="button" class="fw-kpi" data-kpi="costsIncurred" aria-pressed="false"><span class="fw-kpi-lab">Expense realized (QBO)</span><span class="fw-kpi-val">{money(k.costsIncurredTotal)}</span><span class="fw-kpi-sub">job-tagged bills + purchases, ledger jobs</span></button>
+      <button type="button" class="fw-kpi" data-kpi="signedContract" aria-pressed="false"><span class="fw-kpi-lab">Signed contract, no AR</span><span class="fw-kpi-val">{k.signedContractJobs}</span><span class="fw-kpi-sub">work in progress, nothing invoiced yet</span></button>
     </div>
 
     <div class="fw-cashmap">
       <span class="fw-cashmap-title">3-week cash map — billed AR only. Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.</span>
-      <div class="fw-cashmap-cells">
-        <div class="fw-week"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></div>
-        <div class="fw-week"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></div>
-        <div class="fw-week"><span class="fw-week-lab">Week 3</span><span class="fw-week-val">{money(k.week3)}</span></div>
-        <div class="fw-week"><span class="fw-week-lab">Beyond wk 3</span><span class="fw-week-val">{money(k.beyond)}</span></div>
-        <div class="fw-week fw-week-warn"><span class="fw-week-lab">Billed AR, no date</span><span class="fw-week-val">{money(k.billedArNoDate)}</span><span class="fw-week-sub">unscheduled — this is the meeting's job</span></div>
-        <div class="fw-week"><span class="fw-week-lab">Dated share</span><span class="fw-week-val">{pct(k.datedShare)}</span><span class="fw-week-sub">of billed AR carries a date</span></div>
+      <div class="fw-cashmap-cells" role="group" aria-label="Filter the board by cash week">
+        <button type="button" class="fw-week" data-kpi="week1" aria-pressed="false"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></button>
+        <button type="button" class="fw-week" data-kpi="week2" aria-pressed="false"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></button>
+        <button type="button" class="fw-week" data-kpi="week3" aria-pressed="false"><span class="fw-week-lab">Week 3</span><span class="fw-week-val">{money(k.week3)}</span></button>
+        <button type="button" class="fw-week" data-kpi="beyond" aria-pressed="false"><span class="fw-week-lab">Beyond wk 3</span><span class="fw-week-val">{money(k.beyond)}</span></button>
+        <button type="button" class="fw-week fw-week-warn" data-kpi="billedArNoDate" aria-pressed="false"><span class="fw-week-lab">Billed AR, no date</span><span class="fw-week-val">{money(k.billedArNoDate)}</span><span class="fw-week-sub">unscheduled — this is the meeting's job</span></button>
+        {/* Dated share is a ratio, not a set of rows — nothing to filter to. */}
+        <div class="fw-week fw-week-static"><span class="fw-week-lab">Dated share</span><span class="fw-week-val">{pct(k.datedShare)}</span><span class="fw-week-sub">of billed AR carries a date</span></div>
       </div>
     </div>
 
@@ -115,11 +126,12 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId} data-rep={j.salesperson}>
+                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
                   <td class="fw-client" title={j.client}>{j.client}</td>
-                  <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}`}>
+                  <td class="fw-bucket" title={`AccuLynx: ${milestoneLabel(j.milestone)} · ref: ${j.bucket} · ${j.collectionStatus}${j.populationReason === "signed_contract" ? " · on the board as a signed contract (no AR yet)" : ""}`}>
                     <strong>{milestoneLabel(j.milestone)}</strong>
+                    {j.populationReason === "signed_contract" && <span class="fw-wip-dot" aria-label="Signed contract, no AR yet">•</span>}
                   </td>
                   <td>{j.salesperson}</td>
                   <td class="fw-num">{money(j.contractAmount)}</td>
@@ -150,8 +162,10 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     ))}
 
     <p class="fw-foot">
-      Yellow columns save automatically and survive the nightly rebuild. Nightly: AccuLynx sync (hourly) + ABC (3:30a) +
-      QBO → <code>refresh_wip_ar_master()</code> at ~4:45a CT, pack publish at 6a CT. Thursday: week roll, then this board is the meeting.
+      Yellow columns save automatically and survive the nightly rebuild. Feeds, all verified running 2026-08-21:
+      AccuLynx sync hourly · QBO mirror daily 01:00 UTC · ABC mirror daily 07:30 UTC (3:30a ET) →
+      <code>refresh_wip_ar_master()</code> daily 10:45 UTC (5:45a CT), pack publish 6a CT. Thursday: week roll, then this board is the meeting.
+      Population: jobs carrying AR, plus signed contracts (<span class="fw-wip-dot">•</span>) — prospect/approved/completed/invoiced over $1.
     </p>
   </section>
 
@@ -198,14 +212,31 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
     .fw .fw-btn-primary[disabled] { opacity: 0.6; cursor: wait; }
     .fw .fw-error { color: var(--red); font-size: 13px; }
     .fw .fw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
-    .fw .fw-kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--panel); }
+    /* KPI pills and cash-map cells are buttons that filter the board. They keep
+       the card look; only the affordances (cursor, hover, pressed) are added. */
+    .fw .fw-kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--panel); text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+    .fw .fw-kpi:hover { border-color: var(--gold); }
+    .fw .fw-kpi:focus-visible, .fw .fw-week:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+    .fw .fw-kpi[aria-pressed="true"] { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); background: var(--fill-cell); }
+    .fw[data-theme="dark"] .fw-kpi[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+    .fw .fw-filterbar { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12.5px; color: var(--muted); }
+    .fw .fw-clear { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 3px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+    .fw .fw-clear:hover { border-color: var(--muted); }
+    .fw .fw-wip-dot { color: var(--gold); font-weight: 700; margin-left: 4px; }
+    /* Filtering hides via [hidden]. Table rows carry a UA display that can
+       outrank the UA [hidden] rule, so state it explicitly. */
+    .fw [hidden] { display: none !important; }
     .fw .fw-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .fw .fw-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .fw .fw-kpi-sub { font-size: 11.5px; color: var(--muted); }
     .fw .fw-cashmap { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--panel); }
     .fw .fw-cashmap-title { font-size: 12px; color: var(--muted); }
     .fw .fw-cashmap-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-    .fw .fw-week { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--zebra); }
+    .fw .fw-week { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--zebra); border: 1px solid transparent; text-align: left; font-family: inherit; color: inherit; font-size: 12.5px; cursor: pointer; }
+    .fw .fw-week-static { cursor: default; }
+    button.fw-week:hover { border-color: var(--gold); }
+    .fw .fw-week[aria-pressed="true"] { border-color: var(--navy); background: var(--fill-cell); }
+    .fw[data-theme="dark"] .fw-week[aria-pressed="true"] { border-color: var(--gold); }
     .fw .fw-week-warn { background: var(--warn-bg); }
     .fw .fw-week-lab { font-size: 11px; color: var(--muted); }
     .fw .fw-week-val { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -281,18 +312,73 @@ const reps = [...new Set(board.groups.flatMap((g) => g.jobs.map((j) => j.salespe
       });
     });
 
-    // Rep filter: hides non-matching rows and empty location groups so one
-    // rep's book can be processed top to bottom.
+    // ── Filtering ────────────────────────────────────────────────────────
+    // Two independent filters — rep and KPI — resolved in ONE pass so they
+    // compose. A row is visible when it satisfies both. Visibility is a class
+    // rather than an inline style so counting visible rows never has to parse
+    // a style attribute.
     const repSelect = document.getElementById("fw-rep") as HTMLSelectElement | null;
-    repSelect?.addEventListener("change", () => {
-      const rep = repSelect.value;
+    const filterBar = document.getElementById("fw-filterbar") as HTMLElement | null;
+    const filterLabel = document.getElementById("fw-filter-label") as HTMLElement | null;
+    const clearBtn = document.getElementById("fw-clear") as HTMLButtonElement | null;
+    const kpiButtons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button.fw-kpi[data-kpi], button.fw-week[data-kpi]"),
+    );
+
+    let activeKpi: string | null = null;
+
+    const applyFilters = () => {
+      const rep = repSelect?.value ?? "";
+      let shown = 0;
+
       document.querySelectorAll<HTMLTableRowElement>("tr[data-job]").forEach((row) => {
-        row.style.display = !rep || row.getAttribute("data-rep") === rep ? "" : "none";
+        const repOk = !rep || row.getAttribute("data-rep") === rep;
+        const kpiOk =
+          !activeKpi || (row.getAttribute("data-kpi") ?? "").split(" ").includes(activeKpi);
+        const visible = repOk && kpiOk;
+        row.hidden = !visible;
+        if (visible) shown += 1;
       });
+
+      // Collapse location groups that have nothing left in them, and re-open
+      // the ones that do — a filtered-to-empty group is noise.
       document.querySelectorAll<HTMLElement>(".fw-group").forEach((group) => {
-        const visible = group.querySelectorAll<HTMLTableRowElement>('tr[data-job]:not([style*="none"])').length;
-        group.style.display = visible ? "" : "none";
+        const visible = group.querySelectorAll<HTMLTableRowElement>("tr[data-job]:not([hidden])").length;
+        group.hidden = visible === 0;
       });
+
+      kpiButtons.forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.kpi === activeKpi));
+      });
+
+      const active = activeKpi ? kpiButtons.find((b) => b.dataset.kpi === activeKpi) : null;
+      const name = active?.querySelector(".fw-kpi-lab, .fw-week-lab")?.textContent?.trim() ?? "";
+      if (activeKpi || rep) {
+        if (filterLabel) {
+          const parts = [activeKpi ? `KPI: ${name}` : null, rep ? `Rep: ${rep}` : null].filter(Boolean);
+          filterLabel.textContent = `${parts.join(" · ")} — ${shown} job${shown === 1 ? "" : "s"}`;
+        }
+        filterBar?.removeAttribute("hidden");
+      } else {
+        filterBar?.setAttribute("hidden", "");
+      }
+    };
+
+    repSelect?.addEventListener("change", applyFilters);
+
+    kpiButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        // Clicking the active pill clears it, so a pill is a toggle rather
+        // than a mode you have to escape from.
+        activeKpi = activeKpi === btn.dataset.kpi ? null : (btn.dataset.kpi ?? null);
+        applyFilters();
+      });
+    });
+
+    clearBtn?.addEventListener("click", () => {
+      activeKpi = null;
+      if (repSelect) repSelect.value = "";
+      applyFilters();
     });
 
     // Maya send button — confirms, then POSTs; reports the outcome inline.

@@ -36,6 +36,14 @@ export interface FridayWipJob {
   hitMiss: string | null;
   notes: string | null;
   computedAt: string | null;
+  /** Why this job is on the board — 'ar_balance' | 'signed_contract' | 'both' (mig 258). */
+  populationReason: string | null;
+  /**
+   * Which KPI pills / cash-map cells this row is counted in. The board's
+   * filters are driven off exactly these keys, so a pill can never select a
+   * different set of rows than the number on it was summed from.
+   */
+  kpiKeys: string[];
 }
 
 export interface FridayWipGroup {
@@ -60,6 +68,8 @@ export interface FridayWipKpis {
   beyond: number;
   datedShare: number; // share of billed AR carrying a date
   costsIncurredTotal: number;
+  arJobs: number; // jobs admitted by an AR balance
+  signedContractJobs: number; // signed contracts carrying no AR yet (mig 258)
 }
 
 export interface FridayWipBoard {
@@ -89,7 +99,7 @@ function emptyBoard(error: string): FridayWipBoard {
       ledgerJobs: 0, totalBalance: 0, billedAr: 0, unbilled: 0,
       criticalArTier1: 0, tier2NeverInvoiced: 0, billedArNoDate: 0,
       week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
-      costsIncurredTotal: 0,
+      costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
     },
     groups: [],
     error,
@@ -107,7 +117,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
         "contract_amount,billed_total,collected_revenue,outstanding_ar,billed_ar,unbilled," +
         "days_in_status,action,acculynx_url,costs_incurred_to_date,expense_outstanding," +
         "change_order_total,expected_invoice_cash_date,expected_paid_full_date,expected_cash_amount," +
-        "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at",
+        "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at,population_reason",
     )
     .eq("in_ar_population", true)
     .order("location", { ascending: true })
@@ -145,6 +155,8 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     hitMiss: (r.hit_miss as string) ?? null,
     notes: (r.notes as string) ?? null,
     computedAt: (r.computed_at as string) ?? null,
+    populationReason: (r.population_reason as string) ?? null,
+    kpiKeys: [],
   }));
 
   // 3-week cash map runs on BILLED AR only — you cannot collect what was
@@ -156,28 +168,47 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     totalBalance: 0, billedAr: 0, unbilled: 0,
     criticalArTier1: 0, tier2NeverInvoiced: 0, billedArNoDate: 0,
     week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
-    costsIncurredTotal: 0,
+    costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
   };
+  // Every KPI is accumulated and TAGGED in the same pass. `mark` is the only
+  // place a job is counted, so a pill's filter and the number printed on it
+  // are derived from one decision and cannot drift apart.
   for (const j of jobs) {
+    const mark = (key: string) => { if (!j.kpiKeys.includes(key)) j.kpiKeys.push(key); };
+
     kpis.totalBalance += j.outstandingAr;
+    mark("totalBalance"); // every ledger job — this pill doubles as "clear"
+
     kpis.billedAr += j.billedAr;
+    if (j.billedAr > 0) mark("billedAr");
+
     kpis.unbilled += j.unbilled;
-    if (j.costsIncurred != null) kpis.costsIncurredTotal += j.costsIncurred;
-    if (DELIVERED_BUCKETS.has(j.bucket)) {
-      if (j.billedAr > 0) kpis.criticalArTier1 += j.billedAr;
-      if (j.unbilled > 0) kpis.tier2NeverInvoiced += j.unbilled;
+    if (j.unbilled > 0) mark("unbilled");
+
+    if (j.costsIncurred != null) {
+      kpis.costsIncurredTotal += j.costsIncurred;
+      if (j.costsIncurred !== 0) mark("costsIncurred");
     }
+
+    if (j.populationReason === "signed_contract") { kpis.signedContractJobs += 1; mark("signedContract"); }
+    else { kpis.arJobs += 1; mark("arBalance"); }
+
+    if (DELIVERED_BUCKETS.has(j.bucket)) {
+      if (j.billedAr > 0) { kpis.criticalArTier1 += j.billedAr; mark("criticalArTier1"); }
+      if (j.unbilled > 0) { kpis.tier2NeverInvoiced += j.unbilled; mark("tier2NeverInvoiced"); }
+    }
+
     if (j.billedAr > 0) {
       const addToWeek = (dateStr: string, amount: number) => {
         const days = Math.floor((new Date(dateStr + "T00:00:00").getTime() - today.getTime()) / dayMs);
-        if (days <= 6) kpis.week1 += amount;
-        else if (days <= 13) kpis.week2 += amount;
-        else if (days <= 20) kpis.week3 += amount;
-        else kpis.beyond += amount;
+        if (days <= 6) { kpis.week1 += amount; mark("week1"); }
+        else if (days <= 13) { kpis.week2 += amount; mark("week2"); }
+        else if (days <= 20) { kpis.week3 += amount; mark("week3"); }
+        else { kpis.beyond += amount; mark("beyond"); }
       };
       // Estimated $ at the invoice/cash date is near-term cash; the remainder
       // of the billed balance lands at the paid-in-full date. Undated = the
-      // meeting's job.
+      // meeting's job. A job can land in two weeks, so kpiKeys is a set.
       const estCash =
         j.expectedInvoiceCashDate && j.expectedCashAmount != null
           ? Math.min(Math.max(j.expectedCashAmount, 0), j.billedAr)
@@ -186,7 +217,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
       const remainder = j.billedAr - estCash;
       if (remainder > 0) {
         if (j.expectedPaidFullDate) addToWeek(j.expectedPaidFullDate, remainder);
-        else kpis.billedArNoDate += remainder;
+        else { kpis.billedArNoDate += remainder; mark("billedArNoDate"); }
       }
     }
   }
