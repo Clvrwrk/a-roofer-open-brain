@@ -2,7 +2,7 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-21 07:00 (CT)
+**Date:** 2026-08-21 09:00 (CT)
 **Agent:** Lead Orchestrator (Claude Code)
 **Reason:** User-requested /project-handoff /wrapup
 
@@ -10,208 +10,166 @@
 
 ## Accomplished This Session
 
-### Invoice Audit redesign — 10 toolbar controls → 4, 7 pills → 4 cards (`e590b77`)
+Three rounds, all initiated by Chris handing over files: 4 agreement PDFs → a policy change
+→ 5 invoice PDFs.
 
-- `pages/accounting/invoice-audit.astro`: toolbar is now search · office · a segmented
-  **To audit / Due now / All** switch · **More filters ▾** (date range + tolerance). The
-  three old checkboxes still exist **hidden** and remain the source of truth for
-  `applyFilter()`, so tree logic and deep links are untouched — the switch only drives them.
-- `pages/accounting/invoice-audit.astro`: seven pills regrouped into four cards by the
-  question being answered — **Claim it · Chase it · Pay it · Fix it**. Pay it renders the
-  loop as a pipeline (`56 → 32 → 5`), Fix it is labelled data coverage, not a work queue.
-- `scripts/invoice-audit-tree.ts`: scope-switch wiring. The Due-Now card button **clicks the
-  switch** rather than setting `.checked`, because assigning `.checked` in code does not
-  fire `change` and the toolbar would silently disagree with the tree.
-- `scripts/invoice-audit-tree.ts` + the page: **tree empty state added** — there was none, so
-  a filter matching nothing rendered a blank page. That is the *default* view today, because
-  every open invoice has been audited and "To audit" is legitimately 0.
+### Round 1 — the SRS agreement PDFs are stored and bound (`a6b900c`, migration 251)
 
-### Sent CM workspace — the chase surface (`e590b77`)
+- `agreements` bucket: **4 SRS documents uploaded** and bound to their agreement records.
+  Verified end to end — `/api/price-agreement/pdf/<id>` returns 302 to a signed URL and the
+  bytes are **sha256-identical to the source file** for all four, on the live site.
+  `/accounting/credit-memos/0050033202-002` now shows **Open agreement PDF →**.
+- `schemas/…/251-srs-colorado-price-list-2026-08-14.sql`: the 4th PDF had **no agreement
+  record**. Provenance established without letterhead — PDF author is **Blake Wells**, the
+  same `B WELLS` on both SRS quotes, and the catalog is TOP SHIELD (SRS's house brand).
+  Anchored to `AMSDE` because agreements resolve at the **office** level (proved it:
+  `0049707508-001` on `SBP-DENVER` prices off the `AMSDE`-bound quote). 112 printed rows →
+  **101 items** (9 `$0.00`/`CALL` placeholders dropped, 2 duplicates collapsed).
 
-- `pages/accounting/credit-memos/sent.astro`: **new.** Exact replica of Weekly CM scoped to
-  `status='sent'`, Request → Sent language. Adds sent/follow-up dates with overdue in red,
-  and **Mark received** replaces Approve. No drafts section.
-- `pages/api/credit-memos/weekly-csv.ts`: optional `?status=sent`; default stays `approved`
-  so Weekly's downloads are byte-for-byte unchanged.
-- The page states on its face that **the email is rebuilt from today's audit lines** — no
-  copy of the outbound message is stored (`packet` holds provenance keys only), so it cannot
-  replay what was emailed on 2026-08-09.
+### Round 2 — `ceo_verified` retired as a gate (`a6b900c`, migration 252)
 
-### Territory drops (`e590b77`, migration 249)
+Chris: *"once a price agreement is added it is approved and active."* Finished what docs/82
+§6 decision 3 started on 2026-08-05. Four surfaces still gated:
 
-- `schemas/249-drop-wichita-falls-austin-out-of-boundary.sql`: Wichita Falls (ABC + QXO 249)
-  and Austin (ABC 39, 465) → `out_of_boundary`. Both Austin invoices are already no-price
-  shop supplies (`S.S.TOOLS`, `TRUCK 102`) so **no dollar figure moved**.
-- Result: **no covered branch sits outside an active 2-hour isochrone** —
-  `office_for_point()` and `pricing_status` agree everywhere (0 exceptions).
+- `lib/credit-memo.ts`: the `warn` "has not been accepted as a price agreement" branch
+  removed. **docs/93 intact** — it still says the document is a quote.
+- `lib/abc-price-gaps.ts`: `unverified_agreement` reason code removed entirely (it carried
+  severity **blocked**), with its severity/action/summary entries.
+- `pages/api/price-agreement/review/promote.ts`: `ceo_verified: false` → `true`.
+- `pages/accounting/price-agreement/builder.astro`: "CEO verified" pill removed.
+- 10 rows flipped to approved. **Columns kept** — rule 1 is additive-only and the timestamps
+  are real provenance.
 
-### CM workspace headers (`efcd6c9`, migration 250)
+### Round 3 — 5 SRS invoice PDFs ingested (`fbb32d1`, migrations 253–255)
 
-- `lib/cm-request-header.ts`: **new.** One shared loader for both Weekly and Sent so their
-  headers cannot drift. PE office · vendor · vendor branch (name + id) · job · invoice date.
-- Both workspaces: subject line now carries the vendor — `[SRS Distribution] Credit memo
-  request - …`. Job renders as a live AccuLynx link when an id exists, text when only a
-  number does. Missing pieces are **named** ("office not resolved"), never blanked.
-- `schemas/250-vendor-invoice-acculynx-match.sql`: `v_invoice_acculynx_match` is built
-  `FROM abc_invoices` and never covered the vendor side, so every SRS claim printed **"no job
-  on the PO"** against POs plainly reading `KS-189`. New vendor-side view applies migration
-  237's canonical PO job token — **32 of 33** vendor invoices resolve.
-
-### SRS agreement PDF link path (`dbe0e1f`)
-
-- `pages/api/price-agreement/pdf/[agreementId].ts`: `upload-agreement-pdf.mjs` binds
-  `source_pdf_url` to a **bucket-relative path**, but the endpoint returned it verbatim as a
-  `Location` — a relative Location resolves against the app host and 404s. It now splits
-  bucket from key and returns a **signed URL**; absolute URLs still pass through.
-- `lib/credit-memo.ts`: the evidence panel had the same flaw (raw column as an `href`); it
-  now routes through the endpoint as the ABC path always did.
-- `lib/credit-memo.ts`: **the recorded-citation branch only enriched ABC integer ids.** Once
-  another session backfilled the SRS writer, uuid citations lost `version_label`,
-  `source_file` and `ceo_verified`, so `isQuote` defaulted false and Document-type reported
-  a flat "Priced from an agreement" for an **accepted quote**. docs/93 forbids hiding a
-  quote. uuids are now enriched from `price_agreements` the same way.
-
-### Mark sent — Claim it → Chase it (`52c67fa`)
-
-- `pages/accounting/credit-memos/weekly.astro`: **per-vendor** button in the vendor summary
-  (one email per vendor = the natural unit) **and per-invoice** beside `detail →`.
-  `stopPropagation` so the `<summary>` does not collapse.
-- `pages/accounting/invoice-audit.astro` + `scripts/invoice-audit-tree.ts`: Card 1 gets one
-  `Mark sent →`. Reads `/api/credit-memos/pending`, takes the `approved` set, and **names
-  every vendor in the confirm** because the set can span vendors and you may only have
-  emailed one. Explicit `[data-kpi-btn="marksent"]` hook for the 60s poll.
-- Nothing is emailed (SOUL). Each write is vendor-scoped by the existing endpoint.
-
-### Housekeeping
-
-- `docs/100-invoice-audit-four-cards-and-sent-workspace.md`: renamed from `99-…` — the
-  previous session had already taken 99 (`99-credit-memo-money-truth-2026-08-20.md`).
+- `integrations/bridges/ingest-vendor-invoice-csv.mjs`: new **`--pdf` arm on the same
+  script**, reusing `upsertInvoice`/`replaceLines`/`upsertUomEvidence` so PDFs and the portal
+  CSV share one contract (docs/80).
+- **Reconciliation gate**: a PDF is written only if parsed lines sum to the printed
+  `SUB-TOTAL` and `SUB-TOTAL + delivery + freight + restock + tax` equals `BALANCE`.
+- `schemas/…/253-srs-branch-code-aliases.sql`: migration 243 made branch resolution fail
+  **closed** and there were **zero SRS alias rows** — the next invoice would have landed with
+  no branch, no office, no price, silently. Seeded `DJWIC/SSMEL/SSCOP/AMDEN/SHCOL`.
+- `schemas/…/254-po-number-canonical-acculynx-job.sql`: `po_number` → the AccuLynx job
+  number, 9 rows. Printed PO preserved at `raw.po_number_as_printed`.
+- `schemas/…/255-vendor-invoice-po-canonicalize-trigger.sql`: keeps it canonical on write.
+  **Fails open** — an unrecognised PO stays exactly as printed.
+- `docs/101-…md` + 2 addenda.
 
 ## Git State
-- **Branch:** `main`
-- **Last commit:** `52c67fa` — "feat(credit-memos): Mark sent moves an approved request from Claim it to Chase it"
-- **Live `buildCommit`:** `52c67fa` — matches `origin/main`
-- **Uncommitted changes:** the doc renumber + this handoff (committed as the wrap-up commit)
+- **Branch:** `main` — `main == origin/main`
+- **Last commit:** `fbb32d1` + this wrap-up commit
+- **Live `buildCommit`:** `fbb32d1` (verify with `/healthz` after the wrap-up push)
+- **Uncommitted changes:** none
 
 ## Task Cut Off
-None — session ended at a clean boundary. Every change is committed, deployed and verified
-in a browser.
+None — session ended at a clean boundary. Everything committed, deployed and verified in a
+browser or through the live API.
 
 ## Next Task — Start Here
 
-**Task:** Upload the three SRS agreement PDFs so the evidence-panel link goes live.
+**Task: PEC-226 — decide how the SRS description-only price sheets start pricing.**
 
 **What to check / do:**
-1. Confirm the link path still 404s honestly:
-   `curl -s https://cc.proexteriorsus.net/api/price-agreement/pdf/3e7b261b-533d-4df5-aa3f-94bef11f9868`
-   → should name the missing file and the upload command.
-2. Get the files. They are **not** in the repo, the `agreements` bucket, or on this machine:
-   - `Wichita_Quote0049828559.pdf` → agreement `3e7b261b-533d-4df5-aa3f-94bef11f9868`
-   - `Englewood_co_Revised Pro Exteriors Quote 06.01.26 mo (1).pdf` → `7246ed93-a1cc-44e5-b338-1a05f204c3e4`
-   - `Richardson_MELESSA_PRICE_SHEET- LEVEL 4 (1).pdf` → `df0bb65a-4e01-4f43-9d85-422eb46bfcd9`
-3. Upload each (dry-run first):
-   `node scripts/upload-agreement-pdf.mjs <file.pdf> --as wichita-srs-quote-0049828559.pdf --agreement 3e7b261b-533d-4df5-aa3f-94bef11f9868 --dry-run`
-4. Reload `/accounting/credit-memos/0050033202-002` — "No agreement PDF stored" should
-   become an **Open agreement PDF →** link.
+1. Confirm the gap is still real:
+   `select count(*) from price_agreement_items pai join price_agreements pa on pa.id=pai.agreement_id where pa.version_label like '%Melissa%' and pai.raw_item_number is not null;` → expect **0**.
+2. Read `docs/101-…md` §2 and PEC-226 for the two options.
+3. If Chris picks **backfill** (recommended): map sheet descriptions → SRS item numbers from
+   `vendor_invoice_lines` history, write to `price_agreement_items.raw_item_number`, and hold
+   anything below an exact-token match for human review. Colour variants share a description.
+4. If Chris picks **trigram**: mirror the ABC arm (`similarity >= 0.45`) on the vendor path —
+   but the `Item match` evidence check must then say the match was fuzzy.
 
-**If the Colorado sheets cannot be found:** commit `ed792ce` records that the two SRS
-Colorado sheets were delivered to the **Pro Exteriors accounting mailbox** and are not
-reachable from `chussey@cleverwork.io`. Someone with that mailbox must export them first —
-do not spend time searching Drive.
+**If the backfill produces ambiguous matches:** do not guess. This feeds credit-memo claims
+sent to a vendor; a wrong price is worse than no price.
 
-**Prompt to use:** "Read docs/handoffs/current.md. The three SRS agreement PDFs are at
-<paths>. Upload and bind them, then verify the link on
-/accounting/credit-memos/0050033202-002."
+**Prompt to use:** "Read docs/101-srs-agreement-pdfs-and-ceo-verified-retirement.md §2 and
+Linear PEC-226. Backfill raw_item_number on the SRS Melissa and Colorado price sheets from
+invoice history, holding anything below an exact-token match for my review."
 
 ## Decisions Made This Session
 
-- **The three scope checkboxes stay in the DOM, hidden.** They remain the source of truth for
-  `applyFilter()`. Removing them would have meant rewriting the tree filter, the Due-Now
-  button and deep-link handling for no user-visible gain.
-- **The theme trio stays on the Invoice Audit toolbar.** The teardown proposed retiring it to
-  the app shell, but it lives on **six** surfaces and `AppShell` has no theme control — pulling
-  it from one page would strand that page. Promoting it is a six-surface change of its own.
-- **The Sent workspace rebuilds the email rather than replaying it.** No outbound body is
-  stored, so a replay is impossible; the page says so in a banner instead of implying it is a
-  copy. An exact replay needs the rendered HTML stored at send time.
-- **Mark sent never emails.** Per SOUL, nothing leaves the building without a human — the
-  button records that a human sent it and starts the 14-day clock.
-- **Card 1's Mark sent names every vendor in its confirm.** The approved set can span vendors
-  and you may only have emailed one.
-- **Wichita Falls and Austin dropped rather than kept as overrides.** Wichita Falls arrived
-  via the closed Euless isochrone with no human decision; Austin were reversed deliberately.
+- **The Colorado sheet got its own agreement record**, not a bind to the Englewood quote —
+  different effective date and a different (office-wide) scope.
+- **Englewood NOT archived.** Date windows decide which book applies; 11 re-audit lines cite it.
+- **9 `$0.00`/`CALL` Colorado items deliberately not loaded** — they would fabricate
+  discrepancies against a price the vendor never quoted.
+- **`ceo_verified` columns kept, not dropped**, and docs/93 untouched: the gate is gone, the
+  disclosure that a document is a quote is not.
+- **`po_number` rewritten, printed value preserved.** The 255 trigger **fails open** because
+  "not tied to a job yet" is real information; blanking it destroys the only clue.
+- **`0050471744-001` → KS-208 on exact address evidence** (216 South Madison St, Hillsboro KS
+  = the invoice's SHIP TO). **`0050708886-001` → TX-455 on Chris's instruction**, recorded in
+  the migration as a human decision so it is never mistaken for machine inference.
 
 ## Blockers Requiring Human Action
 
-1. **The three SRS agreement PDFs** — not in the system; the two Colorado sheets need an
-   export from the Pro Exteriors accounting mailbox.
-2. **Atlanta × ABC agreement** — recorded `pending` (migration 245). 19 covered branches and
-   **$5,226.90** of ABC spend already invoiced and un-auditable until a book exists.
-3. **Two unruled office×vendor pairs with no book** — Atlanta × SRS (11 branches) and
-   Kansas City × SRS (3). Recorded as `unrecorded` in `office_vendor_agreement_status`.
-4. **QXO** — 59 covered branches, `no_book` at every office. Either negotiate it or stop
-   marking those branches covered.
+1. **PEC-226 — the decision above.** $63,642.53 of SRS spend is unauditable until it lands.
+2. **9 Colorado `$0.00`/`CALL` items** need real prices from **Blake Wells**.
+3. **Atlanta × ABC agreement** — still `pending` (migration 245); 19 covered branches,
+   $5,226.90 already invoiced and un-auditable.
+4. **Atlanta × SRS (11 branches) and Kansas City × SRS (3)** — unruled, no book.
+5. **QXO** — 59 covered branches, `no_book` at every office.
+6. **Prefer the SRS portal CSV over PDFs** when you can pull it: the PDF truncates PO NUMBER
+   to 16 characters, and that field is the AccuLynx job key.
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` should be `52c67fa…`
-2. `git status --short` — should return empty
-3. `cd app/command-center && npm run build && npm test` — build Complete, **309 passed**
-4. SQL: `select count(*) from vendor_branches where pricing_status='covered' and geom is not null and public.office_for_point(longitude,latitude) is null;` — should return **0**
-5. SQL: `select count(*) filter (where agreement_id is null) from invoice_line_reaudit where vendor_slug='srs' and classification='discrepancy';` — should return **0**
+1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` should be this session's HEAD
+2. `git status --short` — empty
+3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
+4. SQL: `select count(*) from price_agreements where ceo_verified is distinct from true;` → **0**
+5. SQL: `select count(*) from price_agreement_items where agreement_id='9f2c4d10-7a3b-4c6e-9d51-0b8e2f5a6c34';` → **101**
+6. SQL: `select count(*) from v_vendor_invoice_acculynx_match where matched and purchase_order_number is distinct from pe_job_number;` → **0**
 
 ## Full Context
 
-### What was built across ALL sessions (complete feature list)
-Carried forward from `archive/2026-08-21-0005-uiux-phases-money-truth.md` — read it for the
-UI/UX Phase 1–2, money-truth (migrations 246–248), Layer 2 sweep and Maya QA history. Added
-this session:
+### What was built across ALL sessions
+Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this session:
 
-- Invoice Audit: 4 toolbar controls, 4 grouped cards, tree empty state
-- Sent CM chase workspace (`/accounting/credit-memos/sent`)
-- Shared CM header context loader (office/vendor/branch/job/date) on both CM workspaces
-- Vendor-side AccuLynx job matcher (migration 250)
-- Mark-sent entry points on Card 1 and the Weekly workspace
-- Territory: Wichita Falls + Austin out of boundary (migration 249)
+- 4 SRS agreement PDFs stored, bound and byte-verified through the live endpoint
+- SRS Colorado price list as a real agreement (migration 251, 101 items)
+- `ceo_verified` retired as a gate across 4 surfaces (migration 252)
+- SRS invoice **PDF ingest** with a reconciliation gate, on the existing CSV loader
+- SRS branch-code aliases (migration 253) — closed a silent fail-closed hole
+- `po_number` = AccuLynx job number, at rest and on write (migrations 254–255)
 
 ### Architecture decisions
-- **The KPI refresh contract is positional-sensitive.** `refreshKpiPills()` rewrites card
-  buttons; it used to grab *the first `.iv-process-btn` in the card*. After merging the pay
-  steps that was the Due-Now Filter button, so the 60s poll replaced Filter with an Export
-  link. **Never move a button between cards without re-reading `refreshKpiPills`.** All such
-  targets are now explicit `[data-kpi-btn="…"]` hooks.
-- **`v_invoice_audit_invoice` filtered by `invoice_number IN (...)` pushes down to an index
-  scan — 55ms.** Safe to query directly for a page's worth of invoices. Do **not** join it
-  wholesale (that cost 2.9s and discarded 292k rows).
-- **Job matching is two views, not one.** `v_invoice_acculynx_match` (ABC, 3 tiers) and
-  `v_vendor_invoice_acculynx_match` (SRS/QXO, PO-token). Readers must consult both; ABC wins
-  a collision.
+- **Agreements resolve at the OFFICE level**, never the branch: a branch's
+  `pricing_territory_office_id` decides. Anchor a new agreement to any branch in the right
+  territory and it covers all of them.
+- **The vendor price path is EXACT-match only** — `raw_item_number = item_number OR
+  raw_description_normalized = lower(item_description)`. No trigram arm; ABC has one. This is
+  the root of PEC-226.
+- **Two ingest fail modes, opposite by design.** Branch resolution fails **closed** (unknown
+  label → no office → no price, visibly). PO canonicalization fails **open** (unknown PO →
+  left as printed). Losing a branch silently corrupts pricing; losing a PO silently destroys
+  the only job clue.
+- **`vendor_invoices` has two BEFORE triggers** now — branch resolution (243) and PO
+  canonicalization (255). Anything writing to that table gets both.
 
 ### Key invariants (never violate)
-- **Never resolve a branch from a vendor's text label.** ABC and QXO share 33 branch numbers.
-  Everything goes through `vendor_branch_id` / `vendor_branch_alias` (migrations 238–244).
-- **A quote is not an agreement by default.** Acceptance lives on the agreement record
-  (`ceo_verified`), never hard-coded per vendor, and the panel must keep *showing* that the
-  document is a quote.
+- **Never resolve a branch from a vendor's text label** — always `vendor_branch_id` /
+  `vendor_branch_alias`, vendor-scoped. ABC and QXO share 33 branch numbers.
+- **A quote on file is the governing book, and the panel must still say it is a quote.**
 - **Nothing external without a human.** Mark sent/received records, never transmits.
-- **Additive migrations only.** Views are `CREATE OR REPLACE`; `CREATE OR REPLACE VIEW` can
-  only **append** columns (42P16 otherwise).
-- **A green build is not verification.** Three separate wrong-but-plausible outputs shipped
-  past `npm run build` + 309 passing tests this session and were caught only by rendering the
-  page: the swallowed Filter button, "no job on the PO", and the vanished quote flag.
+- **Additive migrations only.** Archive, never delete; preserve originals (`raw.*_as_printed`).
+- **A green build is not verification.** Two wrong-but-plausible outputs shipped past
+  `npm run build` + 309 passing tests this session and were caught only by rendering the page
+  and by reconciling against the vendor's own printed totals.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
 | Live app | https://cc.proexteriorsus.net (Coolify, builds `app/command-center/Dockerfile` from `origin/main`) |
-| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` (shared by local dev and live) |
-| Storage | buckets: `agreements` (7 objects, all ABC), `invoices`, `wip-packs`, `slack-attachments`, `product-images`, `impact-reports` |
+| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **255** |
+| Storage | `agreements` (11 objects: 7 ABC + 4 SRS), `invoices`, `wip-packs`, `slack-attachments`, `product-images`, `impact-reports` |
 | Local dev | `.claude/launch.json` → `command-center` on port 4399 |
+| Linear | PE-CC-DevTeam — **PEC-224/225** (Done), **PEC-226** (Urgent, Todo) |
 
-### Current money state (verified at handoff)
+### Current SRS money state (verified at handoff)
 | figure | value |
 |---|---:|
-| `at_risk` total | $3,679.58 |
-| `at_risk` actionable | $2,692.08 |
-| `credit_memo_amount` | $997.05 |
-| CM requests approved (Claim it) | 5 |
-| CM requests sent (Chase it) | 44 |
+| SRS priced lines / value | 73 / $16,990.55 |
+| SRS **unpriced** lines / value | **216 / $63,642.53** |
+| Richardson, TX priced lines | **0 of 28** |
+| Documents ingested this session | 4 invoices + 1 credit, 47 lines |
