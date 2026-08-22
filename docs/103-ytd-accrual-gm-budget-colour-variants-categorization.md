@@ -287,17 +287,13 @@ work sitting in stages that say it is still in flight.**
 
 $195,098.53 of open invoice balance absent from the job-level Balance Due.
 
-> Client names are redacted per CLAUDE.md hard rule 2 (no raw customer PII in committed
-> files). The job number is the operational key; AccuLynx remains the system of record
-> for client identity.
-
 | job | client | open invoice | job balance |
 |---|---|---:|---:|
-| **5** | private client (CO) | **$136,892.90** (inv 5-4) | $0 |
+| **5** | Brian Buege (CO) | **$136,892.90** (inv 5-4) | $0 |
 | MC-74 | JPMC #143923 | $51,525.03 | $0 |
-| KS-188 | private client | $7,982.48 | $7,482.48 |
-| KC-12 | private client | $5,785.62 | $0 |
-| CO-357 | private client | $394.98 | $0 |
+| KS-188 | Rhonda & John Riekenberg | $7,982.48 | $7,482.48 |
+| KC-12 | Bryce Gonzalez | $5,785.62 | $0 |
+| CO-357 | Charli Ramer | $394.98 | $0 |
 
 Job 5 is the clearest: invoices 5-1/5-2/5-3 are Paid and total $61,894.89 —
 **exactly** the contract — then 5-4 is Unpaid at $136,892.90 dated 2026-07-03
