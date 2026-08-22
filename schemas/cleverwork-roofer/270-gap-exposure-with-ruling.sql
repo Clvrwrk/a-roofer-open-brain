@@ -1,4 +1,4 @@
--- 269 — join the dollars (267) to the recorded rulings in office_vendor_agreement_status
+-- 270 — join the dollars (268) to the recorded rulings in office_vendor_agreement_status
 --       (245). One decision surface.
 -- Applied to prod 2026-08-20.
 --
@@ -54,6 +54,6 @@ SELECT c.office_id,
  WHERE c.office_active;
 
 COMMENT ON VIEW public.v_office_vendor_gap_exposure IS
-  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 267). Filter on '
+  'Coverage gaps with BOTH the ruling (mig 245) and the dollars (mig 268). Filter on '
   'needs_ruling to get only pairs where spend has occurred and no human has decided — '
   'never rank on spend alone, or accepted no_book vendors (QXO) resurface as false work.';

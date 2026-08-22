@@ -2,7 +2,9 @@
 
 Two kinds of agents run per client brain: **vertical** (client-facing in Slack) and **horizontal** (infrastructure). Full charters live under [`agents/`](agents/). This file is the roster + the worktree discipline for AI agents building/maintaining the repo.
 
-> **Pricing/UOM invariant (Accounting + Ops agents):** every invoice/order vs price-agreement comparison happens in ABC's pricing UOM (`priceQty.uom`, e.g. SQ). Use `abc_invoice_lines.price_per_uom` and `v_item_uom_map`; never compare on the raw `quantity`/`uom`/`unit_price`/`pricePerUnitAmount` fields. See [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+> **Pricing/UOM invariant (Accounting + Ops agents):** every invoice/order vs price-agreement comparison happens in ABC's pricing UOM (`priceQty.uom`, e.g. SQ). Use `abc_invoice_lines.price_per_uom` and `v_item_uom_map`; never compare on the raw `quantity`/`uom`/`unit_price`/`pricePerUnitAmount` fields. See [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md) and [`CONVENTIONS.md`](CONVENTIONS.md) §10c.
+
+> **Price-agreement silo invariant (Accounting + Ops agents):** a negotiated price reaches an invoice line only through all four gates — vendor (mig 208), office resolved from the invoice's own branch (mig 217), time (`effective_date` + version supersession), and UOM (refuse, never convert). Fuzzy matching is always a fallback; the tie-break picks the lowest price, so simulate before adding or backdating a book into an office that already has one. See [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md) and [`CONVENTIONS.md`](CONVENTIONS.md) §10b.
 
 > **Reaching the live site:** the Command Center (`cc.proexteriorsus.net`) is WorkOS-gated; agents read live data via `/api/*` with an `Authorization: Bearer <service-token>` (HTML pages are human-only). Canonical how-to: the **`/workos-agent-auth`** skill.
 

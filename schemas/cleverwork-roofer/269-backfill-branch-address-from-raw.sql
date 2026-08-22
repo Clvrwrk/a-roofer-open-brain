@@ -1,4 +1,4 @@
--- 268 — recover branch addresses that were already sitting in the invoice payload.
+-- 269 — recover branch addresses that were already sitting in the invoice payload.
 --
 -- NUMBERING NOTE — two identities, both authoritative in their own place:
 --   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.
@@ -10,9 +10,10 @@
 --     this header stopped at the 246 -> 251 step and were stale; do not use intermediate
 --     numbers to find anything.
 -- The sibling migrations of this set are 267, 269 and 270, all applied to prod.
--- Eighth renumbering 2026-08-22: main took 263 for `263-wip-attention-flags.sql`.
+-- 8th renumber 2026-08-22: main took 263 for `263-wip-attention-flags.sql`.
+-- 9th renumber 2026-08-22: main took 267 for `267-srs-colorado-price-list-backdate.sql`.
 --
--- Found while putting dollars on the coverage gaps (migration 267). The largest single
+-- Found while putting dollars on the coverage gaps (migration 268). The largest single
 -- un-audited bucket in the system is ABC branch 176: 11 invoices, $19,356.94 — on a branch
 -- row with NO city and NO state, so it can never geocode, never land in a territory ring,
 -- and never get priced. Same shape for branches 183 and 305.
