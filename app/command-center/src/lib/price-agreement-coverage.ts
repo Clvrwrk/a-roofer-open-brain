@@ -57,7 +57,7 @@ export interface CoverageVendor {
   allVerified: boolean;
   pricedItems: number;
   hasGap: boolean;
-  /** The recorded ruling for this pair, from office_vendor_agreement_status via mig 265. */
+  /** The recorded ruling for this pair, from office_vendor_agreement_status via mig 269. */
   agreementStatus: string;
   /**
    * The pair's no-price behaviour is ACCEPTED, so it is not work to chase.
