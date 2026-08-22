@@ -49,6 +49,10 @@ When multiple AI agents work on this repo, do not share a checkout. **Stay align
 - **Close the loop:** merge the task branch **back into the live branch and push** so dev and live converge — then `git worktree remove <path>`. Never leave a production feature (vendor map, WorkOS auth, a new surface) stranded on a side branch the rest of dev doesn't build on.
 - **The agent deploys; the gate is explain-then-ship.** Full GitHub/Coolify/Hetzner access (corrected 2026-06-29, supersedes the prior human-only rule). Do all prep first — converge the branch into `main`, apply migrations, build + tests green — then state what's changing + impact + rollback, push `origin main`, and poll `/healthz` until `buildCommit` matches (≈30–90s, up to ~300s cold). Self-granting the permission via `settings.json` is still blocked and not needed. See `/coolify`.
 
+## Long-list disclosure (app-wide UI rule)
+
+Any work surface that can render an unbounded list opens showing **10 rows**, with the rest behind a `Show all N …` control; revealing them keeps the pane **exactly 10 rows tall** so the list scrolls internally and the page does not grow. The pane is the same height collapsed and expanded, so the mouse wheel only ever changes owner as the direct result of a click. Height is measured, never hardcoded; reveal state persists in `localStorage`; filters apply before paging. Full contract — including the sticky-header rules a bounded pane forces — in [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure and [`CONVENTIONS.md`](CONVENTIONS.md) §11a.
+
 ## Session wrap-up / handoff
 
 **Canonical procedure: `CONVENTIONS.md` §13** (shared across all harnesses). End every session here.

@@ -1,14 +1,17 @@
--- 263 — put DOLLARS on the coverage gaps.
+-- 267 — put DOLLARS on the coverage gaps.
 --
 -- NUMBERING NOTE — two identities, both authoritative in their own place:
 --   * IN PROD: applied as `245_office_vendor_spend_exposure`, 2026-08-20 10:57 UTC. Fixed;
 --     Supabase keys on TIMESTAMP, not on this label, so the applied order is unaffected by
 --     any renumbering below. This set applied BEFORE the file numbered 246 existed.
---   * IN THIS REPO: the file is `263-...`, renumbered seven times as parallel sessions
+--   * IN THIS REPO: the file is `267-...`, renumbered EIGHT times as parallel sessions
 --     claimed numbers on main while this work was in flight (245 office closure at 10:55,
 --     then 246 settle-received-credit-memo, and on). Main is canonical, so this branch
 --     yielded each time. Intermediate numbers (250/251/252/253) no longer name any file.
--- The sibling migrations of this set are 264, 265 and 266, all applied to prod.
+-- The sibling migrations of this set are 268, 269 and 270, all applied to prod.
+-- The eighth renumbering (263->267) was forced on 2026-08-22: main landed its own
+-- `263-wip-attention-flags.sql`. The whole set moved 263-266 -> 267-270 rather than
+-- only the colliding file, so the spend view still precedes the migrations that read it.
 --
 -- Context: v_office_vendor_inheritance already tells us which (office x vendor) pairs have
 -- no price agreement — `priced_items = 0`. The Command Center renders that as a gap count.

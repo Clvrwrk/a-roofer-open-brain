@@ -121,6 +121,13 @@ No external skill, plugin, MCP server, agent wrapper, memory tool, or installer 
 - The **contract** is `standards/design/v1.md` — QC owns it, Auditor enforces it. Brand file must lint with **zero errors** (`scripts/lint-design.sh`) before any change ships. Assets use **only** tokens from the brand file — no hard-coded hex, off-palette fonts, one-off radii, or bypass CSS custom properties. A value needed repeatedly is promoted to a token, not search-and-replaced.
 - **Role discipline is the brand.** Each brand color keeps its single role (CTA color on interactions only; never decorative). Monospace tokens appear on Property Card surfaces only. Typeface phase migrations happen only when the brand file's tokens change (the token update is the trigger).
 
+## 11a. Long-list disclosure (app-wide)
+
+- Any work surface that can render an unbounded list opens showing **10 rows**, with the rest behind a `Show all N …` control. Revealing them keeps the pane **exactly 10 rows tall** so the list scrolls internally and the page does not grow.
+- The pane is the **same height collapsed and expanded**. Collapsed it holds its 10 rows so no scrollbar appears and the wheel unambiguously belongs to the page; the wheel only changes owner as the direct result of a click.
+- Pane height is **measured** (`header + rowHeight × 10 + scrollbar gutter`), never hardcoded. Reveal state persists per surface in `localStorage`. Filters apply **before** paging.
+- Full contract, including the sticky-header rules a bounded pane forces (`overflow-x: auto` never with `overflow-y: visible`; measured multi-row header offsets; frozen-column selectors scoped to `thead tr:not(.fw-grouprow)` / `tbody`; column-group `colspan` recomputed on expand): [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure.
+
 ## 12. Workspace front desk and GSD loop
 
 - **Maintenance/Hermes owns orientation.** Agents should read `agents/horizontal/maintenance/WORKSPACE-MAP.md` before broad repo search. If the map is stale, flag Maintenance.

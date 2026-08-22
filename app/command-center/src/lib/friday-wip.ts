@@ -42,6 +42,10 @@ export interface FridayWipJob {
   estTotalCosts: number | null;
   /** How est_total_costs was derived, e.g. 'gm:office_trailing_12mo:27.60'. */
   estCostsSource: string | null;
+  /** 'stale_closeout' | 'balance_contradiction' | null — needs an AccuLynx fix, not a call (mig 263). */
+  attentionFlag: string | null;
+  /** Plain-language "Our Best Guess", popped out from the client name. */
+  attentionNote: string | null;
   /**
    * Which KPI pills / cash-map cells this row is counted in. The board's
    * filters are driven off exactly these keys, so a pill can never select a
@@ -53,9 +57,14 @@ export interface FridayWipJob {
 export interface FridayWipGroup {
   location: string;
   jobs: FridayWipJob[];
+  /** Rows the office actually has in flight — stale close-outs excluded. */
+  activeJobs: number;
+  staleJobs: number;
   totalAr: number;
   totalBilledAr: number;
   totalUnbilled: number;
+  /** The office's gross margin, so the header can show and edit it in place. */
+  margin: OfficeMargin | null;
 }
 
 export interface FridayWipKpis {
@@ -76,6 +85,10 @@ export interface FridayWipKpis {
   signedContractJobs: number; // signed contracts carrying no AR yet (mig 258)
   estTotalCostsTotal: number; // Σ budgeting estimate of total cost (mig 260)
   expenseOutstandingTotal: number; // Σ estimated remaining spend
+  staleCloseoutJobs: number; // finished + collected, never closed in AccuLynx
+  staleCloseoutContract: number; // contract value parked in those
+  contradictionJobs: number; // job balance disagrees with its own invoices
+  contradictionAr: number; // open invoice balance the job balance does not show
 }
 
 /** Per-office gross margin behind the budgeting estimates (mig 260). */
@@ -122,6 +135,7 @@ function emptyBoard(error: string): FridayWipBoard {
       week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
       costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
       estTotalCostsTotal: 0, expenseOutstandingTotal: 0,
+      staleCloseoutJobs: 0, staleCloseoutContract: 0, contradictionJobs: 0, contradictionAr: 0,
     },
     groups: [],
     offices: [],
@@ -141,7 +155,7 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
         "days_in_status,action,acculynx_url,costs_incurred_to_date,expense_outstanding," +
         "change_order_total,expected_invoice_cash_date,expected_paid_full_date,expected_cash_amount," +
         "prior_expected_paid_date,collected_since,hit_miss,notes,computed_at,population_reason," +
-        "est_total_costs,est_costs_source",
+        "est_total_costs,est_costs_source,attention_flag,attention_note",
     )
     .eq("in_ar_population", true)
     .order("location", { ascending: true })
@@ -204,6 +218,8 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     populationReason: (r.population_reason as string) ?? null,
     estTotalCosts: r.est_total_costs == null ? null : num(r.est_total_costs),
     estCostsSource: (r.est_costs_source as string) ?? null,
+    attentionFlag: (r.attention_flag as string) ?? null,
+    attentionNote: (r.attention_note as string) ?? null,
     kpiKeys: [],
   }));
 
@@ -212,18 +228,39 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
   const today = new Date();
   const dayMs = 86_400_000;
   const kpis: FridayWipKpis = {
-    ledgerJobs: jobs.length,
+    // Stale close-outs are not on the working board, so they must not be in
+    // its job count either — see the loop below.
+    ledgerJobs: jobs.filter((j) => j.attentionFlag !== "stale_closeout").length,
     totalBalance: 0, billedAr: 0, unbilled: 0,
     criticalArTier1: 0, tier2NeverInvoiced: 0, billedArNoDate: 0,
     week1: 0, week2: 0, week3: 0, beyond: 0, datedShare: 0,
     costsIncurredTotal: 0, arJobs: 0, signedContractJobs: 0,
     estTotalCostsTotal: 0, expenseOutstandingTotal: 0,
+    staleCloseoutJobs: 0, staleCloseoutContract: 0, contradictionJobs: 0, contradictionAr: 0,
   };
   // Every KPI is accumulated and TAGGED in the same pass. `mark` is the only
   // place a job is counted, so a pill's filter and the number printed on it
   // are derived from one decision and cannot drift apart.
   for (const j of jobs) {
     const mark = (key: string) => { if (!j.kpiKeys.includes(key)) j.kpiKeys.push(key); };
+
+    // Finished-and-collected jobs that were never closed in AccuLynx are an
+    // AccuLynx housekeeping list, not work in progress and not a receivable.
+    // They are counted for their own pill and excluded from every money KPI —
+    // otherwise $9.2M of completed work inflates the board it already left.
+    if (j.attentionFlag === "stale_closeout") {
+      kpis.staleCloseoutJobs += 1;
+      kpis.staleCloseoutContract += j.contractAmount;
+      mark("staleCloseout");
+      continue;
+    }
+    if (j.attentionFlag === "balance_contradiction") {
+      kpis.contradictionJobs += 1;
+      kpis.contradictionAr += Math.max(0, j.billedAr - j.outstandingAr);
+      mark("contradiction");
+      // Falls through: a contradiction row still carries real AR and belongs
+      // in the money KPIs. It just also needs someone to look at it.
+    }
 
     kpis.totalBalance += j.outstandingAr;
     mark("totalBalance"); // every ledger job — this pill doubles as "clear"
@@ -291,6 +328,9 @@ export async function loadFridayWipBoard(): Promise<FridayWipBoard> {
     .map(([location, list]) => ({
       location,
       jobs: list,
+      margin: offices.find((o) => o.location === location) ?? null,
+      activeJobs: list.filter((j) => j.attentionFlag !== "stale_closeout").length,
+      staleJobs: list.filter((j) => j.attentionFlag === "stale_closeout").length,
       totalAr: Math.round(list.reduce((s, j) => s + j.outstandingAr, 0) * 100) / 100,
       totalBilledAr: Math.round(list.reduce((s, j) => s + j.billedAr, 0) * 100) / 100,
       totalUnbilled: Math.round(list.reduce((s, j) => s + j.unbilled, 0) * 100) / 100,

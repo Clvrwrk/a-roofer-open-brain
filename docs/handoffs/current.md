@@ -64,7 +64,7 @@ Chris: *"once a price agreement is added it is approved and active."* Finished w
 
 ### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**263-266** (already applied to prod, all additive) plus `docs/104`. It is 0 behind main and
+**267-270** (already applied to prod, all additive) plus `docs/104`. It is 0 behind main and
 kept merged with it. Marked **ready for review** on 2026-08-21; head is now `f291a90` after
 a round of review fixes (CodeRabbit + Greptile + Cursor Security, all green on the reviewed
 head). **It is not merged and not deployed.**
@@ -79,7 +79,7 @@ Two items on that branch need a human, both recorded in `docs/104`:
    (app.coderabbit.ai/learnings) — not from a PR thread. Worth removing next time someone is
    in there.
 3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
-   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 264
+   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 268
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
    where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
 
@@ -204,7 +204,7 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
   left as printed). Losing a branch silently corrupts pricing; losing a PO silently destroys
   the only job clue.
 - **`vendor_invoices` has two BEFORE triggers** now — branch resolution (243) and PO
-  canonicalization (264). Anything writing to that table gets both.
+  canonicalization (268). Anything writing to that table gets both.
 
 ### Key invariants (never violate)
 - **Never resolve a branch from a vendor's text label** — always `vendor_branch_id` /
@@ -220,7 +220,7 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
 | Service | Detail |
 |---------|--------|
 | Live app | https://cc.proexteriorsus.net (Coolify, builds `app/command-center/Dockerfile` from `origin/main`) |
-| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **266** (263-266 applied from PR #9's branch) |
+| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **270** (267-270 applied from PR #9's branch) |
 | Storage | `agreements` (11 objects: 7 ABC + 4 SRS), `invoices`, `wip-packs`, `slack-attachments`, `product-images`, `impact-reports` |
 | Local dev | `.claude/launch.json` → `command-center` on port 4399 |
 | Linear | PE-CC-DevTeam — **PEC-224/225** (Done), **PEC-226** (Urgent, Todo) |

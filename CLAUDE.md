@@ -39,6 +39,10 @@ The deployable template for a single roofing company's persistent, property-firs
 - **Structured source before OCR.** Before building any OCR/parse/extraction step, check whether the vendor's API or `raw` JSON already carries the field — verify against the live DB first. (2026-06-29: the "Commercial" ship-to was already in `abc_invoices.raw->'shipTo'->>'name'`; reading it avoided building a whole invoice-OCR pipeline.)
 - **Slack agents:** per-agent bot identities, app IDs, token env vars, and channel IDs live in the **`/slack-agents`** skill (`.claude/skills/slack-agents/`). A Slack *config* token cannot mint/read bot tokens — read the skill before re-investigating.
 
+## Long-list disclosure (app-wide UI rule)
+
+Any work surface that can render an unbounded list opens showing **10 rows**, with the rest behind a `Show all N …` control; revealing them keeps the pane **exactly 10 rows tall** so the list scrolls internally and the page does not grow. The pane is the same height collapsed and expanded, so the mouse wheel only ever changes owner as the direct result of a click. Height is measured, never hardcoded; reveal state persists in `localStorage`; filters apply before paging. Full contract — including the sticky-header rules a bounded pane forces — in [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure and [`CONVENTIONS.md`](CONVENTIONS.md) §11a.
+
 ## Live ⇄ Dev alignment (the deploy contract)
 
 The "live" Command Center at **https://cc.proexteriorsus.net** and your **local dev** must never drift into separate code lineages. This bit us on 2026-06-17: a full session of work sat **uncommitted on a stale local `main`** while production was actually running a *different* branch (the Google-Maps vendor map + WorkOS auth), so "live" and "dev" were two unrelated trees. Prevent it:
