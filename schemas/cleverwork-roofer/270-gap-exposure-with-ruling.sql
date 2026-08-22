@@ -2,10 +2,10 @@
 --       (245). One decision surface.
 -- Applied to prod 2026-08-20.
 --
--- 245 and this set's spend view (the file now numbered 267) landed within two minutes of
+-- 245 and this set's spend view (the file now numbered 268) landed within two minutes of
 -- each other from parallel sessions and answer DIFFERENT halves of the same question:
 --   245 says WHY a pair has no agreement  (no_book | pending | not_pursued | unrecorded)
---   267 says HOW MUCH that pair costs     (invoice_count, spend)
+--   268 says HOW MUCH that pair costs     (invoice_count, spend)
 -- Neither alone supports a decision. Ranked by dollars alone, Wichita x QXO ($5,697.47)
 -- looks like work to chase — but QXO carries a recorded `no_book` ruling at every office
 -- (office_vendor_agreement_status, 2026-08-20): those lines price
