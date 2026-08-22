@@ -423,9 +423,19 @@ The Cursor security review flagged that the four views added by 268–271 carry 
 `GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
 
 ```sql
-SET LOCAL ROLE anon;
-SELECT count(*), sum(spend) FROM public.v_office_vendor_spend;   -- 10 rows, $2,269,526.34
+BEGIN;
+  SET LOCAL ROLE anon;
+  SELECT current_user;                                            -- anon  <- prove the role took
+  SELECT count(*), sum(spend) FROM public.v_office_vendor_spend;  -- 10 rows, $2,269,526.34
+ROLLBACK;
 ```
+
+`SET LOCAL` only lives inside a transaction. Send it as a bare statement in an autocommit
+session and it is discarded before the `SELECT` runs, so the query silently executes as
+your *own* role and a privileged connection reports rows the target role could never see —
+a false negative that reads exactly like a clean result. **Always select `current_user` in
+the same transaction**; assert the role rather than assuming it. The independent check that
+needs no role switch at all is `has_table_privilege('anon', 'public.<view>', 'SELECT')`.
 
 A view runs as its **owner** unless `security_invoker` is set, so RLS on the underlying
 invoice tables never applied. Aggregated office × vendor spend and agreement-ruling
