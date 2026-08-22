@@ -132,15 +132,15 @@ const gmBasisLabel: Record<string, string> = {
     </div>
 
     <div class="fw-cashmap">
-      <span class="fw-cashmap-title" title="Estimated $ lands at its invoice/cash date; the remainder at paid-in-full. You cannot collect what was never invoiced.">3-week cash map — billed AR only</span>
+      <span class="fw-cashmap-title" title="Driven by the Est. Cash Flow worksheet and recomputed as you type: To Collect lands on the expected invoice/cash date, Balance to Pay on the expected paid-in-full date, and anything undated is the meeting's job. Basis is Balance Due, so work you intend to invoice and collect counts once you have dated it.">3-week cash map — live from the Est. Cash Flow worksheet</span>
       <div class="fw-cashmap-cells" role="group" aria-label="Filter the board by cash week">
         <button type="button" class="fw-week" data-kpi="week1" aria-pressed="false"><span class="fw-week-lab">Week 1</span><span class="fw-week-val">{money(k.week1)}</span></button>
         <button type="button" class="fw-week" data-kpi="week2" aria-pressed="false"><span class="fw-week-lab">Week 2</span><span class="fw-week-val">{money(k.week2)}</span></button>
         <button type="button" class="fw-week" data-kpi="week3" aria-pressed="false"><span class="fw-week-lab">Week 3</span><span class="fw-week-val">{money(k.week3)}</span></button>
         <button type="button" class="fw-week" data-kpi="beyond" aria-pressed="false"><span class="fw-week-lab">Beyond wk 3</span><span class="fw-week-val">{money(k.beyond)}</span></button>
-        <button type="button" class="fw-week fw-week-warn" data-kpi="billedArNoDate" aria-pressed="false"><span class="fw-week-lab">Billed AR, no date</span><span class="fw-week-val">{money(k.billedArNoDate)}</span><span class="fw-week-sub">unscheduled — this is the meeting's job</span></button>
+        <button type="button" class="fw-week fw-week-warn" data-kpi="billedArNoDate" aria-pressed="false"><span class="fw-week-lab">Undated</span><span class="fw-week-val">{money(k.billedArNoDate)}</span><span class="fw-week-sub">unscheduled — this is the meeting's job</span></button>
         {/* Dated share is a ratio, not a set of rows — nothing to filter to. */}
-        <div class="fw-week fw-week-static"><span class="fw-week-lab">Dated share</span><span class="fw-week-val">{pct(k.datedShare)}</span><span class="fw-week-sub">of billed AR carries a date</span></div>
+        <div class="fw-week fw-week-static"><span class="fw-week-lab">Dated share</span><span class="fw-week-val">{pct(k.datedShare)}</span><span class="fw-week-sub">of balance due carries a date</span></div>
       </div>
     </div>
 
@@ -218,7 +218,7 @@ const gmBasisLabel: Record<string, string> = {
             </thead>
             <tbody>
               {g.jobs.map((j) => (
-                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""} data-location={j.location} data-attention={j.attentionFlag ?? ""}>
+                <tr data-job={j.jobId} data-rep={j.salesperson} data-kpi={j.kpiKeys.join(" ")} data-population={j.populationReason ?? ""} data-location={j.location} data-attention={j.attentionFlag ?? ""} data-billed-ar={j.billedAr}>
                   <td>{j.acculynxUrl ? <a href={j.acculynxUrl} target="_blank" rel="noopener">{j.jobNumber || "—"}</a> : (j.jobNumber || "—")}</td>
                   {/* The job number is already the AccuLynx deep link, so the
                       "Our Best Guess" popout hangs off the client name instead. */}
@@ -245,7 +245,7 @@ const gmBasisLabel: Record<string, string> = {
                   <td class="fw-num" data-col="money">{money(j.outstandingAr)}</td>
 
                   <td data-col="cash" data-more><input class="fw-edit fw-date" type="date" data-field="expected_invoice_cash_date" value={j.expectedInvoiceCashDate ?? ""} /></td>
-                  <td data-col="cash"><input class="fw-edit fw-money-edit" type="number" min="0" step="100" data-field="expected_cash_amount" value={j.expectedCashAmount ?? ""} placeholder="$" /></td>
+                  <td data-col="cash"><input class="fw-edit fw-money-edit" type="text" inputmode="numeric" autocomplete="off" data-field="expected_cash_amount" data-raw={j.expectedCashAmount ?? ""} value={j.expectedCashAmount != null ? money(j.expectedCashAmount) : ""} placeholder="$" /></td>
                   <td data-col="cash" data-more><input class="fw-edit fw-date" type="date" data-field="expected_paid_full_date" value={j.expectedPaidFullDate ?? ""} /></td>
                   {/* Derived, never stored: what is still owed after the cash the
                       team expects to collect. Recomputed live as To Collect is
@@ -391,8 +391,7 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-over-collect { color: var(--red); font-weight: 700; }
     .fw .fw-showmore { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; padding: 7px 14px; cursor: pointer; text-align: left; }
     .fw .fw-showmore:hover { color: var(--ink); background: var(--zebra); }
-    /* Only a fully-expanded office gets an internal scroller. */
-    .fw .fw-tablewrap.is-capped { max-height: 58vh; overflow-y: auto; }
+
     .fw .fw-rep { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fw .fw-action { white-space: nowrap; font-size: 11.5px; }
     .fw .fw-kpi-warn { border-color: var(--gold); }
@@ -435,22 +434,39 @@ const gmBasisLabel: Record<string, string> = {
        columns (Job # · Client) stay frozen. Sticky cells need border-collapse:
        separate (collapsed borders don't travel with sticky cells) and their own
        opaque backgrounds, so zebra/hover paint on td, not tr. */
-    /* No max-height: each office table used to be its own 70vh scroll window
-       over ~3,300px of rows, so the wheel drove the table instead of the page
-       and you could not reach the next office without leaving the pane. The
-       page is now the only vertical scroller; overflow-x stays for the case
-       where both column groups are expanded. */
-    .fw .fw-tablewrap { overflow-x: auto; overflow-y: visible; }
+    /* The pane is ALWAYS exactly PAGE_SIZE rows tall (height set in JS from the
+       measured header + row height). Collapsed there are only 10 rows so no
+       scrollbar appears; expanded you scroll 63 rows through the same window.
+       One well-defined scroll container, which is also what makes the sticky
+       header reliable.
+
+       Do not be tempted by `overflow-x: auto; overflow-y: visible` — per spec a
+       `visible` axis paired with a non-visible one computes to `auto`, so the
+       wrap silently became an UNBOUNDED scroll container and the sticky header
+       anchored to that instead of the viewport. That is the artifact where body
+       rows rendered above the header row. */
+    .fw .fw-tablewrap { overflow: auto; }
     .fw .fw-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
     .fw .fw-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
     .fw .fw-table td { padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
     .fw .fw-table thead th { position: sticky; z-index: 3; background: var(--panel); }
     .fw .fw-table thead tr.fw-grouprow th { top: 0; }
-    .fw .fw-table thead tr:not(.fw-grouprow) th { top: 26px; }
-    .fw .fw-table th:nth-child(-n + 2), .fw .fw-table td:nth-child(-n + 2) { position: sticky; z-index: 2; background: var(--panel); }
-    .fw .fw-table th:nth-child(1), .fw .fw-table td:nth-child(1) { left: 0; width: 72px; min-width: 72px; max-width: 72px; white-space: nowrap; }
-    .fw .fw-table th:nth-child(2), .fw .fw-table td:nth-child(2) { left: 72px; box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.28); }
-    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(-n + 2) { z-index: 4; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th { top: var(--fw-grouprow-h, 26px); }
+    /* Frozen Job # / Client. These selectors MUST exclude the group row: its
+       cells are also nth-child(1) and (2) — the spacer and the Money header —
+       so an unscoped rule froze the Money header to the left edge and dropped
+       it to z-index 2, level with body cells. Rows then painted over it, which
+       is the "data above the frozen header" artifact. */
+    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(-n + 2),
+    .fw .fw-table tbody td:nth-child(-n + 2) { position: sticky; z-index: 2; background: var(--panel); }
+    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(1),
+    .fw .fw-table tbody td:nth-child(1) { left: 0; width: 72px; min-width: 72px; max-width: 72px; white-space: nowrap; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(2),
+    .fw .fw-table tbody td:nth-child(2) { left: 72px; box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.28); }
+    /* Header stack, from the top: group row above column row above body. */
+    .fw .fw-table thead tr.fw-grouprow th { z-index: 6; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th { z-index: 5; }
+    .fw .fw-table thead tr:not(.fw-grouprow) th:nth-child(-n + 2) { z-index: 7; }
     .fw .fw-table tbody tr:nth-child(even) td { background: var(--zebra); }
     .fw .fw-table tbody tr:hover td { background: var(--fill-bg); }
     .fw .fw-table th.fw-fill { background: var(--fill-bg); }
@@ -489,8 +505,10 @@ const gmBasisLabel: Record<string, string> = {
       const cell = row.querySelector<HTMLElement>(".fw-balance-pay");
       if (!cell) return;
       const due = Number(cell.dataset.balanceDue ?? "0");
-      const raw = row.querySelector<HTMLInputElement>('[data-field="expected_cash_amount"]')?.value ?? "";
-      const collect = raw === "" ? 0 : Number(raw);
+      const el = row.querySelector<HTMLInputElement>('[data-field="expected_cash_amount"]');
+      // "$75,000" while blurred, bare digits while focused — take digits either way.
+      const digits = (el ? (el === document.activeElement ? el.value : (el.dataset.raw ?? el.value)) : "").replace(/[^0-9.]/g, "");
+      const collect = digits === "" ? 0 : Number(digits);
       const rest = due - (Number.isFinite(collect) ? collect : 0);
       cell.textContent = fmtMoney(Math.max(0, rest));
       // Expecting to collect more than is owed is a typo, not a plan.
@@ -511,21 +529,95 @@ const gmBasisLabel: Record<string, string> = {
       else input.removeAttribute("title");
     };
 
+    // ── Currency field ───────────────────────────────────────────────────
+    // Displays "$75,000"; carries the plain number in data-raw for the save and
+    // for the arithmetic. Reformatting happens on blur, not on every keystroke,
+    // because rewriting the value under the caret makes it jump.
+    const digitsOf = (v: string) => v.replace(/[^0-9.]/g, "");
+    const moneyInputs = () => document.querySelectorAll<HTMLInputElement>(".fw-money-edit");
+    const rawOf = (el: HTMLInputElement) => {
+      const d = digitsOf(el === document.activeElement ? el.value : (el.dataset.raw ?? el.value));
+      return d === "" ? null : Number(d);
+    };
+    moneyInputs().forEach((el) => {
+      el.addEventListener("focus", () => { el.value = el.dataset.raw ?? digitsOf(el.value); el.select(); });
+      el.addEventListener("input", () => { el.dataset.raw = digitsOf(el.value); });
+      el.addEventListener("blur", () => {
+        const n = rawOf(el);
+        el.dataset.raw = n == null ? "" : String(n);
+        el.value = n == null ? "" : fmtMoney(n);
+      });
+    });
+
+    // ── 3-week cash map, recomputed from the worksheet ───────────────────
+    // Driven by what is typed, not by a value frozen at page load: To Collect
+    // lands on the invoice/cash date, Balance to Pay on the paid-in-full date,
+    // and anything undated is the meeting's job.
+    const dayMs = 86_400_000;
+    const startOfToday = new Date(new Date().toDateString()).getTime();
+    const cashCells: Record<string, HTMLElement | null> = {
+      week1: document.querySelector('[data-kpi="week1"] .fw-week-val'),
+      week2: document.querySelector('[data-kpi="week2"] .fw-week-val'),
+      week3: document.querySelector('[data-kpi="week3"] .fw-week-val'),
+      beyond: document.querySelector('[data-kpi="beyond"] .fw-week-val'),
+      billedArNoDate: document.querySelector('[data-kpi="billedArNoDate"] .fw-week-val'),
+    };
+    const datedShareCell = document.querySelector<HTMLElement>(".fw-week-static .fw-week-val");
+
+    const recalcCashMap = () => {
+      const t = { week1: 0, week2: 0, week3: 0, beyond: 0, billedArNoDate: 0 };
+      let planned = 0;
+      const bucket = (dateStr: string, amount: number) => {
+        const days = Math.floor((new Date(dateStr + "T00:00:00").getTime() - startOfToday) / dayMs);
+        if (days <= 6) t.week1 += amount;
+        else if (days <= 13) t.week2 += amount;
+        else if (days <= 20) t.week3 += amount;
+        else t.beyond += amount;
+      };
+      document.querySelectorAll<HTMLElement>("tr[data-job]").forEach((row) => {
+        // Stale close-outs are off the working board and out of its numbers.
+        if (row.dataset.attention === "stale_closeout") return;
+        const due = Number(row.querySelector<HTMLElement>(".fw-balance-pay")?.dataset.balanceDue ?? "0");
+        if (!(due > 0.004)) return;
+        const collectEl = row.querySelector<HTMLInputElement>('[data-field="expected_cash_amount"]');
+        const collect = Math.min(Math.max(collectEl ? (rawOf(collectEl) ?? 0) : 0, 0), due);
+        const cashDate = row.querySelector<HTMLInputElement>('[data-field="expected_invoice_cash_date"]')?.value ?? "";
+        const paidDate = row.querySelector<HTMLInputElement>('[data-field="expected_paid_full_date"]')?.value ?? "";
+        planned += due;
+        if (collect > 0 && cashDate) { bucket(cashDate, collect); }
+        const rest = due - (cashDate ? collect : 0);
+        if (rest > 0) {
+          if (paidDate) bucket(paidDate, rest);
+          else t.billedArNoDate += rest;
+        }
+      });
+      for (const [k, el] of Object.entries(cashCells)) if (el) el.textContent = fmtMoney(t[k as keyof typeof t]);
+      if (datedShareCell) {
+        const dated = planned - t.billedArNoDate;
+        datedShareCell.textContent = (planned > 0 ? Math.round((dated / planned) * 100) : 0) + "%";
+      }
+    };
+
     document.querySelectorAll<HTMLElement>("tr[data-job]").forEach((row) => recalcRow(row));
     document.querySelectorAll<HTMLInputElement>(".fw-date").forEach(markOverdue);
+    recalcCashMap();
 
     document.querySelectorAll<HTMLElement>(".fw-edit").forEach((el) => {
       el.addEventListener("input", () => {
         const row = el.closest<HTMLElement>("tr");
         if (row) recalcRow(row);
         if (el.classList.contains("fw-date")) markOverdue(el as HTMLInputElement);
+        recalcCashMap();
       });
       el.addEventListener("change", async () => {
         const row = el.closest("tr");
         const jobId = row?.getAttribute("data-job");
         const field = el.getAttribute("data-field");
         if (!jobId || !field) return;
-        const value = (el as HTMLInputElement | HTMLSelectElement).value;
+        // A currency field displays "$75,000"; the API takes the number.
+        const value = el.classList.contains("fw-money-edit")
+          ? ((el as HTMLInputElement).dataset.raw ?? "").replace(/[^0-9.]/g, "")
+          : (el as HTMLInputElement | HTMLSelectElement).value;
         el.classList.remove("fw-saved", "fw-failed");
         try {
           const resp = await fetch("/api/accounting/friday-wip/update", {
@@ -557,9 +649,33 @@ const gmBasisLabel: Record<string, string> = {
 
     let activeKpi: string | null = null;
 
-    // How many jobs an office shows before you ask for the rest.
+    // How many jobs an office shows before you ask for the rest — and, once you
+    // have asked, how many stay in view at a time.
     const PAGE_SIZE = 10;
     const expandedOffices = new Set<string>();
+
+    // The pane is exactly PAGE_SIZE rows tall, always. Measured rather than
+    // guessed so it survives a font or density change. The same measurement
+    // gives the second header row its sticky offset — hardcoding that offset is
+    // what let body rows show through above the header.
+    const sizePane = (wrap: HTMLElement) => {
+      const thead = wrap.querySelector<HTMLElement>("thead");
+      const groupRow = wrap.querySelector<HTMLElement>("thead tr.fw-grouprow");
+      const row = wrap.querySelector<HTMLElement>("tbody tr[data-job]");
+      if (!thead || !row) return;
+      const rowH = row.getBoundingClientRect().height || 29;
+      const headH = thead.getBoundingClientRect().height;
+      if (groupRow) {
+        wrap.style.setProperty("--fw-grouprow-h", `${Math.round(groupRow.getBoundingClientRect().height)}px`);
+      }
+      // Two-pass: a horizontal scrollbar (present whenever a column group is
+      // expanded) steals ~15px of the pane and would clip row 10, which then
+      // adds a vertical scrollbar to a list that fits. Measure it and give it back.
+      const base = Math.ceil(headH + rowH * PAGE_SIZE + 2);
+      wrap.style.maxHeight = `${base}px`;
+      const gutter = wrap.offsetHeight - wrap.clientHeight;
+      if (gutter > 0) wrap.style.maxHeight = `${base + gutter}px`;
+    };
 
     const groupKey = (d: HTMLElement) =>
       d.querySelector<HTMLElement>(".fw-gm")?.dataset.location ??
@@ -609,11 +725,8 @@ const gmBasisLabel: Record<string, string> = {
               : `Show all ${rows.length} jobs  ▾  (${hidden} more)`;
           }
         }
-        // The internal scroller exists ONLY once you have asked for the full
-        // list. Capped at 10 rows there is nothing to scroll, so the wheel
-        // stays with the page — which is what made the old board unnavigable.
         const wrap = group.querySelector<HTMLElement>(".fw-tablewrap");
-        if (wrap) wrap.classList.toggle("is-capped", showAll && rows.length > PAGE_SIZE);
+        if (wrap) sizePane(wrap);
       });
 
       kpiButtons.forEach((b) => {
@@ -715,7 +828,19 @@ const gmBasisLabel: Record<string, string> = {
     // the tables stay the same width and a column can be tracked down the page.
     const setGroup = (group: "money" | "cash", open: boolean) => {
       fwRoot.dataset[group] = open ? "open" : "closed";
-      fwRoot.querySelector(`[data-colgroup-toggle="${group}"]`)?.setAttribute("aria-expanded", String(open));
+      // The group header must SPAN its visible columns. colspan cannot be set
+      // in CSS, so it is recomputed here — leave it at the collapsed width and
+      // an expanded group's right-hand columns have no header above them, so
+      // body rows scroll up through the gap.
+      document.querySelectorAll<HTMLTableCellElement>(`[data-colgroup-toggle="${group}"]`).forEach((th) => {
+        const table = th.closest("table");
+        const span = table
+          ? table.querySelectorAll(`thead tr:not(.fw-grouprow) th[data-col="${group}"]:not([data-more])`).length
+            + (open ? table.querySelectorAll(`thead tr:not(.fw-grouprow) th[data-col="${group}"][data-more]`).length : 0)
+          : 2;
+        th.colSpan = Math.max(1, span);
+        th.setAttribute("aria-expanded", String(open));
+      });
       writeView({ [group]: open });
     };
 
