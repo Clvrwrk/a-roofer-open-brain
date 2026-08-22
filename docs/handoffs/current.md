@@ -95,9 +95,36 @@ below is deployed and verified live.
 
 ## Git State
 - **Branch:** `main` — `main == origin/main`
-- **Last commit:** `f2dbed7` — "docs(handoff): 2026-08-22 wrapup — migrations 256-263, WIP/AR overhaul, full Linear update"
+- **Last commit:** `aa06ab1` — "docs(align): promote the UOM pricing contract into CONVENTIONS and .cursor"
 - **Live `buildCommit`:** `f2dbed7`, status `ok`
 - **Uncommitted changes:** none
+
+### Open branch not on main — PR #9 (ready for review)
+`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
+**268-271** (already applied to prod, all additive) plus `docs/106`. It is 0 behind main and
+kept merged with it. Marked **ready for review** on 2026-08-21; head is now `95a8664` after
+several rounds of review fixes and nine renumberings (CodeRabbit + Greptile + Cursor
+Security all green on the reviewed heads). **It is not merged and not deployed.**
+
+Two items on that branch need a human, both recorded in `docs/106`:
+1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
+   approve repointing the agreement join to `vendor_branch_id` with mig 244's proof.
+2. **One-minute cleanup in an external tool:** CodeRabbit stored a learning during PR #9's
+   review saying to use `abc_invoices.id` as a tiebreak. That column does not exist. It has
+   since stored a corrected learning that contradicts it, so the risk is mostly neutralised,
+   but the stale entry can only be deleted from the CodeRabbit learnings UI
+   (app.coderabbit.ai/learnings) — not from a PR thread. Worth removing next time someone is
+   in there.
+3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
+   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 269
+   demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
+   where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
+
+Numbering note: parallel sessions
+claimed 245-262 and both `docs/99` and `docs/100` while it was in flight, so it yielded seven
+times — its applied
+Supabase labels still read `245_`/`246_`/`248_`/`249_`, which is cosmetic (Supabase keys on
+timestamp; all four applied before the files numbered 246-248 existed).
 
 ## Task Cut Off
 None — session ended at a clean boundary. Every migration applied, every surface
@@ -120,6 +147,11 @@ verified in a browser against prod data, everything deployed.
    `sibling_candidates > 1`, because `raw_item_number` holds one value.
 4. Re-run `select * from refresh_price_agreement_item_candidates(<agreement_id>);` and
    confirm SRS priced lines rise from 93.
+
+> **Carried caution from PR #9 (measured 2026-08-21), still relevant:** the exact-token
+> backfill in mig 256 matched Colorado **4 of 101** and Melissa **4 of 97** — SRS unpriced
+> lines moved only **216 → 211**. Exact-token matching on description-only sheets is close
+> to a no-op, so approving the 24 candidates fixes the *line-level* half only.
 
 **If a candidate looks ambiguous:** reject it. This feeds credit-memo claims sent to a
 vendor; a wrong price is worse than no price.
@@ -152,25 +184,48 @@ and apply only the ones I approve."
 ## Blockers Requiring Human Action
 
 1. **PEC-226** — the 24 candidates above.
-2. **PEC-231** — decide whether ABC moves onto the colour rule. Moves live claim numbers.
-3. **PEC-233** — AccuLynx cleanup: 225 finished jobs to close, 5 balance contradictions
-   ($195,099) to re-save. Job 5's $136,892.90 is the big one.
-4. **PEC-236** — tell Lucinda and the CPA the accrual snapshot moved lifetime → YTD and
+2. **Denver × SRS branch identity — needs a human** (PR #9). Confirm `AMSDE` and
+   `SBP-SOUTHDENVER` are the same physical branch so the two Denver books (101 + 22 items)
+   can be repointed, **or** approve repointing the agreement join to `vendor_branch_id`
+   with mig 244's equivalence proof. Not an agent's call — mig 240's rule is that a guess
+   cannot become a fact. `v_agreement_unreachable` lists **6 agreements / 247 items** (re-verified 2026-08-22).
+   - ⚠️ **PEC-226 alone will NOT make the Colorado sheet price.** It fixes the *line-level*
+     half (missing `raw_item_number`). The Colorado book also fails the *office-ring* half,
+     independently: it hangs on `AMSDE`, which `v_office_vendor_branch` cannot see. Expect
+     Melissa to price after the backfill and **Colorado to stay at `priced_items = 0`**
+     until this blocker is also cleared. Mig 267's effective-date backdate removes a THIRD,
+     separate gate — re-verify rather than assuming it closed either of these two.
+3. **4 branches geocoded but `geocode_status = 'pending'`** (21, 39, 465, 684) against a
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 269 demoted two; 39
+   and 465 were touched 2026-08-21 13:04 by another process and may be a deliberate
+   re-geocode request. Left alone rather than guessed at — see `docs/106`.
+4. **PEC-231** — decide whether ABC moves onto the colour rule. Moves live claim numbers.
+5. **PEC-233** — AccuLynx cleanup: 225 finished jobs to close, 5 balance contradictions
+   ($195,099) to re-save.
+6. **PEC-236** — tell Lucinda and the CPA the accrual snapshot moved lifetime → YTD and
    that `est_total_costs` is now a GM%-derived estimate. **Outward-facing.**
-5. **PEC-232** — 427 categorization lines, 224 of them unambiguous.
-6. **9 Colorado `$0.00`/`CALL` items** still need real prices from **Blake Wells**.
-7. `product_taxonomy` stores mangled entities — `Steep Slope Roofing (<gt/>2:12 Pitch)`.
-   An import artefact, now visible on the categorize surface. Untouched: it is a 172-row
-   reference-table text change and other surfaces may match the exact string.
+7. **PEC-232** — 427 categorization lines, 224 of them unambiguous.
+8. **9 Colorado `$0.00`/`CALL` items** still need real prices from the SRS rep.
+9. **Atlanta × ABC agreement** — still `pending` (mig 245); 19 covered branches, $5,226.90
+   invoiced and un-auditable. **Atlanta × SRS** (11 branches) and **Kansas City, MO × SRS**
+   (3) are unruled with no book. **QXO** is `no_book` at every office — do not chase.
+10. `product_taxonomy` stores mangled entities — `Steep Slope Roofing (<gt/>2:12 Pitch)`.
+    An import artefact, now visible on the categorize surface. Untouched: it is a 172-row
+    reference-table text change and other surfaces may match the exact string.
+11. **Prefer the SRS portal CSV over PDFs** when you can pull it: the PDF truncates PO
+    NUMBER to 16 characters, and that field is the AccuLynx job key.
 
 ## Verification Commands
 1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `f2dbed7`, status `ok`
 2. `git status --short` — empty
-3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
+3. `cd app/command-center && npm run build && npm test` — Complete, **315 passed**
 4. SQL: `select count(*) from v_qbo_job_cost_unattributed where names_a_real_acculynx_job;` → **0**
 5. SQL: `select coalesce(attention_flag,'(active)'), count(*) from wip_ar_master where in_ar_population group by 1;` → 115 active / 225 stale_closeout / 5 balance_contradiction
 6. SQL: `select count(*) from wip_office_margin where gm_pct_override is not null;` → **0**
 7. SQL: `select location, gm_basis, effective_gm_pct from v_wip_office_margin order by 1;` → 4 office rates, 4 company fallbacks
+8. SQL: `select count(*) from price_agreements where ceo_verified is distinct from true;` → **0**
+9. SQL: `select count(*) from v_vendor_invoice_acculynx_match where matched and purchase_order_number is distinct from pe_job_number;` → **0**
+10. SQL: `select count(*) from v_agreement_unreachable;` → **6** (247 items) — PR #9
 
 ## Full Context
 
@@ -205,6 +260,17 @@ Carried forward from `archive/2026-08-21-0900-srs-pdfs-ceo-verified.md`. Added t
 - **Two ingest fail modes, opposite by design.** Branch resolution fails **closed**; PO
   canonicalization fails **open**.
 - **Agreements resolve at the OFFICE level**, never the branch.
+  **⚠️ CORRECTED 2026-08-21 (PR #9): office-level resolution is not sufficient on its own.**
+  Reachability also requires the branch to be **geocoded** — `v_office_vendor_branch` joins on
+  `vb.geom IS NOT NULL AND st_contains(o.boundary, vb.geom)` and *then* matches the agreement
+  by branch-number **text**. `AMSDE` and `SSMEL` both carry the correct territory and are both
+  invisible to the ring. Do not plan work on the uncorrected wording.
+- **The vendor price path is EXACT-match only** — `raw_item_number = item_number OR
+  raw_description_normalized = lower(item_description)`. No trigram arm; ABC has one.
+- **Branch resolution fails CLOSED, PO canonicalization fails OPEN** — deliberately. Losing a
+  branch silently corrupts pricing; losing a PO silently destroys the only job clue.
+- **`vendor_invoices` has two BEFORE triggers** — branch resolution (243) and PO
+  canonicalization (255). Anything writing to that table gets both.
 
 ### Key invariants (never violate)
 - **Never derive a foreign key with a pattern that can silently return NULL without a
@@ -223,7 +289,8 @@ Carried forward from `archive/2026-08-21-0900-srs-pdfs-ceo-verified.md`. Added t
 | Service | Detail |
 |---------|--------|
 | Live app | https://cc.proexteriorsus.net (Coolify, `app/command-center/Dockerfile` from `origin/main`) |
-| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **263** |
+| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **271** (268-271 applied from PR #9's branch) |
+| Storage | `agreements` (11 objects: 7 ABC + 4 SRS), `invoices`, `wip-packs`, `slack-attachments`, `product-images`, `impact-reports` |
 | Hetzner | ABC mirror daily 07:30 UTC · QBO mirror daily 01:00 UTC |
 | pg_cron | acculynx hourly · reconcile 10min · wip-ar-master 10:45 UTC · matviews 15min |
 | Local dev | `.claude/launch.json` → `command-center` on port 4399 |
