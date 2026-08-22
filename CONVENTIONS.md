@@ -114,6 +114,24 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 
 No external skill, plugin, MCP server, agent wrapper, memory tool, or installer repo may be installed, copied into the brain, enabled globally, or recommended as a standard workflow until it passes the third-party agent tool gate. Required evidence: A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. This does not create an exception to the MCP rule: MCPs remain containerized on Hetzner only, with no local stdio MCP servers and no local Node MCPs. Current decisions live in [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
 
+## 10b. Price-agreement silos (invoice audit)
+
+A negotiated price may meet an invoice line **only** if it passes all four gates. Each is independent; failing any one means no comparison happens.
+
+- **Vendor.** Branch numbers collide across vendors (QXO's numerics overlap ABC's: 113, 249, 304, 412). Never join pricing to a branch by bare branch number — every such join also asserts the vendor (migration 208).
+- **Office.** Agreements are office-specific and are never shared between PE offices. The office is resolved from the **invoice's own branch** (`vendor_branches.pricing_territory_office_id`), never from ship-to text and never from the agreement (migration 217). Before this existed, 188 lines were priced out-of-office and $3,212.04 of erroneous claims reached 46 approved credit-memo requests.
+- **Time.** `effective_date <= invoice_date`, plus version supersession: among agreements sharing `(office_id, agreement_number)`, the winner is the latest `effective_date` still on or before the invoice date. `expiry_date` is currently enforced nowhere — deliberate for the evergreen SRS quotes, unexamined for ABC (PEC-238).
+- **UOM.** The audit **refuses rather than converts**: `negotiated_price` is emitted only when the units match, otherwise NULL with `uom_mismatch = true`. Where a sheet genuinely prices in a different unit, record `order_uom` + `uom_conversion_factor` on the item rather than loosening the gate. See §UOM in [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+
+Two consequences that have each already cost real money:
+
+- **Fuzzy matching is always a fallback.** Exact item number, then exact description, then the fuzzy arm (trigram for ABC, colour-key for other vendors) — and only when no exact match exists in the office's governing book.
+- **The final tie-break picks the LOWEST price**, which maximises computed variance. Before adding or backdating a book into an office that already has one, **simulate the change and diff which lines move**; confirm nothing is re-homed off an existing agreement onto a cheaper one.
+
+Also: **credit memos never enter the standard price audit**, and **returns invert the variance sign** — every query presenting a claim filters `extended_price > 0`. Any aggregate shown to a human must be office-scoped; an aggregate that crosses a silo is a reporting bug even when the write path is safe.
+
+Full contract: [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md).
+
 ## 11. Design system (one source of truth for every visual asset)
 
 - Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
