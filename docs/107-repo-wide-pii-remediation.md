@@ -15,7 +15,7 @@ PR #9 surfaced it and removed one instance from its own daily log (`8b142f6`).
 One pattern — a job code followed by a person's name (`KS-158: <name>`) — appears in
 **18 tracked files**:
 
-```
+```text
 .planning/ROADMAP.md
 .planning/phases/01-foundation-.../01-02-PLAN.md
 .planning/phases/01-foundation-.../01-RESEARCH.md
