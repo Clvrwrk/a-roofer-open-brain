@@ -116,7 +116,7 @@ Two items on that branch need a human, both recorded in `docs/106`:
    (app.coderabbit.ai/learnings) — not from a PR thread. Worth removing next time someone is
    in there.
 3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
-   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 268
+   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 269
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
    where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
 
@@ -188,7 +188,7 @@ and apply only the ones I approve."
    `SBP-SOUTHDENVER` are the same physical branch so the two Denver books (101 + 22 items)
    can be repointed, **or** approve repointing the agreement join to `vendor_branch_id`
    with mig 244's equivalence proof. Not an agent's call — mig 240's rule is that a guess
-   cannot become a fact. `v_agreement_unreachable` lists **6 agreements / 237 items**.
+   cannot become a fact. `v_agreement_unreachable` lists **6 agreements / 247 items** (re-verified 2026-08-22).
    - ⚠️ **PEC-226 alone will NOT make the Colorado sheet price.** It fixes the *line-level*
      half (missing `raw_item_number`). The Colorado book also fails the *office-ring* half,
      independently: it hangs on `AMSDE`, which `v_office_vendor_branch` cannot see. Expect
@@ -196,7 +196,7 @@ and apply only the ones I approve."
      until this blocker is also cleared. Mig 267's effective-date backdate removes a THIRD,
      separate gate — re-verify rather than assuming it closed either of these two.
 3. **4 branches geocoded but `geocode_status = 'pending'`** (21, 39, 465, 684) against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 268 demoted two; 39
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 269 demoted two; 39
    and 465 were touched 2026-08-21 13:04 by another process and may be a deliberate
    re-geocode request. Left alone rather than guessed at — see `docs/106`.
 4. **PEC-231** — decide whether ABC moves onto the colour rule. Moves live claim numbers.
@@ -225,7 +225,7 @@ and apply only the ones I approve."
 7. SQL: `select location, gm_basis, effective_gm_pct from v_wip_office_margin order by 1;` → 4 office rates, 4 company fallbacks
 8. SQL: `select count(*) from price_agreements where ceo_verified is distinct from true;` → **0**
 9. SQL: `select count(*) from v_vendor_invoice_acculynx_match where matched and purchase_order_number is distinct from pe_job_number;` → **0**
-10. SQL: `select count(*) from v_agreement_unreachable;` → **6** (237 items) — PR #9
+10. SQL: `select count(*) from v_agreement_unreachable;` → **6** (247 items) — PR #9
 
 ## Full Context
 

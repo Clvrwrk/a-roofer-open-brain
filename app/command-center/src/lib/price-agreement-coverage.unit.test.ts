@@ -63,3 +63,29 @@ describe("gapExposure", () => {
     });
   });
 });
+
+describe("unreachable vs absent agreements", () => {
+  // The two rows in the live chase queue need OPPOSITE actions, and the surface used to
+  // call both of them "No agreement":
+  //   Denver x SRS   live_agreements = 2, agreement_not_reaching = true  -> repair the link
+  //   Atlanta x ABC  live_agreements = 0, agreement_not_reaching = false -> chase paperwork
+  // Both still count as work; the distinction is what the operator should DO.
+  const pair = (notReaching: boolean, live: number) => ({
+    hasGap: true, invoiceCount: 4, spend: 17437.63, isAccepted: false,
+    agreementNotReaching: notReaching, liveAgreements: live,
+  });
+
+  it("counts an unreachable-agreement pair as work to chase, like any other gap", () => {
+    const out = gapExposure([pair(true, 2), { ...pair(false, 0), spend: 5226.9, invoiceCount: 5 }]);
+    expect(out.gapsToChase).toBe(2);
+    expect(out.chaseSpend).toBeCloseTo(17437.63 + 5226.9, 2);
+  });
+
+  it("keeps the reachability flag distinct from the ruling flag", () => {
+    const unreachable = pair(true, 2);
+    // An unreachable agreement is NOT an accepted ruling — it must not be muted away.
+    expect(unreachable.isAccepted).toBe(false);
+    expect(unreachable.agreementNotReaching).toBe(true);
+    expect(unreachable.liveAgreements).toBeGreaterThan(0);
+  });
+});

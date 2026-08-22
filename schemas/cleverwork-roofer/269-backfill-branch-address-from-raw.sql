@@ -4,12 +4,12 @@
 --   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.
 --     That label is fixed and will not change; Supabase keys on timestamp, not on the
 --     number, so the applied order is unaffected by anything below.
---   * IN THIS REPO: the file is `268-...`. It was renumbered eight times (245 -> 251 ->
---     ... -> 268) as parallel sessions claimed numbers on main while this work was in
---     flight. Main is canonical, so this branch yielded each time. Earlier revisions of
---     this header stopped at the 246 -> 251 step and were stale; do not use intermediate
---     numbers to find anything.
--- The sibling migrations of this set are 267, 269 and 270, all applied to prod.
+--   * IN THIS REPO: the file is `269-...`. It was renumbered nine times (245 -> 251 ->
+--     ... -> 269) as parallel sessions claimed numbers on main while this work was in
+--     flight. Main is canonical, so this branch yields each time. Earlier revisions of
+--     this header stopped at intermediate steps and were stale; do not use any
+--     intermediate number to find a file.
+-- The sibling migrations of this set are 268, 270 and 271, all applied to prod.
 -- 8th renumber 2026-08-22: main took 263 for `263-wip-attention-flags.sql`.
 -- 9th renumber 2026-08-22: main took 267 for `267-srs-colorado-price-list-backdate.sql`.
 --
@@ -53,7 +53,15 @@ WITH raw_best AS (
                                i.invoice_number))[1] AS b
       FROM public.abc_invoices i
      WHERE i.vendor_branch_id IS NOT NULL
-       AND NULLIF(i.raw->'branch'->>'city','') IS NOT NULL
+       -- Any recoverable field qualifies, not city alone: the UPDATE below fills city,
+       -- state AND address, so gating the CTE on city would silently drop a payload that
+       -- carries only a street address. 0 of 1,093 payloads hit that case today, so this
+       -- is rerun-correctness rather than a live repair. Added 2026-08-22 after review.
+       AND (
+            NULLIF(i.raw->'branch'->>'city','')         IS NOT NULL
+         OR NULLIF(i.raw->'branch'->>'state','')        IS NOT NULL
+         OR NULLIF(i.raw->'branch'->>'addressLine1','') IS NOT NULL
+       )
      GROUP BY i.vendor_branch_id
 )
 UPDATE public.vendor_branches vb

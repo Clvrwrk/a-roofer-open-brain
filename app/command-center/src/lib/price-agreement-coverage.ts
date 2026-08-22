@@ -64,6 +64,15 @@ export interface CoverageVendor {
    * QXO carries a recorded no_book ruling at every office (2026-08-20).
    */
   isAccepted: boolean;
+  /**
+   * A live agreement EXISTS for this pair but the office ring cannot reach it
+   * (v_office_vendor_gap_exposure.agreement_not_reaching, mig 271). Critical for the label:
+   * such a pair needs its branch identity REPAIRED, not new paperwork chased. Denver x SRS
+   * carries 2 live agreements and still reports priced_items = 0.
+   */
+  agreementNotReaching: boolean;
+  /** Live agreements attached to this pair, reachable or not. */
+  liveAgreements: number;
   /** Invoices booked against this office x vendor (v_office_vendor_spend). */
   invoiceCount: number;
   /**
@@ -217,7 +226,7 @@ export async function loadPriceAgreementCoverage(
     ),
     selectAll<any>(client, "v_office_vendor_spend", "office_id,vendor_id,invoice_count,spend", ["office_id", "vendor_id"]),
     selectAll<any>(client, "v_unresolved_branch_spend", "reason,invoice_count,spend", ["reason"]),
-    selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status", ["office_id", "vendor_id"]),
+    selectAll<any>(client, "v_office_vendor_gap_exposure", "office_id,vendor_id,agreement_status,agreement_not_reaching,live_agreements", ["office_id", "vendor_id"]),
   ]);
   const unresolvedSpend = unresolvedRows.reduce((sum, r) => sum + num(r.spend), 0);
 
@@ -283,8 +292,13 @@ export async function loadPriceAgreementCoverage(
   // office+vendor -> the recorded ruling. A pair ruled no_book prices as no-price BY DESIGN and
   // must never appear in a "chase this" queue, however many dollars it carries.
   const rulingByOfficeVendor = new Map<string, string>();
+  const reachByOfficeVendor = new Map<string, { notReaching: boolean; live: number }>();
   for (const r of rulingRows) {
     rulingByOfficeVendor.set(`${str(r.office_id)}::${str(r.vendor_id)}`, str(r.agreement_status));
+    reachByOfficeVendor.set(`${str(r.office_id)}::${str(r.vendor_id)}`, {
+      notReaching: r.agreement_not_reaching === true,
+      live: num(r.live_agreements),
+    });
   }
 
   const officeMap = new Map<string, CoverageOffice>();
@@ -312,6 +326,8 @@ export async function loadPriceAgreementCoverage(
       hasGap: primaryBranches + regionCoveredBranches === 0,
       agreementStatus: rulingByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? "unrecorded",
       isAccepted: ACCEPTED_STATUSES.has(rulingByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? ""),
+      agreementNotReaching: reachByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.notReaching ?? false,
+      liveAgreements: reachByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.live ?? 0,
       invoiceCount: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.invoiceCount ?? 0,
       spend: spendByOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`)?.spend ?? 0,
       branches: byOfficeVendor.get(`${officeId}::${str(r.vendor_id)}`) ?? [],

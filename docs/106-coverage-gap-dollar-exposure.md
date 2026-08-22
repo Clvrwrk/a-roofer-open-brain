@@ -124,7 +124,7 @@ read `245_…`/`246_…`/`248_…`/`249_…`, which is cosmetic — Supabase key
 existed. Applied order is unchanged.
 
 - **245 says WHY** a pair has no agreement — `no_book | pending | not_pursued | unrecorded`
-- **250 says HOW MUCH** it costs — `invoice_count`, `spend`
+- **268 says HOW MUCH** it costs — `invoice_count`, `spend`
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
@@ -133,13 +133,13 @@ surface can never make that mistake.
 
 ### Migration 271 — the gate was asking the wrong question
 
-252's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
+270's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
 
 > **Denver × SRS has a live, in-territory, 22-item agreement that the office ring cannot
 > reach, so the coverage surface reports `priced_items = 0` for the pair.**
 
-253 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
+271 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
 that matters. The queue is now two rows: Denver × SRS ($17,437.63 of spend, `unrecorded`) and
 Atlanta × ABC ($5,226.90, `pending`).
 
@@ -220,7 +220,7 @@ Repointing the agreement join to `vendor_branch_id` is pricing-affecting and ear
 equivalence proof migration 244 ran before switching (FK == text on every row, 0
 disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
 decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
-a guess cannot become a fact. 253 only makes the failure visible.
+a guess cannot become a fact. 271 only makes the failure visible.
 
 ---
 
