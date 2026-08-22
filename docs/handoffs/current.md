@@ -204,7 +204,7 @@ Carried forward from `archive/2026-08-21-0700-srs-pdfs-mark-sent.md`. Added this
   left as printed). Losing a branch silently corrupts pricing; losing a PO silently destroys
   the only job clue.
 - **`vendor_invoices` has two BEFORE triggers** now — branch resolution (243) and PO
-  canonicalization (268). Anything writing to that table gets both.
+  canonicalization (255). Anything writing to that table gets both.
 
 ### Key invariants (never violate)
 - **Never resolve a branch from a vendor's text label** — always `vendor_branch_id` /
