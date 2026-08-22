@@ -95,8 +95,8 @@ below is deployed and verified live.
 
 ## Git State
 - **Branch:** `main` — `main == origin/main`
-- **Last commit:** `d524177` — "docs(memory): 2026-08-21 session 4 — WIP/AR navigation overhaul shipped"
-- **Live `buildCommit`:** `d524177`, status `ok`
+- **Last commit:** `f2dbed7` — "docs(handoff): 2026-08-22 wrapup — migrations 256-263, WIP/AR overhaul, full Linear update"
+- **Live `buildCommit`:** `f2dbed7`, status `ok`
 - **Uncommitted changes:** none
 
 ## Task Cut Off
@@ -164,7 +164,7 @@ and apply only the ones I approve."
    reference-table text change and other surfaces may match the exact string.
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `d524177`, status `ok`
+1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `f2dbed7`, status `ok`
 2. `git status --short` — empty
 3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
 4. SQL: `select count(*) from v_qbo_job_cost_unattributed where names_a_real_acculynx_job;` → **0**
