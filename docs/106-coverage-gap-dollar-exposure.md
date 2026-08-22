@@ -1,6 +1,6 @@
 # 104 — Rank coverage gaps by dollars, not by branch count
 
-**Initial date:** 2026-08-20 · **Last updated:** 2026-08-21 · **Migrations:** 268, 269, 270, 271 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-08-22 · **Migrations:** 268, 269, 270, 271 · **Ticket:** PEC-221
 
 ## The problem
 

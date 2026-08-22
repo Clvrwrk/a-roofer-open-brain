@@ -95,16 +95,16 @@ below is deployed and verified live.
 
 ## Git State
 - **Branch:** `main` — `main == origin/main`
-- **Last commit:** `f2dbed7` — "docs(handoff): 2026-08-22 wrapup — migrations 256-263, WIP/AR overhaul, full Linear update"
+- **Last commit:** `aa06ab1` — "docs(align): promote the UOM pricing contract into CONVENTIONS and .cursor"
 - **Live `buildCommit`:** `f2dbed7`, status `ok`
 - **Uncommitted changes:** none
 
 ### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
 **268-271** (already applied to prod, all additive) plus `docs/106`. It is 0 behind main and
-kept merged with it. Marked **ready for review** on 2026-08-21; head is now `f291a90` after
-a round of review fixes (CodeRabbit + Greptile + Cursor Security, all green on the reviewed
-head). **It is not merged and not deployed.**
+kept merged with it. Marked **ready for review** on 2026-08-21; head is now `95a8664` after
+several rounds of review fixes and nine renumberings (CodeRabbit + Greptile + Cursor
+Security all green on the reviewed heads). **It is not merged and not deployed.**
 
 Two items on that branch need a human, both recorded in `docs/106`:
 1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
