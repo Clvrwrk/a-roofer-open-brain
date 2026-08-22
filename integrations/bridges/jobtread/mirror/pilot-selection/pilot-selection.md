@@ -175,7 +175,7 @@ COMMIT;
 | CO-354 | CO-354: Melissa Kepler | colorado | Completed | true | true | Rich terminal-stage coverage |
 | CO-352 | CO-352: Melissa Kepler | colorado | Invoiced | true | true | Four-branch rich-data coverage |
 | INS-4 | INS-4: Sarita Alfaro | insurance_program | Invoiced | true | true | Recent job with contacts and financials |
-| KC-12 | KC-12: Bryce Gonzalez | kansas_city | Completed | true | true | Four-branch rich-data coverage |
+| KC-12 | KC-12: private client | kansas_city | Completed | true | true | Four-branch rich-data coverage |
 | MC-49 | MC-49: Lone Star Towers - Condos (Texas Motor Speedway) | multi_family_commercial | Completed | true | true | Invoice-rich recent job |
 | TX-281 | TX-281: Dana Woodward | texas | Completed | true | true | Four-branch rich-data coverage |
 | — | David Abbott | texas | Prospect | true | false | Rich early-stage coverage |

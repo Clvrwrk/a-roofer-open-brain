@@ -32,7 +32,7 @@
 -- ── 3 · Where AccuLynx contradicts itself ─────────────────────────────────
 --
 -- 5 jobs carry open invoices their own job-level Balance Due does not reflect
--- — $195,098.53 invoiced but absent from column N. Job 5 (Brian Buege) is the
+-- — $195,098.53 invoiced but absent from column N. Job 5 is the
 -- clearest: invoices 5-1/5-2/5-3 Paid and totalling exactly the contract, then
 -- 5-4 Unpaid at $136,892.90 dated 2026-07-03, with the job balance still $0.
 -- Flagged 'balance_contradiction'. These rows STAY in the money KPIs — the AR

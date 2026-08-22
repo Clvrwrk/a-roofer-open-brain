@@ -58,7 +58,7 @@ directly from Pave by JobTread id.
 | `pilot_jobs:ebf4971f-de07-438e-8592-53374b0b8913` | `22PbdV3SKMjG` | KS-159: Marjorie Hufman | KS-159: Marjorie Hufman | Match |
 | `pilot_jobs:b61d14db-2a6e-4fbe-98f7-30f0e5fb24df` | `22PbdV3xHUSb` | KS-162: David Martens | KS-162: David Martens | Match |
 | `pilot_jobs:f19b46c4-dc8d-42cd-b907-e944e18c0ad1` | `22PbdV3Aphhh` | KS-158: William Fish | KS-158: William Fish | Match |
-| `pilot_jobs:3f60d5d2-9b59-4609-bbbb-3d99122d88a0` | `22PbdV28Hbys` | KC-12: Bryce Gonzalez | KC-12: Bryce Gonzalez | Match |
+| `pilot_jobs:3f60d5d2-9b59-4609-bbbb-3d99122d88a0` | `22PbdV28Hbys` | KC-12: private client | KC-12: private client | Match |
 
 All five Pave responses also returned `closedOn: null`.
 
