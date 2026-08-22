@@ -412,3 +412,55 @@ That is a **third** independent blocker, on top of the two this document already
 **The one open decision is unchanged and now carries more weight:** confirm `AMSDE` ==
 `SBP-SOUTHDENVER`, or approve repointing the agreement join to `vendor_branch_id` with mig
 244's equivalence proof. Two of the three gates are now closed; this is the only one left.
+
+---
+
+## Addendum, 2026-08-22 (2) — access posture and two standing assumptions
+
+### Migration 272: the coverage views were world-readable
+
+The Cursor security review flagged that the four views added by 268–271 carry no
+`GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
+
+```sql
+SET LOCAL ROLE anon;
+SELECT count(*), sum(spend) FROM public.v_office_vendor_spend;   -- 10 rows, $2,269,526.34
+```
+
+A view runs as its **owner** unless `security_invoker` is set, so RLS on the underlying
+invoice tables never applied. Aggregated office × vendor spend and agreement-ruling
+metadata were readable through PostgREST with the publishable key — outside the
+WorkOS gate.
+
+**Migration 272** revokes `anon`/`authenticated` and grants `service_role` on all four,
+copying the `v_price_list_global` shape. Verified in both directions; `service_role` still
+returns all 10 rows. The Command Center is unaffected because every reader goes through
+`createServerSupabaseClient` (`SUPABASE_SERVICE_ROLE_KEY`); no browser code touches these
+views.
+
+**Still open, deliberately out of scope:** `v_office_vendor_branch` and
+`v_office_vendor_inheritance` are anon-readable on the same default grants. They predate
+this work and expose territory mapping rather than dollars, so they were flagged rather
+than changed. **Needs a human decision.**
+
+> **Rule worth generalising:** a new view in `public` inherits default grants. Deciding its
+> audience is part of writing it, not a follow-up. Check `has_table_privilege('anon', …)`
+> before calling a view done.
+
+### Standing assumption: ABC branch payloads are bimodal
+
+Migration 269 picks the branch payload with the longest `addressLine1`. A review asked what
+happens if that payload lacks a `city`/`state` some other payload carries. Measured across
+all 1,093 branch-linked invoices:
+
+| Payload shape | Invoices |
+|---|---:|
+| full address block | 680 |
+| name-only stub | 413 |
+| **partial (mixed)** | **0** |
+
+There is no partial payload, so the longest-address ordering always selects a full block and
+city/state travel with it. The migration is correct **for this vendor's data shape**, not in
+general. **If a vendor ever emits partial branch payloads, the correct shape becomes a
+per-field `max()`** rather than one winning payload. 269 is already applied to prod, so it
+was left alone rather than superseded by a migration that provably changes no row.
