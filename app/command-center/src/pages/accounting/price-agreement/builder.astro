@@ -141,7 +141,7 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
       <p class="iv-note">
         <b>{coverage.totals.gaps}</b> office × vendor pairs have no <b>reachable</b> agreement coverage. <b>{coverage.totals.gapsWithSpend}</b> carry
         spend; of those, <b>{coverage.totals.gapsToChase}</b> are actually work — <b>{money(coverage.totals.chaseSpend)}</b>
-        of invoiced spend that is not yet auditable and carries no ruling accepting that. <b>Not all of it is
+        of invoiced spend sitting on pairs that cannot be audited and carry no ruling accepting that. <b>Not all of it is
         missing paperwork</b> — where a pair shows &ldquo;ring can't reach it&rdquo;, a live agreement already
         exists and the fix is to repair the agreement-to-branch link, not to chase a new one. The rest are either territory-only
         (branches in the ring, nothing purchased yet) or carry an accepted <code>no_book</code> ruling, which prices
