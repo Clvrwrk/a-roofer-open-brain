@@ -121,7 +121,7 @@ A negotiated price may meet an invoice line **only** if it passes all four gates
 - **Vendor.** Branch numbers collide across vendors (QXO's numerics overlap ABC's: 113, 249, 304, 412). Never join pricing to a branch by bare branch number — every such join also asserts the vendor (migration 208).
 - **Office.** Agreements are office-specific and are never shared between PE offices. The office is resolved from the **invoice's own branch** (`vendor_branches.pricing_territory_office_id`), never from ship-to text and never from the agreement (migration 217). Before this existed, 188 lines were priced out-of-office and $3,212.04 of erroneous claims reached 46 approved credit-memo requests.
 - **Time.** `effective_date <= invoice_date`, plus version supersession: among agreements sharing `(office_id, agreement_number)`, the winner is the latest `effective_date` still on or before the invoice date. `expiry_date` is currently enforced nowhere — deliberate for the evergreen SRS quotes, unexamined for ABC (PEC-238).
-- **UOM.** The audit **refuses rather than converts**: `negotiated_price` is emitted only when the units match, otherwise NULL with `uom_mismatch = true`. Where a sheet genuinely prices in a different unit, record `order_uom` + `uom_conversion_factor` on the item rather than loosening the gate. See §UOM in [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+- **UOM.** The audit **refuses rather than converts**: `negotiated_price` is emitted only when the units match, otherwise NULL with `uom_mismatch = true`. Where a sheet genuinely prices in a different unit, record `order_uom` + `uom_conversion_factor` on the item rather than loosening the gate. See §10c and [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
 
 Two consequences that have each already cost real money:
 
@@ -131,6 +131,22 @@ Two consequences that have each already cost real money:
 Also: **credit memos never enter the standard price audit**, and **returns invert the variance sign** — every query presenting a claim filters `extended_price > 0`. Any aggregate shown to a human must be office-scoped; an aggregate that crosses a silo is a reporting bug even when the write path is safe.
 
 Full contract: [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md).
+
+## 10c. UOM & pricing normalization (the unit every comparison happens in)
+
+§10b decides *which* agreement price may meet a line. This decides *what unit* the comparison happens in. Read it before touching any price comparison.
+
+**ABC ships every line in two units at once** — 99 BD and 33 SQ at 3 BD/SQ are the same shipment. Agreements are quoted in the **pricing** unit (`priceQty.uom`, e.g. SQ). The legacy `quantity`/`uom` columns were ingested inconsistently — usually from `priceQty`, but ~8.5% of lines from `shippedQty` — so one shingle SKU stored $46.50 (per bundle) on some invoices and $132 (per square) on others, and `effective_unit_price` inherited the inconsistency because it is derived from them. Order audits did no UOM handling at all, producing live variances of −80% to −100% that were pure artifacts.
+
+- **One canonical effective price:** `extendedPriceAmount ÷ priceQty.value`, materialised as `abc_invoice_lines.price_per_uom`. Derived from `raw`, so it is immune to how any ingest writer fills the legacy columns.
+- **Orders convert through `v_item_uom_map`** (`item_number → ship_uom, price_uom, units_per_price_uom`), because orders carry no `priceQty`: `effective price = unit_price × units_per_price_uom`.
+- **Never compare on** `quantity`, `uom`, `unit_price`, `effective_unit_price`, or `raw.pricePerUnitAmount`. They are per-stocking-unit or inconsistent.
+- **Never fabricate a variance across mismatched units.** Compare only when `price_uom` equals the agreement's unit; otherwise the variance is NULL and the line carries `uom_mismatch` — surfaced as a "Review (UOM)" badge, not a fake number. This is the same refusal §10b lists as its fourth gate.
+- **Any new pricing surface reads `price_per_uom` / `v_item_uom_map`**, never the legacy columns.
+
+Where a price sheet genuinely quotes in a different unit from the invoice, record `order_uom` + `uom_conversion_factor` on the agreement item rather than loosening the gate — e.g. Malarkey Vista, sheet in BD, invoice in SQ, manufacturer-stated 3 BD/SQ (migration 266).
+
+Migrations **119–122** (2026-06-19). Full contract: [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
 
 ## 11. Design system (one source of truth for every visual asset)
 
