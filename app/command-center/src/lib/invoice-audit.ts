@@ -391,7 +391,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
 
   const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, vendorRows, apiPriceRows, processedRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
-    fetchAll(() => client.from("v_invoice_audit_line").select("*")),
+    fetchAll(() => client.from("mv_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
     fetchAll(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path")),
     fetchAll(() =>
@@ -984,7 +984,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
     // Progress bars need real audit rollups, but not full line detail. Fetch only the
     // invoice/line identity and auditable flag, then join to current audit status in memory.
-    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable,uom_mismatch,negotiated_price,unit_price,quantity")),
+    fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("invoice_number,line_id,is_auditable,uom_mismatch,negotiated_price,unit_price,quantity")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,decision")),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
     // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
@@ -1083,7 +1083,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   const i = invoiceRows[0] ?? null;
   if (!i) return null;
 
-  const lineRows = await fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("*").eq("invoice_number", wanted));
+  const lineRows = await fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("*").eq("invoice_number", wanted));
   const lineIds = lineRows.map((line) => line.line_id).filter(Boolean);
   const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows] = await Promise.all([
     lineIds.length

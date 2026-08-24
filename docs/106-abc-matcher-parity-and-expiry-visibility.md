@@ -184,7 +184,7 @@ its own evidence.
 
 ---
 
-## 5 · PEC-241 — the Invoice Audit page has not been rendering
+## 5 · PEC-241 / PEC-243 — the Invoice Audit surfaces were not rendering, and now do
 
 Found while verifying §4. The page returns HTTP 200 with
 `{"offices":[],"categories":[]}` and a "Supabase pending" badge, because:
@@ -204,12 +204,57 @@ trigram-only, no colour arm, no guard, no gate, no supersession fix, no flag —
 scans in **8.60s** against the current **8.84s**. Everything shipped today costs
 **+0.24s, 2.8%**. The view was already over the ceiling.
 
-Filed as PEC-241 (Urgent). The real fix is to materialise the audit line onto the
-existing 15-minute matview cron, which also relieves PEC-216's neighbours.
+The expand row failed the same way, reported separately by Chris and filed as
+PEC-243: `GET /api/invoice-audit/invoice?invoiceNumber=…` returned **500** in
+8.68s with `detail_failed`. Filtering by invoice number does not help — the
+equality is not pushed into the LATERAL, and `v_invoice_audit_line_cascade` is
+worse still: its plan materialises all 6,982 audit rows to join the 15 detail
+rows asked for (`Rows Removed by Join Filter: 104,715`).
+
+### The fix — migrations 272 and 273
+
+Chris: *"if it's slow we need to find an alternative solution then just failing
+to render."*
+
+`mv_invoice_audit_line`, refreshed CONCURRENTLY on the existing 15-minute
+`refresh-office-pricing-matviews` cron, placed **after** the two matviews it
+reads so it is never derived from inputs newer than itself. Unique index on
+`line_id`, plus `invoice_number` for the expand path. Migration 273 repoints
+`v_invoice_audit_line_cascade` and `v_no_price_repeats`; the app's **8**
+PostgREST call sites moved with them.
+
+| | before | after |
+|---|---:|---:|
+| `GET /accounting/invoice-audit` | 44.6s, **empty** | **0.18s** |
+| initial payload | 30 bytes | **1,129,210 bytes** |
+| status badge | Supabase pending | **Supabase live** |
+| offices / categories | 0 / 0 | **14 / 13** |
+| `GET /api/invoice-audit/invoice?…` | **500** in 8.68s | **200** in 0.97s |
+| `select count(*)` on the audit line | 8,844ms | **1.2ms** |
+
+The 8s ceiling is untouched. Raising `statement_timeout` was available and
+rejected: it lets a slow query hold a connection for 30s instead of failing at
+8, which is a worse failure mode than the one it hides.
+
+`v_invoice_audit_line` remains the definition of record. `silo_assertions()`
+still reads it under pg_cron, where there is no ceiling, so the nightly
+invariants test the live derivation rather than a snapshot of it.
+
+**The trade now being carried:** the audit line is up to 15 minutes stale. Safe
+for what it holds — derived pricing only; audit state lives in
+`invoice_line_audit` and is read separately, so a human action never looks
+un-applied. But a price-agreement change does not reach the audit until the next
+tick, which matters as the price-list builder lands. Force it with
+`REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_invoice_audit_line;`.
 
 > **Invariant.** A finance surface that silently shows zeros is worse than one
 > that errors. `data.status !== "live"` is rendered as a small badge; it should
-> be impossible to miss.
+> be impossible to miss. Still true, still unfixed — the badge is the only thing
+> that said this page was empty, and nobody read it.
+
+> **Invariant.** Never read a per-row-LATERAL view through PostgREST. The 8s
+> `statement_timeout` on `authenticator` is inherited by `service_role`, so the
+> service key buys no relief. Materialise, and read the matview.
 
 ---
 
@@ -240,3 +285,24 @@ select * from silo_assertions();                              -- 0 rows
 ```
 
 `npm run build` complete · `npm test` **309 passed**.
+
+---
+
+## 8 · Chris's ruling on price-list lifetime (2026-08-24)
+
+> "All price list remain in effect until a new price list is generated."
+
+`expiry_date` is documentary. A book governs its office until a **newer list
+supersedes it**. Migration 270 already implements exactly this — `renewal_mode`
+defaults to `evergreen` and the gate fires only on `expires`, which nothing is —
+so the ruling confirms the shipped default rather than changing it.
+
+Consequence for the price-list builder work landing this week: **supersession is
+per agreement version, not per item.** A newer list for the same
+`(office_id, agreement_number)` retires the older one wholesale, including for
+items the new list does not carry — those go unpriced rather than keeping their
+old price. Diff coverage before saving. Per-item carry-forward would be a
+doctrine change and needs its own decision.
+
+Recorded in `docs/105` §6b and propagated to `CONVENTIONS.md` §10b, `AGENTS.md`
+and `.cursor/rules/agent-conventions.mdc`.

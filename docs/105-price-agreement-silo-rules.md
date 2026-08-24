@@ -196,6 +196,41 @@ on the first pass of migration 264.
 
 ---
 
+## 6b · A price list stays in effect until a new price list supersedes it
+
+**Chris, 2026-08-24.** `expiry_date` is documentary. A negotiated book governs
+its office until a *newer list* is generated for it — a lapsed expiry does not
+stop the audit pricing against it, and never has.
+
+That was previously true by omission (the string `expiry` appeared nowhere in
+`v_invoice_audit_line`). It is now recorded per agreement:
+
+- `renewal_mode` on `abc_price_agreements` and `price_agreements`,
+  `'evergreen'` (default) or `'expires'`.
+- The gate is wired on both ABC office arms, the ABC legacy branch arm, and the
+  vendor arm. It fires only on `expires`, so today it fires on nothing.
+- `priced_by_expired_agreement` on the audit line discloses when a price came
+  off a book past its stated expiry — **613 lines** on 2026-08-24. NULL where
+  the line is unpriced or came from the vendor arm, which does not publish its
+  agreement id.
+
+The evidence behind the default: all five ABC lines priced in the seven days to
+2026-08-24 billed at **0.00% variance** against a book that expired 2026-06-30.
+The vendor is honouring it. Enforcing expiry would have cost coverage and gained
+nothing.
+
+**Supersession is still per agreement version**, not per item: a newer list for
+the same `(office_id, agreement_number)` retires the older one wholesale, even
+for items the newer list does not carry. Migration 270 closed the gap where the
+legacy branch arm ignored this and reached back to a superseded version — 137
+lines, $10.75 of claims.
+
+> **Consequence to hold onto while the price-list builder lands.** Loading a new
+> list retires the one it supersedes the moment it is saved. Simulate before
+> saving: §8 gate 5 (lowest-price tie-break) and the coverage diff both apply.
+
+---
+
 ## 7 · Two rules that pair with the silos
 
 - **Credit memos never enter the standard price audit.** They reconcile against
