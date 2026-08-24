@@ -1,4 +1,10 @@
 ---
+// Standalone — deliberately NOT the internal AppShell (PEC-217 §4). This is a
+// reference sheet for one branch's negotiated price list, opened in its own tab
+// from the vendor territory map popup (components/accounting/VendorTerritoryMap.astro,
+// "Active Price List", target="_blank"). It is looked at and printed beside the
+// invoice being audited, not navigated from, so app chrome would be noise in a
+// window whose whole job is to sit next to another one.
 import { loadBranchPriceList } from "@lib/branch-price-list";
 
 const branch = Astro.url.searchParams.get("branch") ?? "";
