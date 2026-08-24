@@ -84,6 +84,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
+  // Routing a branch to an office changes the OFFICE gate — which agreement is
+  // allowed to price that branch's invoices at all (migration 217). It reaches
+  // the audit through mv_office_agreement_versions and mv_invoice_pricing_office,
+  // so the whole chain has to be rebuilt; service_pending_matview_refreshes()
+  // does that in dependency order. Requested, not performed: a REFRESH takes
+  // ~10s and this request runs under an 8s statement_timeout (migration 274).
+  const { error: refreshErr } = await client.rpc("request_matview_refresh", {
+    p_matview: "mv_invoice_audit_line",
+    p_reason: `vendor branch ${vendorBranchId} routed to office ${officeId}`,
+    p_by: "vendor-territories/assign",
+  });
+  if (refreshErr) console.error("[vendor-territories/assign] audit refresh request failed:", refreshErr.message);
+
   const payload = await loadVendorTerritoryMapPayload();
   const branch = payload.branches.find((item) => item.id === vendorBranchId) ?? null;
   const office = payload.offices.find((item) => item.id === officeId) ?? null;
