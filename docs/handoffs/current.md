@@ -2,229 +2,149 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-22 08:10 (CT)
+**Date:** 2026-08-24 16:20 (CT)
 **Agent:** Lead Orchestrator (Claude Code)
-**Reason:** User-requested `/project-handoff /wrapup` — full Linear update
+**Reason:** `/project-handoff /wrapup` + full Linear audit
 
 ---
 
 ## Accomplished This Session
 
-Seven rounds, each started by Chris. Migrations **256–263**, all additive. Everything
-below is deployed and verified live.
+Migrations **268–276**, all additive. Five commits, all deployed and verified live.
+Detail lives in `docs/106`; this section is the index, not a second copy.
 
-### Round 1 — PEC-226: the SRS description-only sheets finally price (mig 256)
+### The pricing matcher — PEC-231 (migs 268, 271)
 
-- `schemas/…/256-srs-description-item-number-backfill.sql`: token helpers
-  (`vendor_desc_tokens` / `_token_key` / `_head`), the
-  `price_agreement_item_candidates` review queue, and
-  `refresh_price_agreement_item_candidates()`.
-- **8 bindings auto-applied** — same token set, agreeing price UOM, exactly one target.
-  SRS priced lines **73 → 78**.
-- **500 candidates queued.** The brand gate was essential: without it the pool proposed
-  `IKO HIP & RIDGE` → `TAMHRARRBK`, a **TAMKO** item. It cut the queue 1,115 → 500.
+Chris ruled "move ABC onto the colour rule." Simulated first: the swap was not
+like-for-like. Trigram wins **961 of 2,230** priced ABC lines (43%) and carries
+**91%** of ABC claim value, and the colour key — tuned on SRS's pipe-delimited
+text — does not survive ABC's abbreviations (`MAL` vs `MALARKEY`).
 
-### Round 2 — the Expenses Realized discrepancy (migs 257–258)
+ABC's real failure mode is **dimension blindness, not colour blindness**: the
+board-topping 129.28% / $412.08 claim was `GAF 12" Cobra Snow Country` priced off
+`cobra 9 snow country`. Shipped a four-rank fallback with a numeric-token subset
+guard on the trigram arm.
 
-- **Every feed was green.** AccuLynx hourly 192/192, ABC mirror on Hetzner 8/8, QBO
-  mirror 8/8 (runs **daily** despite the `mode: thursday` run key), wip-ar nightly 8/8.
-- `schemas/…/257-qbo-job-cost-bare-customer-ref.sql`: **the actual bug.**
-  `v_qbo_job_cost_lines` derived the job number with
-  `substring(customer_ref_name, ':([^:]+)$')` — which **requires a colon**. Most
-  job-tagged expense lines carry the bare job number, so **14,068 of 17,489 lines /
-  $16,349,881** returned NULL and were dropped. 998 of 998 bare job-shaped names matched
-  a real `crm_pipeline.client_job_number`; 0 of 135 others did. Attributed cost
-  **$8.03M → $24.22M**. Added `v_qbo_job_cost_unattributed` as the guard.
-- `schemas/…/258-wip-ar-signed-contract-population.sql`: gate became AR balance **OR**
-  signed contract. **122 → 347 jobs**, `population_reason` records which arm.
-- Board Expense Realized **$875,957 → $8,900,089**.
+**Live: priced 2,267 → 2,013 · claims $7,281.40 → $6,097.30 · worst variance
+129.28% → 58.84% · 105 lines now won by the colour arm.**
 
-### Round 3 — KPI pills became filters
+### Expiry as an explicit choice — PEC-238/239 (migs 269, 270)
 
-- `app/command-center/src/lib/friday-wip.ts`: each job is **tagged with its KPI keys in
-  the same pass that sums them**, so a pill's filter and its number cannot drift.
-- `…/pages/accounting/friday-wip.astro`: 12 filters (6 original pills + signed-contract +
-  4 cash weeks + undated).
+`renewal_mode` (`evergreen` default | `expires`) on both agreement tables, gate
+wired on all four arms and **dormant** — all 5 ABC lines priced in the last 7 days
+bill at 0.00% against a June-expired book, so the books demonstrably roll.
+`priced_by_expired_agreement` discloses on **613 lines**. Fixed the legacy branch
+arm reaching back to superseded versions. Seven duplicate ABC rows in the generic
+price book deactivated; both halves of the dual-audit hazard are now standing
+`silo_assertions()` checks.
 
-### Round 4 — YTD accrual and GM% budgeting (migs 259–260)
+### The surfaces that were never rendering — PEC-241/243 (migs 272–274)
 
-- `…/259-accrual-snapshot-ytd.sql`: the CPA snapshot summed **lifetime** and labelled it
-  with the cutoff. Now YTD: **$12.69M/$8.90M → $5.70M/$3.49M**.
-- `…/260-wip-office-gross-margin.sql`: `est_total_costs` was populated on **0 of 347**
-  rows. Now `contract × (1 − office GM%)`; `expense_outstanding` = that − expense
-  realized, floored at 0. **$2,382,336** outstanding.
-- Three guards, each earned from the data: change orders already in `contract_amount`;
-  an office rate needs **5+ jobs AND $250k+ billed** (Georgia read 56.6% off ONE job,
-  insurance program −18.4% off five); clamped 0–75.
-- `wip_office_margin` + `/api/accounting/friday-wip/margin`, persisted for everyone.
+Found while verifying the above. `authenticator` carries `statement_timeout = 8s`,
+`service_role` inherits it, and `v_invoice_audit_line` cost 8.8s — so **every**
+PostgREST read failed. The page returned HTTP 200 with `{"offices":[],...}` and a
+"Supabase pending" badge; the expand row 500'd. **Proven to predate this session**
+(pre-session probe scans in 8.60s vs 8.84s now).
 
-### Round 5 — colour variants + categorization (migs 261–262)
+`mv_invoice_audit_line` + all readers repointed. **44.6s/empty → 0.18s/1.13MB;
+expand 500 → 200 in 0.97s.** Mig 274 adds `request_matview_refresh()` +
+a one-minute pg_cron drain so a price-list save triggers a rebuild without
+blocking on it.
 
-- `…/261-colour-variants-all-vendors.sql`: ABC's 0.45 trigram rule, measured on SRS,
-  priced `STEEL FLASHING SHINGLES` off `STEEL A ROOF EDGE` for **+1,630.8%**. Installed
-  colour-key equality instead, vocabulary read from `product_color_variants`.
-  SRS priced **78 → 93**, unpriced **$87,394 → $56,701**.
-- `…/262-price-line-product-categorization.sql`: `category_key` is a **GENERATED** column,
-  so categorization = **binding to `products`** and inheriting taxonomy. **748 auto-bound**
-  on exact manufacturer SKU; **956 candidates over 427 lines** queued.
-- New surface `…/pages/accounting/price-agreement/categorize.astro` +
-  `src/lib/product-categorize.ts` + `…/api/accounting/product-match/decide.ts`.
+### Performance and hygiene — PEC-215/216/217 (migs 275, 276)
 
-### Round 6 — why 230 jobs showed $0 balance (mig 263)
+Price Agreements **13.56s/3.77MB → 0.72s/315KB**, output byte-identical.
+Structural CHECK guard on `abc_invoices.invoice_number`. Site-hygiene sweep closed.
 
-- `…/263-wip-attention-flags.sql`: three fixes. **Draft invoices excluded from AR**
-  (MC-76's $36,000). **225 jobs** contracted/invoiced/**collected in full** but never
-  closed in AccuLynx flagged `stale_closeout` — job 10 has sat at `invoiced` **1,576
-  days**. **5 jobs** whose open invoices are absent from their own Balance Due flagged
-  `balance_contradiction` (**$195,098.53**; job 5's invoice 5-4 is $136,892.90).
-- `diagnose_wip_ar_attention()` writes an **"Our Best Guess"** note derived from each
-  row's own numbers on every rebuild, popped out from the **client name**.
+### Chris's standing ruling, recorded
 
-### Round 7 — navigation overhaul + a new app-wide rule
+> "All price list remain in effect until a new price list is generated."
 
-- Measured at 1920×900: page **4,465 → 1,021px**, chrome **711 → 578px**, rows visible
-  **3 → 11**, row height **67 → 29px**, horizontal overflow **585 → 0**.
-- **Money / Est. Cash Flow column groups** (Chris's hybrid design), offices collapsed by
-  default at 10 jobs, `Balance to Pay` **derived** (`Balance Due − To Collect`, live —
-  it previously rendered static `billed_ar` and showed **$0** on a $146,576 balance),
-  live 3-week cash map, currency field, overdue red + navy tracer.
-- **The header bleed was four faults stacked** — see Architecture decisions below.
-- Codified **Long-list disclosure** in `standards/design/v1.md`, `CONVENTIONS.md` §11a,
-  `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/agent-conventions.mdc`.
-- `docs/102`, `docs/103` written.
+`expiry_date` is documentary. Written into `docs/105` §6b and propagated to
+`CONVENTIONS.md` §10b, `AGENTS.md`, `.cursor/rules/agent-conventions.mdc`.
 
 ## Git State
 - **Branch:** `main` — `main == origin/main`
-- **Last commit:** `f2dbed7` — "docs(handoff): 2026-08-22 wrapup — migrations 256-263, WIP/AR overhaul, full Linear update"
-- **Live `buildCommit`:** `f2dbed7`, status `ok`
+- **Last commit:** `266dd5f` — "chore(pec-217): document the one undocumented shell-less page, and log the sweep"
+- **Live `buildCommit`:** `266dd5f`, status `ok`
 - **Uncommitted changes:** none
 
 ## Task Cut Off
-None — session ended at a clean boundary. Every migration applied, every surface
-verified in a browser against prod data, everything deployed.
+None. Every migration applied and verified, build + 309 tests green, deployed.
 
 ## Next Task — Start Here
 
-**Task: PEC-226 — rule on the 24 held candidates.**
+**Task: PEC-235 — apply the Long-list disclosure rule to the 5 remaining surfaces.**
+
+Deliberately not started rather than half-done: five surfaces, each with the four
+sticky-header traps the ticket documents, each needing real browser verification
+of scroll ownership and measured pane height.
 
 **What to check / do:**
-1. `select * from v_price_agreement_item_review where match_tier <> 'token_overlap' order by evidence_amount desc;` → expect **24 rows**.
-2. Three need a human call, and none of them should be guessed:
-   - `IKO CAMBRIDGE AR` → 6 colour variants, ~$38k. Sheet says **AR** (algae-resistant);
-     invoices say **Class 3 impact resistant**. Same product or not?
-   - `MALARKEY VISTA AR` → `MALVIARIRSBOK3`, $7,878. Sheet prices it **both /BD and /SQ**.
-   - `TAMKO HIP AND RIDGE` → `TAMHRARRBK`. **4 sheet rows at 4 different prices**
-     ($65.50 / $67 / $96.50 / $82) all pointing at one item.
-3. Approve by setting `review_status='approved'` and promoting to
-   `price_agreement_items.raw_item_number` — **one row per colour** where
-   `sibling_candidates > 1`, because `raw_item_number` holds one value.
-4. Re-run `select * from refresh_price_agreement_item_candidates(<agreement_id>);` and
-   confirm SRS priced lines rise from 93.
+1. Read PEC-235 and `standards/design/v1.md` § Long-list disclosure. The reference
+   implementation is `app/command-center/src/pages/accounting/friday-wip.astro`.
+2. Surfaces: Invoice Audit, Price List Review, Categorize Price Lines, Credit
+   Memos, Agreement Builder.
+3. **Measure, never hardcode.** Two-pass sizing — set the height, then add back
+   `offsetHeight − clientHeight`; a horizontal scrollbar steals ~15px, clips row
+   10, and adds a vertical scrollbar to a list that fits.
+4. Verify each surface in the browser: pane height identical collapsed and
+   expanded, wheel ownership changes only on click, filters apply before paging.
 
-**If a candidate looks ambiguous:** reject it. This feeds credit-memo claims sent to a
-vendor; a wrong price is worse than no price.
+**If a surface has no table** (Invoice Audit is a nested `details` tree, not a
+grid): say so and adapt rather than forcing the table contract onto it.
 
-**Prompt to use:** "Read docs/103 §2 and Linear PEC-226. Walk me through the 24 held
-candidates in v_price_agreement_item_review one at a time, strongest evidence first,
-and apply only the ones I approve."
+**Prompt to use:** "Read PEC-235 and standards/design/v1.md § Long-list disclosure. Apply the rule to the 5 listed surfaces one at a time, verifying each in the browser before moving to the next."
 
 ## Decisions Made This Session
 
-- **PEC-226 auto-applies only exact token-set equality** with an agreeing UOM and a unique
-  target. Colour families go to review because one sheet row maps to many item numbers and
-  `raw_item_number` is a single column.
-- **ABC's trigram rule was NOT copied verbatim** (PEC-231). Measured, it invents claims on
-  description-only sheets. ABC keeps trigram pending Chris's go-ahead — 2,263 priced lines
-  at stake.
-- **Migration 257 leaves the colon branch byte-identical.** The bug was the missing
-  bare-name branch; narrowing the colon branch would risk dropping cost that counts.
-- **Stale close-outs are flagged, not deleted** — they are the AccuLynx cleanup list.
-  Contradictions **stay in the money KPIs**; that AR is real.
-- **Category is read through the product, never stored beside it.** Two copies of a
-  classification drift, and the drift is silent.
-- **`Balance to Pay` is derived, never stored.** A stored copy drifts from the two numbers
-  it comes from.
-- **View state is `localStorage`, not session** — this is weekly planning, so the way it
-  was left on Friday is how it should look on return.
-- ⚠ **The 3-week cash map's basis changed from billed AR to Balance Due**, to match the
-  pool `To Collect` is typed against. A doctrine change, not a defect fix.
+- **The dimension guard, not the colour rule alone.** Chris's call, on measured evidence that colour-only cost 39% of coverage and 81% of claims.
+- **`renewal_mode` defaults to `evergreen`** — evidence-based (0.00% variance against expired books), later confirmed as doctrine by Chris.
+- **Did NOT raise `statement_timeout`.** It trades a visible failure for an invisible one; making the query fast was the answer.
+- **Refresh is requested, never performed inline.** A direct REFRESH would 500 *after* the write landed. Proven: a `SECURITY DEFINER` fn with `SET statement_timeout TO '120s'` still dies at the caller's 2s — the timeout is armed when the outer statement begins.
+- **`last_refreshed_at = now()`, not `clock_timestamp()`** — a request arriving during a 10s refresh must stay pending. Inverts the usual trap; same mechanism.
+- **`v_item_api_price` stays a plain view.** API-observed prices are the freshest number on that page.
+- **PEC-232 stays a human queue.** No exact tier remains; one candidate means nothing else scored, not that it is right.
 
 ## Blockers Requiring Human Action
 
-1. **PEC-226** — the 24 candidates above.
-2. **PEC-231** — decide whether ABC moves onto the colour rule. Moves live claim numbers.
-3. **PEC-233** — AccuLynx cleanup: 225 finished jobs to close, 5 balance contradictions
-   ($195,099) to re-save. Job 5's $136,892.90 is the big one.
-4. **PEC-236** — tell Lucinda and the CPA the accrual snapshot moved lifetime → YTD and
-   that `est_total_costs` is now a GM%-derived estimate. **Outward-facing.**
-5. **PEC-232** — 427 categorization lines, 224 of them unambiguous.
-6. **9 Colorado `$0.00`/`CALL` items** still need real prices from **Blake Wells**.
-7. `product_taxonomy` stores mangled entities — `Steep Slope Roofing (<gt/>2:12 Pitch)`.
-   An import artefact, now visible on the categorize surface. Untouched: it is a 172-row
-   reference-table text change and other surfaces may match the exact string.
+1. **PEC-244** — 23 Maya intake tickets stalled since 08-18, incl. **11 Urgent** security-alert items needing one bulk ruling, and PEC-208 stuck in `Agent Working`. Flagged, not triaged: they are intake data, several phishing-shaped.
+2. **PEC-240** — 9 Colorado SRS items printing `$0.00`/`CALL`; needs real prices from Blake Wells.
+3. **PEC-242** — Wichita / Richardson / Kansas City need a current list out of the price-list builder.
+4. **PEC-111** — confirm the 25 Richardson IKO items trace to a source document, not an inference.
+5. **PEC-221 / PEC-214** — sitting in review; two vendor drafts await a decision.
+6. **PEC-216 hold** — Chris said "hold" earlier, then "continue all PEC work". I read the hold as released and shipped it. Confirm, or I revert mig 276.
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `f2dbed7`, status `ok`
+1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `266dd5f`, `ok`
 2. `git status --short` — empty
 3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
-4. SQL: `select count(*) from v_qbo_job_cost_unattributed where names_a_real_acculynx_job;` → **0**
-5. SQL: `select coalesce(attention_flag,'(active)'), count(*) from wip_ar_master where in_ar_population group by 1;` → 115 active / 225 stale_closeout / 5 balance_contradiction
-6. SQL: `select count(*) from wip_office_margin where gm_pct_override is not null;` → **0**
-7. SQL: `select location, gm_basis, effective_gm_pct from v_wip_office_margin order by 1;` → 4 office rates, 4 company fallbacks
+4. SQL: `select count(*) from silo_assertions();` → **0**
+5. SQL: ABC priced lines **2,013** / claims **$6,097.30** / worst variance **58.84**
+6. SQL: `select count(*) from v_invoice_audit_line where priced_by_expired_agreement;` → **613**
+7. `curl -w '%{time_total} %{size_download}' localhost:4399/accounting/invoice-audit` → ~0.18s, ~1.13MB, badge "Supabase live"
 
 ## Full Context
 
-### What was built across ALL sessions
-Carried forward from `archive/2026-08-21-0900-srs-pdfs-ceo-verified.md`. Added this session:
+Carried forward from `archive/2026-08-22-0810-abc-matcher-wip-overhaul.md`, which
+holds the running feature list, architecture decisions, design system and service
+map. Added this session:
 
-- PEC-226 exact-token backfill + brand-gated candidate queue (256)
-- QBO job-cost bare-CustomerRef fix, $16.2M recovered, + unattributed guard view (257)
-- WIP population widened to signed contracts, `population_reason` (258)
-- CPA accrual snapshot windowed to YTD (259)
-- Per-office GM% engine, override table + API, Est Exp Outstanding populated (260)
-- Colour-variant rule for the vendor path, vocabulary from the PE product file (261)
-- Price-line → product binding, categorize worksurface, 748 auto-bound (262)
-- Draft-invoice exclusion, stale/contradiction flags, "Our Best Guess" notes (263)
-- Friday WIP/AR navigation overhaul; **Long-list disclosure** design rule
+- ABC colour arm + dimension guard; `desc_num_tokens()`; trigger-maintained match keys (268, 271)
+- Generic-book ABC duplicates deactivated + two new silo assertions (269)
+- `renewal_mode`, `priced_by_expired_agreement`, legacy-arm supersession fix (270)
+- `mv_invoice_audit_line` + readers repointed (272, 273)
+- On-demand matview refresh, debounced through pg_cron (274)
+- `abc_invoices.invoice_number` CHECK (275); `v_item_api_price` (276)
 
-### Architecture decisions
-
-- **The header bleed was four independent faults**, each sufficient on its own:
-  (1) `overflow-x: auto` with `overflow-y: visible` — per spec the `visible` axis computes
-  to `auto`, so the pane became an *unbounded* scroll container and sticky anchored to
-  nothing; (2) the second header row's sticky `top` was hardcoded 26px, the group row
-  measures **31px**; (3) `th:nth-child(-n+2)` also matches the column-group row (spacer=1,
-  MONEY=2), freezing MONEY left and demoting it to `z-index: 2`; (4) group header `colspan`
-  fixed at 2, so an expanded group left columns uncovered — `colspan` cannot be set in CSS.
-- **`vendor_desc_color_key` is STABLE, so the planner inlines it** back into join
-  predicates and evaluates per pair (873 × 750) — it times out no matter how the CTEs are
-  arranged. Only materialising helps: hence stored `color_key` columns + `refresh_color_keys()`.
-- **Never retire rows by timestamp inside plpgsql.** The row default `now()` is transaction
-  time and is EARLIER than a `clock_timestamp()` captured at function entry, so the run
-  deletes its own inserts. Stamp a run id instead.
-- **Two ingest fail modes, opposite by design.** Branch resolution fails **closed**; PO
-  canonicalization fails **open**.
-- **Agreements resolve at the OFFICE level**, never the branch.
-
-### Key invariants (never violate)
-- **Never derive a foreign key with a pattern that can silently return NULL without a
-  companion view counting the NULLs.** $16.2M hid behind one `substring()`.
-- **A sync reporting success proves the bytes arrived, not that they were read correctly.**
-- **A vendor's matching rule is not portable just because it is the same company's code.**
-- **Category is read through the product, never stored beside it.**
-- **A row needing a system fix is not the same as a row needing a phone call.**
-- **The mouse wheel only ever changes owner as the direct result of a click.**
-- **Nothing external without a human.** Mark sent/received; never transmit.
-- **Additive migrations only.** Archive, never delete.
-- **A green build is not verification.** Every surface this session was rendered and
-  clicked against prod data before shipping.
+### Key invariants added this session
+- **A matcher change is not verified by its match counts.** Mig 268's numbers were right and its plan was wrong. **EXPLAIN the predicate before shipping a join over a large input.**
+- **Never read a per-row-LATERAL view through PostgREST.** The service key buys no relief from the 8s ceiling.
+- **A finance surface that silently shows zeros is worse than one that errors.** Still unfixed: `status !== "live"` renders as a small badge nobody read for weeks.
+- **One non-indexable disjunct disqualifies a whole OR from a BitmapOr.**
 
 ### Service / deployment map
-| Service | Detail |
-|---------|--------|
-| Live app | https://cc.proexteriorsus.net (Coolify, `app/command-center/Dockerfile` from `origin/main`) |
-| Prod DB | Supabase `rnhmvcpsvtqjlffpsayu` — schemas through **263** |
-| Hetzner | ABC mirror daily 07:30 UTC · QBO mirror daily 01:00 UTC |
-| pg_cron | acculynx hourly · reconcile 10min · wip-ar-master 10:45 UTC · matviews 15min |
-| Local dev | `.claude/launch.json` → `command-center` on port 4399 |
-| Linear | PE-CC-DevTeam — **PEC-229/230/234** Done · **PEC-226** In Progress · **PEC-231/232/233/235/236** Todo |
+Unchanged from the archived handoff, plus: prod Supabase `rnhmvcpsvtqjlffpsayu`
+schemas through **276**; pg_cron gains `service-matview-refresh-requests` (every
+minute) and `refresh-office-pricing-matviews` now also refreshes
+`mv_invoice_audit_line`.
