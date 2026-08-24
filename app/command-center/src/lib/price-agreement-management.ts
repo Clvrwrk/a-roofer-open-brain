@@ -148,20 +148,25 @@ export async function loadPriceAgreementManagement(env: RuntimeEnv = getRuntimeE
   // PEC-216: fetch API prices ONLY for the items the gap worksheet actually shows.
   // This used to page v_branch_item_api_price in full — 39,984 rows / ~40 round
   // trips on every page load — to serve a lookup consulted solely at the
-  // `apiPrice:` line below, for the ~593 history items. That single query was the
-  // bulk of a 13.5s render. `.in()` is chunked per the PostgREST playbook, and each
-  // chunk still pages because one item spans many branches.
+  // `apiPrice:` line below, for the ~597 history items. That single query was the
+  // bulk of a 13.5s render.
+  //
+  // Second pass: read v_item_api_price (migration 276) rather than the
+  // branch-level view. The branch-level view is keyed (item, branch), so a
+  // 200-item chunk returned 9,788 rows — ~49 branches per item, 48 of which this
+  // loop discarded on arrival. api_price_min is that same "lowest positive price
+  // across branches" computed in SQL, verified row-for-row against the old
+  // client-side reduction (0 mismatches across all 613 items).
   const apiItemNumbers = [...new Set(histRows.map((h) => h.item_number).filter(Boolean).map(String))];
   const apiByItem = new Map<string, number>();
   for (let i = 0; i < apiItemNumbers.length; i += 200) {
     const chunk = apiItemNumbers.slice(i, i + 200);
     const rows = await fetchAll<any>((a, b) =>
-      client.from("v_branch_item_api_price").select("item_number,api_price").in("item_number", chunk).range(a, b));
+      client.from("v_item_api_price").select("item_number,api_price_min").in("item_number", chunk).range(a, b));
     for (const r of rows) {
-      const p = num(r.api_price);
+      const p = num(r.api_price_min);
       if (!r.item_number || p <= 0) continue;
-      const cur = apiByItem.get(r.item_number);
-      if (cur == null || p < cur) apiByItem.set(r.item_number, p);
+      apiByItem.set(r.item_number, p);
     }
   }
 
