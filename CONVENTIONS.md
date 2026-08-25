@@ -120,7 +120,7 @@ A negotiated price may meet an invoice line **only** if it passes all four gates
 
 - **Vendor.** Branch numbers collide across vendors (QXO's numerics overlap ABC's: 113, 249, 304, 412). Never join pricing to a branch by bare branch number — every such join also asserts the vendor (migration 208).
 - **Office.** Agreements are office-specific and are never shared between PE offices. The office is resolved from the **invoice's own branch** (`vendor_branches.pricing_territory_office_id`), never from ship-to text and never from the agreement (migration 217). Before this existed, 188 lines were priced out-of-office and $3,212.04 of erroneous claims reached 46 approved credit-memo requests.
-- **Time.** `effective_date <= invoice_date`, plus version supersession: among agreements sharing `(office_id, agreement_number)`, the winner is the latest `effective_date` still on or before the invoice date. **A price list stays in effect until a new price list supersedes it** — `expiry_date` is documentary, not a gate (Chris, 2026-08-24). That choice is now recorded per agreement in `renewal_mode` (`evergreen` default | `expires`), the gate is wired on all four arms and fires only on `expires`, and `priced_by_expired_agreement` discloses on the audit line when a price came off a lapsed book (migration 270).
+- **Time.** `effective_date <= invoice_date`, plus **item-aware** version supersession: among agreements sharing `(office_id, agreement_number)`, the winner is the latest `effective_date` still on or before the invoice date **that actually prices that item**. A newer version supersedes an older one only for the items it carries — a shorter new price list does **not** repeal the prices it omits, so an item the new list drops keeps its last known negotiated price (migration 277). This is the evergreen rule applied per item: **all agreements remain in effect until the vendor provides a new agreement** (Chris, 2026-08-25; active for ABC, SRS and QXO). Getting this wrong is silent — the line does not error, it falls out as No-Price, so the money simply stops being audited. **A price list stays in effect until a new price list supersedes it** — `expiry_date` is documentary, not a gate (Chris, 2026-08-24). That choice is now recorded per agreement in `renewal_mode` (`evergreen` default | `expires`), the gate is wired on all four arms and fires only on `expires`, and `priced_by_expired_agreement` discloses on the audit line when a price came off a lapsed book (migration 270).
 - **UOM.** The audit **refuses rather than converts**: `negotiated_price` is emitted only when the units match, otherwise NULL with `uom_mismatch = true`. Where a sheet genuinely prices in a different unit, record `order_uom` + `uom_conversion_factor` on the item rather than loosening the gate. See §10c and [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
 
 Two consequences that have each already cost real money:
@@ -131,6 +131,26 @@ Two consequences that have each already cost real money:
 Also: **read the audit through `mv_invoice_audit_line`, never `v_invoice_audit_line`.** The view resolves the governing price with a correlated LATERAL per line and costs ~8.8s, over the 8s `statement_timeout` that `service_role` inherits from `authenticator` — every PostgREST read of it fails, and the surfaces render empty rather than erroring (PEC-241/243, migrations 272–273). The matview refreshes every 15 minutes, so a price-list change is not visible to the audit until the next tick; force it with `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_invoice_audit_line`.
 
 Also: **credit memos never enter the standard price audit**, and **returns invert the variance sign** — every query presenting a claim filters `extended_price > 0`. Any aggregate shown to a human must be office-scoped; an aggregate that crosses a silo is a reporting bug even when the write path is safe.
+
+### Vendor parity of the audit (read before adding or changing a vendor arm)
+
+The audit runs one eval per vendor, and they may differ **only** where the vendor's own process differs. Every legitimate difference is listed here; anything else is a defect, not a variation.
+
+**Legitimate, documented differences** (docs/81 decisions 13 and open item 1):
+
+| | ABC Supply | SRS | QXO |
+|---|---|---|---|
+| Agreements on file | office-inherited books | Level 4 price sheet → Richardson TX | **none, ever** |
+| Consequence | full audit | full audit | every line valid as billed; No-Price triage is the correct terminal state |
+| Invoice source | ABC API (nightly) | CSV upload | CSV upload |
+| PDF + OCR line-sum verification | yes | no PDF source exists | no PDF source exists |
+
+**Everything else must behave identically across vendors.** The four gates, the UOM refusal, the lowest-price tie-break, the fuzzy fallback order, the No-Price threshold (`purchases_ytd >= 2` → `agreement_gap_queue`), and the credit-memo claim bar are vendor-agnostic rules. Do not special-case a vendor to make a number look right.
+
+Two known divergences that are **not** yet justified by process — treat as open defects, do not copy the pattern:
+
+1. **Version supersession is ABC-only.** `price_agreements` (SRS/QXO) carries `version_label` but has no `mv_office_agreement_versions` equivalent and no supersession resolution — its lateral orders by `negotiated_price` with no `effective_date` term. When SRS issues a Level 4 v2, both versions stay `is_active` and the **cheaper** sheet wins regardless of age. ABC's rule (newest version that prices the item) must be ported before a second SRS sheet lands.
+2. **Evergreen has two defaults in SQL.** ABC arms 1–2 exclude only `renewal_mode = 'expires'` (NULL ⇒ still prices, fail-open); ABC arm 3 and the whole SRS/QXO arm require `renewal_mode = 'evergreen' OR expiry_date >= invoice_date` (NULL ⇒ dropped, fail-closed). Both tables `DEFAULT 'evergreen'` and carry zero NULLs today, so this is latent, not active — but the two predicates must be made to agree rather than relying on the column default.
 
 Full contract: [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md).
 
