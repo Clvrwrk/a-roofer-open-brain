@@ -147,10 +147,12 @@ The audit runs one eval per vendor, and they may differ **only** where the vendo
 
 **Everything else must behave identically across vendors.** The four gates, the UOM refusal, the lowest-price tie-break, the fuzzy fallback order, the No-Price threshold (`purchases_ytd >= 2` → `agreement_gap_queue`), and the credit-memo claim bar are vendor-agnostic rules. Do not special-case a vendor to make a number look right.
 
-Two known divergences that are **not** yet justified by process — treat as open defects, do not copy the pattern:
+Both vendor arms are now at parity (migration 279) — the two divergences that existed are closed:
 
-1. **Version supersession is ABC-only.** `price_agreements` (SRS/QXO) carries `version_label` but has no `mv_office_agreement_versions` equivalent and no supersession resolution — its lateral orders by `negotiated_price` with no `effective_date` term. When SRS issues a Level 4 v2, both versions stay `is_active` and the **cheaper** sheet wins regardless of age. ABC's rule (newest version that prices the item) must be ported before a second SRS sheet lands.
-2. **Evergreen has two defaults in SQL.** ABC arms 1–2 exclude only `renewal_mode = 'expires'` (NULL ⇒ still prices, fail-open); ABC arm 3 and the whole SRS/QXO arm require `renewal_mode = 'evergreen' OR expiry_date >= invoice_date` (NULL ⇒ dropped, fail-closed). Both tables `DEFAULT 'evergreen'` and carry zero NULLs today, so this is latent, not active — but the two predicates must be made to agree rather than relying on the column default.
+1. **Version supersession now runs on every arm.** `price_agreements` (SRS/QXO) previously had no supersession at all: its lateral ordered by `negotiated_price` with no `effective_date` term, so two active versions of one agreement number both stayed eligible and the **cheaper** sheet won regardless of age. It now mirrors ABC's item-aware rule, scoped by vendor + office + agreement number, with a NULL agreement number keyed on `'PA-'||id` so an unnumbered sheet can only supersede itself. Proved in a rolled-back transaction: a v2 that reprices one item **dearer** wins that item (recency beats the lowest-price tie-break *within* an agreement number), while an item v2 omits keeps its v1 price.
+2. **Evergreen is one predicate on all four arms.** Every arm now excludes an agreement only when it is explicitly `renewal_mode = 'expires'` **and** has lapsed, written with `COALESCE` so a NULL can never make the predicate NULL and silently drop the row. Note the divergence was never reachable: `renewal_mode` is **`NOT NULL DEFAULT 'evergreen'`** on both `abc_price_agreements` and `price_agreements`, so the fail-open/fail-closed split was code hygiene, not a live bug.
+
+**When adding a vendor arm, port all four gates plus item-aware supersession.** A new arm that reaches an agreement by a different table is still bound by the same rules; verify with a rolled-back transaction that a newer version wins the items it prices and an omitted item keeps its prior price.
 
 Full contract: [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md).
 
