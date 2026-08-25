@@ -194,8 +194,13 @@ Different numbers, so the join never meets.
 
 ### The latent risk is bigger than the one office
 
-`v_agreement_unreachable` (migration 284) shows **all three live numbered SRS agreements —
-136 items — are unreachable**, each held by an ungeocoded row with an obvious twin:
+> ⚠️ **SUPERSEDED — figures below are the 2026-08-20 measurement.** As of 2026-08-24 this is
+> **4 agreements / 247 items**, and `AMSDE` alone holds **128** of them, not 22. The archived
+> duplicate rows described further down have since been tidied away. Do not size the Denver
+> repair from this table — see *Addendum, 2026-08-24* at the end of this document.
+
+`v_agreement_unreachable` (migration 284) showed, on 2026-08-20, **all three live numbered SRS
+agreements — 136 items — unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
 |---|---:|---|---|
@@ -270,9 +275,10 @@ reasons, both verified after merging:
    document is in the *agreement* → branch join inside `v_office_vendor_branch`, which reads
    `vendor_branches.branch_number` as text and never consults the alias table at all.
 
-Re-measured after the merge: Denver × SRS still `priced_items = 0`, `needs_ruling` and
-`agreement_not_reaching` both true; `v_agreement_unreachable` still returns **6 agreements /
-237 items**. Unchanged.
+Re-measured after the merge (2026-08-21): Denver × SRS still `priced_items = 0`,
+`needs_ruling` and `agreement_not_reaching` both true; `v_agreement_unreachable` returned
+**6 agreements / 237 items** at that point. *(Superseded: 4 agreements / 247 items as of
+2026-08-24 — see the final addendum. The `priced_items = 0` result has held throughout.)*
 
 ### Correction to a stated invariant — territory alone is not enough
 
