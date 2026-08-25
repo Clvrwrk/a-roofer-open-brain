@@ -2,149 +2,125 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-24 16:20 (CT)
+**Date:** 2026-08-25 12:40 (CT)
 **Agent:** Lead Orchestrator (Claude Code)
-**Reason:** `/project-handoff /wrapup` + full Linear audit
+**Reason:** User-requested (/project-handoff + /wrapup with full Linear documentation)
 
 ---
 
 ## Accomplished This Session
 
-Migrations **268–276**, all additive. Five commits, all deployed and verified live.
-Detail lives in `docs/106`; this section is the index, not a second copy.
+Session opened with "verify the invoice audit loop has been running daily since 08/10." It has — 16/16 days, zero failures. But verifying it exposed four defects, all now fixed and deployed.
 
-### The pricing matcher — PEC-231 (migs 268, 271)
+### Pricing join — the evergreen rule, applied per item (PEC-253, PEC-254)
 
-Chris ruled "move ABC onto the colour rule." Simulated first: the swap was not
-like-for-like. Trigram wins **961 of 2,230** priced ABC lines (43%) and carries
-**91%** of ABC claim value, and the colour key — tuned on SRS's pipe-delimited
-text — does not survive ABC's abbreviations (`MAL` vs `MALARKEY`).
+- `schemas/cleverwork-roofer/277-item-aware-version-cascade.sql`: version supersession is now **item-aware** on all three ABC arms (exact, fuzzy, branch-match). A newer agreement version supersedes an older one **only for the items it actually prices**. 414 lines regained a benchmark; 0 changed, 0 lost.
+- `schemas/cleverwork-roofer/279-vendor-arm-parity.sql`: ported the same rule to the SRS/QXO arm, which had **no supersession at all** (its lateral ordered by price with no `effective_date` term, so a cheaper *older* sheet would have won). Unified the evergreen predicate across all four arms.
 
-ABC's real failure mode is **dimension blindness, not colour blindness**: the
-board-topping 129.28% / $412.08 claim was `GAF 12" Cobra Snow Country` priced off
-`cobra 9 snow country`. Shipped a four-rank fallback with a numeric-token subset
-guard on the trigram arm.
+### Weekly QB export — built the producer that was never built (PEC-255, PEC-256)
 
-**Live: priced 2,267 → 2,013 · claims $7,281.40 → $6,097.30 · worst variance
-129.28% → 58.84% · 105 lines now won by the colour arm.**
+- `schemas/cleverwork-roofer/278-inv-processed-weekly-view.sql`: `v_inv_processed_weekly`, the export membership set (load-once contract).
+- `schemas/cleverwork-roofer/280-negatives-are-credit-memos.sql`: positive-total gate on the export set + new `v_credit_memo_tbd`, a cross-vendor CM reconciliation queue.
+- `scripts/build-inv-processed-weekly.mjs`: renders `INV-PROCESSED-[vendor]-[date].csv` **one file per vendor**, plus `SUMMARY.md`. Prep-only by default; `--stamp` is opt-in. Hard-refuses a mixed-vendor file or a non-positive row.
+- `.gitignore`: `exports/` ignored — generated batches carry client invoice data (hard rule 2).
 
-### Expiry as an explicit choice — PEC-238/239 (migs 269, 270)
+### Docs and rules
 
-`renewal_mode` (`evergreen` default | `expires`) on both agreement tables, gate
-wired on all four arms and **dormant** — all 5 ABC lines priced in the last 7 days
-bill at 0.00% against a June-expired book, so the books demonstrably roll.
-`priced_by_expired_agreement` discloses on **613 lines**. Fixed the legacy branch
-arm reaching back to superseded versions. Seven duplicate ABC rows in the generic
-price book deactivated; both halves of the dual-audit hazard are now standing
-`silo_assertions()` checks.
-
-### The surfaces that were never rendering — PEC-241/243 (migs 272–274)
-
-Found while verifying the above. `authenticator` carries `statement_timeout = 8s`,
-`service_role` inherits it, and `v_invoice_audit_line` cost 8.8s — so **every**
-PostgREST read failed. The page returned HTTP 200 with `{"offices":[],...}` and a
-"Supabase pending" badge; the expand row 500'd. **Proven to predate this session**
-(pre-session probe scans in 8.60s vs 8.84s now).
-
-`mv_invoice_audit_line` + all readers repointed. **44.6s/empty → 0.18s/1.13MB;
-expand 500 → 200 in 0.97s.** Mig 274 adds `request_matview_refresh()` +
-a one-minute pg_cron drain so a price-list save triggers a rebuild without
-blocking on it.
-
-### Performance and hygiene — PEC-215/216/217 (migs 275, 276)
-
-Price Agreements **13.56s/3.77MB → 0.72s/315KB**, output byte-identical.
-Structural CHECK guard on `abc_invoices.invoice_number`. Site-hygiene sweep closed.
-
-### Chris's standing ruling, recorded
-
-> "All price list remain in effect until a new price list is generated."
-
-`expiry_date` is documentary. Written into `docs/105` §6b and propagated to
-`CONVENTIONS.md` §10b, `AGENTS.md`, `.cursor/rules/agent-conventions.mdc`.
+- `CONVENTIONS.md` §10b, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/agent-conventions.mdc`: item-aware supersession, the **Vendor parity of the audit** block, negative-total = credit memo, per-vendor export. `check-harness-alignment.sh` passes.
+- `docs/81-invoice-audit-v2-process-and-build-plan.md`: decisions 2 and 14 marked **SUPERSEDED** in place.
+- `context/memory/2026-08-25.md`: daily log.
 
 ## Git State
-- **Branch:** `main` — `main == origin/main`
-- **Last commit:** `266dd5f` — "chore(pec-217): document the one undocumented shell-less page, and log the sweep"
-- **Live `buildCommit`:** `266dd5f`, status `ok`
-- **Uncommitted changes:** none
+- **Branch:** `main`
+- **Last commit:** `55b99f1` — "fix(pec-248): a negative total is a credit memo; the QB export is per vendor (mig 280)"
+- **Uncommitted changes:** handoff + daily log only (committed as the final wrap-up commit)
 
 ## Task Cut Off
-None. Every migration applied and verified, build + 309 tests green, deployed.
+None — session ended at a clean boundary. All four migrations applied to prod, verified, and pushed.
 
 ## Next Task — Start Here
 
-**Task: PEC-235 — apply the Long-list disclosure rule to the 5 remaining surfaces.**
-
-Deliberately not started rather than half-done: five surfaces, each with the four
-sticky-header traps the ticket documents, each needing real browser verification
-of scroll ownership and measured pane height.
+**Task:** PEC-257 — disposition the 7 reopened August lines
 
 **What to check / do:**
-1. Read PEC-235 and `standards/design/v1.md` § Long-list disclosure. The reference
-   implementation is `app/command-center/src/pages/accounting/friday-wip.astro`.
-2. Surfaces: Invoice Audit, Price List Review, Categorize Price Lines, Credit
-   Memos, Agreement Builder.
-3. **Measure, never hardcode.** Two-pass sizing — set the height, then add back
-   `offsetHeight − clientHeight`; a horizontal scrollbar steals ~15px, clips row
-   10, and adds a vertical scrollbar to a list that fits.
-4. Verify each surface in the browser: pane height identical collapsed and
-   expanded, wheel ownership changes only on click, filters apply before paging.
+1. Open the Invoice Audit surface, Wichita office, August window.
+2. Seven lines sit `pending` with restored benchmarks totalling **$142.25** over agreement (4.8%–18.7%; five of seven are ≥6%, hold-notice grade under docs/57 §1). Full table in PEC-257.
+3. Approve or reject each. Approved lines become credit-memo claims.
+4. Once dispositioned, the 6 blocked invoices clear for the weekly QB export.
 
-**If a surface has no table** (Invoice Audit is a nested `details` tree, not a
-grid): say so and adapt rather than forcing the table contract onto it.
+**If the lines do not appear:** confirm `mv_invoice_audit_line` refreshed — `select * from matview_refresh_request;` — or force it with `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_invoice_audit_line;`.
 
-**Prompt to use:** "Read PEC-235 and standards/design/v1.md § Long-list disclosure. Apply the rule to the 5 listed surfaces one at a time, verifying each in the browser before moving to the next."
+**Prompt to use:** "Read docs/handoffs/current.md. Then show me the 7 pending August lines from PEC-257 with their agreement evidence so I can disposition them."
 
 ## Decisions Made This Session
 
-- **The dimension guard, not the colour rule alone.** Chris's call, on measured evidence that colour-only cost 39% of coverage and 81% of claims.
-- **`renewal_mode` defaults to `evergreen`** — evidence-based (0.00% variance against expired books), later confirmed as doctrine by Chris.
-- **Did NOT raise `statement_timeout`.** It trades a visible failure for an invisible one; making the query fast was the answer.
-- **Refresh is requested, never performed inline.** A direct REFRESH would 500 *after* the write landed. Proven: a `SECURITY DEFINER` fn with `SET statement_timeout TO '120s'` still dies at the caller's 2s — the timeout is armed when the outer statement begins.
-- **`last_refreshed_at = now()`, not `clock_timestamp()`** — a request arriving during a 10s refresh must stay pending. Inverts the usual trap; same mechanism.
-- **`v_item_api_price` stays a plain view.** API-observed prices are the freshest number on that page.
-- **PEC-232 stays a human queue.** No exact tier remains; one candidate means nothing else scored, not that it is right.
+- **Evergreen applies per ITEM, not per agreement.** Expiry was never the cause of the No-Price flood — all 13 agreements were already `renewal_mode = 'evergreen'`. The bug was item-blind supersession: a shorter new price list silently repealed the prices it omitted. Do not re-litigate; the old wording in all four rule files described the bug as if it were the rule and has been corrected.
+- **Vendor evals may differ only where the vendor process differs.** Legitimate differences are enumerated in CONVENTIONS §10b: QXO has no agreements ever; SRS prices off the Level 4 sheet → Richardson TX; PDF/OCR verification is ABC-only for want of a source. Everything else is vendor-agnostic. Never special-case a vendor to make a number look right.
+- **A negative total is a credit memo,** whatever the vendor flag says. 5 negative documents were unflagged (4 ABC, 1 QXO) and leaked into the QB payables export. Derive from the amount; never write the flag onto the mirror — the nightly sync overwrites it.
+- **The QB bank export is one file per vendor.** ABC, SRS and QXO keep separate QB bank registers. Supersedes docs/81 decisions 2 and 14.
+- **The $1.67M export backlog was a records gap, not a money gap.** Everything had been hand-keyed into QuickBooks as **Purchases** (not Bills — `qbo_bills` for ABC stops at 2023-10-13). 620 invoices verified against the QBO mirror and reconciliation-stamped; **the CSV was never loaded**, because loading it would have double-entered $1.67M.
+- **`2009557754-001` stays cancelled.** Lucinda withdrew it 2026-08-20; Chris upheld that call even though mig 277 made two *different* lines claimable. `do_not_auto_revive` stamped into the request's `packet`. A human cancellation is a decision, not a stale record.
+- **No-Price threshold stays at `purchases_ytd >= 2`.**
 
 ## Blockers Requiring Human Action
 
-1. **PEC-244** — 23 Maya intake tickets stalled since 08-18, incl. **11 Urgent** security-alert items needing one bulk ruling, and PEC-208 stuck in `Agent Working`. Flagged, not triaged: they are intake data, several phishing-shaped.
-2. **PEC-240** — 9 Colorado SRS items printing `$0.00`/`CALL`; needs real prices from Blake Wells.
-3. **PEC-242** — Wichita / Richardson / Kansas City need a current list out of the price-list builder.
-4. **PEC-111** — confirm the 25 Richardson IKO items trace to a source document, not an inference.
-5. **PEC-221 / PEC-214** — sitting in review; two vendor drafts await a decision.
-6. **PEC-216 hold** — Chris said "hold" earlier, then "continue all PEC work". I read the hold as released and shipped it. Confirm, or I revert mig 276.
+1. **PEC-257** — disposition the 7 August lines ($142.25). Blocks 6 invoices from the QB export.
+2. **PEC-258** — 9 credit memos have no original invoice ($26,601.90: ABC 7/$21,421.33, QXO 1/$3,723.59, SRS 1/$1,456.98). Request the original invoice reference from each vendor.
+3. **Weekly batch is unstamped** — 3 files, 13 invoices, $14,610.49 in `exports/inv-processed-2026-08-25/`. Run `--stamp` **only after** accounting loads them.
+4. **Ruling needed:** 309 pre-August lines were also re-benchmarked; 38 show **$575.92** of overcharge. Not reopened (outside the authorised window). Sweep them or leave them?
+5. **`morning_abc_sync` is still paused** — the agent pass that posts ≥6% hold notices to Slack has never run. docs/57 §0 still lists it as `paused` with no cron entry.
+
+## ⚠️ Commit-message ID collision — do not chase these
+
+Commits `9bafd1e`, `7e0eace`, `2a76a6b`, `ec71346`, `55b99f1` cite **PEC-244/245/246/247/248**. Those IDs were used before the board was checked and collide with unrelated live Pax issues. History was **not** rewritten (the commits are on `main` and deployed). Real mapping:
+
+| Commit | Cited (void) | Real issue |
+|---|---|---|
+| `9bafd1e` | pec-244 | **PEC-253** |
+| `7e0eace` | pec-245 | **PEC-255** |
+| `2a76a6b` | pec-246 | docs alignment (PEC-253/254) |
+| `ec71346` | pec-247 | **PEC-254** |
+| `55b99f1` | pec-248 | **PEC-255 / PEC-256** |
+
+Session report: **PEC-259**.
 
 ## Verification Commands
-1. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` = `266dd5f`, `ok`
-2. `git status --short` — empty
-3. `cd app/command-center && npm run build && npm test` — Complete, **309 passed**
-4. SQL: `select count(*) from silo_assertions();` → **0**
-5. SQL: ABC priced lines **2,013** / claims **$6,097.30** / worst variance **58.84**
-6. SQL: `select count(*) from v_invoice_audit_line where priced_by_expired_agreement;` → **613**
-7. `curl -w '%{time_total} %{size_download}' localhost:4399/accounting/invoice-audit` → ~0.18s, ~1.13MB, badge "Supabase live"
+1. `git status --short` — should return empty
+2. `git rev-parse --short HEAD origin/main` — both should match
+3. `bash scripts/check-harness-alignment.sh` — should exit 0, no output
+4. `node scripts/build-inv-processed-weekly.mjs` — should write 3 per-vendor files, 13 invoices, $14,610.49, and print "PREP ONLY"
+5. `select count(*) filter (where negotiated_price is not null) from mv_invoice_audit_line;` — should return **2526** of 7003
+6. `select vendor_slug, is_tbd, count(*) from v_credit_memo_tbd group by 1,2;` — 9 rows with `is_tbd = true`
 
 ## Full Context
 
-Carried forward from `archive/2026-08-22-0810-abc-matcher-wip-overhaul.md`, which
-holds the running feature list, architecture decisions, design system and service
-map. Added this session:
+### What was built across ALL sessions (complete feature list)
+Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus this session:
+- Invoice Audit v2 (docs/81), office-inherited pricing, vendor/office/time/UOM silos (migs 119–122, 201, 208, 217)
+- Friday WIP/AR board (mig 215), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
+- Materialised audit line + on-demand refresh (migs 272–276)
+- **This session:** item-aware supersession (277), weekly QB export set (278), vendor arm parity (279), negative-total/CM routing + per-vendor export (280), the Tuesday INV-PROCESSED producer
 
-- ABC colour arm + dimension guard; `desc_num_tokens()`; trigger-maintained match keys (268, 271)
-- Generic-book ABC duplicates deactivated + two new silo assertions (269)
-- `renewal_mode`, `priced_by_expired_agreement`, legacy-arm supersession fix (270)
-- `mv_invoice_audit_line` + readers repointed (272, 273)
-- On-demand matview refresh, debounced through pg_cron (274)
-- `abc_invoices.invoice_number` CHECK (275); `v_item_api_price` (276)
+### Architecture decisions
+- `v_invoice_audit_line` is the **definition of record**; every reader goes through `mv_invoice_audit_line` (the view costs ~8.8s against an 8s `statement_timeout`, so a direct PostgREST read fails and surfaces render empty). Matview refreshes every 15 min via pg_cron job 13.
+- The audit is **continuous, not batch** — variance is recomputed every 15 minutes, not by a nightly job. "Has the audit run?" is the wrong question; "is anything undispositioned?" is the right one.
+- Credit status is **derived from the amount**, never written onto the vendor mirror — the nightly sync would overwrite it.
 
-### Key invariants added this session
-- **A matcher change is not verified by its match counts.** Mig 268's numbers were right and its plan was wrong. **EXPLAIN the predicate before shipping a join over a large input.**
-- **Never read a per-row-LATERAL view through PostgREST.** The service key buys no relief from the 8s ceiling.
-- **A finance surface that silently shows zeros is worse than one that errors.** Still unfixed: `status !== "live"` renders as a small badge nobody read for weeks.
-- **One non-indexable disjunct disqualifies a whole OR from a BitmapOr.**
+### Key invariants (never violate)
+- **Four gates**, all independent: vendor · office · time (incl. item-aware supersession) · UOM. Failing any one means no comparison happens.
+- **The audit refuses rather than converts** on UOM mismatch.
+- **The final tie-break picks the LOWEST price** — simulate and diff before adding or backdating a book into an office that already has one.
+- **Supersession is item-aware.** A shorter new price list does not repeal the prices it omits.
+- **A negative total is a credit memo.** Never a payable line.
+- **One QB export file per vendor.** Separate bank registers.
+- `register_exported_at` is **one-way**. A stamped invoice never appears in a future QB file — only stamp what has actually reached QuickBooks.
+- **A human cancellation is a decision.** Never bulk-revive a withdrawn CM request.
 
 ### Service / deployment map
-Unchanged from the archived handoff, plus: prod Supabase `rnhmvcpsvtqjlffpsayu`
-schemas through **276**; pg_cron gains `service-matview-refresh-requests` (every
-minute) and `refresh-office-pricing-matviews` now also refreshes
-`mv_invoice_audit_line`.
+| Service | Detail |
+|---------|--------|
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live) |
+| Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main` |
+| Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host — catalog sync → invoice ingest → PDF backfill → Alex No-Price triage |
+| pg_cron job 13 | `mv_invoice_audit_line` + office pricing matviews, every 15 min |
+| Weekly QB batch | `node scripts/build-inv-processed-weekly.mjs` (Tuesdays), prep-only unless `--stamp` |
