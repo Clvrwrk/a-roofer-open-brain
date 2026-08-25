@@ -77,6 +77,10 @@ Rules:
 
 ## 3. Decisions (2026-08-05, Chris)
 
+> **⚠️ Decisions 2 and 14 are SUPERSEDED (Chris, 2026-08-25).** The weekly QB file is **one file per vendor**, not a single cross-vendor file: ABC, SRS and QXO each keep a **separate QB bank register**, so a mixed-vendor export would post one vendor's invoices into another's register. This restores the docs/63 contract (`invoice-payment.ts`: "One file per vendor — a batch spanning N vendors produces N files") and is enforced by `scripts/build-inv-processed-weekly.mjs`, which refuses to write a mixed file. Migration 280.
+>
+> **Also new (Chris, 2026-08-25):** a **negative total IS a credit memo**, whatever the vendor flag says, and never belongs in a QB payables export — it routes to credit-memo reconciliation against its original invoice, or a **CM TBD** line where the original is not yet identified. See `v_credit_memo_tbd` (migration 280).
+
 1. **Inversion confirmed:** payment runs ahead of audit; the audit recovers credits behind payment. All do-not-pay holds ("Held — credit memo", disputed-portion holdback email language) are removed.
 2. **One weekly QB file**, `INV-PROCESSED-[date_processed].csv`, generated every **Tuesday**. Replaces the on-demand payment/register batch exports.
 3. **Weekly cadence:** agents process Tue–Mon; **Monday** is the full human audit & approval; **Tuesday** all files and emails are generated and sent to Lucinda & Chris via the **Maya.Chen** email (AgentMail).
