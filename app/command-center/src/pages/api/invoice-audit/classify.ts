@@ -67,7 +67,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const validLineIds = lines.filter((l) => l.classification === "valid").map((l) => l.invoiceLineId);
   if (isAgent && validLineIds.length) {
     const { data: auditRows, error: auditError } = await client
-      .from("v_invoice_audit_line")
+      .from("mv_invoice_audit_line")
       .select("line_id, negotiated_price, variance_ext, uom_mismatch")
       .in("line_id", validLineIds);
     if (auditError) {
@@ -95,7 +95,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const { data: vendorRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(1);
   const vendorSlug = (vendorRow as any[] | null)?.[0]?.vendor_slug ?? "abc-supply";
   const lineIdsToCheck = lines.map((l) => l.invoiceLineId).filter(Boolean);
-  const { data: lineOwners } = await client.from("v_invoice_audit_line").select("line_id,invoice_number").in("line_id", lineIdsToCheck);
+  const { data: lineOwners } = await client.from("mv_invoice_audit_line").select("line_id,invoice_number").in("line_id", lineIdsToCheck);
   const ownerByLine = new Map(((lineOwners as any[] | null) ?? []).map((r) => [String(r.line_id), String(r.invoice_number)]));
   const foreign = lines.filter((l) => ownerByLine.get(String(l.invoiceLineId)) !== invoiceNumber);
   if (foreign.length) {

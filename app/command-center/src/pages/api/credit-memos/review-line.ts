@@ -48,7 +48,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   // (invoice_number, item_number) against the audit lines view before stamping.
   if (!claim.line_id && claim.item_number) {
     const { data: cand } = await client
-      .from("v_invoice_audit_line")
+      .from("mv_invoice_audit_line")
       .select("line_id")
       .eq("invoice_number", claim.invoice_number)
       .eq("item_number", claim.item_number)

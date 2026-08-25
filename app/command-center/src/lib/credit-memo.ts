@@ -392,7 +392,7 @@ async function loadRequestedCreditMemo(client: any, invoiceNumber: string): Prom
     const { data: flagged } = await client.from("v_invoice_line_audit_current").select("invoice_line_id").eq("invoice_number", invoiceNumber).in("decision", ["credit-flag", "credit-noflag"]);
     const ids = ((flagged as any[] | null) ?? []).map((r) => r.invoice_line_id);
     if (ids.length) {
-      const { data } = await client.from("v_invoice_audit_line").select("item_number,item_description,quantity,uom,unit_price,negotiated_price").in("line_id", ids);
+      const { data } = await client.from("mv_invoice_audit_line").select("item_number,item_description,quantity,uom,unit_price,negotiated_price").in("line_id", ids);
       lineRows = (data as any[] | null) ?? [];
     }
   }

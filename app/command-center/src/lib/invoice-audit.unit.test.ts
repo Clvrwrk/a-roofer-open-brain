@@ -110,7 +110,7 @@ describe("loadInvoiceAuditSummary", () => {
         ],
         roof_system_category: [],
         abc_invoices: [{ invoice_number: "DONE-1", ar_status: "open", date_paid: null }],
-        v_invoice_audit_line: lineRows,
+        mv_invoice_audit_line: lineRows,
         v_invoice_line_audit_current: lineRows.map((line) => ({
           invoice_line_id: line.line_id,
           audit_status: "passed",
@@ -151,7 +151,7 @@ describe("loadInvoiceAuditSummary", () => {
       }],
       roof_system_category: [],
       abc_invoices: [{ invoice_number: invoiceNumber, ar_status: "open", date_paid: null }],
-      v_invoice_audit_line: lineRows,
+      mv_invoice_audit_line: lineRows,
       v_invoice_line_audit_current: lineRows.map((line) => ({ invoice_line_id: line.line_id, audit_status: "passed" })),
       invoice_payment_processed: [{ invoice_number: invoiceNumber, processed_at: "2026-06-26T10:00:00Z", status: ledgerStatus }],
     });
@@ -287,7 +287,7 @@ describe("loadInvoiceAuditSummary", () => {
         ],
         roof_system_category: [],
         abc_invoices: [{ invoice_number: "HELD-1", ar_status: "open", date_paid: null }],
-        v_invoice_audit_line: lineRows,
+        mv_invoice_audit_line: lineRows,
         v_invoice_line_audit_current: [
           { invoice_line_id: "h-1", audit_status: "passed" },
           { invoice_line_id: "h-2", audit_status: "disputed", decision: "credit-flag" },
@@ -328,7 +328,7 @@ describe("loadInvoiceAuditSummary", () => {
           { invoice_number: "PAY-OK-1", ar_status: "open", date_paid: null },
         ],
         service_warranty_audit_queue: [{ invoice_number: "SWHOLD-1", status: "transferred" }],
-        v_invoice_audit_line: [...lineRows, { invoice_number: "PAY-OK-1", line_id: "ok-1", is_auditable: true }],
+        mv_invoice_audit_line: [...lineRows, { invoice_number: "PAY-OK-1", line_id: "ok-1", is_auditable: true }],
         v_invoice_line_audit_current: [
           { invoice_line_id: "sw-1", audit_status: "disputed", decision: "credit-flag" },
           { invoice_line_id: "ok-1", audit_status: "passed" },

@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
 
   // The line must be a real negotiated-variance discrepancy per the LIVE engine.
   const { data: lineRows, error: lineError } = await client
-    .from("v_invoice_audit_line")
+    .from("mv_invoice_audit_line")
     .select("line_id, invoice_number, item_number, item_description, quantity, uom, unit_price, negotiated_price, variance_ext, uom_mismatch, negotiated_agreement_id")
     .eq("line_id", lineId)
     .limit(1);

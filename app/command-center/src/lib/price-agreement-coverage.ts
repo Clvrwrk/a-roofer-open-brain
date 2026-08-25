@@ -57,7 +57,7 @@ export interface CoverageVendor {
   allVerified: boolean;
   pricedItems: number;
   hasGap: boolean;
-  /** The recorded ruling for this pair, from office_vendor_agreement_status via mig 270. */
+  /** The recorded ruling for this pair, from office_vendor_agreement_status via mig 283. */
   agreementStatus: string;
   /**
    * The pair's no-price behaviour is ACCEPTED, so it is not work to chase.
@@ -66,7 +66,7 @@ export interface CoverageVendor {
   isAccepted: boolean;
   /**
    * A live agreement EXISTS for this pair but the office ring cannot reach it
-   * (v_office_vendor_gap_exposure.agreement_not_reaching, mig 271). Critical for the label:
+   * (v_office_vendor_gap_exposure.agreement_not_reaching, mig 284). Critical for the label:
    * such a pair needs its branch identity REPAIRED, not new paperwork chased. Denver x SRS
    * carries 2 live agreements and still reports priced_items = 0.
    */

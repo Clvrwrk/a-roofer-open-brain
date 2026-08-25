@@ -83,5 +83,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await client.from("price_list_pdf_staging").update({ match_status: "promoted" }).eq("source_doc", sourceDoc).in("match_status", ["confirmed", "high"]);
   await client.rpc("refresh_agreement_version_review");
 
-  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo });
+  // Saving a price list changes what every invoice line prices against, and the
+  // audit reads mv_invoice_audit_line (PEC-241/243). Ask for a rebuild rather
+  // than doing one here: REFRESH takes ~10s and this request runs under an 8s
+  // statement_timeout, so a direct refresh would 500 AFTER the list had already
+  // landed. Serviced within a minute by pg_cron (migration 274).
+  const { error: rerr } = await client.rpc("request_matview_refresh", {
+    p_matview: "mv_invoice_audit_line",
+    p_reason: `price list promoted: ${meta.agreement_number} branch ${meta.branch} (${items.length} items)`,
+    p_by: "price-agreement/review/promote",
+  });
+  if (rerr) console.error("[promote] audit refresh request failed:", rerr.message);
+
+  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo, auditRefreshQueued: !rerr });
 };

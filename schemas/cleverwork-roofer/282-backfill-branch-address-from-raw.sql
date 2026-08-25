@@ -4,16 +4,16 @@
 --   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.
 --     That label is fixed and will not change; Supabase keys on timestamp, not on the
 --     number, so the applied order is unaffected by anything below.
---   * IN THIS REPO: the file is `269-...`. It was renumbered nine times (245 -> 251 ->
---     ... -> 269) as parallel sessions claimed numbers on main while this work was in
+--   * IN THIS REPO: the file is `282-...`. It was renumbered ten times (245 -> 251 ->
+--     ... -> 282) as parallel sessions claimed numbers on main while this work was in
 --     flight. Main is canonical, so this branch yields each time. Earlier revisions of
 --     this header stopped at intermediate steps and were stale; do not use any
 --     intermediate number to find a file.
--- The sibling migrations of this set are 268, 270 and 271, all applied to prod.
+-- The sibling migrations of this set are 281, 283, 284 and 285, all applied to prod.
 -- 8th renumber 2026-08-22: main took 263 for `263-wip-attention-flags.sql`.
 -- 9th renumber 2026-08-22: main took 267 for `267-srs-colorado-price-list-backdate.sql`.
 --
--- Found while putting dollars on the coverage gaps (migration 268). The largest single
+-- Found while putting dollars on the coverage gaps (migration 281). The largest single
 -- un-audited bucket in the system is ABC branch 176: 11 invoices, $19,356.94 — on a branch
 -- row with NO city and NO state, so it can never geocode, never land in a territory ring,
 -- and never get priced. Same shape for branches 183 and 305.
