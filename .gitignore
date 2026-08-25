@@ -98,3 +98,6 @@ raw data/
 
 # Credit-memo re-audit working data (business pricing data — never commit)
 .cm-reaudit/
+
+# Generated QB export batches — client invoice data, never committed (hard rule 2)
+exports/
