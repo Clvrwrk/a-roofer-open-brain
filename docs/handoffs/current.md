@@ -140,10 +140,13 @@ Session report: **PEC-259**.
 
 1. **PEC-226** — the 24 candidates above.
 2. **Denver × SRS branch identity — needs a human** (PR #9). Confirm `AMSDE` and
-   `SBP-SOUTHDENVER` are the same physical branch so the two Denver books (101 + 22 items)
-   can be repointed, **or** approve repointing the agreement join to `vendor_branch_id`
-   with mig 244's equivalence proof. Not an agent's call — mig 240's rule is that a guess
-   cannot become a fact. `v_agreement_unreachable` lists **6 agreements / 247 items** (re-verified 2026-08-22).
+   `SBP-SOUTHDENVER` are the same physical branch so the Denver books (**128 items** — 106
+   unnumbered + 22 on `0049345641`) can be repointed, **or** approve repointing the agreement
+   join to `vendor_branch_id` with mig 244's equivalence proof. Not an agent's call — mig
+   240's rule is that a guess cannot become a fact. `v_agreement_unreachable` lists
+   **4 agreements / 247 items** (re-verified 2026-08-24; was 6 agreements before main's
+   268-280 tidied the archived duplicates — the item total did not move, it concentrated on
+   Denver, which went from 22 items to 128).
    - ⚠️ **PEC-226 alone will NOT make the Colorado sheet price.** It fixes the *line-level*
      half (missing `raw_item_number`). The Colorado book also fails the *office-ring* half,
      independently: it hangs on `AMSDE`, which `v_office_vendor_branch` cannot see. Expect
@@ -180,7 +183,7 @@ Session report: **PEC-259**.
 7. SQL: `select location, gm_basis, effective_gm_pct from v_wip_office_margin order by 1;` → 4 office rates, 4 company fallbacks
 8. SQL: `select count(*) from price_agreements where ceo_verified is distinct from true;` → **0**
 9. SQL: `select count(*) from v_vendor_invoice_acculynx_match where matched and purchase_order_number is distinct from pe_job_number;` → **0**
-10. SQL: `select count(*) from v_agreement_unreachable;` → **6** (247 items) — PR #9
+10. SQL: `select count(*) from v_agreement_unreachable;` → **4** (247 items, 128 on `AMSDE`) — PR #9, re-verified 2026-08-24
 
 ## Full Context
 

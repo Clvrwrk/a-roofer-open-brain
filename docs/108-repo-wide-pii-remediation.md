@@ -83,4 +83,4 @@ Two things make a complete sweep a project rather than a patch:
 ## Recommendation
 
 Run this as its own change, one workstream at a time, docs before test fixtures, with the
-policy in §1 settled first. Do not attach it to an unrelated feature PR.
+policy in **Decision 1** above settled first. Do not attach it to an unrelated feature PR.
