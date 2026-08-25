@@ -193,6 +193,32 @@ export function gapExposure(
   };
 }
 
+/**
+ * Build the Agreement Builder's coverage picture for every office x vendor pair.
+ *
+ * Reads five views in parallel and joins them in memory, because each answers a different
+ * question and no single view answers enough of one on its own:
+ *
+ *  - `v_office_vendor_inheritance` — the spine: one row per pair, with `priced_items`
+ *  - `v_office_vendor_branch`      — the branches behind each pair (one row per agreement,
+ *                                    so a branch can legitimately appear more than once)
+ *  - `v_office_vendor_spend`       — invoice count and spend, i.e. what a gap COSTS
+ *  - `v_unresolved_branch_spend`   — spend on branches with no pricing territory at all
+ *  - `v_office_vendor_gap_exposure` — the recorded human ruling plus reachability
+ *
+ * Two properties of the result are easy to misread and worth stating here:
+ *
+ *  - `hasGap` is `primaryBranches + regionCoveredBranches === 0` — the absence of REACHABLE
+ *    coverage, not the absence of an agreement. Denver x SRS has live agreements and still
+ *    reports a gap, because the office ring cannot reach the branch that holds them. Any
+ *    surface that renders this as "no agreement" sends operators to chase signed paperwork.
+ *  - `unresolvedSpend` survives the empty-coverage early return. Spend on territory-less
+ *    branches is a fact about the invoices, not about coverage, and hiding it exactly when
+ *    coverage looks empty would understate the exposure at the worst moment.
+ *
+ * Returns `status: "unconfigured"` (and zeroed totals) when no Supabase client can be built,
+ * so the page renders an honest empty state instead of throwing.
+ */
 export async function loadPriceAgreementCoverage(
   env: RuntimeEnv = getRuntimeEnv(),
 ): Promise<PriceAgreementCoverage> {
