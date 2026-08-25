@@ -33,7 +33,7 @@ Session opened with "verify the invoice audit loop has been running daily since 
 ## Git State
 - **Branch:** `main`
 - **Last commit:** `55b99f1` — "fix(pec-248): a negative total is a credit memo; the QB export is per vendor (mig 280)"
-- **Uncommitted changes:** handoff + daily log only (committed as the final wrap-up commit)
+- **Uncommitted changes:** none
 
 ### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
@@ -45,7 +45,7 @@ Security all green on the reviewed heads; Greptile confidence 5/5). Also carries
 `docs/108-repo-wide-pii-remediation.md`, an escalated repo-wide finding that is NOT this
 branch's to fix. **It is not merged and not deployed.**
 
-Two items on that branch need a human, both recorded in `docs/107`:
+Five items on that branch need a human, recorded in `docs/107` and `docs/108`:
 1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
    approve repointing the agreement join to `vendor_branch_id` with mig 244's proof.
 2. **One-minute cleanup in an external tool:** CodeRabbit stored a learning during PR #9's
@@ -58,6 +58,14 @@ Two items on that branch need a human, both recorded in `docs/107`:
    against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 282
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
    where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
+4. `v_office_vendor_branch` and `v_office_vendor_inheritance` are readable by `anon` on the
+   same default grants that mig 285 closed for the four coverage views. They predate this
+   branch and expose territory mapping rather than dollars, so they were flagged, not
+   changed. Owner's call whether to tighten them.
+5. **Repo-wide customer PII** — `docs/108`. Named individuals sit beside their outstanding
+   balances across at least 18 tracked files, including test fixtures that assert on the
+   names. On `main` today, not introduced here. Needs a policy boundary, a replacement
+   token, a decision on git history, and a CI check. **The most urgent of the five.**
 
 Numbering note: parallel sessions
 claimed 245-262 and both `docs/99` and `docs/100` while it was in flight, so it yielded seven

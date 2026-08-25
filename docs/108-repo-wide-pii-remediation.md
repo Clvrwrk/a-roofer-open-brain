@@ -61,13 +61,17 @@ Two things make a complete sweep a project rather than a patch:
 ## Decisions needed
 
 1. **Policy — what counts as PII here?** Private individuals' names are clearly in scope.
-   Explicitly out of scope in the pass so far, and worth confirming:
-   - **vendor-side business contacts** (e.g. the SRS sales agent named in `docs/101`), which
-     are business contacts and material to the pricing narrative;
+   **Nothing below is exempt yet.** These are *proposed* exemptions for a human to accept or
+   reject; until that happens every named record stays in scope, and none has been retained
+   on the strength of this list:
+   - **vendor-side business contacts** (e.g. the SRS sales agent named in `docs/101`) —
+     business contacts rather than customers, and material to the pricing narrative;
    - **commercial and government entities** (`Lone Star Towers`, `Bureau of Indian Affairs`,
      `JPMC #143923`) — organisations, not people;
-   - **property addresses**, which this repo treats as the primary key. Redacting those
-     would defeat the point of the brain; names are the line.
+   - **property addresses.** In this repo the *property* is the primary key and atoms about a
+     place carry `property_id`; the address is data hanging off that key, not the key itself.
+     Redacting addresses would defeat the point of the brain, and they identify a place rather
+     than a person — customer names are the line.
 2. **Replacement token.** `private client` keeps tables readable and preserves the job
    number, which is the operational key — AccuLynx stays the system of record for identity.
 3. **Git history.** Redacting the tree does not purge history. At least four commits carry
