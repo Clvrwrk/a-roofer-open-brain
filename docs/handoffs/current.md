@@ -45,15 +45,14 @@ Security all green on the reviewed heads; Greptile confidence 5/5). Also carries
 `docs/108-repo-wide-pii-remediation.md`, an escalated repo-wide finding that is NOT this
 branch's to fix. **It is not merged and not deployed.**
 
-Five items on that branch need a human, recorded in `docs/107` and `docs/108`:
+Four items on that branch need a human, recorded in `docs/107` and `docs/108`:
 1. Confirm `AMSDE` == `SBP-SOUTHDENVER` so the two Denver books can be repointed, **or**
    approve repointing the agreement join to `vendor_branch_id` with mig 244's proof.
-2. **One-minute cleanup in an external tool:** CodeRabbit stored a learning during PR #9's
-   review saying to use `abc_invoices.id` as a tiebreak. That column does not exist. It has
-   since stored a corrected learning that contradicts it, so the risk is mostly neutralised,
-   but the stale entry can only be deleted from the CodeRabbit learnings UI
-   (app.coderabbit.ai/learnings) — not from a PR thread. Worth removing next time someone is
-   in there.
+2. ~~**Cleanup in an external tool:** the stale CodeRabbit learning telling readers to use
+   `abc_invoices.id` as a tiebreak — a column that does not exist.~~ **CLOSED 2026-08-25**,
+   without needing a human: CodeRabbit removed the learning itself while confirming the
+   `property_id` correction, and reported the removal on the PR thread. Nothing left to do
+   in the learnings UI.
 3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
    against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 282
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
