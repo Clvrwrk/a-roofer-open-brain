@@ -1,4 +1,4 @@
--- 269 — recover branch addresses that were already sitting in the invoice payload.
+-- 282 — recover branch addresses that were already sitting in the invoice payload.
 --
 -- NUMBERING NOTE — two identities, both authoritative in their own place:
 --   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.

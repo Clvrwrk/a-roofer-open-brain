@@ -1,4 +1,4 @@
-# 107 — Repo-wide customer PII in committed records (open, needs a human)
+# 108 — Repo-wide customer PII in committed records (open, needs a human)
 
 **Status:** OPEN · **Found:** 2026-08-22, during PR #9 review · **Severity:** hard rule 2 violation
 
