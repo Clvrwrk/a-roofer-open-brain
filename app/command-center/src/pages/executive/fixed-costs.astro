@@ -1,12 +1,14 @@
 ---
-// Executive · Fixed Costs (mig 281) — the Owner's overhead picture.
+// Executive · Fixed Costs (mig 281) — the Owner's overhead picture, in the
+// WIP/AR design language (PEC-234): full-bleed `.cfx`, KPI pills, group
+// panels, zebra tables, shared cc.theme, long-list disclosure on the register.
+//
 // Register classifications are basis_version 0 (PROVISIONAL — R1–R11 rulings
-// pending the CPA strategy meeting) and banner as such. Actuals come from
-// mv_overhead_account_month (nightly). Allocation preview uses billed share of
-// the current WIP population — an explicitly labeled placeholder until the
-// Jan 1 GL conversion delivers real location P&L.
+// pending the CPA strategy meeting) and banner as such. Actuals refresh
+// nightly from the QuickBooks mirror (read-only).
 import AppShell from "../../layouts/AppShell.astro";
 import { loadFixedCostBoard } from "@lib/fixed-costs";
+import "../../styles/cash-surface.css";
 
 const board = await loadFixedCostBoard();
 const money = (v: number) =>
@@ -20,76 +22,85 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
 ---
 
 <AppShell title="Fixed Costs" eyebrow="Executive" activePage="executive">
-  <section class="fc">
-    <div class="fc-head">
-      <div>
-        <h1>Fixed Costs &amp; Overhead</h1>
-        <p class="fc-note">
-          Every overhead account, classified and budgeted from the Fixed-Cost Register. Actuals refresh
-          nightly from the QuickBooks mirror (read-only). As of {asOf}.
-        </p>
-      </div>
-      <div class="fc-actions">
-        <a class="fc-btn" href="/api/executive/fixed-costs.xlsx" download>Download workbook (.xlsx)</a>
-        <a class="fc-btn fc-secondary" href="/executive/cash-runway">Cash Runway</a>
+  <section class="cfx" id="cfx" data-theme="light" data-pref="system">
+    <div class="cfx-toolbar">
+      <h2 class="cfx-title">Fixed Costs &amp; Overhead</h2>
+      <span class="cfx-sub">every overhead account, classified and budgeted · actuals nightly from the QBO mirror (read-only)</span>
+      <span class="cfx-spacer"></span>
+      <a class="cfx-btn" href="/executive/cash-runway">Cash Runway</a>
+      <a class="cfx-btn cfx-btn-primary" href="/api/executive/fixed-costs.xlsx" download title="PE_FixedCosts_asof-date.xlsx — Pools / Register / Allocation Preview">Download workbook</a>
+      <span class="cfx-count">as of {asOf}</span>
+      <div class="cfx-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
       </div>
     </div>
 
     {board.provisional && (
-      <div class="fc-banner">
-        <b>Provisional — basis_version {board.basisVersion}.</b> {board.rulingsOpen} classification rulings
-        (R1–R11) are pending the CPA strategy meeting. Numbers are real; the fixed/variable and
-        pool assignments are draft until the rulings land.
-      </div>
+      <p class="cfx-banner">
+        <b>Provisional — basis_version {board.basisVersion}.</b> {board.rulingsOpen} accounts are flagged
+        across rulings R1–R11, pending the CPA strategy meeting. The dollars are real; the fixed/variable
+        and pool assignments are draft until the rulings land.
+      </p>
     )}
-    {board.error && <p class="fc-error">{board.error}</p>}
+    {board.error && <p class="cfx-error">{board.error}</p>}
 
-    <div class="fc-tiles">
-      <div class="fc-tile big"><div class="n">{money(board.monthlyNut)}</div><div class="l">Monthly nut (budget)</div></div>
-      <div class="fc-tile"><div class="n">{money(board.ttmOverhead)}</div><div class="l">TTM overhead</div></div>
-      <div class="fc-tile"><div class="n">{pct1(board.overheadPctOfRevenue)}</div><div class="l">Of {money(board.ttmRevenue)} TTM revenue</div></div>
-      <div class="fc-tile"><div class="n">{pct1(board.fixedShare)}</div><div class="l">Fixed + step-fixed share</div></div>
+    <div class="cfx-kpis">
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Monthly nut (budget)</span><span class="cfx-kpi-val">{money(board.monthlyNut)}</span><span class="cfx-kpi-sub">what arrives whether or not a square sells</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">TTM overhead</span><span class="cfx-kpi-val">{money(board.ttmOverhead)}</span><span class="cfx-kpi-sub">trailing 12 months, all pools</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Overhead % of revenue</span><span class="cfx-kpi-val">{pct1(board.overheadPctOfRevenue)}</span><span class="cfx-kpi-sub">of {money(board.ttmRevenue)} TTM revenue</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Fixed + step-fixed share</span><span class="cfx-kpi-val">{pct1(board.fixedShare)}</span><span class="cfx-kpi-sub">of overhead — the committed portion</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.rulingsOpen > 0 }]}><span class="cfx-kpi-lab">Accounts awaiting ruling</span><span class="cfx-kpi-val">{board.rulingsOpen}</span><span class="cfx-kpi-sub">across R1–R11, decided at the CPA meeting</span></div>
     </div>
 
-    <h2>Cost pools <span class="fc-sub">budget vs. actual · {lastMonthLabel} = last full month</span></h2>
-    <div class="fc-card">
-      <table class="fc-table">
-        <thead>
-          <tr><th>Pool</th><th class="num">Monthly budget</th><th class="num">{lastMonthLabel} actual</th><th class="num">3-mo avg</th><th class="num">Δ vs budget</th><th class="num">Accounts</th><th class="num">Rulings</th></tr>
-        </thead>
-        <tbody>
-          {board.pools.map((p) => {
-            const delta = p.avg3moActual - p.monthlyBudget;
-            return (
-              <tr>
-                <td>{p.label}</td>
-                <td class="num">{money(p.monthlyBudget)}</td>
-                <td class="num">{money(p.lastMonthActual)}</td>
-                <td class="num">{money(p.avg3moActual)}</td>
-                <td class="num" class:list={[{ over: delta > 0 && Math.abs(delta) > p.monthlyBudget * 0.1 }]}>{money(delta)}</td>
-                <td class="num">{p.accounts}</td>
-                <td class="num">{p.rulingsOpen > 0 ? <span class="fc-ruling">{p.rulingsOpen}</span> : ""}</td>
-              </tr>
-            );
-          })}
-          <tr class="bold">
-            <td>Total</td>
-            <td class="num">{money(board.pools.reduce((s, p) => s + p.monthlyBudget, 0))}</td>
-            <td class="num">{money(board.pools.reduce((s, p) => s + p.lastMonthActual, 0))}</td>
-            <td class="num">{money(board.pools.reduce((s, p) => s + p.avg3moActual, 0))}</td>
-            <td class="num">{money(board.pools.reduce((s, p) => s + p.avg3moActual - p.monthlyBudget, 0))}</td>
-            <td class="num">{board.rows.length}</td>
-            <td class="num">{board.rulingsOpen}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="cfx-group">
+      <div class="cfx-group-head">
+        <span class="cfx-group-name">Cost pools</span>
+        <span class="cfx-group-count">budget vs. actual · {lastMonthLabel} = last full month</span>
+      </div>
+      <div class="cfx-tablewrap">
+        <table class="cfx-table">
+          <thead>
+            <tr><th>Pool</th><th class="num">Monthly budget</th><th class="num">{lastMonthLabel} actual</th><th class="num">3-mo avg</th><th class="num">Δ vs budget</th><th class="num">Accounts</th><th class="num">Rulings</th></tr>
+          </thead>
+          <tbody>
+            {board.pools.map((p) => {
+              const delta = p.avg3moActual - p.monthlyBudget;
+              return (
+                <tr>
+                  <td>{p.label}</td>
+                  <td class="num">{money(p.monthlyBudget)}</td>
+                  <td class="num">{money(p.lastMonthActual)}</td>
+                  <td class="num">{money(p.avg3moActual)}</td>
+                  <td class="num" class:list={[{ "cfx-neg": delta > 0 && Math.abs(delta) > p.monthlyBudget * 0.1 }]}>{money(delta)}</td>
+                  <td class="num">{p.accounts}</td>
+                  <td class="num">{p.rulingsOpen > 0 ? <span class="cfx-warn-note" style="font-weight:700">⚑ {p.rulingsOpen}</span> : ""}</td>
+                </tr>
+              );
+            })}
+            <tr class="cfx-endrow">
+              <td>Total</td>
+              <td class="num">{money(board.pools.reduce((s, p) => s + p.monthlyBudget, 0))}</td>
+              <td class="num">{money(board.pools.reduce((s, p) => s + p.lastMonthActual, 0))}</td>
+              <td class="num">{money(board.pools.reduce((s, p) => s + p.avg3moActual, 0))}</td>
+              <td class="num">{money(board.pools.reduce((s, p) => s + p.avg3moActual - p.monthlyBudget, 0))}</td>
+              <td class="num">{board.rows.length}</td>
+              <td class="num">{board.rulingsOpen}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="fc-cols">
-      <div class="fc-wide">
-        <h2>Register <span class="fc-sub">{board.rows.length} accounts · ⚑ = ruling pending</span></h2>
-        <div class="fc-pane" id="register-pane" data-pane-key="fc-register">
-          <table class="fc-table">
+    <div class="cfx-cols">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Register</span>
+          <span class="cfx-group-count">{board.rows.length} accounts · ⚑ = ruling pending</span>
+        </div>
+        <div class="cfx-pane" id="register-pane" data-pane-key="fc-register">
+          <table class="cfx-table">
             <thead>
               <tr><th>Account</th><th>Behavior</th><th>Attribution</th><th class="num">Budget / mo</th><th class="num">3-mo avg</th><th></th></tr>
             </thead>
@@ -99,24 +110,27 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
                 .sort((a, b) => b.monthlyBudget - a.monthlyBudget)
                 .map((r) => (
                   <tr>
-                    <td title={r.notes ?? ""}>{r.accountFqn}</td>
+                    <td title={r.notes ?? ""} style="max-width:280px;overflow:hidden;text-overflow:ellipsis">{r.accountFqn}</td>
                     <td>{behaviorLabel[r.costBehavior] ?? r.costBehavior}</td>
                     <td>{r.attribution === "office_direct" ? "Office-direct" : r.attribution === "inferred" ? `Inferred — ${r.attributionRule ?? ""}` : "Corporate"}</td>
                     <td class="num">{money(r.monthlyBudget)}</td>
                     <td class="num">{money(r.avg3moActual)}</td>
-                    <td>{r.needsRuling ? <span class="fc-ruling" title={r.notes ?? ""}>⚑ {r.rulingRef}</span> : ""}</td>
+                    <td>{r.needsRuling ? <span class="cfx-warn-note" style="font-weight:700" title={r.notes ?? ""}>⚑ {r.rulingRef}</span> : ""}</td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
-        <button class="fc-showall" id="register-toggle" type="button">Show all {board.rows.length} …</button>
+        <button class="cfx-showmore" id="register-toggle" type="button">Show all {board.rows.length} …</button>
       </div>
 
-      <div>
-        <h2>Allocation preview <span class="fc-sub">corporate overhead by office</span></h2>
-        <div class="fc-card">
-          <table class="fc-table">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Allocation preview — corporate overhead by office</span>
+          <span class="cfx-group-money">placeholder basis</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
             <thead><tr><th>Location</th><th class="num">Billed share</th><th class="num">Allocated / mo</th></tr></thead>
             <tbody>
               {board.officeAllocations.map((a) => (
@@ -125,10 +139,10 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
             </tbody>
           </table>
         </div>
-        <p class="fc-hint">
-          Placeholder basis: billed share of the current WIP/AR population. Real by-office P&amp;L
-          arrives with the Jan 1 GL conversion (QBO Locations + Classes, tag-at-entry) — this
-          preview shows the mechanics the Owner will get, honestly labeled.
+        <p class="cfx-note" style="padding: 8px 14px 12px">
+          Corporate-attributed budget spread by each office's billed share of the current WIP/AR
+          population. Real by-office P&amp;L arrives with the Jan 1 GL conversion (QBO Locations +
+          Classes, tag-at-entry) — this preview shows the mechanics, honestly labeled.
         </p>
       </div>
     </div>
@@ -136,9 +150,11 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
 </AppShell>
 
 <script>
-  // Long-list disclosure (standards/design/v1 §Long-list): the register pane
-  // opens at 10 rows; expanding keeps the SAME measured height and scrolls
-  // internally. Reveal state persists in localStorage.
+  import { initThemePref } from "../../scripts/theme-pref";
+  initThemePref(document.getElementById("cfx")!, ".cfx-theme button");
+
+  // Long-list disclosure (PEC-234 rule): 10 rows, same measured height
+  // expanded, internal scroll, persisted state.
   const pane = document.getElementById("register-pane");
   const toggle = document.getElementById("register-toggle");
   if (pane && toggle) {
@@ -149,7 +165,7 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
       const row10 = rows[9] as HTMLElement;
       const paneH = row10.offsetTop + row10.offsetHeight;
       pane.style.height = `${paneH + headH}px`;
-      const key = pane.dataset.paneKey ?? "fc-pane";
+      const key = pane.dataset.paneKey ?? "cfx-pane";
       const apply = (expanded: boolean) => {
         pane.style.overflowY = expanded ? "auto" : "hidden";
         toggle.textContent = expanded ? "Show first 10" : `Show all ${rows.length} …`;
@@ -164,36 +180,3 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
     }
   }
 </script>
-
-<style>
-  .fc{padding:8px 4px 40px;max-width:1120px}
-  .fc-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-  .fc h1{font-size:22px;margin:0 0 8px}
-  .fc h2{font-size:15px;margin:26px 0 8px}
-  .fc-sub{color:#6b7886;font-size:12px;font-weight:400;margin-left:8px}
-  .fc-note{font-size:13px;color:#6b7886;line-height:1.55;margin:0;max-width:70ch}
-  .fc-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .fc-btn{border:1px solid #5b46d8;background:#5b46d8;color:#fff;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap}
-  .fc-btn.fc-secondary{background:transparent;color:#5b46d8}
-  .fc-banner{margin:14px 0 0;border:1px solid #ecc9a8;border-left:4px solid #b4560f;background:#fdf3e7;border-radius:8px;padding:10px 14px;font-size:13px;color:#7a4a1f;line-height:1.5}
-  .fc-error{color:#a33b2e;font-size:13px}
-  .fc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0 4px}
-  .fc-tile{border:1px solid #e3e8ef;border-radius:12px;background:#fff;padding:14px 16px}
-  .fc-tile .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
-  .fc-tile.big .n{font-size:28px}
-  .fc-tile .l{font-size:11.5px;color:#6b7886;margin-top:2px}
-  .fc-card{border:1px solid #e3e8ef;border-radius:12px;background:#fff;overflow-x:auto}
-  .fc-pane{border:1px solid #e3e8ef;border-radius:12px;background:#fff;overflow-x:auto;overflow-y:hidden}
-  .fc-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:520px}
-  .fc-table th,.fc-table td{padding:6px 10px;border-bottom:1px solid #eef1f5;text-align:left;white-space:nowrap}
-  .fc-table td:first-child{white-space:normal}
-  .fc-table thead th{background:#f7f8fa;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7886;position:sticky;top:0}
-  .fc-table th.num,.fc-table td.num{text-align:right;font-variant-numeric:tabular-nums}
-  .fc-table td.over{color:#a33b2e;font-weight:600}
-  .fc-table tr.bold td{font-weight:700;border-top:2px solid #1f4e3d}
-  .fc-ruling{color:#b4560f;font-weight:700;font-size:11.5px}
-  .fc-cols{display:grid;grid-template-columns:minmax(420px,3fr) minmax(280px,2fr);gap:24px;align-items:start}
-  @media (max-width: 900px){ .fc-cols{grid-template-columns:1fr} }
-  .fc-showall{margin-top:8px;border:1px solid #d6dce4;background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
-  .fc-hint{font-size:11.5px;color:#6b7886;line-height:1.5;margin:8px 0 0}
-</style>

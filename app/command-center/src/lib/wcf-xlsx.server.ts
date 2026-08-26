@@ -81,6 +81,14 @@ export async function buildCashFlowWorkbook(board: CashFlowBoard): Promise<Buffe
     cell.font = { name: "Arial", size: 10, bold: col === 1 };
     if (col > 1) cell.numFmt = "0.0";
   });
+  // Definition audited 2026-08-26: ending cash ÷ average weekly TOTAL
+  // disbursements. Months shown alongside (4.345 weeks/month) so the two
+  // scales can never be confused.
+  const moc = s.addRow(["  ≈ months of cash (4.345 wks/mo)", ...board.weeks.map((w) => Math.round((w.weeksOfCash / 4.345) * 10) / 10)]);
+  moc.eachCell((cell, col) => {
+    cell.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF666666" } };
+    if (col > 1) cell.numFmt = "0.0";
+  });
   const flags = s.addRow(["Below minimum floor?", ...board.weeks.map((w) => (w.belowFloor ? "BELOW FLOOR" : "ok"))]);
   flags.eachCell((cell, col) => {
     cell.font = { name: "Arial", size: 10, bold: col === 1, color: String(cell.value) === "BELOW FLOOR" ? { argb: "FFA33B2E" } : undefined };

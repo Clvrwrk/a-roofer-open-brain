@@ -1,12 +1,17 @@
 ---
 // 13-Week Cash Flow (13WCF) work surface — Accounting (mig 281).
 //
+// Design language mirrors the Friday WIP/AR board (PEC-234 — the design source
+// of truth for work surfaces): full-bleed `.cfx` grid, toolbar, KPI pills, the
+// cash-map week strip, group panels, zebra tables, shared cc.theme preference.
+//
 // Receipts link LIVE to the WIP/AR board: date a job on Friday WIP/AR and it
 // leaves the undated pool here on the next load. Drivers (wcf_assumptions) are
-// editable inline; every change is audit-logged. The one-click workbook export
-// carries exactly what this page shows, as-of stamped.
+// editable inline; every change is audit-logged. The workbook export carries
+// exactly what this page shows, as-of stamped.
 import AppShell from "../../layouts/AppShell.astro";
 import { loadCashFlowBoard } from "@lib/cash-flow";
+import "../../styles/cash-surface.css";
 
 const board = await loadCashFlowBoard();
 const money = (v: number) =>
@@ -17,107 +22,131 @@ const wk = (isoDate: string) => {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
 };
 const asOf = board.generatedAt.slice(0, 10);
+// Weeks-of-cash context (audited 2026-08-26): ending cash ÷ average weekly
+// TOTAL disbursements across the 13 forecast weeks. Months shown alongside
+// (1 month = 4.345 weeks) so the two scales can never be confused.
+const avgWeeklyDisb = board.weeks.length
+  ? board.weeks.reduce((s, w) => s + w.totalDisbursements, 0) / board.weeks.length
+  : 0;
+const months = (weeks: number) => (weeks / 4.345).toFixed(1);
+const wk1 = board.weeks[0];
+const wkLast = board.weeks[board.weeks.length - 1];
 const pctKeys = new Set(["undated_collection_pct"]);
-const intKeys = new Set(["new_billings_ramp_week"]);
-const fmtAssumption = (key: string, v: number) =>
-  pctKeys.has(key) ? String(v) : intKeys.has(key) ? String(Math.round(v)) : String(Math.round(v));
+const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) : String(Math.round(v)));
 ---
 
 <AppShell title="13-Week Cash Flow" eyebrow="Accounting" activePage="accounting">
-  <section class="wcf">
-    <div class="wcf-head">
-      <div>
-        <h1>13-Week Cash Flow Forecast</h1>
-        <p class="wcf-note">
-          Rolling weekly forecast, one quarter ahead: beginning cash + expected receipts − scheduled
-          disbursements. <b>Dated receipts come live from the WIP/AR board</b> — set an expected
-          invoice-cash date on <a href="/accounting/friday-wip">Friday WIP/AR</a> and the job moves out
-          of the assumption-spread pool into its real week. Assumption-driven rows are provisional
-          (basis_version 0 — CPA rulings pending). As of {asOf}.
-        </p>
-      </div>
-      <div class="wcf-actions">
-        <a class="wcf-btn" href="/api/accounting/cash-flow.xlsx" download>Download workbook (.xlsx)</a>
-        <a class="wcf-btn wcf-secondary" href="/executive/cash-runway">Executive view</a>
+  <section class="cfx" id="cfx" data-theme="light" data-pref="system">
+    <div class="cfx-toolbar">
+      <h2 class="cfx-title">13-Week Cash Flow</h2>
+      <span class="cfx-sub">receipts live from the <a href="/accounting/friday-wip">WIP/AR board</a> · drivers audited · basis_version 0 (CPA rulings pending)</span>
+      <span class="cfx-spacer"></span>
+      <a class="cfx-btn" href="/executive/cash-runway">Executive view</a>
+      <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download title="PE_13WCF_asof-date.xlsx — exactly what this page shows, at this moment">Download workbook</a>
+      <span class="cfx-count">as of {asOf}</span>
+      <div class="cfx-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
       </div>
     </div>
 
-    {board.error && <p class="wcf-error">{board.error}</p>}
+    {board.error && <p class="cfx-error">{board.error}</p>}
 
-    <div class="wcf-tiles">
-      <div class="wcf-tile"><div class="n">{money(board.beginningCash)}</div><div class="l">Cash today ({board.bankAccounts.length} accounts)</div></div>
-      <div class="wcf-tile"><div class="n">{board.weeks.length ? money(board.weeks[board.weeks.length - 1].endingCash) : "—"}</div><div class="l">Ending cash, week 13</div></div>
-      <div class="wcf-tile" class:list={[{ "wcf-bad": board.floorBreached }]}>
-        <div class="n">{money(board.minEndingCash)}</div>
-        <div class="l">Low point{board.minEndingWeek ? ` (wk of ${wk(board.minEndingWeek)})` : ""} · floor {money(board.minCashFloor)}</div>
-      </div>
-      <div class="wcf-tile" class:list={[{ "wcf-bad": board.datedShare < 0.5 }]}>
-        <div class="n">{pct(board.datedShare)}</div>
-        <div class="l">AR dated by value · {money(board.undatedCash)} undated ({board.undatedJobs} jobs)</div>
+    <div class="cfx-kpis">
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Cash today</span><span class="cfx-kpi-val">{money(board.beginningCash)}</span><span class="cfx-kpi-sub">{board.bankAccounts.length} bank accounts, QBO mirror</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1 ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Ending cash, week 13</span><span class="cfx-kpi-val">{wkLast ? money(wkLast.endingCash) : "—"}</span><span class="cfx-kpi-sub">net {wkLast ? money(board.weeks.reduce((s, w) => s + w.net, 0)) : "—"} over the quarter</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">13-week low vs floor</span><span class="cfx-kpi-val">{money(board.minEndingCash)}</span><span class="cfx-kpi-sub">{board.minEndingWeek ? `wk of ${wk(board.minEndingWeek)} · ` : ""}floor {money(board.minCashFloor)}{board.floorBreached ? " — BREACHED" : ""}</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.datedShare < 0.5 }]}><span class="cfx-kpi-lab">AR dated by value</span><span class="cfx-kpi-val">{pct(board.datedShare)}</span><span class="cfx-kpi-sub">{money(board.undatedCash)} undated across {board.undatedJobs} jobs</span></div>
+    </div>
+
+    <div class="cfx-cashmap">
+      <span class="cfx-cashmap-title">Ending cash by week — the 3-week cash map on the WIP board, extended to the full quarter</span>
+      <div class="cfx-cashmap-cells">
+        {board.weeks.map((w) => (
+          <div class="cfx-week" class:list={[{ "cfx-week-warn": w.belowFloor }]}>
+            <span class="cfx-week-lab">wk {wk(w.weekStart)}</span>
+            <span class="cfx-week-val" class:list={[{ "cfx-week-neg": w.endingCash < 0 }]}>{money(w.endingCash)}</span>
+            <span class="cfx-week-sub">net {money(w.net)}</span>
+          </div>
+        ))}
       </div>
     </div>
 
-    <h2>Forecast</h2>
-    <div class="wcf-scroll">
-      <table class="wcf-table">
-        <thead>
-          <tr>
-            <th class="sticky">Week beginning</th>
-            {board.weeks.map((w) => <th class="num">{wk(w.weekStart)}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="bold"><td class="sticky">Beginning cash</td>{board.weeks.map((w) => <td class="num">{money(w.beginningCash)}</td>)}</tr>
-          <tr class="sec"><td class="sticky" colspan={14}>Receipts</td></tr>
-          <tr><td class="sticky ind">Dated AR (WIP board)</td>{board.weeks.map((w) => <td class="num live">{money(w.datedReceipts)}</td>)}</tr>
-          <tr><td class="sticky ind">Undated pool @ weekly %</td>{board.weeks.map((w) => <td class="num">{money(w.undatedReceipts)}</td>)}</tr>
-          <tr><td class="sticky ind">New billings</td>{board.weeks.map((w) => <td class="num">{money(w.newBillings)}</td>)}</tr>
-          <tr class="bold"><td class="sticky">Total receipts</td>{board.weeks.map((w) => <td class="num">{money(w.totalReceipts)}</td>)}</tr>
-          <tr class="sec"><td class="sticky" colspan={14}>Disbursements</td></tr>
-          <tr><td class="sticky ind">Materials</td>{board.weeks.map((w) => <td class="num">{money(w.materials)}</td>)}</tr>
-          <tr><td class="sticky ind">Subcontractors</td>{board.weeks.map((w) => <td class="num">{money(w.subs)}</td>)}</tr>
-          <tr><td class="sticky ind">Commissions (1099)</td>{board.weeks.map((w) => <td class="num">{money(w.commissions)}</td>)}</tr>
-          <tr><td class="sticky ind">W-2 payroll + taxes</td>{board.weeks.map((w) => <td class="num">{money(w.payroll)}</td>)}</tr>
-          <tr><td class="sticky ind">Fixed overhead (register)</td>{board.weeks.map((w) => <td class="num">{money(w.fixedOverhead)}</td>)}</tr>
-          <tr><td class="sticky ind">One-time / past-due AP</td>{board.weeks.map((w) => <td class="num">{money(w.oneTime)}</td>)}</tr>
-          <tr class="bold"><td class="sticky">Total disbursements</td>{board.weeks.map((w) => <td class="num">{money(w.totalDisbursements)}</td>)}</tr>
-          <tr class="bold"><td class="sticky">Net cash flow</td>{board.weeks.map((w) => <td class="num" class:list={[{ neg: w.net < 0 }]}>{money(w.net)}</td>)}</tr>
-          <tr class="bold end"><td class="sticky">Ending cash</td>{board.weeks.map((w) => <td class="num" class:list={[{ breach: w.belowFloor }]}>{money(w.endingCash)}</td>)}</tr>
-          <tr><td class="sticky ind">Weeks of cash on hand</td>{board.weeks.map((w) => <td class="num">{w.weeksOfCash.toFixed(1)}</td>)}</tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="wcf-cols">
-      <div>
-        <h2>Assumptions <span class="wcf-sub">editable — every change is audit-logged</span></h2>
-        <table class="wcf-assume">
+    <div class="cfx-group">
+      <div class="cfx-group-head">
+        <span class="cfx-group-name">Forecast sheet</span>
+        <span class="cfx-group-count">beginning cash + receipts − disbursements, per week</span>
+        <span class="cfx-group-money">dated receipts are live from wip_ar_master</span>
+      </div>
+      <div class="cfx-tablewrap">
+        <table class="cfx-table cfx-frozen">
+          <thead>
+            <tr><th>Week beginning</th>{board.weeks.map((w) => <th class="num">{wk(w.weekStart)}</th>)}</tr>
+          </thead>
           <tbody>
-            {board.assumptions.map((a) => (
-              <tr>
-                <td class="lbl" title={a.note ?? ""}>{a.label}</td>
-                <td class="val">
-                  <input type="text" inputmode="decimal" data-key={a.key} value={fmtAssumption(a.key, a.value)} />
-                  {pctKeys.has(a.key) && <span class="unit">fraction</span>}
-                </td>
-                <td class="who">{a.updatedBy ? `${a.updatedBy}` : ""}</td>
-              </tr>
-            ))}
+            <tr class="cfx-bold"><td>Beginning cash</td>{board.weeks.map((w) => <td class="num">{money(w.beginningCash)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Receipts</td></tr>
+            <tr><td class="ind">Dated AR (WIP board)</td>{board.weeks.map((w) => <td class="num cfx-live">{money(w.datedReceipts)}</td>)}</tr>
+            <tr><td class="ind">Undated pool @ weekly %</td>{board.weeks.map((w) => <td class="num">{money(w.undatedReceipts)}</td>)}</tr>
+            <tr><td class="ind">New billings</td>{board.weeks.map((w) => <td class="num">{money(w.newBillings)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total receipts</td>{board.weeks.map((w) => <td class="num">{money(w.totalReceipts)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Disbursements</td></tr>
+            <tr><td class="ind">Materials</td>{board.weeks.map((w) => <td class="num">{money(w.materials)}</td>)}</tr>
+            <tr><td class="ind">Subcontractors</td>{board.weeks.map((w) => <td class="num">{money(w.subs)}</td>)}</tr>
+            <tr><td class="ind">Commissions (1099)</td>{board.weeks.map((w) => <td class="num">{money(w.commissions)}</td>)}</tr>
+            <tr><td class="ind">W-2 payroll + taxes</td>{board.weeks.map((w) => <td class="num">{money(w.payroll)}</td>)}</tr>
+            <tr><td class="ind">Fixed overhead (register)</td>{board.weeks.map((w) => <td class="num">{money(w.fixedOverhead)}</td>)}</tr>
+            <tr><td class="ind">One-time / past-due AP</td>{board.weeks.map((w) => <td class="num">{money(w.oneTime)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total disbursements</td>{board.weeks.map((w) => <td class="num">{money(w.totalDisbursements)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Net cash flow</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-neg": w.net < 0 }]}>{money(w.net)}</td>)}</tr>
+            <tr class="cfx-endrow"><td>Ending cash</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-breach": w.belowFloor }]}>{money(w.endingCash)}</td>)}</tr>
+            <tr><td class="ind">Weeks of cash on hand</td>{board.weeks.map((w) => <td class="num" title={`≈ ${months(w.weeksOfCash)} months`}>{w.weeksOfCash.toFixed(1)}</td>)}</tr>
           </tbody>
         </table>
-        <p class="wcf-hint">Press Enter (or click away) to save a changed value; the forecast reloads with the new driver.</p>
+      </div>
+    </div>
+
+    <div class="cfx-cols">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Assumptions</span>
+          <span class="cfx-group-count">editable — every change is audit-logged; Enter or click away to save</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
+            <thead><tr><th>Driver</th><th class="num">Value</th><th>Last edit</th></tr></thead>
+            <tbody>
+              {board.assumptions.map((a) => (
+                <tr>
+                  <td title={a.note ?? ""} style="white-space:normal">{a.label}</td>
+                  <td class="num">
+                    <input class="cfx-input" type="text" inputmode="decimal" data-key={a.key} value={fmtAssumption(a.key, a.value)} />
+                    {pctKeys.has(a.key) && <span class="cfx-unit">fraction</span>}
+                  </td>
+                  <td class="cfx-who">{a.updatedBy ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div>
-        <h2>Undated AR — date these on the WIP board <span class="wcf-sub">{board.undatedJobs} jobs · {money(board.undatedCash)}</span></h2>
-        <div class="wcf-pane" id="undated-pane" data-pane-key="wcf-undated">
-          <table class="wcf-jobs">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Undated AR — date these on the WIP board</span>
+          <span class="cfx-group-count">{board.undatedJobs} jobs</span>
+          <span class="cfx-group-money">{money(board.undatedCash)}</span>
+        </div>
+        <div class="cfx-pane" id="undated-pane" data-pane-key="wcf-undated">
+          <table class="cfx-table">
             <thead><tr><th>Job #</th><th>Client</th><th>Location</th><th class="num">Outstanding</th></tr></thead>
             <tbody>
               {board.undatedTopJobs.map((j) => (
                 <tr>
                   <td><a href="/accounting/friday-wip">{j.jobNumber || "—"}</a></td>
-                  <td>{j.client}</td>
+                  <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">{j.client}</td>
                   <td>{j.location}</td>
                   <td class="num">{money(j.outstanding)}</td>
                 </tr>
@@ -126,10 +155,10 @@ const fmtAssumption = (key: string, v: number) =>
           </table>
         </div>
         {board.undatedTopJobs.length > 10 && (
-          <button class="wcf-showall" id="undated-toggle" type="button">Show all {board.undatedTopJobs.length} …</button>
+          <button class="cfx-showmore" id="undated-toggle" type="button">Show all {board.undatedTopJobs.length} …</button>
         )}
         {board.pastExpectedCash > 0 && (
-          <p class="wcf-hint warn">{money(board.pastExpectedCash)} of dated AR is already past its expected date — folded into week 1; chase or re-date.</p>
+          <p class="cfx-warn-note" style="padding:0 14px 10px">{money(board.pastExpectedCash)} of dated AR is past its expected date — folded into week 1; chase or re-date.</p>
         )}
       </div>
     </div>
@@ -137,8 +166,12 @@ const fmtAssumption = (key: string, v: number) =>
 </AppShell>
 
 <script>
+  import { initThemePref } from "../../scripts/theme-pref";
+  const root = document.getElementById("cfx")!;
+  initThemePref(root, ".cfx-theme button");
+
   // Assumption inline edits → POST /api/accounting/cash-flow/assumption.
-  for (const input of document.querySelectorAll<HTMLInputElement>(".wcf-assume input[data-key]")) {
+  for (const input of document.querySelectorAll<HTMLInputElement>(".cfx-input[data-key]")) {
     const original = input.value;
     const save = async () => {
       if (input.value === original) return;
@@ -161,9 +194,8 @@ const fmtAssumption = (key: string, v: number) =>
     input.addEventListener("blur", save);
   }
 
-  // Long-list disclosure (standards/design/v1 §Long-list): pane opens at 10
-  // rows; "Show all N" keeps the pane the SAME measured height and scrolls
-  // internally. Reveal state persists in localStorage.
+  // Long-list disclosure (PEC-234 rule): the pane opens at 10 rows; expanding
+  // keeps the SAME measured height and scrolls internally; state persists.
   const pane = document.getElementById("undated-pane");
   const toggle = document.getElementById("undated-toggle");
   if (pane && toggle) {
@@ -174,8 +206,7 @@ const fmtAssumption = (key: string, v: number) =>
       const row10 = rows[9] as HTMLElement;
       const paneH = row10.offsetTop + row10.offsetHeight; // measured, never hardcoded
       pane.style.height = `${paneH + headH}px`;
-      pane.style.overflowY = "hidden";
-      const key = pane.dataset.paneKey ?? "wcf-pane";
+      const key = pane.dataset.paneKey ?? "cfx-pane";
       const apply = (expanded: boolean) => {
         pane.style.overflowY = expanded ? "auto" : "hidden";
         toggle.textContent = expanded ? "Show first 10" : `Show all ${rows.length} …`;
@@ -188,52 +219,3 @@ const fmtAssumption = (key: string, v: number) =>
     }
   }
 </script>
-
-<style>
-  .wcf{padding:8px 4px 40px;max-width:1180px}
-  .wcf-head{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-  .wcf h1{font-size:22px;margin:0 0 8px}
-  .wcf h2{font-size:15px;margin:26px 0 8px}
-  .wcf-sub{color:#6b7886;font-size:12px;font-weight:400;margin-left:8px}
-  .wcf-note{font-size:13px;color:#6b7886;line-height:1.55;margin:0;max-width:70ch}
-  .wcf-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .wcf-btn{border:1px solid #5b46d8;background:#5b46d8;color:#fff;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap}
-  .wcf-btn.wcf-secondary{background:transparent;color:#5b46d8}
-  .wcf-error{color:#a33b2e;font-size:13px}
-  .wcf-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0 4px}
-  .wcf-tile{border:1px solid #e3e8ef;border-radius:12px;background:#fff;padding:12px 14px}
-  .wcf-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
-  .wcf-tile .l{font-size:11.5px;color:#6b7886;margin-top:2px}
-  .wcf-tile.wcf-bad .n{color:#a33b2e}
-  .wcf-scroll{overflow-x:auto;border:1px solid #e3e8ef;border-radius:12px;background:#fff}
-  .wcf-table{border-collapse:collapse;font-size:12.5px;min-width:1050px;width:100%}
-  .wcf-table th,.wcf-table td{padding:5px 8px;border-bottom:1px solid #eef1f5;white-space:nowrap}
-  .wcf-table thead th{background:#f7f8fa;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7886;text-align:right}
-  .wcf-table thead th.sticky{text-align:left}
-  .wcf-table td.num{text-align:right;font-variant-numeric:tabular-nums}
-  .wcf-table .sticky{position:sticky;left:0;background:#fff;min-width:190px}
-  .wcf-table thead .sticky{background:#f7f8fa}
-  .wcf-table tr.sec td{background:#f7f8fa;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#425466}
-  .wcf-table tr.bold td{font-weight:700}
-  .wcf-table tr.end td{border-top:2px solid #1f4e3d}
-  .wcf-table td.ind{padding-left:20px}
-  .wcf-table td.live{color:#1f4e3d;font-weight:600}
-  .wcf-table td.neg{color:#a33b2e}
-  .wcf-table td.breach{color:#fff;background:#a33b2e;font-weight:700}
-  .wcf-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px;align-items:start}
-  .wcf-assume{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border:1px solid #e3e8ef;border-radius:12px}
-  .wcf-assume td{padding:6px 10px;border-bottom:1px solid #eef1f5;vertical-align:middle}
-  .wcf-assume td.lbl{max-width:280px}
-  .wcf-assume td.val{white-space:nowrap}
-  .wcf-assume input{width:110px;border:1px solid #d6dce4;border-radius:6px;padding:4px 7px;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;color:#0000cc}
-  .wcf-assume .unit{font-size:10.5px;color:#6b7886;margin-left:5px}
-  .wcf-assume td.who{font-size:10.5px;color:#6b7886;text-align:right}
-  .wcf-hint{font-size:11.5px;color:#6b7886;margin:6px 0 0}
-  .wcf-hint.warn{color:#b4560f}
-  .wcf-pane{border:1px solid #e3e8ef;border-radius:12px;background:#fff;overflow-x:auto}
-  .wcf-jobs{width:100%;border-collapse:collapse;font-size:12.5px}
-  .wcf-jobs th,.wcf-jobs td{padding:6px 10px;border-bottom:1px solid #eef1f5;text-align:left}
-  .wcf-jobs thead th{background:#f7f8fa;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7886;position:sticky;top:0}
-  .wcf-jobs th.num,.wcf-jobs td.num{text-align:right;font-variant-numeric:tabular-nums}
-  .wcf-showall{margin-top:8px;border:1px solid #d6dce4;background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
-</style>
