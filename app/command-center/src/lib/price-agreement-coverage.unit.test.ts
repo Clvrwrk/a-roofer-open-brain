@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gapExposure } from "./price-agreement-coverage";
+import { gapExposure, coverageLabelKind } from "./price-agreement-coverage";
 
 /** Shorthand for the four fields gapExposure reads. */
 const v = (hasGap: boolean, invoiceCount: number, spend: number, isAccepted = false) =>
@@ -87,5 +87,40 @@ describe("unreachable vs absent agreements", () => {
     expect(unreachable.isAccepted).toBe(false);
     expect(unreachable.agreementNotReaching).toBe(true);
     expect(unreachable.liveAgreements).toBeGreaterThan(0);
+  });
+});
+
+describe("coverageLabelKind", () => {
+  // The pill tells an operator WHAT TO DO. Getting the order wrong has twice sent someone
+  // to chase paperwork that was already signed, so the order is pinned here on purpose.
+  const pair = (over: Partial<Parameters<typeof coverageLabelKind>[0]> = {}) => ({
+    hasGap: true, invoiceCount: 4, isAccepted: false, agreementNotReaching: false, ...over,
+  });
+
+  it("returns null when the pair has no gap", () => {
+    expect(coverageLabelKind(pair({ hasGap: false }))).toBeNull();
+  });
+
+  it("REGRESSION: an unreachable agreement with no invoices is not labelled 'no spend yet'", () => {
+    // The bug: `invoiceCount === 0` was tested first, so a signed-but-unreachable book that
+    // had not been invoiced yet rendered as "No agreement — no spend yet" and pointed the
+    // operator at paperwork that already exists. A book signed before the first order puts
+    // a real pair in exactly this state.
+    expect(coverageLabelKind(pair({ invoiceCount: 0, agreementNotReaching: true })))
+      .toBe("unreachable");
+  });
+
+  it("lets a recorded human ruling outrank the derived reachability signal", () => {
+    expect(coverageLabelKind(pair({ isAccepted: true, agreementNotReaching: true })))
+      .toBe("accepted");
+  });
+
+  it("still reports an unreachable agreement that does carry spend", () => {
+    expect(coverageLabelKind(pair({ agreementNotReaching: true }))).toBe("unreachable");
+  });
+
+  it("keeps the two plain cases distinct", () => {
+    expect(coverageLabelKind(pair({ invoiceCount: 0 }))).toBe("no-spend");
+    expect(coverageLabelKind(pair({ invoiceCount: 5 }))).toBe("no-agreement");
   });
 });

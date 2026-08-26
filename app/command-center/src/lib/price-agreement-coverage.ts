@@ -194,6 +194,39 @@ export function gapExposure(
 }
 
 /**
+ * Which coverage pill a gap pair should show. Returns null when the pair has no gap.
+ *
+ * ORDER IS THE WHOLE POINT — most specific first. Each case below can be true at the same
+ * time as the ones under it, so whichever is tested first wins, and testing a broad case
+ * early silently masks a narrow one:
+ *
+ *  1. `accepted`      — a human recorded a ruling (no_book / not_pursued). A human decision
+ *                       outranks every derived signal, so nothing below can override it.
+ *  2. `unreachable`   — live agreements exist but the office ring cannot reach them. The
+ *                       operator must REPAIR THE BRANCH LINK, not chase paperwork.
+ *  3. `no-spend`      — no agreement and no invoices: theoretical, nothing to chase yet.
+ *  4. `no-agreement`  — no agreement and real spend: the plain chase case.
+ *
+ * This function exists because the ordering has been wrong TWICE, both times sending
+ * operators after paperwork that was already signed. First `unreachable` was missing
+ * entirely; then it sat below `no-spend`, so an unreachable pair that had not yet been
+ * invoiced fell through to "No agreement — no spend yet". Zero pairs are in that state
+ * today, but a book signed before the first order puts one there, which is exactly the
+ * case this surface exists to catch. The unit tests lock this order deliberately.
+ */
+export type CoverageLabelKind = "accepted" | "unreachable" | "no-spend" | "no-agreement";
+
+export function coverageLabelKind(
+  vendor: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "isAccepted" | "agreementNotReaching">,
+): CoverageLabelKind | null {
+  if (!vendor.hasGap) return null;
+  if (vendor.isAccepted) return "accepted";
+  if (vendor.agreementNotReaching) return "unreachable";
+  if (vendor.invoiceCount === 0) return "no-spend";
+  return "no-agreement";
+}
+
+/**
  * Build the Agreement Builder's coverage picture for every office x vendor pair.
  *
  * Reads five views in parallel and joins them in memory, because each answers a different

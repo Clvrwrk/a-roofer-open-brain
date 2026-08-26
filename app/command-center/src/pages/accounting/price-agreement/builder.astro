@@ -1,7 +1,7 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
-import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
+import { loadPriceAgreementCoverage, coverageLabelKind } from "@lib/price-agreement-coverage";
 import { CM_VENDORS } from "@lib/cm-vendor-roster";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -186,13 +186,17 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
                   <div><strong>{vendor.pricedItems.toLocaleString()}</strong><span>Priced items</span></div>
                 </div>
                 <div class="iv-branch-tags">
-                  {vendor.hasGap && (vendor.invoiceCount === 0
-                    ? <span class="pill pill-grey">No agreement — no spend yet</span>
-                    : vendor.isAccepted
-                      ? <span class="pill pill-grey">Accepted ruling ({vendor.agreementStatus}) — {money(vendor.spend)} spend, not work</span>
-                      : vendor.agreementNotReaching
-                        ? <span class="pill pill-red">Agreement exists, ring can't reach it — {money(vendor.spend)} spend ({vendor.invoiceCount} inv). Repair the branch link, don't chase paperwork.</span>
-                        : <span class="pill pill-red">No agreement — {money(vendor.spend)} spend ({vendor.invoiceCount} inv)</span>)}
+                  {/* Order is decided by coverageLabelKind() — see its doc comment. Do not
+                      reorder these branches here; change the function and its tests. */}
+                  {coverageLabelKind(vendor) === "accepted"
+                    ? <span class="pill pill-grey">Accepted ruling ({vendor.agreementStatus}) — {money(vendor.spend)} spend, not work</span>
+                    : coverageLabelKind(vendor) === "unreachable"
+                      ? <span class="pill pill-red">Agreement exists, ring can't reach it — {money(vendor.spend)} spend ({vendor.invoiceCount} inv). Repair the branch link, don't chase paperwork.</span>
+                      : coverageLabelKind(vendor) === "no-spend"
+                        ? <span class="pill pill-grey">No agreement — no spend yet</span>
+                        : coverageLabelKind(vendor) === "no-agreement"
+                          ? <span class="pill pill-red">No agreement — {money(vendor.spend)} spend ({vendor.invoiceCount} inv)</span>
+                          : null}
                   {vendor.anyLapsed && <span class="pill pill-yellow">Extended (awaiting replacement)</span>}
                   {vendor.competingAgreements > 1 && <span class="pill pill-brand">{vendor.competingAgreements} competing lists — lowest price per item</span>}
                 </div>
