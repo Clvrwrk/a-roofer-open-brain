@@ -49,6 +49,30 @@
 -- by v_unresolved_branch_spend rather than being silently folded into an office's total.
 --
 -- Additive and idempotent: CREATE OR REPLACE VIEW only. No table is altered.
+--
+-- INVARIANT — the two views below are an EXACT complementary partition, and must stay one.
+--   resolved   (v_office_vendor_spend)     = vendor_branch_id IS NOT NULL
+--                                            AND vb.pricing_territory_office_id IS NOT NULL
+--   unresolved (v_unresolved_branch_spend) = vendor_branch_id IS NULL
+--                                            OR  vb.pricing_territory_office_id IS NULL
+-- Every invoice lands in exactly one. Verified 2026-08-26 against prod:
+--   $2,278,692.71 resolved + $27,566.56 unresolved = $2,306,259.27 total, 1,134 = 1,134 rows.
+--
+-- A 2026-08-26 review proposed tightening the RESOLVED arm only — requiring a covered
+-- `abc-supply` branch and `vendor_invoices.vendor_id = vendor_branches.vendor_id` — on the
+-- theory that spend could enter resolved and vanish from unresolved. It cannot: the two
+-- predicates are exact complements, so nothing can be absent from both. Applying that change
+-- to the resolved arm alone would CREATE the leak it was meant to prevent, because the
+-- unresolved arm keys on office nullity and would not pick the excluded rows back up.
+-- If either predicate is ever tightened, tighten BOTH and re-run the reconciliation above.
+--
+-- The underlying mismatch also has no instances: 0 abc_invoices rows point at a non-ABC
+-- branch, 0 vendor_invoices rows disagree with their branch's vendor, 0 carry a NULL
+-- vendor_id alongside a branch (prod, 2026-08-26). Note the vendor label here is derived
+-- FROM the branch (vb.vendor_id), never assumed from the source table, so a mismatched FK
+-- would be attributed to the branch's real vendor rather than silently mislabelled.
+-- A cross-vendor FK mismatch is a data-integrity concern for a constraint or monitor, not a
+-- reason to reshape spend attribution.
 
 CREATE OR REPLACE VIEW public.v_office_vendor_spend AS
 WITH invoice_union AS (
