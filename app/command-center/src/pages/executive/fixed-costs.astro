@@ -49,6 +49,8 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
     <div class="cfx-kpis">
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Monthly nut (budget)</span><span class="cfx-kpi-val">{money(board.monthlyNut)}</span><span class="cfx-kpi-sub">what arrives whether or not a square sells</span></div>
       <div class="cfx-kpi"><span class="cfx-kpi-lab">TTM overhead</span><span class="cfx-kpi-val">{money(board.ttmOverhead)}</span><span class="cfx-kpi-sub">trailing 12 months, all pools</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">TTM direct costs (COGS)</span><span class="cfx-kpi-val">{money(board.cogsTtm)}</span><span class="cfx-kpi-sub">materials, subs, commissions — attributed to jobs, not this register</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Gross margin</span><span class="cfx-kpi-val">{pct1(board.grossMarginPct)}</span><span class="cfx-kpi-sub">{money(board.grossMarginTtm)} TTM · revenue − COGS</span></div>
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Overhead % of revenue</span><span class="cfx-kpi-val">{pct1(board.overheadPctOfRevenue)}</span><span class="cfx-kpi-sub">of {money(board.ttmRevenue)} TTM revenue</span></div>
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Fixed + step-fixed share</span><span class="cfx-kpi-val">{pct1(board.fixedShare)}</span><span class="cfx-kpi-sub">of overhead — the committed portion</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.rulingsOpen > 0 }]}><span class="cfx-kpi-lab">Accounts awaiting ruling</span><span class="cfx-kpi-val">{board.rulingsOpen}</span><span class="cfx-kpi-sub">across R1–R11, decided at the CPA meeting</span></div>
@@ -90,6 +92,56 @@ const behaviorLabel: Record<string, string> = { fixed: "Fixed", step_fixed: "Ste
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="cfx-cols">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Cost structure — revenue to operating</span>
+          <span class="cfx-group-count">TTM, from transaction actuals (not a closed P&amp;L)</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
+            <thead><tr><th>Layer</th><th class="num">TTM</th><th class="num">% of revenue</th></tr></thead>
+            <tbody>
+              <tr class="cfx-bold"><td>Revenue</td><td class="num">{money(board.ttmRevenue)}</td><td class="num">100.0%</td></tr>
+              <tr><td class="ind">− Direct job costs (COGS) + commissions</td><td class="num">{money(board.cogsTtm)}</td><td class="num">{pct1(board.ttmRevenue > 0 ? board.cogsTtm / board.ttmRevenue : 0)}</td></tr>
+              <tr class="cfx-bold"><td>= Gross margin</td><td class="num cfx-live">{money(board.grossMarginTtm)}</td><td class="num cfx-live">{pct1(board.grossMarginPct)}</td></tr>
+              <tr><td class="ind">− Variable overhead</td><td class="num">{money(board.variableOverheadTtm)}</td><td class="num">{pct1(board.ttmRevenue > 0 ? board.variableOverheadTtm / board.ttmRevenue : 0)}</td></tr>
+              <tr><td class="ind">− Fixed + step-fixed overhead</td><td class="num">{money(board.fixedOverheadTtm)}</td><td class="num">{pct1(board.ttmRevenue > 0 ? board.fixedOverheadTtm / board.ttmRevenue : 0)}</td></tr>
+              <tr class="cfx-endrow"><td>= Operating result (pre-interest/depreciation)</td><td class="num">{money(board.grossMarginTtm - board.ttmOverhead)}</td><td class="num">{pct1(board.ttmRevenue > 0 ? (board.grossMarginTtm - board.ttmOverhead) / board.ttmRevenue : 0)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="cfx-note" style="padding: 8px 14px 12px">
+          The fixed/variable overhead split follows the register's basis_version 0 classifications
+          (provisional). Rulings R2/R3/R11 move dollars between COGS and overhead — Company Housing,
+          workers' comp, and Supplemental Estimating are the boundary cases.
+        </p>
+      </div>
+
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Direct costs (COGS) by account</span>
+          <span class="cfx-group-count">context only — job costs attribute through the WIP board</span>
+          <span class="cfx-group-money">{money(board.cogsTtm)} TTM</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
+            <thead><tr><th>Account</th><th class="num">TTM</th><th class="num">{lastMonthLabel}</th><th class="num">3-mo avg</th></tr></thead>
+            <tbody>
+              {board.cogsRows.map((r) => (
+                <tr>
+                  <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis">{r.accountFqn}</td>
+                  <td class="num">{money(r.ttmAmount)}</td>
+                  <td class="num">{money(r.lastMonthActual)}</td>
+                  <td class="num">{money(r.avg3moActual)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

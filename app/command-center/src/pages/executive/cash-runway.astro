@@ -116,10 +116,12 @@ const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
               <tr><td>Dated AR (live from WIP board)</td><td class="num cfx-live">{money(board.weeks.reduce((s, w) => s + w.datedReceipts, 0))}</td></tr>
               <tr><td>Undated AR pool (assumption spread)</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.undatedReceipts, 0))}</td></tr>
               <tr><td>New billings converting</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.newBillings, 0))}</td></tr>
-              <tr class="cfx-secrow"><td colspan="2">Disbursements</td></tr>
-              <tr><td>Materials · subs · commissions</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.materials + w.subs + w.commissions, 0))}</td></tr>
+              <tr class="cfx-secrow"><td colspan="2">Disbursements — direct job costs (COGS)</td></tr>
+              <tr><td>Materials · subcontractors · commissions</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.totalDirect, 0))}</td></tr>
+              <tr class="cfx-secrow"><td colspan="2">Disbursements — overhead</td></tr>
               <tr><td>W-2 payroll + employer taxes</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.payroll, 0))}</td></tr>
-              <tr><td>Fixed overhead (<a href="/executive/fixed-costs">register</a>)</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.fixedOverhead + w.oneTime, 0))}</td></tr>
+              <tr><td>Fixed overhead (<a href="/executive/fixed-costs">register</a>) + one-time</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.fixedOverhead + w.oneTime, 0))}</td></tr>
+              <tr class="cfx-bold"><td>Total overhead</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.totalOverhead, 0))}</td></tr>
               <tr class="cfx-endrow"><td>Net over 13 weeks</td><td class="num" class:list={[{ "cfx-neg": board.weeks.reduce((s, w) => s + w.net, 0) < 0 }]}>{money(board.weeks.reduce((s, w) => s + w.net, 0))}</td></tr>
             </tbody>
           </table>

@@ -92,13 +92,16 @@ const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) 
             <tr><td class="ind">Undated pool @ weekly %</td>{board.weeks.map((w) => <td class="num">{money(w.undatedReceipts)}</td>)}</tr>
             <tr><td class="ind">New billings</td>{board.weeks.map((w) => <td class="num">{money(w.newBillings)}</td>)}</tr>
             <tr class="cfx-bold"><td>Total receipts</td>{board.weeks.map((w) => <td class="num">{money(w.totalReceipts)}</td>)}</tr>
-            <tr class="cfx-secrow"><td colspan={14}>Disbursements</td></tr>
+            <tr class="cfx-secrow"><td colspan={14}>Disbursements — direct job costs (COGS) + commissions</td></tr>
             <tr><td class="ind">Materials</td>{board.weeks.map((w) => <td class="num">{money(w.materials)}</td>)}</tr>
             <tr><td class="ind">Subcontractors</td>{board.weeks.map((w) => <td class="num">{money(w.subs)}</td>)}</tr>
             <tr><td class="ind">Commissions (1099)</td>{board.weeks.map((w) => <td class="num">{money(w.commissions)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total direct (COGS)</td>{board.weeks.map((w) => <td class="num">{money(w.totalDirect)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Disbursements — overhead</td></tr>
             <tr><td class="ind">W-2 payroll + taxes</td>{board.weeks.map((w) => <td class="num">{money(w.payroll)}</td>)}</tr>
             <tr><td class="ind">Fixed overhead (register)</td>{board.weeks.map((w) => <td class="num">{money(w.fixedOverhead)}</td>)}</tr>
             <tr><td class="ind">One-time / past-due AP</td>{board.weeks.map((w) => <td class="num">{money(w.oneTime)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total overhead</td>{board.weeks.map((w) => <td class="num">{money(w.totalOverhead)}</td>)}</tr>
             <tr class="cfx-bold"><td>Total disbursements</td>{board.weeks.map((w) => <td class="num">{money(w.totalDisbursements)}</td>)}</tr>
             <tr class="cfx-bold"><td>Net cash flow</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-neg": w.net < 0 }]}>{money(w.net)}</td>)}</tr>
             <tr class="cfx-endrow"><td>Ending cash</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-breach": w.belowFloor }]}>{money(w.endingCash)}</td>)}</tr>

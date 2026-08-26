@@ -34,9 +34,13 @@ export interface WcfWeek {
   materials: number;
   subs: number;
   commissions: number;
+  /** Materials + subs + commissions — the direct (COGS) side of the outflows. */
+  totalDirect: number;
   payroll: number;
   fixedOverhead: number;
   oneTime: number;
+  /** Payroll + register overhead + one-time — the overhead side of the outflows. */
+  totalOverhead: number;
   totalDisbursements: number;
   net: number;
   beginningCash: number;
@@ -145,7 +149,9 @@ export function computeProjection(inputs: ProjectionInputs): WcfWeek[] {
     const materials = num(a.materials_weekly);
     const subs = num(a.subs_weekly);
     const commissions = num(a.commissions_weekly);
-    const totalDisbursements = materials + subs + commissions + payroll + weeklyFixed + oneTime;
+    const totalDirect = materials + subs + commissions;
+    const totalOverhead = payroll + weeklyFixed + oneTime;
+    const totalDisbursements = totalDirect + totalOverhead;
     avgDisbEstimate.push(totalDisbursements);
 
     const net = totalReceipts - totalDisbursements;
@@ -161,9 +167,11 @@ export function computeProjection(inputs: ProjectionInputs): WcfWeek[] {
       materials,
       subs,
       commissions,
+      totalDirect,
       payroll,
       fixedOverhead: weeklyFixed,
       oneTime,
+      totalOverhead,
       totalDisbursements,
       net,
       beginningCash,
