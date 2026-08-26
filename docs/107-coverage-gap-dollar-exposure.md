@@ -1,6 +1,6 @@
 # 107 — Rank coverage gaps by dollars, not by branch count
 
-**Initial date:** 2026-08-20 · **Last updated:** 2026-08-24 · **Migrations:** 281, 282, 283, 284, 285 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-08-26 · **Migrations:** 286, 287, 288, 289, 290 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -45,7 +45,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 281 — the two views
+## Migration 286 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -58,7 +58,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 282 — the address was never missing
+## Migration 287 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -86,7 +86,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 282 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 287 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -131,15 +131,15 @@ Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offic
 ($5,697.47) reads as work to chase — it is not. **Migration 270** joins the two so the
 surface can never make that mistake.
 
-### Migration 284 — the gate was asking the wrong question
+### Migration 289 — the gate was asking the wrong question
 
-283's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
+288's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
 
 > **Denver × SRS has a live, in-territory, 22-item agreement that the office ring cannot
 > reach, so the coverage surface reports `priced_items = 0` for the pair.**
 
-284 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
+289 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
 that matters. The queue is now two rows: Denver × SRS ($17,437.63 of spend, `unrecorded`) and
 Atlanta × ABC ($5,226.90, `pending`).
 
@@ -199,7 +199,7 @@ Different numbers, so the join never meets.
 > duplicate rows described further down have since been tidied away. Do not size the Denver
 > repair from this table — see *Addendum, 2026-08-24* at the end of this document.
 
-`v_agreement_unreachable` (migration 284) showed, on 2026-08-20, **all three live numbered SRS
+`v_agreement_unreachable` (migration 289) showed, on 2026-08-20, **all three live numbered SRS
 agreements — 136 items — unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
@@ -225,7 +225,7 @@ Repointing the agreement join to `vendor_branch_id` is pricing-affecting and ear
 equivalence proof migration 244 ran before switching (FK == text on every row, 0
 disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
 decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
-a guess cannot become a fact. 284 only makes the failure visible.
+a guess cannot become a fact. 289 only makes the failure visible.
 
 ---
 
@@ -339,9 +339,9 @@ different result: exact-token on description-only sheets is close to a no-op, an
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
 
-## Addendum — 2026-08-21: a defect migration 282 introduced, and 4 rows a human should look at
+## Addendum — 2026-08-21: a defect migration 287 introduced, and 4 rows a human should look at
 
-Migration 282's `geocode_status` assignment was keyed on the wrong condition. It read:
+Migration 287's `geocode_status` assignment was keyed on the wrong condition. It read:
 
 ```sql
 WHEN vb.city IS NULL AND rb.b->>'addressLine1' IS NOT NULL THEN 'pending'
@@ -353,7 +353,7 @@ data and does it still lack a geom":
 1. **It demoted already-geocoded rows.** A branch that had a `geom` but a NULL `city` was
    flipped from `ok` to `pending` — re-queueing a perfectly good geocode. The applied run
    did this to **branches 21 (Raleigh NC) and 684 (Norman OK)**, both stamped
-   `2026-08-20 10:59:17+00`, which is migration 282's run.
+   `2026-08-20 10:59:17+00`, which is migration 287's run.
 2. **It missed address-only recovery.** A branch whose `city` was already set but whose
    `address` was NULL would gain an address and keep its old status — so a row that had
    become geocodable stayed marked `no_address` and was never picked up. This matches
@@ -377,8 +377,8 @@ Four rows violate it:
 
 | Branch | City | `updated_at` | Attributable to |
 |---|---|---|---|
-| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 282 |
-| 684 | Norman OK | 2026-08-20 10:59:17 | migration 282 |
+| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 287 |
+| 684 | Norman OK | 2026-08-20 10:59:17 | migration 287 |
 | 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
 | 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
 
@@ -423,9 +423,9 @@ That is a **third** independent blocker, on top of the two this document already
 
 ## Addendum, 2026-08-22 (2) — access posture and two standing assumptions
 
-### Migration 285: the coverage views were world-readable
+### Migration 290: the coverage views were world-readable
 
-The Cursor security review flagged that the four views added by 281–284 carry no
+The Cursor security review flagged that the four views added by 286–289 carry no
 `GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
 
 ```sql
@@ -448,7 +448,7 @@ invoice tables never applied. Aggregated office × vendor spend and agreement-ru
 metadata were readable through PostgREST with the publishable key — outside the
 WorkOS gate.
 
-**Migration 285** revokes `anon`/`authenticated` and grants `service_role` on all four,
+**Migration 290** revokes `anon`/`authenticated` and grants `service_role` on all four,
 copying the `v_price_list_global` shape. Verified in both directions; `service_role` still
 returns all 10 rows. The Command Center is unaffected because every reader goes through
 `createServerSupabaseClient` (`SUPABASE_SERVICE_ROLE_KEY`); no browser code touches these
@@ -465,7 +465,7 @@ than changed. **Needs a human decision.**
 
 ### Standing assumption: ABC branch payloads are bimodal
 
-Migration 282 picks the branch payload with the longest `addressLine1`. A review asked what
+Migration 287 picks the branch payload with the longest `addressLine1`. A review asked what
 happens if that payload lacks a `city`/`state` some other payload carries. Measured across
 all 1,093 branch-linked invoices:
 
@@ -478,7 +478,7 @@ all 1,093 branch-linked invoices:
 There is no partial payload, so the longest-address ordering always selects a full block and
 city/state travel with it. The migration is correct **for this vendor's data shape**, not in
 general. **If a vendor ever emits partial branch payloads, the correct shape becomes a
-per-field `max()`** rather than one winning payload. 282 is already applied to prod, so it
+per-field `max()`** rather than one winning payload. 287 is already applied to prod, so it
 was left alone rather than superseded by a migration that provably changes no row.
 
 ---

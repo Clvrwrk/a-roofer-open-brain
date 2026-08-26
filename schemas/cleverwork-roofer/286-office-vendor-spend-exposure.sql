@@ -1,14 +1,14 @@
--- 281 — put DOLLARS on the coverage gaps.
+-- 286 — put DOLLARS on the coverage gaps.
 --
 -- NUMBERING NOTE — two identities, both authoritative in their own place:
 --   * IN PROD: applied as `245_office_vendor_spend_exposure`, 2026-08-20 10:57 UTC. Fixed;
 --     Supabase keys on TIMESTAMP, not on this label, so the applied order is unaffected by
 --     any renumbering below. This set applied BEFORE the file numbered 246 existed.
---   * IN THIS REPO: the file is `281-...`, renumbered TEN times as parallel sessions
+--   * IN THIS REPO: the file is `286-...`, renumbered ELEVEN times as parallel sessions
 --     claimed numbers on main while this work was in flight. Main is canonical, so this
---     branch yields every time. Intermediate numbers (250-253, 263-266, 267) no longer
+--     branch yields every time. Intermediate numbers (250-253, 263-266, 267, 281-285) no longer
 --     name any file in this set.
--- The sibling migrations of this set are 282, 283, 284 and 285, all applied to prod.
+-- The sibling migrations of this set are 287, 288, 289 and 290, all applied to prod.
 --
 -- The last two moves, for anyone tracing a stale reference:
 --   8th, 2026-08-22: main landed `263-wip-attention-flags.sql`  -> set moved 263-266 to 267-270
@@ -16,6 +16,8 @@
 --                                                                -> set moved 267-270 to 268-271
 --  10th, 2026-08-24: main landed its own 268-280 (ABC colour arm, matview audit line,
 --                    credit memos)                              -> set moved 268-272 to 281-285
+--  11th, 2026-08-26: main landed `281-ceo-fixed-cost-13wcf.sql`
+--                                                                -> set moved 281-285 to 286-290
 -- Each time the WHOLE set moves, not just the colliding file, so the spend view keeps
 -- preceding the two migrations that read it.
 --

@@ -1,7 +1,7 @@
--- 284 — an agreement that exists but reaches nothing. Detector + a corrected exposure gate.
+-- 289 — an agreement that exists but reaches nothing. Detector + a corrected exposure gate.
 -- Applied to prod 2026-08-20.
 --
--- WHY: migration 283's `needs_ruling` keyed off `live_agreements = 0` — does the PAPERWORK
+-- WHY: migration 288's `needs_ruling` keyed off `live_agreements = 0` — does the PAPERWORK
 -- exist. That is the wrong question. Denver x SRS has a live, in-territory, 22-item
 -- agreement (0049345641, S Denver / Englewood) that the office ring cannot reach, so the
 -- coverage surface reports `priced_items = 0` for the pair. Keying on paperwork hid it.
@@ -92,10 +92,10 @@ COMMENT ON VIEW public.v_agreement_unreachable IS
   'Active agreements that reach no branch in any active office ring, so the OFFICE-RING path '
   'cannot price from them and the pair reads priced_items = 0. This is a ring-coverage '
   'failure, not proof the items price nothing — a separate line-level path may still price '
-  'some lines. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 284 '
+  'some lines. Cause is the branch-number TEXT join in v_office_vendor_branch (see mig 289 '
   'header).';
 
--- Corrected gate: auditability, not paperwork. Supersedes migration 283's predicate.
+-- Corrected gate: auditability, not paperwork. Supersedes migration 288's predicate.
 CREATE OR REPLACE VIEW public.v_office_vendor_gap_exposure AS
 SELECT c.office_id,
        c.office            AS office_name,
@@ -124,7 +124,7 @@ SELECT c.office_id,
  WHERE c.office_active;
 
 COMMENT ON VIEW public.v_office_vendor_gap_exposure IS
-  'Coverage gaps with the ruling (mig 245) AND the dollars (mig 281), gated on whether the '
+  'Coverage gaps with the ruling (mig 245) AND the dollars (mig 286), gated on whether the '
   'pair can actually be audited (priced_items), not on whether paperwork exists. '
   'needs_ruling = spend occurred, nothing prices, nobody has accepted it. '
   'agreement_not_reaching = a signed book exists and still prices nothing (see '

@@ -37,7 +37,7 @@ Session opened with "verify the invoice audit loop has been running daily since 
 
 ### Open branch not on main — PR #9 (ready for review)
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**281-285** (already applied to prod, all additive) plus `docs/107`. It is 0 behind main and
+**286-290** (already applied to prod, all additive) plus `docs/107`. It is 0 behind main and
 kept merged with it. Marked **ready for review** on 2026-08-21; head is now `0eb5e0d` after
 several rounds of review fixes and **ten** renumberings — the tenth on 2026-08-24, when main
 landed its own 268-280 and took every number the set held (CodeRabbit + Greptile + Cursor
@@ -54,11 +54,11 @@ Four items on that branch need a human, recorded in `docs/107` and `docs/108`:
    `property_id` correction, and reported the removal on the PR thread. Nothing left to do
    in the learnings UI.
 3. Four branches (21, 39, 465, 684) are geocoded but marked `geocode_status = 'pending'`,
-   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 282
+   against a `geom IS NOT NULL` ⇒ `'ok'` invariant that holds for 1,752 rows. Mig 287
    demoted two of them; 39 and 465 were touched at 13:04 on 2026-08-21 by another process,
    where `pending` may be a deliberate re-geocode request. Left alone rather than guessed at.
 4. `v_office_vendor_branch` and `v_office_vendor_inheritance` are readable by `anon` on the
-   same default grants that mig 285 closed for the four coverage views. They predate this
+   same default grants that mig 290 closed for the four coverage views. They predate this
    branch and expose territory mapping rather than dollars, so they were flagged, not
    changed. Owner's call whether to tighten them.
 5. **Repo-wide customer PII** — `docs/108`. Named individuals sit beside their outstanding
@@ -154,7 +154,7 @@ Session report: **PEC-259**.
      until this blocker is also cleared. Mig 267's effective-date backdate removes a THIRD,
      separate gate — re-verify rather than assuming it closed either of these two.
 3. **4 branches geocoded but `geocode_status = 'pending'`** (21, 39, 465, 684) against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 282 demoted two; 39
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 287 demoted two; 39
    and 465 were touched 2026-08-21 13:04 by another process and may be a deliberate
    re-geocode request. Left alone rather than guessed at — see `docs/107`.
 4. **PEC-231** — decide whether ABC moves onto the colour rule. Moves live claim numbers.

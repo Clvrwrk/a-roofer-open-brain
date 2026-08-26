@@ -1,7 +1,7 @@
--- 285 — restrict the coverage/spend exposure views to service_role.
+-- 290 — restrict the coverage/spend exposure views to service_role.
 --
 -- Found by the Cursor security review on PR #9 and CONFIRMED against prod:
--- the four views added by 281-284 inherited the public schema's default
+-- the four views added by 286-289 inherited the public schema's default
 -- grants, so `anon` could read them through PostgREST with the publishable
 -- key. Measured before this migration, as role anon:
 --
