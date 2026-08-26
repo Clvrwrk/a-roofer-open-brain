@@ -70,15 +70,25 @@ export async function buildCashFlowWorkbook(board: CashFlowBoard): Promise<Buffe
   line("Materials (ABC/SRS/QXO)", board.weeks.map((w) => w.materials), { blue: true });
   line("Subcontractors", board.weeks.map((w) => w.subs), { blue: true });
   line("Sales commissions (1099)", board.weeks.map((w) => w.commissions), { blue: true });
+  line("Total direct (COGS)", board.weeks.map((w) => w.totalDirect), { bold: true });
   line("W-2 payroll + employer taxes", board.weeks.map((w) => w.payroll), { blue: true });
   line("Fixed overhead (register)", board.weeks.map((w) => w.fixedOverhead));
   line("One-time / past-due AP", board.weeks.map((w) => w.oneTime), { blue: true });
+  line("Total overhead", board.weeks.map((w) => w.totalOverhead), { bold: true });
   line("Total disbursements", board.weeks.map((w) => w.totalDisbursements), { bold: true });
   line("Net cash flow", board.weeks.map((w) => w.net), { bold: true });
   line("ENDING CASH", board.weeks.map((w) => w.endingCash), { bold: true });
   const woc = s.addRow(["Weeks of cash on hand", ...board.weeks.map((w) => w.weeksOfCash)]);
   woc.eachCell((cell, col) => {
     cell.font = { name: "Arial", size: 10, bold: col === 1 };
+    if (col > 1) cell.numFmt = "0.0";
+  });
+  // Definition audited 2026-08-26: ending cash ÷ average weekly TOTAL
+  // disbursements. Months shown alongside (4.345 weeks/month) so the two
+  // scales can never be confused.
+  const moc = s.addRow(["  ≈ months of cash (4.345 wks/mo)", ...board.weeks.map((w) => Math.round((w.weeksOfCash / 4.345) * 10) / 10)]);
+  moc.eachCell((cell, col) => {
+    cell.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF666666" } };
     if (col > 1) cell.numFmt = "0.0";
   });
   const flags = s.addRow(["Below minimum floor?", ...board.weeks.map((w) => (w.belowFloor ? "BELOW FLOOR" : "ok"))]);
@@ -170,6 +180,39 @@ export async function buildFixedCostWorkbook(board: FixedCostBoard): Promise<Buf
     ]);
     for (const c of [7, 8, 9, 10]) r.getCell(c).numFmt = CUR;
     if (row.needsRuling) r.getCell(11).font = { name: "Arial", bold: true, color: { argb: "FFB4560F" }, size: 10 };
+  }
+
+  const c = wb.addWorksheet("Cost Structure");
+  c.getColumn(1).width = 44;
+  c.getColumn(2).width = 16;
+  c.getColumn(3).width = 14;
+  c.addRow(["Cost structure — TTM, from transaction actuals (not a closed P&L)"]).font = { name: "Arial", bold: true, size: 11 };
+  c.addRow([]);
+  styleHeader(c.addRow(["Layer", "TTM", "% of revenue"]));
+  const rev = board.ttmRevenue;
+  const pctOf = (v: number) => (rev > 0 ? v / rev : 0);
+  const ladder: [string, number, boolean][] = [
+    ["Revenue", rev, true],
+    ["− Direct job costs (COGS) + commissions", board.cogsTtm, false],
+    ["= Gross margin", board.grossMarginTtm, true],
+    ["− Variable overhead", board.variableOverheadTtm, false],
+    ["− Fixed + step-fixed overhead", board.fixedOverheadTtm, false],
+    ["= Operating result (pre-interest/depreciation)", board.grossMarginTtm - board.ttmOverhead, true],
+  ];
+  for (const [label, v, bold] of ladder) {
+    const r = c.addRow([label, v, pctOf(v)]);
+    r.getCell(1).font = { name: "Arial", size: 10, bold };
+    r.getCell(2).font = { name: "Arial", size: 10, bold };
+    r.getCell(2).numFmt = CUR;
+    r.getCell(3).font = { name: "Arial", size: 10, bold };
+    r.getCell(3).numFmt = PCT;
+  }
+  c.addRow([]);
+  styleHeader(c.addRow(["COGS account", "TTM", "3-mo avg"]));
+  for (const row of board.cogsRows) {
+    const r = c.addRow([row.accountFqn, row.ttmAmount, row.avg3moActual]);
+    r.getCell(2).numFmt = CUR;
+    r.getCell(3).numFmt = CUR;
   }
 
   const o = wb.addWorksheet("Allocation Preview");

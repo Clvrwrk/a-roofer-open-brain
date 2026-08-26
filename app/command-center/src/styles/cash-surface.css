@@ -1,0 +1,130 @@
+/* Cash-family work surfaces — 13WCF, Cash Runway, Fixed Costs (mig 281).
+ *
+ * Design source of truth: the Friday WIP/AR board (`.fw`, PEC-234). This file
+ * mirrors that vocabulary under `.cfx` so the cash surfaces read as the same
+ * app: same brand tokens (navy #11133f · gold #eaa221 via global.css roles),
+ * same full-bleed grid, toolbar, KPI pills, cash-map week cells, group panels,
+ * zebra tables, and the shared light/dark mechanism (scripts/theme-pref.ts,
+ * one `cc.theme` preference across every audit surface).
+ *
+ * Keep in step with friday-wip.astro's `.fw` block — when that board's design
+ * moves, this follows (WIP is canonical; see Linear PEC-234/PEC-235).
+ */
+
+.cfx {
+  --bg: #f4f6f9; --panel: #ffffff; --ink: #1c2733; --muted: #6b7886; --line: #e3e8ef;
+  --zebra: #f0f1f8; --navy: #11133f; --gold: #eaa221;
+  --fill-bg: #fbedd2; --fill-cell: #fffbeb; --warn-bg: #fbedd2;
+  --green: #137a4d; --green-bg: #e3f5ec; --red: #a51f1f; --orange: #a4480d;
+  --teal: #0f766e; --teal-dark: #115e59;
+  --chart-line: #11133f;
+  display: grid; gap: 14px;
+  background: var(--bg); color: var(--ink);
+  margin: calc(-1 * var(--space-4, 16px)) -28px calc(-1 * var(--space-6, 24px));
+  padding: 18px 28px 30px; min-height: 70vh;
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  overflow-x: clip;
+}
+.cfx[data-theme="dark"] {
+  --bg: #0f141b; --panel: #161d27; --ink: #e6edf5; --muted: #8b98a8; --line: #27313e;
+  --zebra: #1a2230; --gold: #f2cf6b;
+  --fill-bg: #3a3115; --fill-cell: #2a2410; --warn-bg: #4d3800;
+  --green: #7ee2ad; --green-bg: #123626; --red: #ff8585; --orange: #f3a766;
+  --chart-line: #e6edf5;
+}
+
+/* ── Toolbar ── */
+.cfx .cfx-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cfx .cfx-title { margin: 0; font-size: 18px; color: var(--ink); }
+.cfx .cfx-sub { color: var(--muted); font-size: 12.5px; }
+.cfx .cfx-spacer { flex: 1; }
+.cfx .cfx-count { color: var(--muted); font-size: 12px; }
+.cfx .cfx-theme { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+.cfx .cfx-theme button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
+.cfx .cfx-theme button.is-active { background: var(--navy); color: #fff; }
+.cfx .cfx-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; text-decoration: none; font-family: inherit; }
+.cfx .cfx-btn:hover { border-color: var(--muted); }
+.cfx .cfx-btn-primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+.cfx .cfx-btn-primary:hover { background: var(--teal-dark); color: #fff; }
+.cfx .cfx-error { color: var(--red); font-size: 13px; }
+.cfx .cfx-note { color: var(--muted); font-size: 12.5px; line-height: 1.55; margin: 0; max-width: 110ch; }
+.cfx .cfx-note a, .cfx .cfx-sub a { color: inherit; text-decoration: underline; text-decoration-color: var(--gold); }
+.cfx .cfx-warn-note { color: var(--orange); font-size: 12px; margin: 0; }
+
+/* ── Provisional banner (basis_version 0) ── */
+.cfx .cfx-banner { border: 1px solid var(--gold); border-left: 4px solid var(--gold); background: var(--fill-cell); color: var(--ink); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; line-height: 1.5; }
+
+/* ── KPI pills (fw-kpi look) ── */
+.cfx .cfx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; }
+.cfx .cfx-kpi { border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; display: grid; gap: 1px; background: var(--panel); text-align: left; color: inherit; }
+.cfx .cfx-kpi-lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); line-height: 1.25; }
+.cfx .cfx-kpi-val { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cfx .cfx-kpi-sub { font-size: 10.5px; color: var(--muted); line-height: 1.3; }
+.cfx .cfx-kpi-bad .cfx-kpi-val { color: var(--red); }
+.cfx .cfx-kpi-warn { border-color: var(--gold); }
+
+/* ── Cash map — the 13-week strip (fw-cashmap / fw-week look) ── */
+.cfx .cfx-cashmap { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; display: grid; gap: 5px; background: var(--panel); }
+.cfx .cfx-cashmap-title { font-size: 12px; color: var(--muted); }
+.cfx .cfx-cashmap-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+.cfx .cfx-week { display: grid; gap: 0; padding: 4px 8px; border-radius: 8px; background: var(--zebra); border: 1px solid transparent; text-align: left; color: inherit; font-size: 12.5px; }
+.cfx .cfx-week-warn { background: var(--warn-bg); border-color: var(--red); }
+.cfx .cfx-week-lab { font-size: 11px; color: var(--muted); }
+.cfx .cfx-week-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cfx .cfx-week-sub { font-size: 10.5px; color: var(--muted); }
+.cfx .cfx-week-neg { color: var(--red); }
+
+/* ── Group panels (fw-group look) ── */
+.cfx .cfx-group { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); min-width: 0; }
+.cfx .cfx-group-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; row-gap: 6px; padding: 10px 14px; border-left: 3px solid var(--gold); border-radius: 10px 0 0 10px; }
+.cfx .cfx-group-name { font-weight: 700; white-space: nowrap; }
+.cfx .cfx-group-count { color: var(--muted); font-size: 12.5px; }
+.cfx .cfx-group-money { margin-left: auto; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.cfx .cfx-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; align-items: start; }
+
+/* ── Tables (fw-table look; sticky header + optional frozen first column) ── */
+.cfx .cfx-tablewrap { overflow: auto; }
+.cfx .cfx-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
+.cfx .cfx-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--panel); }
+.cfx .cfx-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+.cfx .cfx-table thead th { position: sticky; top: 0; z-index: 3; }
+.cfx .cfx-table tbody tr:nth-child(even) td { background: var(--zebra); }
+.cfx .cfx-table tbody tr:hover td { background: var(--fill-bg); }
+.cfx .cfx-table th.num, .cfx .cfx-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.cfx .cfx-table .cfx-neg { color: var(--red); }
+.cfx .cfx-table .cfx-live { color: var(--green); font-weight: 600; }
+.cfx .cfx-table tr.cfx-secrow td { background: var(--zebra); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.cfx .cfx-table tr.cfx-bold td { font-weight: 700; }
+.cfx .cfx-table tr.cfx-endrow td { border-top: 2px solid var(--navy); font-weight: 700; }
+.cfx[data-theme="dark"] .cfx-table tr.cfx-endrow td { border-top-color: var(--gold); }
+.cfx .cfx-table td.cfx-breach { color: #fff; background: var(--red); font-weight: 700; }
+.cfx .cfx-table td.ind { padding-left: 20px; }
+/* Frozen first column for the wide forecast sheet (fw frozen-column pattern:
+   sticky needs border-collapse separate + its own opaque background). */
+.cfx .cfx-table.cfx-frozen thead th:first-child,
+.cfx .cfx-table.cfx-frozen tbody td:first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--panel);
+  min-width: 200px; box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.28);
+}
+.cfx .cfx-table.cfx-frozen thead th:first-child { z-index: 4; }
+.cfx .cfx-table.cfx-frozen tbody tr:nth-child(even) td:first-child { background: var(--zebra); }
+.cfx .cfx-table.cfx-frozen tbody tr:hover td:first-child { background: var(--fill-bg); }
+.cfx .cfx-table.cfx-frozen tbody tr.cfx-secrow td:first-child { background: var(--zebra); }
+
+/* ── Long-list pane + show-more (fw-showmore look; PEC-234 rule) ── */
+.cfx .cfx-pane { overflow: auto; }
+.cfx .cfx-showmore { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; padding: 7px 14px; cursor: pointer; text-align: left; border-radius: 0 0 10px 10px; }
+.cfx .cfx-showmore:hover { color: var(--ink); background: var(--zebra); }
+
+/* ── Inline assumption inputs (fw-gm-input look) ── */
+.cfx .cfx-input { width: 96px; text-align: right; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; font-size: 12.5px; font-family: inherit; background: var(--panel); color: var(--ink); font-variant-numeric: tabular-nums; }
+.cfx .cfx-input:focus { border-color: var(--navy); outline: none; }
+.cfx[data-theme="dark"] .cfx-input:focus { border-color: var(--gold); }
+.cfx .cfx-unit { font-size: 10.5px; color: var(--muted); margin-left: 5px; }
+.cfx .cfx-who { font-size: 10.5px; color: var(--muted); }
+
+/* ── SVG chart panel ── */
+.cfx .cfx-chart { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 10px 8px 2px; }
+.cfx .cfx-chart svg { width: 100%; height: auto; display: block; }
+
+.cfx [hidden] { display: none !important; }

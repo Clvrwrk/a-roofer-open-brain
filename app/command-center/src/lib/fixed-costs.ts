@@ -48,6 +48,15 @@ export interface OfficeAllocation {
   corporateAllocated: number;
 }
 
+/** Direct-cost (COGS) account actuals from the matview — context beside the
+ *  overhead register, never part of it (CM docs/81: COGS attributes to jobs). */
+export interface CogsRow {
+  accountFqn: string;
+  ttmAmount: number;
+  lastMonthActual: number;
+  avg3moActual: number;
+}
+
 export interface FixedCostBoard {
   status: "live" | "unconfigured";
   generatedAt: string;
@@ -62,6 +71,14 @@ export interface FixedCostBoard {
   pools: PoolSummary[];
   rows: RegisterRow[];
   officeAllocations: OfficeAllocation[];
+  /** COGS vs overhead split (Chris 2026-08-26): direct-cost actuals + the
+   *  cost-structure ladder Revenue → COGS → gross margin → overhead → operating. */
+  cogsRows: CogsRow[];
+  cogsTtm: number;
+  grossMarginTtm: number;
+  grossMarginPct: number;
+  variableOverheadTtm: number;
+  fixedOverheadTtm: number;
   lastFullMonth: string | null;
   error: string | null;
 }
@@ -104,6 +121,12 @@ function emptyBoard(error: string): FixedCostBoard {
     pools: [],
     rows: [],
     officeAllocations: [],
+    cogsRows: [],
+    cogsTtm: 0,
+    grossMarginTtm: 0,
+    grossMarginPct: 0,
+    variableOverheadTtm: 0,
+    fixedOverheadTtm: 0,
     lastFullMonth: null,
     error,
   };
@@ -136,14 +159,23 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
   const lastFullMonth = isoMonthStart(now, -1);
   const threeMonthsBack = isoMonthStart(now, -3);
 
-  const [registerRes, actualsRes, wipRes, ttmRevenue] = await Promise.all([
+  const ttmStart = isoMonthStart(now, -12);
+  const [registerRes, actualsRes, cogsRes, wipRes, ttmRevenue] = await Promise.all([
     client.from("fixed_cost_register").select("*").eq("basis_version", 0).order("cost_pool").order("ttm_amount", { ascending: false }),
     client.from("mv_overhead_account_month").select("account_fqn, month, amount").gte("month", threeMonthsBack),
+    // COGS actuals live in the same matview (QBO classifies COGS accounts under
+    // classification='Expense'; the account_type column separates them). Full
+    // TTM window so the direct-cost split gets real trailing figures.
+    client
+      .from("mv_overhead_account_month")
+      .select("account_fqn, month, amount")
+      .eq("account_type", "Cost of Goods Sold")
+      .gte("month", ttmStart),
     client.from("wip_ar_master").select("location, billed_total").eq("in_ar_population", true).limit(1000),
     loadTtmRevenue(client),
   ]);
 
-  const firstError = registerRes.error ?? actualsRes.error ?? wipRes.error;
+  const firstError = registerRes.error ?? actualsRes.error ?? cogsRes.error ?? wipRes.error;
   if (firstError) return emptyBoard(firstError.message);
 
   // account → { lastMonth, threeMoTotal } from the matview (months are complete
@@ -225,6 +257,31 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
     }))
     .sort((a, b) => b.billedShare - a.billedShare);
 
+  // COGS split: per-account TTM / last-full-month / trailing-3-month average
+  // (the current partial month is excluded, mirroring the overhead figures).
+  const cogsByAccount = new Map<string, { ttm: number; lastMonth: number; threeMo: number }>();
+  for (const r of cogsRes.data ?? []) {
+    const month = String(r.month).slice(0, 10);
+    if (month >= currentMonth) continue;
+    const fqn = String(r.account_fqn);
+    const amt = num(r.amount);
+    const acc = cogsByAccount.get(fqn) ?? { ttm: 0, lastMonth: 0, threeMo: 0 };
+    acc.ttm += amt;
+    if (month === lastFullMonth) acc.lastMonth += amt;
+    if (month >= threeMonthsBack) acc.threeMo += amt;
+    cogsByAccount.set(fqn, acc);
+  }
+  const cogsRows: CogsRow[] = [...cogsByAccount.entries()]
+    .map(([accountFqn, v]) => ({
+      accountFqn,
+      ttmAmount: Math.round(v.ttm),
+      lastMonthActual: Math.round(v.lastMonth),
+      avg3moActual: Math.round(v.threeMo / 3),
+    }))
+    .sort((a, b) => b.ttmAmount - a.ttmAmount);
+  const cogsTtm = cogsRows.reduce((s, r) => s + r.ttmAmount, 0);
+  const grossMarginTtm = ttmRevenue - cogsTtm;
+
   return {
     status: "live",
     generatedAt: now.toISOString(),
@@ -239,6 +296,12 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
     pools,
     rows,
     officeAllocations,
+    cogsRows,
+    cogsTtm,
+    grossMarginTtm,
+    grossMarginPct: ttmRevenue > 0 ? grossMarginTtm / ttmRevenue : 0,
+    variableOverheadTtm: Math.round(ttmOverhead - fixedTtm),
+    fixedOverheadTtm: Math.round(fixedTtm),
     lastFullMonth,
     error: null,
   };

@@ -58,11 +58,15 @@ describe("computeProjection", () => {
     // One-time outflow only in week 1.
     expect(weeks[0].oneTime).toBe(26526);
     expect(weeks[1].oneTime).toBe(0);
-    // Running cash is internally consistent.
+    // Running cash is internally consistent, and the COGS/overhead subtotals
+    // partition total disbursements exactly.
     for (let i = 0; i < 13; i++) {
       expect(weeks[i].endingCash).toBe(weeks[i].beginningCash + weeks[i].net);
       if (i > 0) expect(weeks[i].beginningCash).toBe(weeks[i - 1].endingCash);
       expect(weeks[i].totalReceipts).toBe(weeks[i].datedReceipts + weeks[i].undatedReceipts + weeks[i].newBillings);
+      expect(weeks[i].totalDirect).toBe(weeks[i].materials + weeks[i].subs + weeks[i].commissions);
+      expect(weeks[i].totalOverhead).toBe(weeks[i].payroll + weeks[i].fixedOverhead + weeks[i].oneTime);
+      expect(weeks[i].totalDisbursements).toBe(weeks[i].totalDirect + weeks[i].totalOverhead);
     }
     // Undated pool declines: each week's spread is 4% of the remaining pool.
     expect(weeks[0].undatedReceipts).toBe(Math.round(2463986 * 0.04));
