@@ -27,6 +27,20 @@
 -- Additive and idempotent (hard rule 1): GRANT/REVOKE only, no data touched,
 -- safe to re-run. Rollback is a single statement per view:
 --   GRANT SELECT ON public.<view> TO anon, authenticated;
+--
+-- LEDGER HISTORY — this one is not like its siblings:
+--   2026-08-22  executed DIRECTLY against prod. The lockdown took effect immediately, but
+--               it left NO `supabase_migrations.schema_migrations` row, so prod's ledger was
+--               silent about a live access-control change and a freshly provisioned
+--               environment replaying migrations would never have applied it. A review on
+--               2026-08-26 flagged that as a rollback-readiness gap. It was right.
+--   2026-08-26  registered as `290_coverage_views_service_role_only`
+--               (version 20260826193359) by re-running this idempotent statement through
+--               the migration path. Verified BEFORE running that anon/authenticated already
+--               held no privilege, so no state changed; verified AFTER that the row exists,
+--               anon/authenticated still hold 0, and service_role holds SELECT on all four.
+-- The lesson: a security fix applied out-of-band is only half-applied. It protects today's
+-- database and no other. Ship it through the migration path so the next environment inherits it.
 
 REVOKE ALL ON public.v_office_vendor_spend         FROM anon, authenticated;
 REVOKE ALL ON public.v_unresolved_branch_spend     FROM anon, authenticated;

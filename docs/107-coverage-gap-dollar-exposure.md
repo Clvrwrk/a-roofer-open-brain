@@ -425,6 +425,14 @@ That is a **third** independent blocker, on top of the two this document already
 
 ### Migration 290: the coverage views were world-readable
 
+> **Ledger note (2026-08-26).** This migration was originally executed *directly* against
+> prod on 2026-08-22, with no `schema_migrations` row. The lockdown was live, but a freshly
+> provisioned environment replaying migrations would never have applied it. A review flagged
+> that as a rollback-readiness gap; it was correct. Registered on 2026-08-26 as
+> `290_coverage_views_service_role_only` (version `20260826193359`) by re-running the
+> idempotent statement through the migration path — grants verified unchanged before and
+> after. **A security fix applied out-of-band protects today's database and no other.**
+
 The Cursor security review flagged that the four views added by 286–289 carry no
 `GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
 
