@@ -176,16 +176,16 @@ const reasonFor = (l: CmLine) => {
           </span>
         </summary>
         <div class="cmw-email">
-          <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>sent</b></p>
+          <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>Requested</b></p>
           <p>We requested credit memos on {vendorLineCount(vendor)} lines across {sentFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
-          <p>Total credit sent: <b>{money(vendorTotal(vendor))}</b>.</p>
+          <p>Total credit Requested: <b>{money(vendorTotal(vendor))}</b>.</p>
           <p>Where an agreement lapsed with no successor in place we priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
           <p>Please issue the credits against the original invoice numbers and confirm.</p>
           {sentFor(vendor).map((r) => (
             <div class="cmw-invoice" data-invoice={r.invoice_number}>
               <p class="cmw-inv-head">
-                <b>Invoice {r.invoice_number}</b> — credit sent: <b>{money(r.expected_credit)}</b>
-                {day(r.sent_at) && <span class="cmw-sent-meta"> · sent {day(r.sent_at)}</span>}
+                <b>Invoice {r.invoice_number}</b> — credit Requested: <b>{money(r.expected_credit)}</b>
+                {day(r.sent_at) && <span class="cmw-sent-meta"> · Requested {day(r.sent_at)}</span>}
                 {r.follow_up_due_at && <span class:list={["cmw-sent-meta", isOverdue(r) && "cmw-overdue"]}> · follow-up {day(r.follow_up_due_at)}{isOverdue(r) ? " (overdue)" : ""}</span>}
                 {" · "}<a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
                 <button class="cmw-approve cmw-received" data-cm-received={r.invoice_number} type="button" title="The vendor credit landed — close this request">Mark received</button>
