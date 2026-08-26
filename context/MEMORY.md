@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/26: CEO project LIVE (mig 281)** — 13WCF `/accounting/cash-flow` (receipts live from wip_ar_master expected dates) + Executive **Cash Runway** & **Fixed Costs** (59-acct register, basis_version 0 **PROVISIONAL — rulings R1–R11 await the CPA strategy meeting**; banner stays until v1). #1 lever: AR dating at 5% ($2.28M/110 jobs undated — Roberto). Next: rulings→basis_version 1 + artifact v0.4; diligence studios (WorkOS roles); Jan-1 accrual plan; ADP feed ($448k vendor vs $939k payroll gap). Register artifact 46784631…; Diligence 2f170ec4…; PDFs in Dropbox `GL-Acrual Project`.
+**8/26: CEO project LIVE (mig 281)** — 13WCF `/accounting/cash-flow` (receipts live from wip_ar_master dates) + Exec **Cash Runway** & **Fixed Costs** (59-acct register, **PROVISIONAL bv0 — R1–R11 await CPA meeting**). #1 lever: AR dating 5% ($2.28M/110 jobs — Roberto). Next: rulings→v1+artifact v0.4; diligence studios (WorkOS); accrual plan; ADP feed. Artifacts 46784631/2f170ec4; PDFs: Dropbox GL-Acrual.
 **Blocked on Chris:** CPA rulings; PEC-244/240/242/111/221/214 (older). PEC-216 shipped post-hold — confirm or revert mig 276.
 
 ## Standing instructions (Chris)
