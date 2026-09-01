@@ -144,6 +144,22 @@ async function upsertUomEvidence(vendorId, item, shipUom, priceUom, factor) {
   });
 }
 
+// SRS credit memos name the invoice they credit as a description row —
+// "Orig Inv#: 0050252253-002". That reference is the exact-match key for
+// credit-memo reconciliation (Chris 2026-09-01): a received CM must pair with
+// the request on its ORIGINAL invoice, never with the closest request by
+// amount. Scan every description string of the document; a memo can credit
+// more than one invoice.
+function extractOriginalInvoices(descPool, ownInvoiceNumber) {
+  const found = new Set();
+  for (const d of descPool) {
+    for (const m of String(d ?? "").matchAll(/Orig\.?\s*Inv\.?\s*#?\s*:?\s*([0-9][0-9-]{6,})/gi)) {
+      if (m[1] !== ownInvoiceNumber) found.add(m[1]);
+    }
+  }
+  return [...found];
+}
+
 async function ingestSrsDetail(vendorId, file) {
   const rows = parseCsv(readFileSync(file, "utf8"));
   const header = rows.shift();
@@ -156,6 +172,10 @@ async function ingestSrsDetail(vendorId, file) {
   for (const [invNum, inv] of invoices) {
     const h = inv.header, c = (name) => col(h, name);
     const terms = c("TERMS");
+    const originals = extractOriginalInvoices(
+      [...inv.notes, ...inv.lines.flatMap((l) => l.extraDesc), ...inv.lines.map((l) => col(l.row, "DESC_COL"))],
+      invNum,
+    );
     const invoice = await upsertInvoice({
       vendor_id: vendorId,
       account_number: c("ACCOUNT_NUMBER"),
@@ -173,7 +193,11 @@ async function ingestSrsDetail(vendorId, file) {
       ship_via: c("SHIP_VIA") || null,
       order_type: c("ORDER_TYPE") || null,
       total_due: num(c("TOTAL_DUE")),
-      raw: { return_address: c("RETURN_ADDRESS"), notes: inv.notes, source_file: basename(file) },
+      raw: {
+        return_address: c("RETURN_ADDRESS"), notes: inv.notes, source_file: basename(file),
+        original_invoice_number: originals[0] ?? null,
+        original_invoice_numbers: originals,
+      },
       updated_at: new Date().toISOString(),
     });
     const lines = [];
@@ -361,6 +385,9 @@ async function ingestSrsPdfInvoice(vendorId, file) {
       ordered_by: p.orderedBy, created_by: p.createdBy,
       delivery_charge: p.charges.delivery ?? null, freight_charge: p.charges.freight ?? null,
       orig_invoice_number: origInv, reconciled: true,
+      // canonical keys — what qb-bank-csv and credit_memo_reconcile read
+      original_invoice_number: origInv,
+      original_invoice_numbers: origInv ? [origInv] : [],
       po_number_may_be_truncated: (p.poNumber ?? "").length >= 16,
     },
     updated_at: new Date().toISOString(),

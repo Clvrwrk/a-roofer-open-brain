@@ -18,7 +18,7 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 const vendorParam = cmVendorBySlug(Astro.url.searchParams.get("vendor"))?.slug ?? null;
 
 interface CmLine {
-  id: number; invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
+  id: number; invoice_number: string; item_number: string | null; item_description: string; quantity: number; invoiced_price: number;
   office_price: number; variance_ext: number; office_name: string; agreement_number: string | null;
   agreement_effective: string | null; agreement_expiry: string | null; match_method: string; paexp_tag: string | null;
   run_label: string; created_at: string; reviewed_by: string | null; reviewed_at: string | null;
@@ -32,16 +32,50 @@ let headers = new Map<string, CmRequestHeader>();
 interface CmReceipt {
   cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
   match_state: string; original_invoice_number: string | null; expected_credit: number | null;
+  matched_request_id: string | null; vendor_slug: string;
 }
+// The credit memo document's own lines, keyed by cm invoice number — rendered
+// nested (light green) under the request lines (light red) they answer.
+interface CmDocLine { item_number: string | null; item_description: string | null; qty: number; uom: string; unit_price: number | null; extended_price: number | null; }
 let pendingReceipts: CmReceipt[] = [];
+const cmLinesByDoc = new Map<string, CmDocLine[]>();
 if (client) {
   let receiptQuery = client
     .from("credit_memo_receipts")
-    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
+    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit, matched_request_id, vendor_slug")
     .eq("review_status", "pending");
   if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
   const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
   pendingReceipts = (receiptRows ?? []) as CmReceipt[];
+
+  // CM document lines: SRS/QXO from vendor_invoice_lines, ABC from abc_invoice_lines.
+  const nonAbc = pendingReceipts.filter((r) => r.vendor_slug !== "abc-supply").map((r) => r.cm_invoice_number);
+  const abc = pendingReceipts.filter((r) => r.vendor_slug === "abc-supply").map((r) => r.cm_invoice_number);
+  const CHUNK = 100;
+  for (let i = 0; i < nonAbc.length; i += CHUNK) {
+    const { data } = await client
+      .from("vendor_invoice_lines")
+      .select("invoice_number, item_number, item_description, ship_qty, price_uom, ship_uom, unit_price, extended_price")
+      .in("invoice_number", nonAbc.slice(i, i + CHUNK))
+      .limit(2000);
+    for (const l of data ?? []) {
+      const list = cmLinesByDoc.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.ship_qty ?? 0), uom: String(l.price_uom ?? l.ship_uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price) });
+      cmLinesByDoc.set(String(l.invoice_number), list);
+    }
+  }
+  for (let i = 0; i < abc.length; i += CHUNK) {
+    const { data } = await client
+      .from("abc_invoice_lines")
+      .select("invoice_number, item_number, item_description, quantity, uom, unit_price, extended_price")
+      .in("invoice_number", abc.slice(i, i + CHUNK))
+      .limit(2000);
+    for (const l of data ?? []) {
+      const list = cmLinesByDoc.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.quantity ?? 0), uom: String(l.uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price) });
+      cmLinesByDoc.set(String(l.invoice_number), list);
+    }
+  }
 
   let reqQuery = client
     .from("credit_memo_requests")
@@ -67,7 +101,7 @@ if (client) {
     for (let i = 0; i < invoiceNumbers.length; i += CHUNK) {
       let lineQuery = client
         .from("invoice_line_reaudit")
-        .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
+        .select("id, run_label, invoice_number, item_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
         .in("invoice_number", invoiceNumbers.slice(i, i + CHUNK))
         .eq("classification", "discrepancy");
       // Silo (docs/87): a colliding invoice number must not pull another vendor's lines.
@@ -112,6 +146,54 @@ const headerParts = (invoiceNumber: string, vendor: string) => {
     invoiced: h?.invoiceDate ? `Invoiced ${h.invoiceDate}` : "invoice date unknown",
   };
 };
+// Nested review model (Chris 2026-09-01): a received CM renders INSIDE the sent
+// request's own block — each request claim line (light red) is followed by the
+// CM document line that answers it (light green), matched by item number, so the
+// human audits them pair by pair. CM lines with no request counterpart trail the
+// table, still green, labeled as extra.
+const receiptsByReqInvoice = new Map<string, CmReceipt[]>();
+for (const r of pendingReceipts) {
+  if (!r.original_invoice_number) continue;
+  const list = receiptsByReqInvoice.get(r.original_invoice_number) ?? [];
+  list.push(r);
+  receiptsByReqInvoice.set(r.original_invoice_number, list);
+}
+// Receipts whose request block is on this page nest there; the rest (no open
+// request, or the request already left the chase queue) keep the flat table.
+const renderedReqInvoices = new Set(requests.map((r) => r.invoice_number));
+const standaloneReceipts = pendingReceipts.filter(
+  (rc) => !rc.original_invoice_number || !renderedReqInvoices.has(rc.original_invoice_number));
+// CM line descriptions from the portal CSV carry trailing note rows
+// (SUB-TOTAL / Sales Tax separators). Keep the substance — item text, the
+// Orig Inv# ref, and the vendor's Reason — drop the ledger noise.
+const cleanCmDesc = (d: string | null) =>
+  String(d ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s && !/^\*+.*\*+$/.test(s) && !/^sales tax/i.test(s) && !/^sub-?total/i.test(s))
+    .join(" | ");
+const matchBasisLabel = (rc: CmReceipt) =>
+  rc.match_state === "amount_mismatch" && rc.matched_request_id
+    ? "the memo names this invoice (Orig Inv#) — amounts differ, your call"
+    : rc.match_state.replace(/_/g, " ");
+const pairingFor = (invoiceNumber: string) => {
+  const receipts = receiptsByReqInvoice.get(invoiceNumber) ?? [];
+  const reqLines = linesByInvoice.get(invoiceNumber) ?? [];
+  const cmPool: { rc: CmReceipt; cl: CmDocLine; used: boolean }[] = receipts.flatMap((rc) =>
+    (cmLinesByDoc.get(rc.cm_invoice_number) ?? []).map((cl) => ({ rc, cl, used: false })));
+  const rows: ({ kind: "req"; line: CmLine } | { kind: "cm"; rc: CmReceipt; cl: CmDocLine; extra: boolean })[] = [];
+  for (const line of reqLines) {
+    rows.push({ kind: "req", line });
+    for (const p of cmPool) {
+      if (p.used || !p.cl.item_number || !line.item_number) continue;
+      if (String(p.cl.item_number).trim().toUpperCase() !== String(line.item_number).trim().toUpperCase()) continue;
+      p.used = true;
+      rows.push({ kind: "cm", rc: p.rc, cl: p.cl, extra: false });
+    }
+  }
+  for (const p of cmPool) if (!p.used) rows.push({ kind: "cm", rc: p.rc, cl: p.cl, extra: true });
+  return { receipts, rows };
+};
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   const agreement = l.agreement_number
@@ -139,25 +221,35 @@ const reasonFor = (l: CmLine) => {
     <p class="cmw-note">Requests already <b>sent</b> to the vendor and awaiting credit — this is the chase queue. Mark received when the credit lands; the invoice then leaves this page. Use <a href="/accounting/credit-memos/weekly">Weekly CM</a> for requests still being assembled.</p>
     <p class="cmw-note cmw-warn">The email below is <b>rebuilt from today's audit lines</b> — no copy of the outbound message is stored, so a figure here can differ from what the vendor actually received if the line was re-audited after sending.</p>
 
-    {pendingReceipts.length > 0 && (
+    {standaloneReceipts.length > 0 && (
       <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received — review required ({pendingReceipts.length}). A vendor credit arrived that does not exactly match an open request: Approve accepts it as satisfying the closest request; Re-request keeps our request open.</p>
+        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Expand a row to see the memo's own lines; Approve accepts the credit as-is, Re-request keeps our request open.</p>
         <table>
-          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Closest request</th><th class="num">Expected</th><th></th></tr></thead>
+          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Original invoice</th><th class="num">Expected</th><th></th></tr></thead>
           <tbody>
-            {pendingReceipts.map((r) => (
-              <tr data-receipt={r.cm_invoice_number}>
-                <td>{r.cm_invoice_number}</td>
-                <td class="num">{money(Number(r.cm_total))}</td>
-                <td>{r.cm_invoice_date ?? ""}</td>
-                <td>{r.match_state.replace(/_/g, " ")}</td>
-                <td>{r.original_invoice_number ?? "—"}</td>
-                <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
-                <td>
-                  <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
-                  <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
-                </td>
-              </tr>
+            {standaloneReceipts.map((r) => (
+              <>
+                <tr data-receipt={r.cm_invoice_number}>
+                  <td>{r.cm_invoice_number}</td>
+                  <td class="num">{money(Number(r.cm_total))}</td>
+                  <td>{r.cm_invoice_date ?? ""}</td>
+                  <td>{r.match_state.replace(/_/g, " ")}</td>
+                  <td>{r.original_invoice_number ?? "—"}</td>
+                  <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
+                  <td>
+                    <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
+                    <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
+                  </td>
+                </tr>
+                {(cmLinesByDoc.get(r.cm_invoice_number) ?? []).map((cl) => (
+                  <tr class="cmw-cm-row">
+                    <td colspan="4">{cl.item_number}{cl.item_description ? ` — ${cleanCmDesc(cl.item_description)}` : ""}</td>
+                    <td class="num">{cl.qty} {cl.uom}</td>
+                    <td class="num">{cl.unit_price != null ? money(cl.unit_price) : "—"}</td>
+                    <td class="num">{cl.extended_price != null ? money(cl.extended_price) : "—"}</td>
+                  </tr>
+                ))}
+              </>
             ))}
           </tbody>
         </table>
@@ -195,20 +287,37 @@ const reasonFor = (l: CmLine) => {
                   ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
                   : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
               </>); })()}</p>
-              <table>
-                <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
-                <tbody>
-                  {(linesByInvoice.get(r.invoice_number) ?? []).map((l) => (
-                    <tr>
-                      <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
-                      <td class="num">{Number(l.quantity)}</td>
-                      <td class="num">{money(Number(l.invoiced_price))}</td>
-                      <td class="num">{money(Number(l.office_price))}</td>
-                      <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(() => { const pairing = pairingFor(r.invoice_number); return (<>
+                {pairing.receipts.map((rc) => (
+                  <p class="cmw-receipt-strip" data-receipt={rc.cm_invoice_number}>
+                    <b>Credit memo {rc.cm_invoice_number}</b> received {rc.cm_invoice_date ?? ""} · <b>{money(Math.abs(Number(rc.cm_total)))}</b> credited vs <b>{money(r.expected_credit)}</b> requested · {matchBasisLabel(rc)}
+                    <button class="cmw-approve" data-receipt-review="approve" type="button" title="Accept this credit as satisfying the request">Approve</button>
+                    <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button" title="Keep our request open — the credit does not cover it">Re-request</button>
+                  </p>
+                ))}
+                <table>
+                  <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
+                  <tbody>
+                    {pairing.rows.map((row) => row.kind === "req" ? (
+                      <tr class:list={[pairing.receipts.length > 0 && "cmw-req-row"]}>
+                        <td>{row.line.item_description}<br /><span class="cmw-reason">{reasonFor(row.line)}</span></td>
+                        <td class="num">{Number(row.line.quantity)}</td>
+                        <td class="num">{money(Number(row.line.invoiced_price))}</td>
+                        <td class="num">{money(Number(row.line.office_price))}</td>
+                        <td class="num"><b>{money(Number(row.line.variance_ext))}</b></td>
+                      </tr>
+                    ) : (
+                      <tr class="cmw-cm-row">
+                        <td><span class="cmw-cm-tag">CM {row.rc.cm_invoice_number}</span> {row.cl.item_number}{row.cl.item_description ? ` — ${cleanCmDesc(row.cl.item_description)}` : ""}{row.extra ? " · no matching request line" : ""}</td>
+                        <td class="num">{row.cl.qty} {row.cl.uom}</td>
+                        <td class="num">{row.cl.unit_price != null ? money(row.cl.unit_price) : "—"}</td>
+                        <td class="num">—</td>
+                        <td class="num"><b>{row.cl.extended_price != null ? money(Math.abs(row.cl.extended_price)) : "—"}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>); })()}
               {(linesByInvoice.get(r.invoice_number) ?? []).length === 0 && (
                 <p class="cmw-noclaims">No claim lines are on file for this invoice's latest re-audit run — the request was sent from an earlier run.</p>
               )}
@@ -250,6 +359,12 @@ const reasonFor = (l: CmLine) => {
   .cmw-reason{color:#666;font-size:12px}
   .cmw-drafts-title{font-size:12px;color:#6b7886;font-weight:700;margin:0 0 6px}
   .cmw-noclaims{color:#6b7886;font-size:12px;margin:6px 0 0}
+  /* Nested CM review: request lines light red, the vendor's CM lines light green,
+     paired row-under-row for line-by-line human audit (Chris 2026-09-01). */
+  .cmw-req-row td{background:#fdeeee}
+  .cmw-cm-row td{background:#e9f7ef}
+  .cmw-cm-tag{display:inline-block;background:#137a4d;color:#fff;border-radius:5px;padding:1px 6px;font-size:10.5px;font-weight:700;margin-right:5px}
+  .cmw-receipt-strip{margin:8px 0 6px;padding:8px 11px;border:1px solid #bfe6d0;background:#e9f7ef;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
   .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
   .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
