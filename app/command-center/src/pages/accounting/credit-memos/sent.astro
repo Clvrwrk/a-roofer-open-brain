@@ -95,6 +95,9 @@ if (client) {
       origLinesByInvoice.set(String(l.invoice_number), list);
     }
   }
+  // Office/branch context for the originals too — the unlinked-credit section
+  // nests Office → Vendor → Branch exactly like everything else (Chris 2026-09-01).
+  for (const [k, v] of await loadCmRequestHeaders(client, origInvoices)) headers.set(k, v);
 
   let reqQuery = client
     .from("credit_memo_requests")
@@ -135,7 +138,9 @@ if (client) {
       if (Number(l.variance_ext ?? 0) < 0.05) continue;
       (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
     }
-    headers = await loadCmRequestHeaders(client, invoiceNumbers);
+    // merge (never reassign) — the receipts section already seeded headers for
+    // the ORIGINAL invoices of unlinked credits.
+    for (const [k, v] of await loadCmRequestHeaders(client, invoiceNumbers)) headers.set(k, v);
   }
 }
 
@@ -283,6 +288,37 @@ const standaloneModel = standaloneReceipts.map((r) => {
   }
   return { r, b, rows };
 });
+// The unlinked credits nest Office → Vendor → Branch like every other work
+// surface, and default ROLLED UP (office rows only) so the section stays a few
+// lines tall instead of a wall of tables (Chris 2026-09-01). Office/branch come
+// from the ORIGINAL invoice's header.
+type SModel = (typeof standaloneModel)[number];
+interface SBranch { branch: string; entries: SModel[]; }
+interface SVendor { vendor: string; branches: SBranch[]; entries: SModel[]; }
+interface SOffice { office: string; vendors: SVendor[]; entries: SModel[]; }
+const standaloneTree: SOffice[] = (() => {
+  const om = new Map<string, Map<string, Map<string, SModel[]>>>();
+  for (const m of standaloneModel) {
+    const h = m.r.original_invoice_number ? headers.get(m.r.original_invoice_number) : undefined;
+    const office = h?.office || "Office not resolved";
+    const vendor = cmVendorLabel(m.r.vendor_slug) ?? m.r.vendor_slug;
+    const branch = h?.branchName || h?.branchNumber
+      ? (h?.branchNumber ? (h?.branchName ? h.branchName + " (" + h.branchNumber + ")" : String(h.branchNumber)) : String(h?.branchName))
+      : "Branch not resolved";
+    const vm = om.get(office) ?? new Map(); om.set(office, vm);
+    const bm = vm.get(vendor) ?? new Map(); vm.set(vendor, bm);
+    const list = bm.get(branch) ?? []; bm.set(branch, list);
+    list.push(m);
+  }
+  return [...om.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([office, vm]) => {
+    const vendorGroups = [...vm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([vendor, bm]) => {
+      const branches = [...bm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([branch, entries]) => ({ branch, entries }));
+      return { vendor, branches, entries: branches.flatMap((b) => b.entries) };
+    });
+    return { office, vendors: vendorGroups, entries: vendorGroups.flatMap((v) => v.entries) };
+  });
+})();
+const sTotal = (rows: SModel[]) => rows.reduce((s, m) => s + Math.abs(Number(m.r.cm_total)), 0);
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   const agreement = l.agreement_number
@@ -312,8 +348,34 @@ const reasonFor = (l: CmLine) => {
 
     {standaloneReceipts.length > 0 && (
       <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Each is audited the same way: the original invoice's billed line (light red, with the agreement price) above the vendor's credited line (light green).</p>
-        {standaloneModel.map(({ r, b, rows }) => (
+        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Nested by the ORIGINAL invoice's office and branch; expand to audit the billed line (light red, with agreement price) above the vendor's credited line (light green).</p>
+        {standaloneTree.map((o) => (
+          <details class="cmw-office">
+            <summary>
+              <span class="cmw-chev">›</span>
+              <span class="cmw-office-name">{o.office}</span>
+              <span class="cmw-mini">
+                <span>{o.entries.length} <em>credit memos</em></span>
+                <span><b>{money(sTotal(o.entries))}</b> <em>credited</em></span>
+              </span>
+            </summary>
+            <div class="cmw-office-body">
+            {o.vendors.map((v) => (
+          <details class="cmw-vendor" open>
+            <summary>
+              <span class="cmw-chev">›</span>
+              <b>{v.vendor}</b>
+              <span class="cmw-sum">{v.entries.length} credit memo(s) · <b>{money(sTotal(v.entries))}</b></span>
+            </summary>
+            {v.branches.map((br) => (
+            <details class="cmw-branch" open>
+              <summary>
+                <span class="cmw-chev">›</span>
+                <span class="cmw-branch-name">{br.branch}</span>
+                <span class="cmw-sum">{br.entries.length} credit memo(s) · <b>{money(sTotal(br.entries))}</b></span>
+              </summary>
+              <div class="cmw-email">
+              {br.entries.map(({ r, b, rows }) => (
           <div class="cmw-invoice" data-receipt={r.cm_invoice_number}>
             <p class="cmw-receipt-strip">
               <b>Credit memo {r.cm_invoice_number}</b> received {r.cm_invoice_date ?? ""} · {r.match_state.replace(/_/g, " ")}
@@ -352,6 +414,14 @@ const reasonFor = (l: CmLine) => {
               </tbody>
             </table>
           </div>
+              ))}
+              </div>
+            </details>
+            ))}
+          </details>
+            ))}
+            </div>
+          </details>
         ))}
       </div>
     )}
