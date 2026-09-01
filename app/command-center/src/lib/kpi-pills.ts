@@ -54,6 +54,12 @@ export interface KpiPillData {
   awaitingCount: number;
   awaitingTotal: number;
   awaitingOverdue: number;
+  // 3b · CMs collected — requests the vendor satisfied (status 'received'; the
+  // reconcile job auto-flips exact matches, humans approve the rest)
+  cmReceivedCount: number;
+  cmReceivedTotal: number;
+  // receipts awaiting a human call in the Sent CM review table (mismatch/ambiguous)
+  cmReceiptsPendingReview: number;
   // 4 · Due Now — Pay
   dueNow: number;
   // 5 · Paid — Pending Verification
@@ -87,6 +93,9 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
     awaitingCount: 0,
     awaitingTotal: 0,
     awaitingOverdue: 0,
+    cmReceivedCount: 0,
+    cmReceivedTotal: 0,
+    cmReceiptsPendingReview: 0,
     dueNow: data.totals.dueNow,
     pendingVerification: 0,
     qbPendingByVendor: [],
@@ -102,11 +111,13 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
   if (!client) return out;
 
   const nowIso = new Date().toISOString();
-  const [pipe, pay, cmRows, sentRows, qbPendRows, alexQ] = await Promise.all([
+  const [pipe, pay, cmRows, sentRows, receivedRows, receiptReview, qbPendRows, alexQ] = await Promise.all([
     client.from("invoice_pipeline_status").select("id", { count: "exact", head: true }).eq("pipeline_status", "invoice_audit_pending"),
     client.from("invoice_payment_processed").select("id", { count: "exact", head: true }).eq("status", "paid_pending_verification"),
     fetchAllRows(() => client.from("credit_memo_requests").select("invoice_number, vendor_slug, status, expected_credit").eq("request_kind", "requested").in("status", ["draft", "approved"])),
     fetchAllRows(() => client.from("credit_memo_requests").select("expected_credit, follow_up_due_at").eq("request_kind", "requested").eq("status", "sent")),
+    fetchAllRows(() => client.from("credit_memo_requests").select("expected_credit").eq("request_kind", "requested").eq("status", "received")),
+    client.from("credit_memo_receipts").select("cm_invoice_number", { count: "exact", head: true }).eq("review_status", "pending"),
     fetchAllRows(() => client.from("v_qb_export_pending").select("vendor_slug, pending_rows")),
     client.from("agreement_gap_queue").select("id", { count: "exact", head: true }).eq("status", "candidate"),
   ]);
@@ -132,6 +143,12 @@ export async function loadKpiPills(env: RuntimeEnv = getRuntimeEnv()): Promise<K
     out.awaitingTotal += Number(r.expected_credit ?? 0);
     if (r.follow_up_due_at && String(r.follow_up_due_at) < nowIso) out.awaitingOverdue += 1;
   }
+
+  for (const r of receivedRows ?? []) {
+    out.cmReceivedCount += 1;
+    out.cmReceivedTotal += Number(r.expected_credit ?? 0);
+  }
+  out.cmReceiptsPendingReview = receiptReview.count ?? 0;
 
   out.qbPendingByVendor = ((qbPend.data as any[] | null) ?? []).map((r) => ({ slug: String(r.vendor_slug), pending: Number(r.pending_rows ?? 0) }));
   out.qbPendingTotal = out.qbPendingByVendor.reduce((s, r) => s + r.pending, 0);

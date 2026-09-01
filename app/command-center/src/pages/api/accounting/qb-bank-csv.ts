@@ -99,6 +99,27 @@ export const GET: APIRoute = async ({ locals, url }) => {
   // job/client resolution maps, filled per vendor below
   const jobByInvoice = new Map<string, { job: string | null; client: string | null }>();
 
+  // Dual confirmation (Chris 2026-09-01): when a CM document reconciled against a
+  // request (auto exact match, or a human Approve in Sent CM review), its cm_actual
+  // row must name the SAME original invoice the register's CM-TBD line was posted
+  // under — "CMINV#<cm>-OriginalINV#<X>" pairs with "CM-TBD-INV#<X>" so Lucinda can
+  // match the two Received lines in QB. Receipts take precedence over the per-vendor
+  // heuristics below.
+  const receiptOriginal = new Map<string, string>();
+  {
+    const { data: receipts } = await client
+      .from("credit_memo_receipts")
+      .select("cm_invoice_number, original_invoice_number, match_state, review_status")
+      .eq("vendor_slug", vendor.slug)
+      .not("original_invoice_number", "is", null)
+      .limit(2000);
+    for (const r of receipts ?? []) {
+      if (r.match_state === "matched_exact" || r.review_status === "approved") {
+        receiptOriginal.set(String(r.cm_invoice_number), String(r.original_invoice_number));
+      }
+    }
+  }
+
   if (vendor.slug === "abc-supply") {
     // ABC job/customer resolution rides the PO-driven match view. PEC-186 follow-up
     // (Chris 2026-08-09): do NOT require matched=true — the audit surface shows the

@@ -101,7 +101,9 @@ if (root && dataEl && mount) {
       }
       set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
       const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');
-      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} sent · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
+      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} outstanding · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
+      const col = document.querySelector<HTMLElement>('[data-kpi-sub="collected"]');
+      if (col) col.innerHTML = `${num$(k.cmReceivedCount)} collected (${m$(k.cmReceivedTotal)}) · <span class="${Number(k.cmReceiptsPendingReview) > 0 ? "iv-overdue" : ""}">${num$(k.cmReceiptsPendingReview)}</span> received CMs need review`;
       set('[data-kpi-val="dueNow"]', num$(k.dueNow));
       set('[data-kpi-val="verify"]', num$(k.pendingVerification));
       set('[data-kpi-val="qb"]', num$(k.qbPendingTotal));
