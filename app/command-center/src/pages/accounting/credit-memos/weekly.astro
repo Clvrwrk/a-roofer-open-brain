@@ -24,19 +24,18 @@ let requests: { invoice_number: string; status: string; expected_credit: number;
 const linesByInvoice = new Map<string, CmLine[]>();
 // PE office / vendor / vendor branch / job / invoice date for each claim header.
 let headers = new Map<string, CmRequestHeader>();
-interface CmReceipt {
-  cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
-  match_state: string; original_invoice_number: string | null; expected_credit: number | null;
-}
-let pendingReceipts: CmReceipt[] = [];
+// Received-credit review lives on ONE surface: Sent CM (the chase queue), which
+// pairs each credit against its original invoice with the tax breakout. This page
+// only assembles requests — it shows a COUNT and points across (Chris 2026-09-01:
+// the duplicate flat table here had none of the audit context and was removed).
+let receiptsPendingReview = 0;
 if (client) {
-  let receiptQuery = client
+  let receiptCountQuery = client
     .from("credit_memo_receipts")
-    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
+    .select("cm_invoice_number", { count: "exact", head: true })
     .eq("review_status", "pending");
-  if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
-  const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
-  pendingReceipts = (receiptRows ?? []) as CmReceipt[];
+  if (vendorParam) receiptCountQuery = receiptCountQuery.eq("vendor_slug", vendorParam);
+  receiptsPendingReview = (await receiptCountQuery).count ?? 0;
   let reqQuery = client
     .from("credit_memo_requests")
     .select("invoice_number, vendor_slug, status, expected_credit, packet")
@@ -170,29 +169,8 @@ const reasonFor = (l: CmLine) => {
     </div>
     <p class="cmw-note">Vendor-specific request emails build from <b>approved</b> invoices only (docs/81 decision 8). Approve or un-approve invoices from the Invoice Audit dashboard. Drafts below are awaiting approval and are excluded from the email.</p>
 
-    {pendingReceipts.length > 0 && (
-      <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received — review required ({pendingReceipts.length}). A vendor credit arrived that does not exactly match an open request: Approve accepts it as satisfying the closest request; Re-request keeps our request in the weekly email.</p>
-        <table>
-          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Closest request</th><th class="num">Expected</th><th></th></tr></thead>
-          <tbody>
-            {pendingReceipts.map((r) => (
-              <tr data-receipt={r.cm_invoice_number}>
-                <td>{r.cm_invoice_number}</td>
-                <td class="num">{money(Number(r.cm_total))}</td>
-                <td>{r.cm_invoice_date ?? ""}</td>
-                <td>{r.match_state.replace(/_/g, " ")}</td>
-                <td>{r.original_invoice_number ?? "—"}</td>
-                <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
-                <td>
-                  <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
-                  <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    {receiptsPendingReview > 0 && (
+      <p class="cmw-note cmw-warn"><b>{receiptsPendingReview} received credit memo(s) need review</b> — the line-by-line audit (original invoice vs credit, with sales tax broken out) lives on the chase surface: <a href={`/accounting/credit-memos/sent${vendorParam ? `?vendor=${encodeURIComponent(vendorParam)}` : ""}`}>review in Sent CM →</a></p>
     )}
 
     {requests.length === 0 && <p class="cmw-empty">No draft or approved credit memo requests.</p>}
@@ -406,11 +384,6 @@ const reasonFor = (l: CmLine) => {
   .cmw-draft-block td.chk{text-align:center;width:64px}
   .cmw-draft-block td.chk input{width:16px;height:16px;accent-color:#137a4d;cursor:pointer}
   .cmw-noclaims{color:#6b7886;font-size:12px}
-  .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
-  .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
-  .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
-  .cmw-receipts th.num,.cmw-receipts td.num{text-align:right}
-  .cmw-rerequest{margin-left:6px;font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer}
   .cmw-approve:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
   .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
   .cmw-marksent{margin-left:8px;border-color:#5b46d8;background:#efecfd;color:#5b46d8}
@@ -446,20 +419,8 @@ const reasonFor = (l: CmLine) => {
   });
 
   document.addEventListener("click", async (ev) => {
-    const rbtn = (ev.target as HTMLElement)?.closest?.("[data-receipt-review]") as HTMLButtonElement | null;
-    if (rbtn) {
-      const row = rbtn.closest("[data-receipt]") as HTMLElement;
-      rbtn.disabled = true;
-      const res = await fetch("/api/credit-memos/receipt-review", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ cmInvoiceNumber: row.dataset.receipt, action: rbtn.dataset.receiptReview }),
-      }).then((r) => r.json()).catch(() => null);
-      if (res?.cmInvoiceNumber) row.remove();
-      else { rbtn.disabled = false; window.alert("Review failed: " + (res?.error_description || res?.error || "network error")); }
-      return;
-    }
+    // Received-credit review moved to Sent CM (the one review surface) — no
+    // receipt handler here any more.
     // Mark sent — records the vendor email as sent and moves the request to Chase it.
     const sbtn = (ev.target as HTMLElement)?.closest?.("[data-cm-mark-sent]") as HTMLButtonElement | null;
     if (sbtn) {
