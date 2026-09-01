@@ -37,8 +37,10 @@ interface CmReceipt {
 // The credit memo document's own lines, keyed by cm invoice number — rendered
 // nested (light green) under the request lines (light red) they answer.
 interface CmDocLine { item_number: string | null; item_description: string | null; qty: number; uom: string; unit_price: number | null; extended_price: number | null; }
+interface OrigLine extends CmDocLine { negotiated_price: number | null; }
 let pendingReceipts: CmReceipt[] = [];
 const cmLinesByDoc = new Map<string, CmDocLine[]>();
+const origLinesByInvoice = new Map<string, OrigLine[]>();
 if (client) {
   let receiptQuery = client
     .from("credit_memo_receipts")
@@ -74,6 +76,23 @@ if (client) {
       const list = cmLinesByDoc.get(String(l.invoice_number)) ?? [];
       list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.quantity ?? 0), uom: String(l.uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price) });
       cmLinesByDoc.set(String(l.invoice_number), list);
+    }
+  }
+
+  // Original-invoice audit rows for every receipt that names its original —
+  // so an unlinked / mismatched credit is audited the SAME way: what the
+  // vendor billed (and the agreement price) beside what the vendor credited.
+  const origInvoices = [...new Set(pendingReceipts.map((r) => r.original_invoice_number).filter(Boolean))] as string[];
+  for (let i = 0; i < origInvoices.length; i += CHUNK) {
+    const { data } = await client
+      .from("mv_invoice_audit_line")
+      .select("invoice_number, item_number, item_description, quantity, uom, unit_price, extended_price, negotiated_price")
+      .in("invoice_number", origInvoices.slice(i, i + CHUNK))
+      .limit(3000);
+    for (const l of data ?? []) {
+      const list = origLinesByInvoice.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.quantity ?? 0), uom: String(l.uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price), negotiated_price: l.negotiated_price == null ? null : Number(l.negotiated_price) });
+      origLinesByInvoice.set(String(l.invoice_number), list);
     }
   }
 
@@ -174,12 +193,29 @@ const cleanCmDesc = (d: string | null) =>
     .join(" | ");
 const matchBasisLabel = (rc: CmReceipt) =>
   rc.match_state === "amount_mismatch" && rc.matched_request_id
-    ? "the memo names this invoice (Orig Inv#) — amounts differ, your call"
+    ? "the memo names this invoice (Orig Inv#)"
     : rc.match_state.replace(/_/g, " ");
-const pairingFor = (invoiceNumber: string) => {
-  const receipts = receiptsByReqInvoice.get(invoiceNumber) ?? [];
+// A CM's total includes sales tax; our requests are EX-tax. The honest
+// comparison is line credit vs requested — tax is derived, not guessed:
+// |CM total| − |sum of the memo's own lines| (Chris 2026-09-01: a $97.65 CM
+// against a $92.25 request is $90.00 in lines + $7.65 tax — SHORT $2.25).
+const cmBreakdown = (rc: CmReceipt) => {
+  const lines = cmLinesByDoc.get(rc.cm_invoice_number) ?? [];
+  const total = Math.abs(Number(rc.cm_total));
+  if (!lines.length) return { total, lineCredit: null as number | null, tax: null as number | null };
+  const lineCredit = Math.round(lines.reduce((s, l) => s + Math.abs(Number(l.extended_price ?? 0)), 0) * 100) / 100;
+  const tax = Math.round((total - lineCredit) * 100) / 100;
+  return { total, lineCredit, tax: tax >= -0.01 ? Math.max(0, tax) : null };
+};
+// requested − line credit: positive = the vendor shorted the lines.
+const lineDelta = (rc: CmReceipt, requested: number) => {
+  const b = cmBreakdown(rc);
+  return b.lineCredit == null ? null : Math.round((requested - b.lineCredit) * 100) / 100;
+};
+const pairingFor = (invoiceNumber: string, expectedCredit: number) => {
+  const receiptRows = receiptsByReqInvoice.get(invoiceNumber) ?? [];
   const reqLines = linesByInvoice.get(invoiceNumber) ?? [];
-  const cmPool: { rc: CmReceipt; cl: CmDocLine; used: boolean }[] = receipts.flatMap((rc) =>
+  const cmPool: { rc: CmReceipt; cl: CmDocLine; used: boolean }[] = receiptRows.flatMap((rc) =>
     (cmLinesByDoc.get(rc.cm_invoice_number) ?? []).map((cl) => ({ rc, cl, used: false })));
   const rows: ({ kind: "req"; line: CmLine } | { kind: "cm"; rc: CmReceipt; cl: CmDocLine; extra: boolean })[] = [];
   for (const line of reqLines) {
@@ -192,8 +228,31 @@ const pairingFor = (invoiceNumber: string) => {
     }
   }
   for (const p of cmPool) if (!p.used) rows.push({ kind: "cm", rc: p.rc, cl: p.cl, extra: true });
+  // computed in the frontmatter so the template stays expression-only (the
+  // Astro compiler rejects block-bodied arrows nested inside expressions)
+  const receipts = receiptRows.map((rc) => ({ rc, b: cmBreakdown(rc), d: lineDelta(rc, expectedCredit) }));
   return { receipts, rows };
 };
+// Standalone (no open request on this page) receipts, fully precomputed:
+// tax breakdown + original-invoice line paired under each credited line.
+interface StandaloneRow { kind: "orig" | "orig-missing" | "cm"; cl: CmDocLine; ol: OrigLine | null; }
+const standaloneModel = standaloneReceipts.map((r) => {
+  const b = cmBreakdown(r);
+  const cmLines = cmLinesByDoc.get(r.cm_invoice_number) ?? [];
+  const origLines = r.original_invoice_number ? (origLinesByInvoice.get(r.original_invoice_number) ?? []) : [];
+  const usedOrig = new Set();
+  // flat typed row list (orig above its cm, orig-missing marker when the mirror
+  // lacks the billed line) — the template stays a single expression-bodied map,
+  // which is all the Astro compiler accepts inside nested expressions.
+  const rows: StandaloneRow[] = [];
+  for (const cl of cmLines) {
+    const oi = origLines.findIndex((ol, idx) => !usedOrig.has(idx) && ol.item_number && cl.item_number && String(ol.item_number).trim().toUpperCase() === String(cl.item_number).trim().toUpperCase());
+    if (oi >= 0) { usedOrig.add(oi); rows.push({ kind: "orig", cl, ol: origLines[oi] }); }
+    else rows.push({ kind: "orig-missing", cl, ol: null });
+    rows.push({ kind: "cm", cl, ol: null });
+  }
+  return { r, b, rows };
+});
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   const agreement = l.agreement_number
@@ -223,36 +282,47 @@ const reasonFor = (l: CmLine) => {
 
     {standaloneReceipts.length > 0 && (
       <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Expand a row to see the memo's own lines; Approve accepts the credit as-is, Re-request keeps our request open.</p>
-        <table>
-          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Original invoice</th><th class="num">Expected</th><th></th></tr></thead>
-          <tbody>
-            {standaloneReceipts.map((r) => (
-              <>
-                <tr data-receipt={r.cm_invoice_number}>
-                  <td>{r.cm_invoice_number}</td>
-                  <td class="num">{money(Number(r.cm_total))}</td>
-                  <td>{r.cm_invoice_date ?? ""}</td>
-                  <td>{r.match_state.replace(/_/g, " ")}</td>
-                  <td>{r.original_invoice_number ?? "—"}</td>
-                  <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
-                  <td>
-                    <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
-                    <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
-                  </td>
-                </tr>
-                {(cmLinesByDoc.get(r.cm_invoice_number) ?? []).map((cl) => (
+        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Each is audited the same way: the original invoice's billed line (light red, with the agreement price) above the vendor's credited line (light green).</p>
+        {standaloneModel.map(({ r, b, rows }) => (
+          <div class="cmw-invoice" data-receipt={r.cm_invoice_number}>
+            <p class="cmw-receipt-strip">
+              <b>Credit memo {r.cm_invoice_number}</b> received {r.cm_invoice_date ?? ""} · {r.match_state.replace(/_/g, " ")}
+              {r.original_invoice_number && <span>· original invoice <b>{r.original_invoice_number}</b></span>}
+              {b.lineCredit != null
+                ? <span>· <b>{money(b.lineCredit)}</b> line credit{b.tax != null && b.tax > 0 ? " + " + money(b.tax) + " sales tax" : ""} = {money(b.total)} total</span>
+                : <span>· <b>{money(b.total)}</b> credited</span>}
+              {r.expected_credit != null && <span>· vs <b>{money(Number(r.expected_credit))}</b> requested (ex-tax)</span>}
+              <button class="cmw-approve" data-receipt-review="approve" type="button" title="Accept the credit as-is">Approve</button>
+              <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button" title="Keep our request open">Re-request</button>
+            </p>
+            <table>
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Agreement</th><th class="num">Extended</th></tr></thead>
+              <tbody>
+                {rows.map((row) => row.kind === "orig" ? (
+                  <tr class="cmw-req-row">
+                    <td>Billed on {r.original_invoice_number}: {row.ol!.item_number}{row.ol!.item_description ? ` — ${cleanCmDesc(row.ol!.item_description)}` : ""}</td>
+                    <td class="num">{row.ol!.qty} {row.ol!.uom}</td>
+                    <td class="num">{row.ol!.unit_price != null ? money(row.ol!.unit_price) : "—"}</td>
+                    <td class="num">{row.ol!.negotiated_price != null ? money(row.ol!.negotiated_price) : "No Price"}</td>
+                    <td class="num">{row.ol!.extended_price != null ? money(row.ol!.extended_price) : "—"}</td>
+                  </tr>
+                ) : row.kind === "orig-missing" ? (
+                  <tr class="cmw-req-row">
+                    <td colspan="5">Original invoice line not found in the audit mirror{r.original_invoice_number ? " for " + r.original_invoice_number : ""} — verify against the invoice document.</td>
+                  </tr>
+                ) : (
                   <tr class="cmw-cm-row">
-                    <td colspan="4">{cl.item_number}{cl.item_description ? ` — ${cleanCmDesc(cl.item_description)}` : ""}</td>
-                    <td class="num">{cl.qty} {cl.uom}</td>
-                    <td class="num">{cl.unit_price != null ? money(cl.unit_price) : "—"}</td>
-                    <td class="num">{cl.extended_price != null ? money(cl.extended_price) : "—"}</td>
+                    <td><span class="cmw-cm-tag">CM</span> {row.cl.item_number}{row.cl.item_description ? ` — ${cleanCmDesc(row.cl.item_description)}` : ""}</td>
+                    <td class="num">{row.cl.qty} {row.cl.uom}</td>
+                    <td class="num">{row.cl.unit_price != null ? money(row.cl.unit_price) : "—"}</td>
+                    <td class="num">—</td>
+                    <td class="num"><b>{row.cl.extended_price != null ? money(Math.abs(row.cl.extended_price)) : "—"}</b></td>
                   </tr>
                 ))}
-              </>
-            ))}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
+        ))}
       </div>
     )}
 
@@ -287,10 +357,19 @@ const reasonFor = (l: CmLine) => {
                   ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
                   : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
               </>); })()}</p>
-              {(() => { const pairing = pairingFor(r.invoice_number); return (<>
-                {pairing.receipts.map((rc) => (
+              {(() => { const pairing = pairingFor(r.invoice_number, r.expected_credit); return (<>
+                {pairing.receipts.map(({ rc, b, d }) => (
                   <p class="cmw-receipt-strip" data-receipt={rc.cm_invoice_number}>
-                    <b>Credit memo {rc.cm_invoice_number}</b> received {rc.cm_invoice_date ?? ""} · <b>{money(Math.abs(Number(rc.cm_total)))}</b> credited vs <b>{money(r.expected_credit)}</b> requested · {matchBasisLabel(rc)}
+                    <b>Credit memo {rc.cm_invoice_number}</b> received {rc.cm_invoice_date ?? ""} · {matchBasisLabel(rc)}
+                    {b.lineCredit != null
+                      ? <span>· <b>{money(b.lineCredit)}</b> line credit{b.tax != null && b.tax > 0 ? " + " + money(b.tax) + " sales tax" : ""} = {money(b.total)} total · vs <b>{money(r.expected_credit)}</b> requested (ex-tax)</span>
+                      : <span>· <b>{money(b.total)}</b> credited vs <b>{money(r.expected_credit)}</b> requested</span>}
+                    {d != null && Math.abs(d) >= 0.01 && (
+                      <span class:list={["cmw-delta", d > 0 ? "cmw-delta-short" : "cmw-delta-over"]}>
+                        {d > 0 ? "lines SHORT " + money(d) : "lines over by " + money(Math.abs(d))}
+                      </span>
+                    )}
+                    {d != null && Math.abs(d) < 0.01 && <span class="cmw-delta cmw-delta-even">lines match the request</span>}
                     <button class="cmw-approve" data-receipt-review="approve" type="button" title="Accept this credit as satisfying the request">Approve</button>
                     <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button" title="Keep our request open — the credit does not cover it">Re-request</button>
                   </p>
@@ -365,6 +444,10 @@ const reasonFor = (l: CmLine) => {
   .cmw-cm-row td{background:#e9f7ef}
   .cmw-cm-tag{display:inline-block;background:#137a4d;color:#fff;border-radius:5px;padding:1px 6px;font-size:10.5px;font-weight:700;margin-right:5px}
   .cmw-receipt-strip{margin:8px 0 6px;padding:8px 11px;border:1px solid #bfe6d0;background:#e9f7ef;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .cmw-delta{border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:750}
+  .cmw-delta-short{background:#fbe2e2;color:#a51f1f}
+  .cmw-delta-over{background:#fbf0d4;color:#946400}
+  .cmw-delta-even{background:#e3f5ec;color:#137a4d}
   .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
   .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
   .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
