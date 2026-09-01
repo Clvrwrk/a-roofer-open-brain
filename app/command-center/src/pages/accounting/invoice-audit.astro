@@ -137,9 +137,13 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
         {/* The refresh script REPLACES the innerHTML of [data-kpi-sub="awaiting"], so the
             count must live outside it or it gets wiped on the first poll. */}
         <span class="iv-kpi-val" data-kpi-val="awaiting">{kpi.awaitingCount.toLocaleString()}</span>
-        <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} sent · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
+        <span class="iv-kpi-sub" data-kpi-sub="awaiting">{money(kpi.awaitingTotal)} outstanding · <span class:list={[kpi.awaitingOverdue > 0 && "iv-overdue"]} data-kpi-overdue>{kpi.awaitingOverdue}</span> overdue (+14d)</span>
+        {/* Collected = requests the vendor satisfied: the reconcile job auto-marks a CM
+            document 'received' only on an exact vendor-scoped amount match; anything off
+            by a cent goes to the human review table in Sent CM instead. */}
+        <span class="iv-kpi-sub" data-kpi-sub="collected">{kpi.cmReceivedCount.toLocaleString()} collected ({money(kpi.cmReceivedTotal)}) · <span class:list={[kpi.cmReceiptsPendingReview > 0 && "iv-overdue"]}>{kpi.cmReceiptsPendingReview}</span> received CMs need review</span>
         <div class="iv-btnrow">
-          <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/sent" title="The sent credit-memo workspace — every request already with a vendor, awaiting credit">Chase in Sent CM</a>
+          <a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/sent" title="The sent credit-memo workspace — every request already with a vendor, awaiting credit, plus received CMs that need a human match call">Chase in Sent CM</a>
         </div>
       </div>
 

@@ -117,7 +117,19 @@ async function upsertInvoice(payload) {
   return row;
 }
 
+// Deterministic line id: uuid derived from (invoice_id, line_number). The weekly
+// SRS CSV re-lists every still-open invoice, so re-parses are ROUTINE — random ids
+// meant each re-ingest deleted+reinserted lines under fresh uuids, orphaning every
+// invoice_line_audit decision keyed to the old ids and re-presenting audited
+// invoices as new work (Chris caught 0050033288-003, 2026-09-01: 33 invoices /
+// 211 decisions orphaned). Same (invoice, position) → same id, every parse.
+function deterministicLineId(invoiceId, lineNumber) {
+  const h = createHash("md5").update(`${invoiceId}:${lineNumber}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
 async function replaceLines(invoiceId, lines) {
+  for (const l of lines) l.id = deterministicLineId(invoiceId, l.line_number);
   // Scoped delete inside one invoice only (re-parse path), then insert.
   await rest(`vendor_invoice_lines?invoice_id=eq.${invoiceId}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   if (lines.length) await rest("vendor_invoice_lines", { method: "POST", body: JSON.stringify(lines), headers: { Prefer: "return=minimal" } });
