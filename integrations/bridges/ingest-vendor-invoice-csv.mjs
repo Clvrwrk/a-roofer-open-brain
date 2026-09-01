@@ -509,6 +509,12 @@ async function main() {
     else { kind = "invoice_csv"; result = await ingestQxoDetail(vendor.id, file); }
     await registerUpload(vendor.id, file, kind, result.invoices, "parsed", null);
     console.log(`${slug} ${kind}: ${JSON.stringify(result)}`);
+    // Alex pass rides every ingest, not just the 07:30 ABC nightly — a mid-day
+    // manual batch otherwise sits with its No-Price lines as fake human audit
+    // work until the next morning (Chris caught this on the 2026-09-01 SRS
+    // batch: 64 No-Price lines showed "Review" that Alex should have stamped).
+    const triage = await rest("rpc/alex_no_price_triage", { method: "POST", body: "{}" });
+    console.log(`alex triage: ${JSON.stringify(triage)}`);
   } catch (e) {
     await registerUpload(vendor.id, file, kind ?? "invoice_csv", 0, "failed", e.message).catch(() => {});
     throw e;
