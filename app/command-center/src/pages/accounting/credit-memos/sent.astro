@@ -139,15 +139,45 @@ if (client) {
   }
 }
 
-const vendors = [...new Set(requests.map((r) => r.vendor))].sort();
 const money = (n: number) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const sentFor = (vendor: string) => requests.filter((r) => r.vendor === vendor);
-const vendorTotal = (vendor: string) => sentFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
-const vendorLineCount = (vendor: string) => sentFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
 const day = (iso: string | null) => (iso ? String(iso).slice(0, 10) : null);
 const nowIso = new Date().toISOString();
 const isOverdue = (r: { follow_up_due_at: string | null }) => !!r.follow_up_due_at && String(r.follow_up_due_at) < nowIso;
-const overdueFor = (vendor: string) => sentFor(vendor).filter(isOverdue).length;
+
+// ── invoice-audit-style nesting (Chris 2026-09-01): every CM work surface
+// groups PE Office → Vendor → Vendor Branch → line detail, exactly like
+// /accounting/invoice-audit. Shared header contract (loadCmRequestHeaders)
+// supplies office + branch per invoice; unresolved pieces are NAMED groups,
+// never silently merged. Weekly CM carries the same tree — keep them in sync.
+type Req = (typeof requests)[number];
+interface CmTreeBranch { branch: string; invoices: Req[]; }
+interface CmTreeVendor { vendor: string; branches: CmTreeBranch[]; invoices: Req[]; }
+interface CmTreeOffice { office: string; vendors: CmTreeVendor[]; invoices: Req[]; }
+const buildCmTree = (rows: Req[]): CmTreeOffice[] => {
+  const om = new Map<string, Map<string, Map<string, Req[]>>>();
+  for (const r of rows) {
+    const h = headers.get(r.invoice_number);
+    const office = h?.office || "Office not resolved";
+    const branch = h?.branchName || h?.branchNumber
+      ? (h?.branchNumber ? (h?.branchName ? h.branchName + " (" + h.branchNumber + ")" : String(h.branchNumber)) : String(h?.branchName))
+      : "Branch not resolved";
+    const vm = om.get(office) ?? new Map(); om.set(office, vm);
+    const bm = vm.get(r.vendor) ?? new Map(); vm.set(r.vendor, bm);
+    const list = bm.get(branch) ?? []; bm.set(branch, list);
+    list.push(r);
+  }
+  return [...om.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([office, vm]) => {
+    const vendorGroups = [...vm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([vendor, bm]) => {
+      const branches = [...bm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([branch, invoices]) => ({ branch, invoices }));
+      return { vendor, branches, invoices: branches.flatMap((b) => b.invoices) };
+    });
+    return { office, vendors: vendorGroups, invoices: vendorGroups.flatMap((v) => v.invoices) };
+  });
+};
+const lineCountOf = (rows: Req[]) => rows.reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+const totalOf = (rows: Req[]) => rows.reduce((s, r) => s + r.expected_credit, 0);
+const overdueOf = (rows: Req[]) => rows.filter(isOverdue).length;
+const tree = buildCmTree(requests);
 // Same header contract as Weekly CM — loaded through the shared helper so the two
 // surfaces cannot drift apart.
 // PE Office · Vendor · Vendor branch (id) · Job# · Invoice date. Split so the job can be
@@ -328,22 +358,38 @@ const reasonFor = (l: CmLine) => {
 
     {requests.length === 0 && <p class="cmw-empty">No sent credit memo requests are awaiting credit.</p>}
 
-    {vendors.map((vendor) => (
-      <details class="cmw-vendor" open>
+    {tree.map((o) => (
+      <details class="cmw-office" open>
         <summary>
-          <b>{vendor}</b>
-          <span class="cmw-sum">
-            {sentFor(vendor).length} sent invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
-            {overdueFor(vendor) > 0 && <span class="cmw-overdue-pill">{overdueFor(vendor)} overdue (+14d)</span>}
+          <span class="cmw-chev">›</span>
+          <span class="cmw-office-name">{o.office}</span>
+          <span class="cmw-mini">
+            <span>{o.invoices.length} <em>sent</em></span>
+            <span>{lineCountOf(o.invoices)} <em>lines</em></span>
+            <span><b>{money(totalOf(o.invoices))}</b> <em>requested</em></span>
+            {overdueOf(o.invoices) > 0 && <span class="cmw-overdue-pill">{overdueOf(o.invoices)} overdue (+14d)</span>}
           </span>
         </summary>
-        <div class="cmw-email">
-          <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>Requested</b></p>
-          <p>We requested credit memos on {vendorLineCount(vendor)} lines across {sentFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
-          <p>Total credit Requested: <b>{money(vendorTotal(vendor))}</b>.</p>
-          <p>Where an agreement lapsed with no successor in place we priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
-          <p>Please issue the credits against the original invoice numbers and confirm.</p>
-          {sentFor(vendor).map((r) => (
+        <div class="cmw-office-body">
+        {o.vendors.map((v) => (
+      <details class="cmw-vendor" open>
+        <summary>
+          <span class="cmw-chev">›</span>
+          <b>{v.vendor}</b>
+          <span class="cmw-sum">
+            {v.invoices.length} sent invoice(s) · {lineCountOf(v.invoices)} line(s) · <b>{money(totalOf(v.invoices))}</b>
+            {overdueOf(v.invoices) > 0 && <span class="cmw-overdue-pill">{overdueOf(v.invoices)} overdue (+14d)</span>}
+          </span>
+        </summary>
+        {v.branches.map((br) => (
+        <details class="cmw-branch" open>
+          <summary>
+            <span class="cmw-chev">›</span>
+            <span class="cmw-branch-name">{br.branch}</span>
+            <span class="cmw-sum">{br.invoices.length} invoice(s) · {lineCountOf(br.invoices)} line(s) · <b>{money(totalOf(br.invoices))}</b></span>
+          </summary>
+          <div class="cmw-email">
+          {br.invoices.map((r) => (
             <div class="cmw-invoice" data-invoice={r.invoice_number}>
               <p class="cmw-inv-head">
                 <b>Invoice {r.invoice_number}</b> — credit Requested: <b>{money(r.expected_credit)}</b>
@@ -352,8 +398,9 @@ const reasonFor = (l: CmLine) => {
                 {" · "}<a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
                 <button class="cmw-approve cmw-received" data-cm-received={r.invoice_number} type="button" title="The vendor credit landed — close this request">Mark received</button>
               </p>
-              <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
-                {m.lead} · {m.jobNumber
+              {/* office/vendor/branch live in the tree above — the invoice line keeps job + date */}
+              <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, v.vendor); return (<>
+                {m.jobNumber
                   ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
                   : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
               </>); })()}</p>
@@ -402,6 +449,11 @@ const reasonFor = (l: CmLine) => {
               )}
             </div>
           ))}
+          </div>
+        </details>
+        ))}
+      </details>
+        ))}
         </div>
       </details>
     ))}
@@ -409,7 +461,24 @@ const reasonFor = (l: CmLine) => {
 </AppShell>
 
 <style>
-  .cmw{padding:8px 4px 40px;max-width:900px}
+  /* Full-width like the Invoice Audit — the 900px email column left a dead
+     right half and stacked the action buttons (Chris 2026-09-01). */
+  .cmw{padding:8px 4px 40px}
+  /* Office → Vendor → Branch nesting, same visual grammar as .iv-office/.iv-branch */
+  .cmw-office{background:#fff;border:1px solid #e3e8ef;border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .cmw-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .cmw-office>summary::-webkit-details-marker{display:none}
+  .cmw-office-name{font-weight:750;font-size:15px;flex:1}
+  .cmw-office-body{padding:4px 12px 12px;border-top:1px solid #e3e8ef}
+  .cmw-chev{color:#6b7886;transition:transform .15s;font-size:15px}
+  details[open]>summary .cmw-chev{transform:rotate(90deg)}
+  .cmw-mini{display:flex;gap:16px;align-items:center;font-size:12px;color:#6b7886}
+  .cmw-mini b{font-variant-numeric:tabular-nums}
+  .cmw-mini em{font-style:normal;text-transform:uppercase;font-size:10px;letter-spacing:.03em}
+  .cmw-branch{border:1px solid #e3e8ef;border-radius:10px;margin:8px 0;background:#fff}
+  .cmw-branch>summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .cmw-branch>summary::-webkit-details-marker{display:none}
+  .cmw-branch-name{font-weight:700;font-size:13.5px}
   .cmw-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .cmw-bar h1{font-size:22px;margin:0}
   .cmw-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -420,6 +489,7 @@ const reasonFor = (l: CmLine) => {
   .cmw-warn{background:#fbf0d4;color:#946400;border:1px solid #f0dca4;border-radius:8px;padding:8px 11px;margin-bottom:18px}
   .cmw-empty{color:#6b7886;font-size:13px;padding:10px 2px}
   .cmw-vendor{border:1px solid #e3e8ef;border-radius:12px;margin-bottom:14px;background:#fff}
+  .cmw-office .cmw-vendor{background:#f7f8fb;margin:8px 0}
   .cmw-vendor>summary{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;font-size:15px;flex-wrap:wrap}
   .cmw-sum{color:#6b7886;font-size:13px;display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
   .cmw-overdue-pill{background:#fbe2e2;color:#a51f1f;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700}
