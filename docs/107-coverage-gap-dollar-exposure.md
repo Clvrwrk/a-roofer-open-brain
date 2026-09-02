@@ -140,8 +140,9 @@ wrong, and it hid the largest un-triaged pair in the system:
 > reach, so the coverage surface reports `priced_items = 0` for the pair.**
 
 289 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
-that matters. The queue is now two rows: Denver × SRS ($17,437.63 of spend, `unrecorded`) and
-Atlanta × ABC ($5,226.90, `pending`).
+that matters. The queue is two rows: Denver × SRS (`unrecorded`) and Atlanta × ABC (`pending`).
+As measured on 2026-08-20 that was $17,437.63 and $5,226.90; the Denver figure has since moved
+with a credit memo — see the 2026-09-02 addendum for the current pair of numbers.
 
 #### Correction — what "prices nothing" does and does not mean
 
@@ -525,3 +526,50 @@ PEC-226's item backfill, main's mig 267 effective-date backdate, and this 13-mig
 Denver × SRS is still `priced_items = 0`, because none of them touch the branch-identity
 gate. That gate is decision 1 below, and it has grown from a 22-item question to a 128-item
 one while waiting.
+
+
+---
+
+## Addendum — 2026-09-02: the first figure to move in ten days, and why
+
+Every daily re-verification from 2026-08-24 to 2026-09-01 returned identical numbers. On
+2026-09-02 one moved:
+
+| Metric | 2026-09-01 | 2026-09-02 | |
+|---|---:|---:|---|
+| Chase queue rows | 2 | 2 | unchanged |
+| Chase queue spend | $22,664.53 | **$22,589.10** | **−$75.43** |
+| Denver × SRS invoices | 4 | **5** | **+1** |
+| Denver × SRS spend | $17,437.63 | **$17,362.20** | **−$75.43** |
+| Atlanta × ABC | 5 / $5,226.90 | 5 / $5,226.90 | unchanged |
+| `v_agreement_unreachable` | 4 / 247 / 128 on `AMSDE` | 4 / 247 / 128 | unchanged |
+| Unresolved branch spend | $27,566.56 | $27,566.56 | unchanged |
+| `anon` privileges on the four views | 0 | 0 | unchanged |
+
+**Cause, traced rather than assumed:** SRS credit memo `0050976695-001`, dated 2026-08-27 for
+−$75.43, was ingested at 2026-09-01 12:35 UTC by main's credit-memo received flow (migrations
+282–284). It attaches to the same Denver branch, so it joins the pair's `invoice_union` and
+nets against the total.
+
+**This is the spend view behaving correctly, not a defect.** `v_office_vendor_spend` sums
+invoice totals, and a credit memo is a negative total — so pair spend is inherently *net of
+credits*. The pair already carried one credit (`0050095528-001`, −$657.61) before this work
+began; that is why the figure was never a gross purchase number.
+
+Two consequences worth carrying forward:
+
+1. **The un-audited figure is not stable, and should never be quoted as though it were.** It
+   moves whenever a credit memo lands. The Agreement Builder previously rendered a hardcoded
+   `$17,437.63` in its explanatory footnote — accurate the day it was written, wrong by
+   $75.43 ten days later, and destined to drift again. That figure is now gone from the
+   surface: the note states the principle (totals include tax and freight, are net of credit
+   memos, and are always higher than the genuinely unpriced line value) without a
+   pair-specific number that nothing keeps current.
+2. **The branch-identity decision is untouched by any of it.** `priced_items` is still 0 and
+   `v_agreement_unreachable` is unchanged at 4 agreements / 247 items / 128 on `AMSDE`. The
+   prediction in this document has now held across a **fourth** independent round of other
+   people's work.
+
+Deliberately NOT rewritten: the dated tables and migration headers above, and the 2026-08-20
+daily log. Each was true when written, and a document that edits its own history to look
+consistent is worth less than one that shows the movement.

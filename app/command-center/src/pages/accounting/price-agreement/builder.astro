@@ -148,8 +148,8 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
         as no-price by design and is not something to chase.
         <br />
         <small>Figures are invoice <b>totals</b>, which include tax, freight, and lines the line-level path does price —
-        they are not the un-audited amount. Denver × SRS reads {money(17437.63)} of spend against $13,464.80 of
-        genuinely unpriced line value.</small>
+        they are not the un-audited amount, and they are net of any credit memos posted against the pair. The genuinely
+        unpriced line value is always lower, and is measured on the line-level path rather than shown here.</small>
       </p>
     )}
 

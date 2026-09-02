@@ -78,8 +78,11 @@ export interface CoverageVendor {
   /**
    * Invoice TOTAL booked against this office x vendor. Note this is not the same as
    * un-audited value: it includes tax, freight, and lines the separate line-level path
-   * does price. Denver x SRS reads $17,437.63 here while only $13,464.80 of line value is
-   * actually unpriced. Label it as spend, never as "un-audited".
+   * does price, and it is NET OF CREDIT MEMOS (a credit is a negative total and joins the
+   * same union). Measured on 2026-08-20, Denver x SRS read $17,437.63 here against only
+   * $13,464.80 of genuinely unpriced line value; by 2026-09-02 the spend half had moved to
+   * $17,362.20 on one incoming credit, which is why no figure like this is hardcoded into a
+   * surface. Label it as spend, never as "un-audited".
    */
   spend: number;
   branches: CoverageBranch[];
@@ -175,9 +178,10 @@ const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
  *  1. A gap with no invoices is theoretical — branches sit in the ring, nothing was bought.
  *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work.
  *  3. `spend` is the invoice TOTAL, which includes tax, freight, and lines the separate
- *     line-level path does price. It is NOT the un-audited figure and must not be labelled
- *     as one — Denver x SRS reads $17,437.63 of spend against $13,464.80 of unpriced line
- *     value.
+ *     line-level path does price, and is net of credit memos. It is NOT the un-audited
+ *     figure and must not be labelled as one: on 2026-08-20 Denver x SRS carried $17,437.63
+ *     of spend against $13,464.80 of unpriced line value. Treat any such number as a
+ *     snapshot — a single credit memo moved that pair on 2026-09-02.
  */
 export function gapExposure(
   vendors: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "spend" | "isAccepted">[],
