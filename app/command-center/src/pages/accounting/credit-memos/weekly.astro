@@ -24,19 +24,18 @@ let requests: { invoice_number: string; status: string; expected_credit: number;
 const linesByInvoice = new Map<string, CmLine[]>();
 // PE office / vendor / vendor branch / job / invoice date for each claim header.
 let headers = new Map<string, CmRequestHeader>();
-interface CmReceipt {
-  cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
-  match_state: string; original_invoice_number: string | null; expected_credit: number | null;
-}
-let pendingReceipts: CmReceipt[] = [];
+// Received-credit review lives on ONE surface: Sent CM (the chase queue), which
+// pairs each credit against its original invoice with the tax breakout. This page
+// only assembles requests — it shows a COUNT and points across (Chris 2026-09-01:
+// the duplicate flat table here had none of the audit context and was removed).
+let receiptsPendingReview = 0;
 if (client) {
-  let receiptQuery = client
+  let receiptCountQuery = client
     .from("credit_memo_receipts")
-    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
+    .select("cm_invoice_number", { count: "exact", head: true })
     .eq("review_status", "pending");
-  if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
-  const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
-  pendingReceipts = (receiptRows ?? []) as CmReceipt[];
+  if (vendorParam) receiptCountQuery = receiptCountQuery.eq("vendor_slug", vendorParam);
+  receiptsPendingReview = (await receiptCountQuery).count ?? 0;
   let reqQuery = client
     .from("credit_memo_requests")
     .select("invoice_number, vendor_slug, status, expected_credit, packet")
@@ -82,6 +81,42 @@ const approvedFor = (vendor: string) => requests.filter((r) => r.vendor === vend
 const draftFor = (vendor: string) => requests.filter((r) => r.vendor === vendor && r.status === "draft");
 const vendorTotal = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
 const vendorLineCount = (vendor: string) => approvedFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+
+// ── invoice-audit-style nesting (Chris 2026-09-01): every CM work surface
+// groups PE Office → Vendor → Vendor Branch → line detail, exactly like
+// /accounting/invoice-audit. Sent CM carries the same tree — keep in sync.
+// The per-vendor copyable EMAIL keeps vendor-wide scope in the collapsed
+// preview below the tree (the email is a per-vendor artifact, not per office).
+type Req = (typeof requests)[number];
+interface CmTreeBranch { branch: string; invoices: Req[]; }
+interface CmTreeVendor { vendor: string; branches: CmTreeBranch[]; invoices: Req[]; }
+interface CmTreeOffice { office: string; vendors: CmTreeVendor[]; invoices: Req[]; }
+const buildCmTree = (rows: Req[]): CmTreeOffice[] => {
+  const om = new Map<string, Map<string, Map<string, Req[]>>>();
+  for (const r of rows) {
+    const h = headers.get(r.invoice_number);
+    const office = h?.office || "Office not resolved";
+    const branch = h?.branchName || h?.branchNumber
+      ? (h?.branchNumber ? (h?.branchName ? h.branchName + " (" + h.branchNumber + ")" : String(h.branchNumber)) : String(h?.branchName))
+      : "Branch not resolved";
+    const vm = om.get(office) ?? new Map(); om.set(office, vm);
+    const bm = vm.get(r.vendor) ?? new Map(); vm.set(r.vendor, bm);
+    const list = bm.get(branch) ?? []; bm.set(branch, list);
+    list.push(r);
+  }
+  return [...om.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([office, vm]) => {
+    const vendorGroups = [...vm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([vendor, bm]) => {
+      const branches = [...bm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([branch, invoices]) => ({ branch, invoices }));
+      return { vendor, branches, invoices: branches.flatMap((b) => b.invoices) };
+    });
+    return { office, vendors: vendorGroups, invoices: vendorGroups.flatMap((v) => v.invoices) };
+  });
+};
+const approvedOf = (rows: Req[]) => rows.filter((r) => r.status === "approved");
+const draftOf = (rows: Req[]) => rows.filter((r) => r.status === "draft");
+const lineCountOf = (rows: Req[]) => rows.reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+const totalOf = (rows: Req[]) => rows.reduce((s, r) => s + r.expected_credit, 0);
+const tree = buildCmTree(requests);
 // PE Office · Vendor · Vendor branch (id) · Job# · Invoice date — the context a human
 // (or the vendor) needs before acting on a claim. Missing pieces are named, not blanked.
 // PE Office · Vendor · Vendor branch (id) · Job# · Invoice date. Split so the job can be
@@ -99,6 +134,13 @@ const headerParts = (invoiceNumber: string, vendor: string) => {
     invoiced: h?.invoiceDate ? `Invoiced ${h.invoiceDate}` : "invoice date unknown",
   };
 };
+// Per-draft review state, precomputed so the tree template stays
+// expression-bodied (the Astro compiler rejects block arrows nested deep).
+const draftMeta = new Map(requests.filter((r) => r.status === "draft").map((r) => {
+  const claimLines = linesByInvoice.get(r.invoice_number) ?? [];
+  const reviewed = claimLines.filter((l) => l.reviewed_at).length;
+  return [r.invoice_number, { claimLines, reviewed, allReviewed: claimLines.length > 0 && reviewed === claimLines.length }];
+}));
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   // Every claim names the agreement it challenges the billed amount against
@@ -127,51 +169,129 @@ const reasonFor = (l: CmLine) => {
     </div>
     <p class="cmw-note">Vendor-specific request emails build from <b>approved</b> invoices only (docs/81 decision 8). Approve or un-approve invoices from the Invoice Audit dashboard. Drafts below are awaiting approval and are excluded from the email.</p>
 
-    {pendingReceipts.length > 0 && (
-      <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received — review required ({pendingReceipts.length}). A vendor credit arrived that does not exactly match an open request: Approve accepts it as satisfying the closest request; Re-request keeps our request in the weekly email.</p>
-        <table>
-          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Closest request</th><th class="num">Expected</th><th></th></tr></thead>
-          <tbody>
-            {pendingReceipts.map((r) => (
-              <tr data-receipt={r.cm_invoice_number}>
-                <td>{r.cm_invoice_number}</td>
-                <td class="num">{money(Number(r.cm_total))}</td>
-                <td>{r.cm_invoice_date ?? ""}</td>
-                <td>{r.match_state.replace(/_/g, " ")}</td>
-                <td>{r.original_invoice_number ?? "—"}</td>
-                <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
-                <td>
-                  <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
-                  <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    {receiptsPendingReview > 0 && (
+      <p class="cmw-note cmw-warn"><b>{receiptsPendingReview} received credit memo(s) need review</b> — the line-by-line audit (original invoice vs credit, with sales tax broken out) lives on the chase surface: <a href={`/accounting/credit-memos/sent${vendorParam ? `?vendor=${encodeURIComponent(vendorParam)}` : ""}`}>review in Sent CM →</a></p>
     )}
 
     {requests.length === 0 && <p class="cmw-empty">No draft or approved credit memo requests.</p>}
 
-    {vendors.map((vendor) => (
+    {tree.map((o) => (
+      <details class="cmw-office" open>
+        <summary>
+          <span class="cmw-chev">›</span>
+          <span class="cmw-office-name">{o.office}</span>
+          <span class="cmw-mini">
+            <span>{approvedOf(o.invoices).length} <em>approved</em></span>
+            <span>{lineCountOf(approvedOf(o.invoices))} <em>lines</em></span>
+            <span><b>{money(totalOf(approvedOf(o.invoices)))}</b> <em>requested</em></span>
+            {draftOf(o.invoices).length > 0 && <span class="cmw-draft-pill">{draftOf(o.invoices).length} draft awaiting approval</span>}
+          </span>
+        </summary>
+        <div class="cmw-office-body">
+        {o.vendors.map((v) => (
       <details class="cmw-vendor" open>
         <summary>
-          <b>{vendor}</b>
+          <span class="cmw-chev">›</span>
+          <b>{v.vendor}</b>
           <span class="cmw-sum">
-            {approvedFor(vendor).length} approved invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
-            {draftFor(vendor).length > 0 && <span class="cmw-draft-pill">{draftFor(vendor).length} draft awaiting approval</span>}
+            {approvedOf(v.invoices).length} approved invoice(s) · {lineCountOf(approvedOf(v.invoices))} line(s) · <b>{money(totalOf(approvedOf(v.invoices)))}</b>
+            {draftOf(v.invoices).length > 0 && <span class="cmw-draft-pill">{draftOf(v.invoices).length} draft awaiting approval</span>}
           </span>
-          {/* Records that THIS vendor's email went out. No external send happens here
-              (SOUL: nothing leaves the building without a human) — it moves the requests
-              from Claim it to Chase it and stamps the audit complete. */}
-          {approvedFor(vendor).length > 0 && (
+          {/* Records that this office group's approved requests went out with the vendor
+              email. No external send happens here (SOUL: nothing leaves the building
+              without a human). */}
+          {approvedOf(v.invoices).length > 0 && (
             <button class="cmw-approve cmw-marksent" type="button"
-              data-cm-mark-sent={vendor}
-              data-invoices={approvedFor(vendor).map((r) => r.invoice_number).join(",")}
-              data-total={money(vendorTotal(vendor))}
-              title="Record that this vendor's email has been sent — these requests move to the Sent CM chase queue">Mark sent →</button>
+              data-cm-mark-sent={v.vendor}
+              data-invoices={approvedOf(v.invoices).map((r) => r.invoice_number).join(",")}
+              data-total={money(totalOf(approvedOf(v.invoices)))}
+              title="Record these approved requests as sent — they move to the Sent CM chase queue">Mark sent →</button>
           )}
+        </summary>
+        {v.branches.map((br) => (
+        <details class="cmw-branch" open>
+          <summary>
+            <span class="cmw-chev">›</span>
+            <span class="cmw-branch-name">{br.branch}</span>
+            <span class="cmw-sum">{br.invoices.length} invoice(s) · {lineCountOf(br.invoices)} line(s) · <b>{money(totalOf(approvedOf(br.invoices)))}</b> approved</span>
+          </summary>
+          <div class="cmw-email">
+          {approvedOf(br.invoices).map((r) => (
+              <div class="cmw-invoice">
+                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
+                  <button class="cmw-approve cmw-marksent" type="button" data-cm-mark-sent={v.vendor}
+                    data-invoices={r.invoice_number} data-total={money(r.expected_credit)}
+                    title="Record this one invoice as sent — it moves to the Sent CM chase queue">Mark sent →</button></p>
+                {/* office/vendor/branch live in the tree above — the invoice line keeps job + date */}
+                <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, v.vendor); return (<>
+                {m.jobNumber
+                  ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
+                  : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
+              </>); })()}</p>
+                <table>
+                  <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
+                  <tbody>
+                    {(linesByInvoice.get(r.invoice_number) ?? []).map((l) => (
+                      <tr>
+                        <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
+                        <td class="num">{Number(l.quantity)}</td>
+                        <td class="num">{money(Number(l.invoiced_price))}</td>
+                        <td class="num">{money(Number(l.office_price))}</td>
+                        <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+          ))}
+          {draftOf(br.invoices).map((r) => (
+                <details class="cmw-draft-block" data-invoice={r.invoice_number}>
+                  <summary>
+                    <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`} onclick="event.stopPropagation()">{r.invoice_number}</a>
+                    <span>· {money(r.expected_credit)} · <span data-review-count>{draftMeta.get(r.invoice_number)?.reviewed ?? 0}</span>/{draftMeta.get(r.invoice_number)?.claimLines.length ?? 0} lines reviewed</span>
+                    <span class="cmw-draft-pill">draft — not in the email yet</span>
+                    {(draftMeta.get(r.invoice_number)?.claimLines.length ?? 0) > 0 && (
+                      <button class="cmw-approve" data-cm-approve={r.invoice_number} disabled={!draftMeta.get(r.invoice_number)?.allReviewed}
+                        title={draftMeta.get(r.invoice_number)?.allReviewed ? "Add this invoice to the vendor email" : "Review (check) every claim line first"} type="button">Approve</button>
+                    )}
+                    {(draftMeta.get(r.invoice_number)?.claimLines.length ?? 0) === 0 && <span class="cmw-noclaims">no claim lines</span>}
+                  </summary>
+                  {(draftMeta.get(r.invoice_number)?.claimLines.length ?? 0) > 0 && (
+                    <table>
+                      <thead><tr><th>Reviewed</th><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement</th><th class="num">Credit</th></tr></thead>
+                      <tbody>
+                        {(draftMeta.get(r.invoice_number)?.claimLines ?? []).map((l) => (
+                          <tr>
+                            <td class="chk"><input type="checkbox" data-review-line={l.id} checked={!!l.reviewed_at} title={l.reviewed_at ? `Reviewed by ${l.reviewed_by} ${String(l.reviewed_at).slice(0, 10)}` : "Mark this claim line as reviewed"} /></td>
+                            <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
+                            <td class="num">{Number(l.quantity)}</td>
+                            <td class="num">{money(Number(l.invoiced_price))}</td>
+                            <td class="num">{money(Number(l.office_price))}</td>
+                            <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </details>
+          ))}
+          </div>
+        </details>
+        ))}
+      </details>
+        ))}
+        </div>
+      </details>
+    ))}
+
+    {/* The copyable per-vendor EMAIL — vendor-wide scope (the email is a vendor
+        artifact; the tree above is the work surface). Collapsed by default. */}
+    {vendors.map((vendor) => (
+      <details class="cmw-vendor cmw-emailprev">
+        <summary>
+          <span class="cmw-chev">›</span>
+          <b>Email preview — {vendor}</b>
+          <span class="cmw-sum">{approvedFor(vendor).length} approved invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b></span>
         </summary>
         {approvedFor(vendor).length === 0 ? (
           <p class="cmw-empty">Nothing approved for {vendor} yet.</p>
@@ -184,14 +304,9 @@ const reasonFor = (l: CmLine) => {
             <p>Please issue the credits against the original invoice numbers and confirm.</p>
             {approvedFor(vendor).map((r) => (
               <div class="cmw-invoice">
-                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b> · <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
-                  <button class="cmw-approve cmw-marksent" type="button" data-cm-mark-sent={vendor}
-                    data-invoices={r.invoice_number} data-total={money(r.expected_credit)}
-                    title="Record this one invoice as sent — it moves to the Sent CM chase queue">Mark sent →</button></p>
+                <p class="cmw-inv-head"><b>Invoice {r.invoice_number}</b> — credit requested: <b>{money(r.expected_credit)}</b></p>
                 <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
-                {m.lead} · {m.jobNumber
-                  ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
-                  : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
+                {m.lead} · {m.jobNumber ? <span>Job {m.jobNumber}</span> : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
               </>); })()}</p>
                 <table>
                   <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
@@ -211,53 +326,32 @@ const reasonFor = (l: CmLine) => {
             ))}
           </div>
         )}
-        {draftFor(vendor).length > 0 && (
-          <div class="cmw-drafts">
-            <p class="cmw-drafts-title">Awaiting approval ({vendor}) — check every claim line to activate Approve; Approve adds the invoice to this vendor's email:</p>
-            {draftFor(vendor).map((r) => {
-              const claimLines = linesByInvoice.get(r.invoice_number) ?? [];
-              const reviewed = claimLines.filter((l) => l.reviewed_at).length;
-              const allReviewed = claimLines.length > 0 && reviewed === claimLines.length;
-              return (
-                <details class="cmw-draft-block" data-invoice={r.invoice_number}>
-                  <summary>
-                    <a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`} onclick="event.stopPropagation()">{r.invoice_number}</a>
-                    <span>· {money(r.expected_credit)} · <span data-review-count>{reviewed}</span>/{claimLines.length} lines reviewed</span>
-                    {claimLines.length > 0 && (
-                      <button class="cmw-approve" data-cm-approve={r.invoice_number} disabled={!allReviewed}
-                        title={allReviewed ? "Add this invoice to the vendor email" : "Review (check) every claim line first"} type="button">Approve</button>
-                    )}
-                    {claimLines.length === 0 && <span class="cmw-noclaims">no claim lines</span>}
-                  </summary>
-                  {claimLines.length > 0 && (
-                    <table>
-                      <thead><tr><th>Reviewed</th><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement</th><th class="num">Credit</th></tr></thead>
-                      <tbody>
-                        {claimLines.map((l) => (
-                          <tr>
-                            <td class="chk"><input type="checkbox" data-review-line={l.id} checked={!!l.reviewed_at} title={l.reviewed_at ? `Reviewed by ${l.reviewed_by} ${String(l.reviewed_at).slice(0, 10)}` : "Mark this claim line as reviewed"} /></td>
-                            <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
-                            <td class="num">{Number(l.quantity)}</td>
-                            <td class="num">{money(Number(l.invoiced_price))}</td>
-                            <td class="num">{money(Number(l.office_price))}</td>
-                            <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </details>
-              );
-            })}
-          </div>
-        )}
       </details>
     ))}
   </section>
 </AppShell>
 
 <style>
-  .cmw{padding:8px 4px 40px;max-width:900px}
+  /* Full-width like the Invoice Audit — the 900px email column left a dead
+     right half and stacked the action buttons (Chris 2026-09-01). */
+  .cmw{padding:8px 4px 40px}
+  /* Office → Vendor → Branch nesting, same visual grammar as .iv-office/.iv-branch */
+  .cmw-office{background:#fff;border:1px solid #e3e8ef;border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .cmw-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .cmw-office>summary::-webkit-details-marker{display:none}
+  .cmw-office-name{font-weight:750;font-size:15px;flex:1}
+  .cmw-office-body{padding:4px 12px 12px;border-top:1px solid #e3e8ef}
+  .cmw-chev{color:#6b7886;transition:transform .15s;font-size:15px}
+  details[open]>summary .cmw-chev{transform:rotate(90deg)}
+  .cmw-mini{display:flex;gap:16px;align-items:center;font-size:12px;color:#6b7886}
+  .cmw-mini b{font-variant-numeric:tabular-nums}
+  .cmw-mini em{font-style:normal;text-transform:uppercase;font-size:10px;letter-spacing:.03em}
+  .cmw-branch{border:1px solid #e3e8ef;border-radius:10px;margin:8px 0;background:#fff}
+  .cmw-branch>summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .cmw-branch>summary::-webkit-details-marker{display:none}
+  .cmw-branch-name{font-weight:700;font-size:13.5px}
+  .cmw-office .cmw-vendor{background:#f7f8fb;margin:8px 0}
+  .cmw-emailprev{margin-top:18px}
   .cmw-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .cmw-bar h1{font-size:22px;margin:0}
   .cmw-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -290,11 +384,6 @@ const reasonFor = (l: CmLine) => {
   .cmw-draft-block td.chk{text-align:center;width:64px}
   .cmw-draft-block td.chk input{width:16px;height:16px;accent-color:#137a4d;cursor:pointer}
   .cmw-noclaims{color:#6b7886;font-size:12px}
-  .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
-  .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
-  .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}
-  .cmw-receipts th.num,.cmw-receipts td.num{text-align:right}
-  .cmw-rerequest{margin-left:6px;font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer}
   .cmw-approve:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
   .cmw-approve{border:1px solid #137a4d;background:#e3f5ec;color:#137a4d;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer}
   .cmw-marksent{margin-left:8px;border-color:#5b46d8;background:#efecfd;color:#5b46d8}
@@ -330,20 +419,8 @@ const reasonFor = (l: CmLine) => {
   });
 
   document.addEventListener("click", async (ev) => {
-    const rbtn = (ev.target as HTMLElement)?.closest?.("[data-receipt-review]") as HTMLButtonElement | null;
-    if (rbtn) {
-      const row = rbtn.closest("[data-receipt]") as HTMLElement;
-      rbtn.disabled = true;
-      const res = await fetch("/api/credit-memos/receipt-review", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ cmInvoiceNumber: row.dataset.receipt, action: rbtn.dataset.receiptReview }),
-      }).then((r) => r.json()).catch(() => null);
-      if (res?.cmInvoiceNumber) row.remove();
-      else { rbtn.disabled = false; window.alert("Review failed: " + (res?.error_description || res?.error || "network error")); }
-      return;
-    }
+    // Received-credit review moved to Sent CM (the one review surface) — no
+    // receipt handler here any more.
     // Mark sent — records the vendor email as sent and moves the request to Chase it.
     const sbtn = (ev.target as HTMLElement)?.closest?.("[data-cm-mark-sent]") as HTMLButtonElement | null;
     if (sbtn) {

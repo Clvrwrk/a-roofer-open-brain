@@ -18,7 +18,7 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 const vendorParam = cmVendorBySlug(Astro.url.searchParams.get("vendor"))?.slug ?? null;
 
 interface CmLine {
-  id: number; invoice_number: string; item_description: string; quantity: number; invoiced_price: number;
+  id: number; invoice_number: string; item_number: string | null; item_description: string; quantity: number; invoiced_price: number;
   office_price: number; variance_ext: number; office_name: string; agreement_number: string | null;
   agreement_effective: string | null; agreement_expiry: string | null; match_method: string; paexp_tag: string | null;
   run_label: string; created_at: string; reviewed_by: string | null; reviewed_at: string | null;
@@ -32,16 +32,72 @@ let headers = new Map<string, CmRequestHeader>();
 interface CmReceipt {
   cm_invoice_number: string; cm_total: number; cm_invoice_date: string | null;
   match_state: string; original_invoice_number: string | null; expected_credit: number | null;
+  matched_request_id: string | null; vendor_slug: string;
 }
+// The credit memo document's own lines, keyed by cm invoice number — rendered
+// nested (light green) under the request lines (light red) they answer.
+interface CmDocLine { item_number: string | null; item_description: string | null; qty: number; uom: string; unit_price: number | null; extended_price: number | null; }
+interface OrigLine extends CmDocLine { negotiated_price: number | null; }
 let pendingReceipts: CmReceipt[] = [];
+const cmLinesByDoc = new Map<string, CmDocLine[]>();
+const origLinesByInvoice = new Map<string, OrigLine[]>();
 if (client) {
   let receiptQuery = client
     .from("credit_memo_receipts")
-    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit")
+    .select("cm_invoice_number, cm_total, cm_invoice_date, match_state, original_invoice_number, expected_credit, matched_request_id, vendor_slug")
     .eq("review_status", "pending");
   if (vendorParam) receiptQuery = receiptQuery.eq("vendor_slug", vendorParam);
   const { data: receiptRows } = await receiptQuery.order("created_at", { ascending: false }).limit(200);
   pendingReceipts = (receiptRows ?? []) as CmReceipt[];
+
+  // CM document lines: SRS/QXO from vendor_invoice_lines, ABC from abc_invoice_lines.
+  const nonAbc = pendingReceipts.filter((r) => r.vendor_slug !== "abc-supply").map((r) => r.cm_invoice_number);
+  const abc = pendingReceipts.filter((r) => r.vendor_slug === "abc-supply").map((r) => r.cm_invoice_number);
+  const CHUNK = 100;
+  for (let i = 0; i < nonAbc.length; i += CHUNK) {
+    const { data } = await client
+      .from("vendor_invoice_lines")
+      .select("invoice_number, item_number, item_description, ship_qty, price_uom, ship_uom, unit_price, extended_price")
+      .in("invoice_number", nonAbc.slice(i, i + CHUNK))
+      .limit(2000);
+    for (const l of data ?? []) {
+      const list = cmLinesByDoc.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.ship_qty ?? 0), uom: String(l.price_uom ?? l.ship_uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price) });
+      cmLinesByDoc.set(String(l.invoice_number), list);
+    }
+  }
+  for (let i = 0; i < abc.length; i += CHUNK) {
+    const { data } = await client
+      .from("abc_invoice_lines")
+      .select("invoice_number, item_number, item_description, quantity, uom, unit_price, extended_price")
+      .in("invoice_number", abc.slice(i, i + CHUNK))
+      .limit(2000);
+    for (const l of data ?? []) {
+      const list = cmLinesByDoc.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.quantity ?? 0), uom: String(l.uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price) });
+      cmLinesByDoc.set(String(l.invoice_number), list);
+    }
+  }
+
+  // Original-invoice audit rows for every receipt that names its original —
+  // so an unlinked / mismatched credit is audited the SAME way: what the
+  // vendor billed (and the agreement price) beside what the vendor credited.
+  const origInvoices = [...new Set(pendingReceipts.map((r) => r.original_invoice_number).filter(Boolean))] as string[];
+  for (let i = 0; i < origInvoices.length; i += CHUNK) {
+    const { data } = await client
+      .from("mv_invoice_audit_line")
+      .select("invoice_number, item_number, item_description, quantity, uom, unit_price, extended_price, negotiated_price")
+      .in("invoice_number", origInvoices.slice(i, i + CHUNK))
+      .limit(3000);
+    for (const l of data ?? []) {
+      const list = origLinesByInvoice.get(String(l.invoice_number)) ?? [];
+      list.push({ item_number: l.item_number, item_description: l.item_description, qty: Number(l.quantity ?? 0), uom: String(l.uom ?? ""), unit_price: l.unit_price == null ? null : Number(l.unit_price), extended_price: l.extended_price == null ? null : Number(l.extended_price), negotiated_price: l.negotiated_price == null ? null : Number(l.negotiated_price) });
+      origLinesByInvoice.set(String(l.invoice_number), list);
+    }
+  }
+  // Office/branch context for the originals too — the unlinked-credit section
+  // nests Office → Vendor → Branch exactly like everything else (Chris 2026-09-01).
+  for (const [k, v] of await loadCmRequestHeaders(client, origInvoices)) headers.set(k, v);
 
   let reqQuery = client
     .from("credit_memo_requests")
@@ -67,7 +123,7 @@ if (client) {
     for (let i = 0; i < invoiceNumbers.length; i += CHUNK) {
       let lineQuery = client
         .from("invoice_line_reaudit")
-        .select("id, run_label, invoice_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
+        .select("id, run_label, invoice_number, item_number, item_description, quantity, invoiced_price, office_name, office_price, variance_ext, agreement_number, agreement_effective, agreement_expiry, match_method, paexp_tag, created_at, reviewed_by, reviewed_at")
         .in("invoice_number", invoiceNumbers.slice(i, i + CHUNK))
         .eq("classification", "discrepancy");
       // Silo (docs/87): a colliding invoice number must not pull another vendor's lines.
@@ -82,19 +138,51 @@ if (client) {
       if (Number(l.variance_ext ?? 0) < 0.05) continue;
       (linesByInvoice.get(l.invoice_number) ?? linesByInvoice.set(l.invoice_number, []).get(l.invoice_number)!).push(l);
     }
-    headers = await loadCmRequestHeaders(client, invoiceNumbers);
+    // merge (never reassign) — the receipts section already seeded headers for
+    // the ORIGINAL invoices of unlinked credits.
+    for (const [k, v] of await loadCmRequestHeaders(client, invoiceNumbers)) headers.set(k, v);
   }
 }
 
-const vendors = [...new Set(requests.map((r) => r.vendor))].sort();
 const money = (n: number) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const sentFor = (vendor: string) => requests.filter((r) => r.vendor === vendor);
-const vendorTotal = (vendor: string) => sentFor(vendor).reduce((s, r) => s + r.expected_credit, 0);
-const vendorLineCount = (vendor: string) => sentFor(vendor).reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
 const day = (iso: string | null) => (iso ? String(iso).slice(0, 10) : null);
 const nowIso = new Date().toISOString();
 const isOverdue = (r: { follow_up_due_at: string | null }) => !!r.follow_up_due_at && String(r.follow_up_due_at) < nowIso;
-const overdueFor = (vendor: string) => sentFor(vendor).filter(isOverdue).length;
+
+// ── invoice-audit-style nesting (Chris 2026-09-01): every CM work surface
+// groups PE Office → Vendor → Vendor Branch → line detail, exactly like
+// /accounting/invoice-audit. Shared header contract (loadCmRequestHeaders)
+// supplies office + branch per invoice; unresolved pieces are NAMED groups,
+// never silently merged. Weekly CM carries the same tree — keep them in sync.
+type Req = (typeof requests)[number];
+interface CmTreeBranch { branch: string; invoices: Req[]; }
+interface CmTreeVendor { vendor: string; branches: CmTreeBranch[]; invoices: Req[]; }
+interface CmTreeOffice { office: string; vendors: CmTreeVendor[]; invoices: Req[]; }
+const buildCmTree = (rows: Req[]): CmTreeOffice[] => {
+  const om = new Map<string, Map<string, Map<string, Req[]>>>();
+  for (const r of rows) {
+    const h = headers.get(r.invoice_number);
+    const office = h?.office || "Office not resolved";
+    const branch = h?.branchName || h?.branchNumber
+      ? (h?.branchNumber ? (h?.branchName ? h.branchName + " (" + h.branchNumber + ")" : String(h.branchNumber)) : String(h?.branchName))
+      : "Branch not resolved";
+    const vm = om.get(office) ?? new Map(); om.set(office, vm);
+    const bm = vm.get(r.vendor) ?? new Map(); vm.set(r.vendor, bm);
+    const list = bm.get(branch) ?? []; bm.set(branch, list);
+    list.push(r);
+  }
+  return [...om.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([office, vm]) => {
+    const vendorGroups = [...vm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([vendor, bm]) => {
+      const branches = [...bm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([branch, invoices]) => ({ branch, invoices }));
+      return { vendor, branches, invoices: branches.flatMap((b) => b.invoices) };
+    });
+    return { office, vendors: vendorGroups, invoices: vendorGroups.flatMap((v) => v.invoices) };
+  });
+};
+const lineCountOf = (rows: Req[]) => rows.reduce((s, r) => s + (linesByInvoice.get(r.invoice_number)?.length ?? 0), 0);
+const totalOf = (rows: Req[]) => rows.reduce((s, r) => s + r.expected_credit, 0);
+const overdueOf = (rows: Req[]) => rows.filter(isOverdue).length;
+const tree = buildCmTree(requests);
 // Same header contract as Weekly CM — loaded through the shared helper so the two
 // surfaces cannot drift apart.
 // PE Office · Vendor · Vendor branch (id) · Job# · Invoice date. Split so the job can be
@@ -112,6 +200,125 @@ const headerParts = (invoiceNumber: string, vendor: string) => {
     invoiced: h?.invoiceDate ? `Invoiced ${h.invoiceDate}` : "invoice date unknown",
   };
 };
+// Nested review model (Chris 2026-09-01): a received CM renders INSIDE the sent
+// request's own block — each request claim line (light red) is followed by the
+// CM document line that answers it (light green), matched by item number, so the
+// human audits them pair by pair. CM lines with no request counterpart trail the
+// table, still green, labeled as extra.
+const receiptsByReqInvoice = new Map<string, CmReceipt[]>();
+for (const r of pendingReceipts) {
+  if (!r.original_invoice_number) continue;
+  const list = receiptsByReqInvoice.get(r.original_invoice_number) ?? [];
+  list.push(r);
+  receiptsByReqInvoice.set(r.original_invoice_number, list);
+}
+// Receipts whose request block is on this page nest there; the rest (no open
+// request, or the request already left the chase queue) keep the flat table.
+const renderedReqInvoices = new Set(requests.map((r) => r.invoice_number));
+const standaloneReceipts = pendingReceipts.filter(
+  (rc) => !rc.original_invoice_number || !renderedReqInvoices.has(rc.original_invoice_number));
+// CM line descriptions from the portal CSV carry trailing note rows
+// (SUB-TOTAL / Sales Tax separators). Keep the substance — item text, the
+// Orig Inv# ref, and the vendor's Reason — drop the ledger noise.
+const cleanCmDesc = (d: string | null) =>
+  String(d ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s && !/^\*+.*\*+$/.test(s) && !/^sales tax/i.test(s) && !/^sub-?total/i.test(s))
+    .join(" | ");
+const matchBasisLabel = (rc: CmReceipt) =>
+  rc.match_state === "amount_mismatch" && rc.matched_request_id
+    ? "the memo names this invoice (Orig Inv#)"
+    : rc.match_state.replace(/_/g, " ");
+// A CM's total includes sales tax; our requests are EX-tax. The honest
+// comparison is line credit vs requested — tax is derived, not guessed:
+// |CM total| − |sum of the memo's own lines| (Chris 2026-09-01: a $97.65 CM
+// against a $92.25 request is $90.00 in lines + $7.65 tax — SHORT $2.25).
+const cmBreakdown = (rc: CmReceipt) => {
+  const lines = cmLinesByDoc.get(rc.cm_invoice_number) ?? [];
+  const total = Math.abs(Number(rc.cm_total));
+  if (!lines.length) return { total, lineCredit: null as number | null, tax: null as number | null };
+  const lineCredit = Math.round(lines.reduce((s, l) => s + Math.abs(Number(l.extended_price ?? 0)), 0) * 100) / 100;
+  const tax = Math.round((total - lineCredit) * 100) / 100;
+  return { total, lineCredit, tax: tax >= -0.01 ? Math.max(0, tax) : null };
+};
+// requested − line credit: positive = the vendor shorted the lines.
+const lineDelta = (rc: CmReceipt, requested: number) => {
+  const b = cmBreakdown(rc);
+  return b.lineCredit == null ? null : Math.round((requested - b.lineCredit) * 100) / 100;
+};
+const pairingFor = (invoiceNumber: string, expectedCredit: number) => {
+  const receiptRows = receiptsByReqInvoice.get(invoiceNumber) ?? [];
+  const reqLines = linesByInvoice.get(invoiceNumber) ?? [];
+  const cmPool: { rc: CmReceipt; cl: CmDocLine; used: boolean }[] = receiptRows.flatMap((rc) =>
+    (cmLinesByDoc.get(rc.cm_invoice_number) ?? []).map((cl) => ({ rc, cl, used: false })));
+  const rows: ({ kind: "req"; line: CmLine } | { kind: "cm"; rc: CmReceipt; cl: CmDocLine; extra: boolean })[] = [];
+  for (const line of reqLines) {
+    rows.push({ kind: "req", line });
+    for (const p of cmPool) {
+      if (p.used || !p.cl.item_number || !line.item_number) continue;
+      if (String(p.cl.item_number).trim().toUpperCase() !== String(line.item_number).trim().toUpperCase()) continue;
+      p.used = true;
+      rows.push({ kind: "cm", rc: p.rc, cl: p.cl, extra: false });
+    }
+  }
+  for (const p of cmPool) if (!p.used) rows.push({ kind: "cm", rc: p.rc, cl: p.cl, extra: true });
+  // computed in the frontmatter so the template stays expression-only (the
+  // Astro compiler rejects block-bodied arrows nested inside expressions)
+  const receipts = receiptRows.map((rc) => ({ rc, b: cmBreakdown(rc), d: lineDelta(rc, expectedCredit) }));
+  return { receipts, rows };
+};
+// Standalone (no open request on this page) receipts, fully precomputed:
+// tax breakdown + original-invoice line paired under each credited line.
+interface StandaloneRow { kind: "orig" | "orig-missing" | "cm"; cl: CmDocLine; ol: OrigLine | null; }
+const standaloneModel = standaloneReceipts.map((r) => {
+  const b = cmBreakdown(r);
+  const cmLines = cmLinesByDoc.get(r.cm_invoice_number) ?? [];
+  const origLines = r.original_invoice_number ? (origLinesByInvoice.get(r.original_invoice_number) ?? []) : [];
+  const usedOrig = new Set();
+  // flat typed row list (orig above its cm, orig-missing marker when the mirror
+  // lacks the billed line) — the template stays a single expression-bodied map,
+  // which is all the Astro compiler accepts inside nested expressions.
+  const rows: StandaloneRow[] = [];
+  for (const cl of cmLines) {
+    const oi = origLines.findIndex((ol, idx) => !usedOrig.has(idx) && ol.item_number && cl.item_number && String(ol.item_number).trim().toUpperCase() === String(cl.item_number).trim().toUpperCase());
+    if (oi >= 0) { usedOrig.add(oi); rows.push({ kind: "orig", cl, ol: origLines[oi] }); }
+    else rows.push({ kind: "orig-missing", cl, ol: null });
+    rows.push({ kind: "cm", cl, ol: null });
+  }
+  return { r, b, rows };
+});
+// The unlinked credits nest Office → Vendor → Branch like every other work
+// surface, and default ROLLED UP (office rows only) so the section stays a few
+// lines tall instead of a wall of tables (Chris 2026-09-01). Office/branch come
+// from the ORIGINAL invoice's header.
+type SModel = (typeof standaloneModel)[number];
+interface SBranch { branch: string; entries: SModel[]; }
+interface SVendor { vendor: string; branches: SBranch[]; entries: SModel[]; }
+interface SOffice { office: string; vendors: SVendor[]; entries: SModel[]; }
+const standaloneTree: SOffice[] = (() => {
+  const om = new Map<string, Map<string, Map<string, SModel[]>>>();
+  for (const m of standaloneModel) {
+    const h = m.r.original_invoice_number ? headers.get(m.r.original_invoice_number) : undefined;
+    const office = h?.office || "Office not resolved";
+    const vendor = cmVendorLabel(m.r.vendor_slug) ?? m.r.vendor_slug;
+    const branch = h?.branchName || h?.branchNumber
+      ? (h?.branchNumber ? (h?.branchName ? h.branchName + " (" + h.branchNumber + ")" : String(h.branchNumber)) : String(h?.branchName))
+      : "Branch not resolved";
+    const vm = om.get(office) ?? new Map(); om.set(office, vm);
+    const bm = vm.get(vendor) ?? new Map(); vm.set(vendor, bm);
+    const list = bm.get(branch) ?? []; bm.set(branch, list);
+    list.push(m);
+  }
+  return [...om.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([office, vm]) => {
+    const vendorGroups = [...vm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([vendor, bm]) => {
+      const branches = [...bm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([branch, entries]) => ({ branch, entries }));
+      return { vendor, branches, entries: branches.flatMap((b) => b.entries) };
+    });
+    return { office, vendors: vendorGroups, entries: vendorGroups.flatMap((v) => v.entries) };
+  });
+})();
+const sTotal = (rows: SModel[]) => rows.reduce((s, m) => s + Math.abs(Number(m.r.cm_total)), 0);
 const reasonFor = (l: CmLine) => {
   const pct = l.office_price ? (((Number(l.invoiced_price) - Number(l.office_price)) / Number(l.office_price)) * 100).toFixed(1) : "?";
   const agreement = l.agreement_number
@@ -139,49 +346,120 @@ const reasonFor = (l: CmLine) => {
     <p class="cmw-note">Requests already <b>sent</b> to the vendor and awaiting credit — this is the chase queue. Mark received when the credit lands; the invoice then leaves this page. Use <a href="/accounting/credit-memos/weekly">Weekly CM</a> for requests still being assembled.</p>
     <p class="cmw-note cmw-warn">The email below is <b>rebuilt from today's audit lines</b> — no copy of the outbound message is stored, so a figure here can differ from what the vendor actually received if the line was re-audited after sending.</p>
 
-    {pendingReceipts.length > 0 && (
+    {standaloneReceipts.length > 0 && (
       <div class="cmw-vendor cmw-receipts">
-        <p class="cmw-drafts-title">Credit memos received — review required ({pendingReceipts.length}). A vendor credit arrived that does not exactly match an open request: Approve accepts it as satisfying the closest request; Re-request keeps our request open.</p>
-        <table>
-          <thead><tr><th>Credit memo</th><th class="num">Amount</th><th>Date</th><th>Match state</th><th>Closest request</th><th class="num">Expected</th><th></th></tr></thead>
-          <tbody>
-            {pendingReceipts.map((r) => (
-              <tr data-receipt={r.cm_invoice_number}>
-                <td>{r.cm_invoice_number}</td>
-                <td class="num">{money(Number(r.cm_total))}</td>
-                <td>{r.cm_invoice_date ?? ""}</td>
-                <td>{r.match_state.replace(/_/g, " ")}</td>
-                <td>{r.original_invoice_number ?? "—"}</td>
-                <td class="num">{r.expected_credit != null ? money(Number(r.expected_credit)) : "—"}</td>
-                <td>
-                  <button class="cmw-approve" data-receipt-review="approve" type="button">Approve</button>
-                  <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button">Re-request</button>
-                </td>
-              </tr>
+        <p class="cmw-drafts-title">Credit memos received with no open request on this page ({standaloneReceipts.length}) — returns, rebates, or credits whose request already closed. Nested by the ORIGINAL invoice's office and branch; expand to audit the billed line (light red, with agreement price) above the vendor's credited line (light green).</p>
+        {standaloneTree.map((o) => (
+          <details class="cmw-office">
+            <summary>
+              <span class="cmw-chev">›</span>
+              <span class="cmw-office-name">{o.office}</span>
+              <span class="cmw-mini">
+                <span>{o.entries.length} <em>credit memos</em></span>
+                <span><b>{money(sTotal(o.entries))}</b> <em>credited</em></span>
+              </span>
+            </summary>
+            <div class="cmw-office-body">
+            {o.vendors.map((v) => (
+          <details class="cmw-vendor" open>
+            <summary>
+              <span class="cmw-chev">›</span>
+              <b>{v.vendor}</b>
+              <span class="cmw-sum">{v.entries.length} credit memo(s) · <b>{money(sTotal(v.entries))}</b></span>
+            </summary>
+            {v.branches.map((br) => (
+            <details class="cmw-branch" open>
+              <summary>
+                <span class="cmw-chev">›</span>
+                <span class="cmw-branch-name">{br.branch}</span>
+                <span class="cmw-sum">{br.entries.length} credit memo(s) · <b>{money(sTotal(br.entries))}</b></span>
+              </summary>
+              <div class="cmw-email">
+              {br.entries.map(({ r, b, rows }) => (
+          <div class="cmw-invoice" data-receipt={r.cm_invoice_number}>
+            <p class="cmw-receipt-strip">
+              <b>Credit memo {r.cm_invoice_number}</b> received {r.cm_invoice_date ?? ""} · {r.match_state.replace(/_/g, " ")}
+              {r.original_invoice_number && <span>· original invoice <b>{r.original_invoice_number}</b></span>}
+              {b.lineCredit != null
+                ? <span>· <b>{money(b.lineCredit)}</b> line credit{b.tax != null && b.tax > 0 ? " + " + money(b.tax) + " sales tax" : ""} = {money(b.total)} total</span>
+                : <span>· <b>{money(b.total)}</b> credited</span>}
+              {r.expected_credit != null && <span>· vs <b>{money(Number(r.expected_credit))}</b> requested (ex-tax)</span>}
+              <button class="cmw-approve" data-receipt-review="approve" type="button" title="Accept the credit as-is">Approve</button>
+              <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button" title="Keep our request open">Re-request</button>
+            </p>
+            <table>
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Agreement</th><th class="num">Extended</th></tr></thead>
+              <tbody>
+                {rows.map((row) => row.kind === "orig" ? (
+                  <tr class="cmw-req-row">
+                    <td>Billed on {r.original_invoice_number}: {row.ol!.item_number}{row.ol!.item_description ? ` — ${cleanCmDesc(row.ol!.item_description)}` : ""}</td>
+                    <td class="num">{row.ol!.qty} {row.ol!.uom}</td>
+                    <td class="num">{row.ol!.unit_price != null ? money(row.ol!.unit_price) : "—"}</td>
+                    <td class="num">{row.ol!.negotiated_price != null ? money(row.ol!.negotiated_price) : "No Price"}</td>
+                    <td class="num">{row.ol!.extended_price != null ? money(row.ol!.extended_price) : "—"}</td>
+                  </tr>
+                ) : row.kind === "orig-missing" ? (
+                  <tr class="cmw-req-row">
+                    <td colspan="5">Original invoice line not found in the audit mirror{r.original_invoice_number ? " for " + r.original_invoice_number : ""} — verify against the invoice document.</td>
+                  </tr>
+                ) : (
+                  <tr class="cmw-cm-row">
+                    <td><span class="cmw-cm-tag">CM</span> {row.cl.item_number}{row.cl.item_description ? ` — ${cleanCmDesc(row.cl.item_description)}` : ""}</td>
+                    <td class="num">{row.cl.qty} {row.cl.uom}</td>
+                    <td class="num">{row.cl.unit_price != null ? money(row.cl.unit_price) : "—"}</td>
+                    <td class="num">—</td>
+                    <td class="num"><b>{row.cl.extended_price != null ? money(Math.abs(row.cl.extended_price)) : "—"}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+              ))}
+              </div>
+            </details>
             ))}
-          </tbody>
-        </table>
+          </details>
+            ))}
+            </div>
+          </details>
+        ))}
       </div>
     )}
 
     {requests.length === 0 && <p class="cmw-empty">No sent credit memo requests are awaiting credit.</p>}
 
-    {vendors.map((vendor) => (
-      <details class="cmw-vendor" open>
+    {tree.map((o) => (
+      <details class="cmw-office" open>
         <summary>
-          <b>{vendor}</b>
-          <span class="cmw-sum">
-            {sentFor(vendor).length} sent invoice(s) · {vendorLineCount(vendor)} line(s) · <b>{money(vendorTotal(vendor))}</b>
-            {overdueFor(vendor) > 0 && <span class="cmw-overdue-pill">{overdueFor(vendor)} overdue (+14d)</span>}
+          <span class="cmw-chev">›</span>
+          <span class="cmw-office-name">{o.office}</span>
+          <span class="cmw-mini">
+            <span>{o.invoices.length} <em>sent</em></span>
+            <span>{lineCountOf(o.invoices)} <em>lines</em></span>
+            <span><b>{money(totalOf(o.invoices))}</b> <em>requested</em></span>
+            {overdueOf(o.invoices) > 0 && <span class="cmw-overdue-pill">{overdueOf(o.invoices)} overdue (+14d)</span>}
           </span>
         </summary>
-        <div class="cmw-email">
-          <p class="cmw-email-meta">Subject: [{vendor}] Credit memo request - Pro Exteriors LLC - {sentFor(vendor).length} invoices, {money(vendorTotal(vendor))} — <b>Requested</b></p>
-          <p>We requested credit memos on {vendorLineCount(vendor)} lines across {sentFor(vendor).length} invoices. Each line was billed above the price agreement in force for its Pro Exteriors office location on the invoice date. Detail and reasoning are listed by invoice; the same detail is attached as a spreadsheet.</p>
-          <p>Total credit Requested: <b>{money(vendorTotal(vendor))}</b>.</p>
-          <p>Where an agreement lapsed with no successor in place we priced against that agreement, which remains in force until replaced; those lines carry a PAEXP reference.</p>
-          <p>Please issue the credits against the original invoice numbers and confirm.</p>
-          {sentFor(vendor).map((r) => (
+        <div class="cmw-office-body">
+        {o.vendors.map((v) => (
+      <details class="cmw-vendor" open>
+        <summary>
+          <span class="cmw-chev">›</span>
+          <b>{v.vendor}</b>
+          <span class="cmw-sum">
+            {v.invoices.length} sent invoice(s) · {lineCountOf(v.invoices)} line(s) · <b>{money(totalOf(v.invoices))}</b>
+            {overdueOf(v.invoices) > 0 && <span class="cmw-overdue-pill">{overdueOf(v.invoices)} overdue (+14d)</span>}
+          </span>
+        </summary>
+        {v.branches.map((br) => (
+        <details class="cmw-branch" open>
+          <summary>
+            <span class="cmw-chev">›</span>
+            <span class="cmw-branch-name">{br.branch}</span>
+            <span class="cmw-sum">{br.invoices.length} invoice(s) · {lineCountOf(br.invoices)} line(s) · <b>{money(totalOf(br.invoices))}</b></span>
+          </summary>
+          <div class="cmw-email">
+          {br.invoices.map((r) => (
             <div class="cmw-invoice" data-invoice={r.invoice_number}>
               <p class="cmw-inv-head">
                 <b>Invoice {r.invoice_number}</b> — credit Requested: <b>{money(r.expected_credit)}</b>
@@ -190,30 +468,62 @@ const reasonFor = (l: CmLine) => {
                 {" · "}<a href={`/accounting/credit-memos/${encodeURIComponent(r.invoice_number)}`}>detail →</a>
                 <button class="cmw-approve cmw-received" data-cm-received={r.invoice_number} type="button" title="The vendor credit landed — close this request">Mark received</button>
               </p>
-              <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, vendor); return (<>
-                {m.lead} · {m.jobNumber
+              {/* office/vendor/branch live in the tree above — the invoice line keeps job + date */}
+              <p class="cmw-inv-meta">{(() => { const m = headerParts(r.invoice_number, v.vendor); return (<>
+                {m.jobNumber
                   ? (m.jobHref ? <a href={m.jobHref} target="_blank" rel="noopener">Job {m.jobNumber} ↗</a> : <span>Job {m.jobNumber}</span>)
                   : <span>no job on the PO</span>}{m.clientName ? ` (${m.clientName})` : ""} · {m.invoiced}
               </>); })()}</p>
-              <table>
-                <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
-                <tbody>
-                  {(linesByInvoice.get(r.invoice_number) ?? []).map((l) => (
-                    <tr>
-                      <td>{l.item_description}<br /><span class="cmw-reason">{reasonFor(l)}</span></td>
-                      <td class="num">{Number(l.quantity)}</td>
-                      <td class="num">{money(Number(l.invoiced_price))}</td>
-                      <td class="num">{money(Number(l.office_price))}</td>
-                      <td class="num"><b>{money(Number(l.variance_ext))}</b></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(() => { const pairing = pairingFor(r.invoice_number, r.expected_credit); return (<>
+                {pairing.receipts.map(({ rc, b, d }) => (
+                  <p class="cmw-receipt-strip" data-receipt={rc.cm_invoice_number}>
+                    <b>Credit memo {rc.cm_invoice_number}</b> received {rc.cm_invoice_date ?? ""} · {matchBasisLabel(rc)}
+                    {b.lineCredit != null
+                      ? <span>· <b>{money(b.lineCredit)}</b> line credit{b.tax != null && b.tax > 0 ? " + " + money(b.tax) + " sales tax" : ""} = {money(b.total)} total · vs <b>{money(r.expected_credit)}</b> requested (ex-tax)</span>
+                      : <span>· <b>{money(b.total)}</b> credited vs <b>{money(r.expected_credit)}</b> requested</span>}
+                    {d != null && Math.abs(d) >= 0.01 && (
+                      <span class:list={["cmw-delta", d > 0 ? "cmw-delta-short" : "cmw-delta-over"]}>
+                        {d > 0 ? "lines SHORT " + money(d) : "lines over by " + money(Math.abs(d))}
+                      </span>
+                    )}
+                    {d != null && Math.abs(d) < 0.01 && <span class="cmw-delta cmw-delta-even">lines match the request</span>}
+                    <button class="cmw-approve" data-receipt-review="approve" type="button" title="Accept this credit as satisfying the request">Approve</button>
+                    <button class="cmw-btn cmw-secondary cmw-rerequest" data-receipt-review="rerequest" type="button" title="Keep our request open — the credit does not cover it">Re-request</button>
+                  </p>
+                ))}
+                <table>
+                  <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Invoiced</th><th class="num">Agreement price</th><th class="num">Credit</th></tr></thead>
+                  <tbody>
+                    {pairing.rows.map((row) => row.kind === "req" ? (
+                      <tr class:list={[pairing.receipts.length > 0 && "cmw-req-row"]}>
+                        <td>{row.line.item_description}<br /><span class="cmw-reason">{reasonFor(row.line)}</span></td>
+                        <td class="num">{Number(row.line.quantity)}</td>
+                        <td class="num">{money(Number(row.line.invoiced_price))}</td>
+                        <td class="num">{money(Number(row.line.office_price))}</td>
+                        <td class="num"><b>{money(Number(row.line.variance_ext))}</b></td>
+                      </tr>
+                    ) : (
+                      <tr class="cmw-cm-row">
+                        <td><span class="cmw-cm-tag">CM {row.rc.cm_invoice_number}</span> {row.cl.item_number}{row.cl.item_description ? ` — ${cleanCmDesc(row.cl.item_description)}` : ""}{row.extra ? " · no matching request line" : ""}</td>
+                        <td class="num">{row.cl.qty} {row.cl.uom}</td>
+                        <td class="num">{row.cl.unit_price != null ? money(row.cl.unit_price) : "—"}</td>
+                        <td class="num">—</td>
+                        <td class="num"><b>{row.cl.extended_price != null ? money(Math.abs(row.cl.extended_price)) : "—"}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>); })()}
               {(linesByInvoice.get(r.invoice_number) ?? []).length === 0 && (
                 <p class="cmw-noclaims">No claim lines are on file for this invoice's latest re-audit run — the request was sent from an earlier run.</p>
               )}
             </div>
           ))}
+          </div>
+        </details>
+        ))}
+      </details>
+        ))}
         </div>
       </details>
     ))}
@@ -221,7 +531,24 @@ const reasonFor = (l: CmLine) => {
 </AppShell>
 
 <style>
-  .cmw{padding:8px 4px 40px;max-width:900px}
+  /* Full-width like the Invoice Audit — the 900px email column left a dead
+     right half and stacked the action buttons (Chris 2026-09-01). */
+  .cmw{padding:8px 4px 40px}
+  /* Office → Vendor → Branch nesting, same visual grammar as .iv-office/.iv-branch */
+  .cmw-office{background:#fff;border:1px solid #e3e8ef;border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .cmw-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .cmw-office>summary::-webkit-details-marker{display:none}
+  .cmw-office-name{font-weight:750;font-size:15px;flex:1}
+  .cmw-office-body{padding:4px 12px 12px;border-top:1px solid #e3e8ef}
+  .cmw-chev{color:#6b7886;transition:transform .15s;font-size:15px}
+  details[open]>summary .cmw-chev{transform:rotate(90deg)}
+  .cmw-mini{display:flex;gap:16px;align-items:center;font-size:12px;color:#6b7886}
+  .cmw-mini b{font-variant-numeric:tabular-nums}
+  .cmw-mini em{font-style:normal;text-transform:uppercase;font-size:10px;letter-spacing:.03em}
+  .cmw-branch{border:1px solid #e3e8ef;border-radius:10px;margin:8px 0;background:#fff}
+  .cmw-branch>summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .cmw-branch>summary::-webkit-details-marker{display:none}
+  .cmw-branch-name{font-weight:700;font-size:13.5px}
   .cmw-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .cmw-bar h1{font-size:22px;margin:0}
   .cmw-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -232,6 +559,7 @@ const reasonFor = (l: CmLine) => {
   .cmw-warn{background:#fbf0d4;color:#946400;border:1px solid #f0dca4;border-radius:8px;padding:8px 11px;margin-bottom:18px}
   .cmw-empty{color:#6b7886;font-size:13px;padding:10px 2px}
   .cmw-vendor{border:1px solid #e3e8ef;border-radius:12px;margin-bottom:14px;background:#fff}
+  .cmw-office .cmw-vendor{background:#f7f8fb;margin:8px 0}
   .cmw-vendor>summary{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;font-size:15px;flex-wrap:wrap}
   .cmw-sum{color:#6b7886;font-size:13px;display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
   .cmw-overdue-pill{background:#fbe2e2;color:#a51f1f;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700}
@@ -250,6 +578,16 @@ const reasonFor = (l: CmLine) => {
   .cmw-reason{color:#666;font-size:12px}
   .cmw-drafts-title{font-size:12px;color:#6b7886;font-weight:700;margin:0 0 6px}
   .cmw-noclaims{color:#6b7886;font-size:12px;margin:6px 0 0}
+  /* Nested CM review: request lines light red, the vendor's CM lines light green,
+     paired row-under-row for line-by-line human audit (Chris 2026-09-01). */
+  .cmw-req-row td{background:#fdeeee}
+  .cmw-cm-row td{background:#e9f7ef}
+  .cmw-cm-tag{display:inline-block;background:#137a4d;color:#fff;border-radius:5px;padding:1px 6px;font-size:10.5px;font-weight:700;margin-right:5px}
+  .cmw-receipt-strip{margin:8px 0 6px;padding:8px 11px;border:1px solid #bfe6d0;background:#e9f7ef;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .cmw-delta{border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:750}
+  .cmw-delta-short{background:#fbe2e2;color:#a51f1f}
+  .cmw-delta-over{background:#fbf0d4;color:#946400}
+  .cmw-delta-even{background:#e3f5ec;color:#137a4d}
   .cmw-receipts{padding:10px 14px 14px;background:#fffbeb}
   .cmw-receipts table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff}
   .cmw-receipts th,.cmw-receipts td{border:1px solid #e3e8ef;padding:6px 8px;text-align:left}

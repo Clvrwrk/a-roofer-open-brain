@@ -117,7 +117,19 @@ async function upsertInvoice(payload) {
   return row;
 }
 
+// Deterministic line id: uuid derived from (invoice_id, line_number). The weekly
+// SRS CSV re-lists every still-open invoice, so re-parses are ROUTINE — random ids
+// meant each re-ingest deleted+reinserted lines under fresh uuids, orphaning every
+// invoice_line_audit decision keyed to the old ids and re-presenting audited
+// invoices as new work (Chris caught 0050033288-003, 2026-09-01: 33 invoices /
+// 211 decisions orphaned). Same (invoice, position) → same id, every parse.
+function deterministicLineId(invoiceId, lineNumber) {
+  const h = createHash("md5").update(`${invoiceId}:${lineNumber}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
 async function replaceLines(invoiceId, lines) {
+  for (const l of lines) l.id = deterministicLineId(invoiceId, l.line_number);
   // Scoped delete inside one invoice only (re-parse path), then insert.
   await rest(`vendor_invoice_lines?invoice_id=eq.${invoiceId}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   if (lines.length) await rest("vendor_invoice_lines", { method: "POST", body: JSON.stringify(lines), headers: { Prefer: "return=minimal" } });
@@ -132,6 +144,22 @@ async function upsertUomEvidence(vendorId, item, shipUom, priceUom, factor) {
   });
 }
 
+// SRS credit memos name the invoice they credit as a description row —
+// "Orig Inv#: 0050252253-002". That reference is the exact-match key for
+// credit-memo reconciliation (Chris 2026-09-01): a received CM must pair with
+// the request on its ORIGINAL invoice, never with the closest request by
+// amount. Scan every description string of the document; a memo can credit
+// more than one invoice.
+function extractOriginalInvoices(descPool, ownInvoiceNumber) {
+  const found = new Set();
+  for (const d of descPool) {
+    for (const m of String(d ?? "").matchAll(/Orig\.?\s*Inv\.?\s*#?\s*:?\s*([0-9][0-9-]{6,})/gi)) {
+      if (m[1] !== ownInvoiceNumber) found.add(m[1]);
+    }
+  }
+  return [...found];
+}
+
 async function ingestSrsDetail(vendorId, file) {
   const rows = parseCsv(readFileSync(file, "utf8"));
   const header = rows.shift();
@@ -144,6 +172,10 @@ async function ingestSrsDetail(vendorId, file) {
   for (const [invNum, inv] of invoices) {
     const h = inv.header, c = (name) => col(h, name);
     const terms = c("TERMS");
+    const originals = extractOriginalInvoices(
+      [...inv.notes, ...inv.lines.flatMap((l) => l.extraDesc), ...inv.lines.map((l) => col(l.row, "DESC_COL"))],
+      invNum,
+    );
     const invoice = await upsertInvoice({
       vendor_id: vendorId,
       account_number: c("ACCOUNT_NUMBER"),
@@ -161,7 +193,11 @@ async function ingestSrsDetail(vendorId, file) {
       ship_via: c("SHIP_VIA") || null,
       order_type: c("ORDER_TYPE") || null,
       total_due: num(c("TOTAL_DUE")),
-      raw: { return_address: c("RETURN_ADDRESS"), notes: inv.notes, source_file: basename(file) },
+      raw: {
+        return_address: c("RETURN_ADDRESS"), notes: inv.notes, source_file: basename(file),
+        original_invoice_number: originals[0] ?? null,
+        original_invoice_numbers: originals,
+      },
       updated_at: new Date().toISOString(),
     });
     const lines = [];
@@ -349,6 +385,9 @@ async function ingestSrsPdfInvoice(vendorId, file) {
       ordered_by: p.orderedBy, created_by: p.createdBy,
       delivery_charge: p.charges.delivery ?? null, freight_charge: p.charges.freight ?? null,
       orig_invoice_number: origInv, reconciled: true,
+      // canonical keys — what qb-bank-csv and credit_memo_reconcile read
+      original_invoice_number: origInv,
+      original_invoice_numbers: origInv ? [origInv] : [],
       po_number_may_be_truncated: (p.poNumber ?? "").length >= 16,
     },
     updated_at: new Date().toISOString(),
@@ -497,6 +536,12 @@ async function main() {
     else { kind = "invoice_csv"; result = await ingestQxoDetail(vendor.id, file); }
     await registerUpload(vendor.id, file, kind, result.invoices, "parsed", null);
     console.log(`${slug} ${kind}: ${JSON.stringify(result)}`);
+    // Alex pass rides every ingest, not just the 07:30 ABC nightly — a mid-day
+    // manual batch otherwise sits with its No-Price lines as fake human audit
+    // work until the next morning (Chris caught this on the 2026-09-01 SRS
+    // batch: 64 No-Price lines showed "Review" that Alex should have stamped).
+    const triage = await rest("rpc/alex_no_price_triage", { method: "POST", body: "{}" });
+    console.log(`alex triage: ${JSON.stringify(triage)}`);
   } catch (e) {
     await registerUpload(vendor.id, file, kind ?? "invoice_csv", 0, "failed", e.message).catch(() => {});
     throw e;
