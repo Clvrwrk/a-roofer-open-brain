@@ -573,3 +573,37 @@ Two consequences worth carrying forward:
 Deliberately NOT rewritten: the dated tables and migration headers above, and the 2026-08-20
 daily log. Each was true when written, and a document that edits its own history to look
 consistent is worth less than one that shows the movement.
+
+### Follow-up — 2026-09-05: it moved again, from the other direction
+
+| Metric | 2026-09-02 | 2026-09-05 | |
+|---|---:|---:|---|
+| Chase queue spend | $22,589.10 | **$24,110.03** | **+$1,520.93** |
+| Atlanta × ABC | 5 / $5,226.90 | **6 / $6,747.83** | **+1 invoice** |
+| Denver × SRS | 5 / $17,362.20 | 5 / $17,362.20 | unchanged |
+| `v_agreement_unreachable` | 4 / 247 / 128 on `AMSDE` | 4 / 247 / 128 | unchanged |
+| Unresolved branch spend | $27,566.56 | $27,566.56 | unchanged |
+| `anon` privileges on the four views | 0 | 0 | unchanged |
+
+**Cause, traced:** ABC invoice `2014178360-001`, dated 2026-09-04 for $1,520.93 on branch 516
+(Doraville, GA), ingested 2026-09-05 07:30 UTC by the nightly ABC sync. Ordinary purchasing on
+a pair whose agreement is still `pending`, so it prices nothing and lands in chase exposure.
+
+**Two movements in three days, from opposite causes** — a credit memo down, a new invoice up —
+settles the question of whether the chase total is a stable number. It is not, and it never
+was: it tracks live purchasing on pairs that cannot yet be audited. That is the metric doing
+its job, not drifting.
+
+So this document stops restating it. **The chase total is deliberately not carried as a
+figure anywhere that has to be maintained** — not in the surface (removed 2026-09-02), and
+from here not in the PR description either. Anyone who needs the current number runs:
+
+```sql
+SELECT office_name, vendor_slug, invoice_count, spend, agreement_status
+  FROM v_office_vendor_gap_exposure WHERE needs_ruling ORDER BY spend DESC;
+```
+
+What is worth carrying is the shape, and it has not changed since 2026-08-20: **two rows,
+needing opposite actions.** Denver × SRS has signed agreements the ring cannot reach — repair
+the branch link. Atlanta × ABC has none yet — the paperwork is genuinely being pursued. The
+branch-identity decision below is untouched by either movement.
