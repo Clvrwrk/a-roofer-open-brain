@@ -1,7 +1,7 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
 import { loadAgreementBuilderOverview } from "@lib/agreement-builder-overview";
-import { loadPriceAgreementCoverage } from "@lib/price-agreement-coverage";
+import { loadPriceAgreementCoverage, coverageLabelKind } from "@lib/price-agreement-coverage";
 import { CM_VENDORS } from "@lib/cm-vendor-roster";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
@@ -46,7 +46,7 @@ const data = overviewResult.status === "fulfilled"
   : { status: "unconfigured" as const, generatedAt: new Date().toISOString(), recipient: { name: "", email: "" }, offices: [], totals: { offices: 0, branches: 0, projectedCost: 0, historicalSpend: 0, savings: 0, negotiableItems: 0 } };
 const coverage = coverageResult.status === "fulfilled"
   ? coverageResult.value
-  : { status: "unconfigured" as const, generatedAt: new Date().toISOString(), offices: [], totals: { offices: 0, vendors: 0, branchRows: 0, primaryBranches: 0, regionCoveredBranches: 0, branchesInheriting: 0, pricedItems: 0, gaps: 0 } };
+  : { status: "unconfigured" as const, generatedAt: new Date().toISOString(), offices: [], totals: { offices: 0, vendors: 0, branchRows: 0, primaryBranches: 0, regionCoveredBranches: 0, branchesInheriting: 0, pricedItems: 0, gaps: 0, lapsedVendors: 0, gapsWithSpend: 0, gapsToChase: 0, gapSpend: 0, chaseSpend: 0, unresolvedSpend: 0 } };
 const milesLabel = (m: number | null) => (m == null ? "—" : `${m.toFixed(1)} mi`);
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
@@ -137,6 +137,30 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 
     {coverage.offices.length === 0 && <p class="iv-empty">No territory coverage rows found.</p>}
 
+    {coverage.totals.gaps > 0 && (
+      <p class="iv-note">
+        <b>{coverage.totals.gaps}</b> office × vendor pairs have no <b>reachable</b> agreement coverage. <b>{coverage.totals.gapsWithSpend}</b> carry
+        spend; of those, <b>{coverage.totals.gapsToChase}</b> are actually work — <b>{money(coverage.totals.chaseSpend)}</b>
+        of invoiced spend sitting on pairs that cannot be audited and carry no ruling accepting that. <b>Not all of it is
+        missing paperwork</b> — where a pair shows &ldquo;ring can't reach it&rdquo;, a live agreement already
+        exists and the fix is to repair the agreement-to-branch link, not to chase a new one. The rest are either territory-only
+        (branches in the ring, nothing purchased yet) or carry an accepted <code>no_book</code> ruling, which prices
+        as no-price by design and is not something to chase.
+        <br />
+        <small>Figures are invoice <b>totals</b>, which include tax, freight, and lines the line-level path does price —
+        they are not the un-audited amount, and they are net of any credit memos posted against the pair. The genuinely
+        unpriced line value is always lower, and is measured on the line-level path rather than shown here.</small>
+      </p>
+    )}
+
+    {coverage.totals.unresolvedSpend !== 0 && (
+      <p class="iv-note">
+        <b>{money(coverage.totals.unresolvedSpend)}</b> sits on branches with <b>no pricing territory</b>, so it is
+        outside this audit entirely. Shown independently of the gap count — it is still true when every
+        office × vendor pair is covered.
+      </p>
+    )}
+
     {coverage.offices.map((office) => (
       <details class="iv-office">
         <summary>
@@ -162,7 +186,17 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
                   <div><strong>{vendor.pricedItems.toLocaleString()}</strong><span>Priced items</span></div>
                 </div>
                 <div class="iv-branch-tags">
-                  {vendor.hasGap && <span class="pill pill-red">No agreement — gap</span>}
+                  {/* Order is decided by coverageLabelKind() — see its doc comment. Do not
+                      reorder these branches here; change the function and its tests. */}
+                  {coverageLabelKind(vendor) === "accepted"
+                    ? <span class="pill pill-grey">Accepted ruling ({vendor.agreementStatus}) — {money(vendor.spend)} spend, not work</span>
+                    : coverageLabelKind(vendor) === "unreachable"
+                      ? <span class="pill pill-red">Agreement exists, ring can't reach it — {money(vendor.spend)} spend ({vendor.invoiceCount} inv). Repair the branch link, don't chase paperwork.</span>
+                      : coverageLabelKind(vendor) === "no-spend"
+                        ? <span class="pill pill-grey">No agreement — no spend yet</span>
+                        : coverageLabelKind(vendor) === "no-agreement"
+                          ? <span class="pill pill-red">No agreement — {money(vendor.spend)} spend ({vendor.invoiceCount} inv)</span>
+                          : null}
                   {vendor.anyLapsed && <span class="pill pill-yellow">Extended (awaiting replacement)</span>}
                   {vendor.competingAgreements > 1 && <span class="pill pill-brand">{vendor.competingAgreements} competing lists — lowest price per item</span>}
                 </div>
