@@ -35,7 +35,8 @@
     "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
     "sanitize-html": "^2.17.5",
-    "svix": "^1.95.1"
+    "svix": "^1.95.1",
+    "@proexteriors/design-system": "file:vendor/proexteriors-design-system-0.1.0.tgz"
   },
   "devDependencies": {
     "postgres": "^3.4.7",
