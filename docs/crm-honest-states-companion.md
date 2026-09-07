@@ -1,0 +1,9 @@
+# CRM shared states and cash availability companion receipt
+
+2026-09-06 Pacific. CRM source baseline `65e0bf2`, branch `codex/prd-grill`; companion baseline `7fff89c`, branch `codex/crm-shared-design`. Shared workspace 0.1.2 artifact SHA-256 `94dd78fd7e3c24c4508a160149dafea7d6368e03668f796958f6c7a6f6004132` installs the same compiled feature/CSS as CRM. This source change is isolated from the shared upstream checkout; no push, merge or deployment.
+
+Shared feature corrects loading/error and Pause/Resume wording, retains standalone heading and uses subordinate desktop headings. CashFlow loader validates existing required assumptions/bounds, bank balances and receipt invariants, fails unavailable on rejected/missing reads and leaves zero-spend runway ratios unknown. Accounting/Executive HTML and both JSON routes plus workbook agree on unavailable data. Actual zero values and SQL empty aggregates remain valid.
+
+327 companion tests, build and six local HTTP cases passed; final focused test also verifies blank unknown ratio cells after XLSX serialization. Independent targeted tests/adversarial checks passed. Builder browser inspected both unavailable financial views and hydrated shared desktop states; independent browser inspected synthetic PWA draft preservation. CRM passed 63 tests/typecheck/build/design. Temporary local server stopped; no real financial data, provider activity or credentials supplied.
+
+Authoritative detailed receipts: CRM `docs/delivery/X1-HONEST-STATES.md`, `X1-HONEST-STATES-RED-TEAM.md` and `evidence/honest-states.json`. The root receipt will identify this exact companion commit. Missing source freshness/completeness, Fixed Costs partial-revenue handling, full weekly audit/backend integration and scored/device/hosted acceptance remain open. No numerical pass or full financial correctness claim.

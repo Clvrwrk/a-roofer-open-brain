@@ -8,6 +8,8 @@ import { loadCashFlowBoard } from "@lib/cash-flow";
 import "../../styles/cash-surface.css";
 
 const board = await loadCashFlowBoard();
+const available = board.status === "live" && !board.error;
+Astro.response.headers.set("Cache-Control", "no-store");
 const money = (v: number) =>
   (v < 0 ? "(" : "") + "$" + Math.round(Math.abs(v)).toLocaleString("en-US") + (v < 0 ? ")" : "");
 const moneyK = (v: number) => `$${Math.round(v / 1000).toLocaleString("en-US")}K`;
@@ -22,7 +24,7 @@ const asOf = board.generatedAt.slice(0, 10);
 const avgWeeklyDisb = board.weeks.length
   ? board.weeks.reduce((s, w) => s + w.totalDisbursements, 0) / board.weeks.length
   : 0;
-const months = (weeks: number) => (weeks / 4.345).toFixed(1);
+const months = (weeks: number | null) => weeks === null ? "—" : (weeks / 4.345).toFixed(1);
 const wk1 = board.weeks[0];
 
 // ---- SVG curve geometry (brand navy line, red floor) ------------------------
@@ -45,13 +47,13 @@ const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
 ---
 
 <AppShell title="Cash Runway" eyebrow="Executive" activePage="executive">
-  <section class="cfx" id="cfx" data-theme="light" data-pref="system">
+  <section class="cfx" id="cfx" data-availability={available ? "ready" : "unavailable"} data-theme="light" data-pref="system">
     <div class="cfx-toolbar">
       <h2 class="cfx-title">Cash Runway</h2>
       <span class="cfx-sub">13-week forecast · receipts live from the <a href="/accounting/friday-wip">WIP/AR board</a> · drivers on the <a href="/accounting/cash-flow">accounting surface</a></span>
       <span class="cfx-spacer"></span>
-      <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download>Download workbook</a>
-      <span class="cfx-count">as of {asOf}</span>
+      {available && <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download>Download workbook</a>}
+      <span class="cfx-count">{available ? `as of ${asOf}` : "Data unavailable"}</span>
       <div class="cfx-theme" role="group" aria-label="Theme">
         <button type="button" data-set-theme="system" class="is-active">System</button>
         <button type="button" data-set-theme="light">Light</button>
@@ -59,11 +61,15 @@ const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
       </div>
     </div>
 
-    {board.error && <p class="cfx-error">{board.error}</p>}
+    {!available ? <section class="cfx-group" aria-labelledby="cash-unavailable-title">
+      <div class="cfx-unavailable-content"><h3 id="cash-unavailable-title">Financial data unavailable</h3>
+      <p>We could not load the inputs needed for this forecast. Cash balances, projections and floor status cannot be assessed.</p>
+      <a class="cfx-btn" href="/executive/cash-runway">Try again</a></div>
+    </section> : <>
 
     <div class="cfx-kpis">
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Cash today</span><span class="cfx-kpi-val">{money(board.beginningCash)}</span><span class="cfx-kpi-sub">{board.bankAccounts.map((b) => b.name).join(" · ")}</span></div>
-      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1 ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1?.weeksOfCash != null ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">13-week low</span><span class="cfx-kpi-val">{money(board.minEndingCash)}</span><span class="cfx-kpi-sub">{board.minEndingWeek ? `wk of ${wk(board.minEndingWeek)} · ` : ""}floor {money(board.minCashFloor)}</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">Floor status</span><span class="cfx-kpi-val">{board.floorBreached ? "BELOW FLOOR" : "Above floor"}</span><span class="cfx-kpi-sub">Owner's minimum, editable on the accounting surface</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.datedShare < 0.5 }]}><span class="cfx-kpi-lab">Forecast confidence</span><span class="cfx-kpi-val">{pct(board.datedShare)} dated</span><span class="cfx-kpi-sub">{money(board.undatedCash)} across {board.undatedJobs} jobs still assumption-spread</span></div>
@@ -97,7 +103,7 @@ const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
           <div class="cfx-week" class:list={[{ "cfx-week-warn": w.belowFloor }]}>
             <span class="cfx-week-lab">wk {wk(w.weekStart)}</span>
             <span class="cfx-week-val" class:list={[{ "cfx-week-neg": w.endingCash < 0 }]}>{money(w.endingCash)}</span>
-            <span class="cfx-week-sub">{w.weeksOfCash.toFixed(1)} wks (≈{months(w.weeksOfCash)} mo)</span>
+            <span class="cfx-week-sub">{(w.weeksOfCash === null ? "—" : w.weeksOfCash.toFixed(1))} wks (≈{months(w.weeksOfCash)} mo)</span>
           </div>
         ))}
       </div>
@@ -147,6 +153,7 @@ const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
         </div>
       </div>
     </div>
+    </>}
   </section>
 </AppShell>
 

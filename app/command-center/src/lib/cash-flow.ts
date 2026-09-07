@@ -12,6 +12,7 @@
 // (computeProjection) so it is unit-testable and identical between the JSON
 // board and the XLSX export.
 
+import { cashFlowInputError } from "./cash-flow-inputs";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export interface WcfAssumption {
@@ -45,7 +46,7 @@ export interface WcfWeek {
   net: number;
   beginningCash: number;
   endingCash: number;
-  weeksOfCash: number;
+  weeksOfCash: number | null; // No meaningful ratio when average disbursement is zero.
   belowFloor: boolean;
 }
 
@@ -176,13 +177,13 @@ export function computeProjection(inputs: ProjectionInputs): WcfWeek[] {
       net,
       beginningCash,
       endingCash: cash,
-      weeksOfCash: 0, // filled below once the 13-week average is known
+      weeksOfCash: null, // filled below once the 13-week average is known
       belowFloor: cash < num(a.min_cash_floor),
     });
   }
 
-  const avgDisb = avgDisbEstimate.reduce((s, v) => s + v, 0) / avgDisbEstimate.length || 1;
-  for (const w of weeks) w.weeksOfCash = Math.round((w.endingCash / avgDisb) * 10) / 10;
+  const avgDisb = avgDisbEstimate.reduce((s, v) => s + v, 0) / avgDisbEstimate.length;
+  for (const w of weeks) w.weeksOfCash = avgDisb > 0 ? Math.round((w.endingCash / avgDisb) * 10) / 10 : null;
   return weeks;
 }
 
@@ -212,6 +213,11 @@ function emptyBoard(error: string): CashFlowBoard {
 }
 
 export async function loadCashFlowBoard(): Promise<CashFlowBoard> {
+  try { return await loadCashFlowInputs(); }
+  catch { return emptyBoard("Financial data could not be loaded. Try again."); }
+}
+
+async function loadCashFlowInputs(): Promise<CashFlowBoard> {
   const { client, config } = createServerSupabaseClient();
   if (!client) return emptyBoard(`Supabase unconfigured: ${config.missing.join(", ")}`);
 
@@ -233,6 +239,8 @@ export async function loadCashFlowBoard(): Promise<CashFlowBoard> {
   const firstError =
     assumptionsRes.error ?? cashRes.error ?? datedRes.error ?? undatedRes.error ?? topJobsRes.error;
   if (firstError) return emptyBoard(firstError.message);
+  const inputError = cashFlowInputError({assumptions:assumptionsRes.data,cash:cashRes.data,dated:datedRes.data,undated:undatedRes.data,topJobs:topJobsRes.data});
+  if(inputError) return emptyBoard(inputError);
 
   const assumptions: WcfAssumption[] = (assumptionsRes.data ?? []).map((r) => ({
     key: String(r.key),
