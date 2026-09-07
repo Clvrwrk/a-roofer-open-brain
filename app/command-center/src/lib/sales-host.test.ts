@@ -25,15 +25,24 @@ describe('shared sales host boundary',()=>{
  });
  it('bypasses cached sales navigation and refuses rendered draft snapshots',async()=>{
   const h=await workerHarness();
-  for(const path of ['/sales','/sales/pipeline','/sales/efforts/test','/api/sales/v1/efforts']){
+  for(const path of ['/sales','/sales/pipeline','/sales/efforts/test','/api/sales/v1/efforts','/accounting/friday-wip']){
    const respondWith=vi.fn();h.listeners.fetch({request:{method:'GET',mode:'navigate',url:'https://cc.example'+path},respondWith});expect(respondWith).not.toHaveBeenCalled();
   }
   let pending:Promise<unknown>|undefined;
   h.listeners.message({data:{type:'CACHE_RENDERED_PAGE',path:'/sales/pipeline',html:'x'.repeat(3000)},waitUntil:(value:Promise<unknown>)=>{pending=value}});await pending;
   expect(h.cache.put).not.toHaveBeenCalled();expect(h.fetch).not.toHaveBeenCalled();
  });
- it('purges old sales snapshots while retaining other department entries',async()=>{
+ it('purges old sales snapshots and the canonical Friday report',async()=>{
   const h=await workerHarness();let pending:Promise<unknown>|undefined;h.listeners.activate({waitUntil:(value:Promise<unknown>)=>{pending=value}});await pending;
-  expect(h.deleted).toEqual(['https://cc.example/sales/efforts/123']);expect(h.caches.delete).not.toHaveBeenCalled();
+  expect(h.deleted).toEqual(['https://cc.example/sales/efforts/123','https://cc.example/accounting/friday-wip']);expect(h.caches.delete).not.toHaveBeenCalled();
  });
+});
+
+it('canonical Friday uses the shared workbench without invoking the legacy loader or Send',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const page=await readFile(new URL('../pages/accounting/friday-wip.astro',import.meta.url),'utf8');
+ const consumer=await readFile(new URL('../components/sales/FridayWeeklyWorkspace.tsx',import.meta.url),'utf8');
+ expect(page).toContain("CRM_WEEKLY_CANONICAL_ENABLED==='true'");expect(page).toContain('canonical ?');expect(page).not.toContain('loadFridayWipBoard');
+ expect(consumer).toContain('WeeklyWorkspace');expect(consumer).toContain('client.session()');expect(consumer).toContain('beforeunload');
+ for(const legacy of ['/api/friday-wip','/send','/pack','loadFridayWipBoard'])expect(consumer).not.toContain(legacy);
 });

@@ -20,7 +20,7 @@ const workOsReady = isWorkOsConfigured();
 const workOsSession = user.authMode === "workos";
 
 const pathname = Astro.url.pathname;
-const cacheSalesPage = !(pathname === "/sales" || pathname.startsWith("/sales/"));
+const cacheSalesPage = !(pathname === "/accounting/friday-wip" || pathname === "/sales" || pathname.startsWith("/sales/"));
 const homeActive = isLeafActive(navHome, pathname);
 const openDepartment = activeDepartmentId(pathname);
 const actorCacheId = actor?.id ?? user.email ?? user.name ?? "local-operator";

@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260906-sales";
+const VERSION = "cc-page-cache-v20260907-weekly";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -19,7 +19,7 @@ const PAGE_ROUTES = [
 const API_ROUTES = ["/api/vendor-territories"];
 let actorCacheKey = "unknown";
 function isSalesPath(path) {
-  try {const url = new URL(path, self.location.origin); return url.origin === self.location.origin && (url.pathname === "/sales" || url.pathname.startsWith("/sales/") || url.pathname.startsWith("/api/sales/"));} catch {return true;}
+  try {const url = new URL(path, self.location.origin); return url.origin === self.location.origin && (url.pathname === "/accounting/friday-wip" || url.pathname === "/sales" || url.pathname.startsWith("/sales/") || url.pathname.startsWith("/api/sales/"));} catch {return true;}
 }
 async function purgeSalesPages() {
   for (const name of await caches.keys()) {
