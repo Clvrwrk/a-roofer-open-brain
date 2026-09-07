@@ -1,0 +1,9 @@
+---
+import SalesPage from '../../../components/sales/SalesPage.astro';
+import AppShell from '../../../layouts/AppShell.astro';
+import {parseSalesRoute} from '@proexteriors/sales-workspace';
+const route=parseSalesRoute(Astro.url.pathname,Astro.url.search);
+if(!route)Astro.response.status=404;
+Astro.response.headers.set('Cache-Control','no-store');
+---
+{route ? <SalesPage route={route}/> : <AppShell title="Sales" activePage="sales"><section class="panel"><h2>Customer link unavailable</h2><p>This link is not a valid sales workspace route.</p><a href="/sales">Return to Sales</a></section></AppShell>}

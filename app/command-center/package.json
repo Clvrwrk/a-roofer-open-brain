@@ -25,6 +25,10 @@
   },
   "dependencies": {
     "@astrojs/node": "^10.1.3",
+    "@astrojs/react": "5.0.7",
+    "@proexteriors/contracts": "file:vendor/proexteriors-contracts-0.1.0.tgz",
+    "@proexteriors/design-system": "file:vendor/proexteriors-design-system-0.1.0.tgz",
+    "@proexteriors/sales-workspace": "file:vendor/proexteriors-sales-workspace-0.1.1.tgz",
     "@sentry/astro": "^10.59.0",
     "@sentry/node": "^10.59.0",
     "@slack/bolt": "^4.7.3",
@@ -34,11 +38,14 @@
     "chart.js": "4.5.1",
     "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "sanitize-html": "^2.17.5",
-    "svix": "^1.95.1",
-    "@proexteriors/design-system": "file:vendor/proexteriors-design-system-0.1.0.tgz"
+    "svix": "^1.95.1"
   },
   "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
     "postgres": "^3.4.7",
     "vitest": "^4.1.9"
   }

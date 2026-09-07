@@ -20,6 +20,7 @@ const workOsReady = isWorkOsConfigured();
 const workOsSession = user.authMode === "workos";
 
 const pathname = Astro.url.pathname;
+const cacheSalesPage = !(pathname === "/sales" || pathname.startsWith("/sales/"));
 const homeActive = isLeafActive(navHome, pathname);
 const openDepartment = activeDepartmentId(pathname);
 const actorCacheId = actor?.id ?? user.email ?? user.name ?? "local-operator";
@@ -172,7 +173,7 @@ const deptIcon = (id: string) =>
       }
     </script>
 
-    <script define:vars={{ actorCacheId }}>
+    <script define:vars={{ actorCacheId, cacheSalesPage }}>
       (() => {
         const pageRoutes = [
           "/",
@@ -183,7 +184,6 @@ const deptIcon = (id: string) =>
           "/executive/pipeline",
           "/accounting",
           "/operations",
-          "/sales",
           "/marketing",
           "/system",
         ];
@@ -211,11 +211,13 @@ const deptIcon = (id: string) =>
         }
 
         function cacheCurrentRendering() {
+          if (!cacheSalesPage) return;
           if (!pageLooksComplete()) return;
           postToWorker({ type: "CACHE_RENDERED_PAGE", path: location.pathname, html: renderedHtmlSnapshot() });
         }
 
         async function browserPrecache() {
+          if (!cacheSalesPage) return;
           if (!("caches" in window)) return;
           for (const route of pageRoutes) {
             try {
@@ -245,12 +247,12 @@ const deptIcon = (id: string) =>
             cacheWorker = worker || null;
             worker?.postMessage({ type: "SET_ACTOR", actorId: actorCacheId });
             cacheCurrentRendering();
-            worker?.postMessage({ type: "PRECACHE", urls: pageRoutes });
+            if (cacheSalesPage) worker?.postMessage({ type: "PRECACHE", urls: pageRoutes });
             navigator.serviceWorker.addEventListener("controllerchange", () => {
               cacheWorker = navigator.serviceWorker.controller;
               postToWorker({ type: "SET_ACTOR", actorId: actorCacheId });
               cacheCurrentRendering();
-              postToWorker({ type: "PRECACHE", urls: pageRoutes });
+              if (cacheSalesPage) postToWorker({ type: "PRECACHE", urls: pageRoutes });
             });
           } catch {
             // Cache worker is an accelerator only; never block the app shell on it.

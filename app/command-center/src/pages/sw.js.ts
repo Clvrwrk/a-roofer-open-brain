@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260819a";
+const VERSION = "cc-page-cache-v20260906-sales";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -13,12 +13,21 @@ const PAGE_ROUTES = [
   "/executive/pipeline",
   "/accounting",
   "/operations",
-  "/sales",
   "/marketing",
   "/system",
 ];
 const API_ROUTES = ["/api/vendor-territories"];
 let actorCacheKey = "unknown";
+function isSalesPath(path) {
+  try {const url = new URL(path, self.location.origin); return url.origin === self.location.origin && (url.pathname === "/sales" || url.pathname.startsWith("/sales/") || url.pathname.startsWith("/api/sales/"));} catch {return true;}
+}
+async function purgeSalesPages() {
+  for (const name of await caches.keys()) {
+    if (!name.startsWith("cc-page-cache-")) continue;
+    const cache = await caches.open(name);
+    for (const request of await cache.keys()) if (isSalesPath(request.url)) await cache.delete(request);
+  }
+}
 
 function safeActorKey(value) {
   return String(value || "unknown").toLowerCase().replace(/[^a-z0-9._-]+/g, "_").slice(0, 80) || "unknown";
@@ -61,7 +70,7 @@ function isCacheableHtml(response, requestedPath) {
 }
 
 async function maybeCacheHtmlResponse(cache, key, response, requestedPath) {
-  if (!isCacheableHtml(response, requestedPath)) return;
+  if (isSalesPath(requestedPath) || !isCacheableHtml(response, requestedPath)) return;
   const copy = response.clone();
   const html = await copy.text();
   if (htmlLooksComplete(html)) {
@@ -70,7 +79,7 @@ async function maybeCacheHtmlResponse(cache, key, response, requestedPath) {
 }
 
 async function cacheRenderedHtml(path, html) {
-  if (!path || !htmlLooksComplete(html)) return;
+  if (!path || isSalesPath(path) || !htmlLooksComplete(html)) return;
   const cache = await caches.open(pageCacheName());
   await cache.put(path, new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }));
 }
@@ -81,6 +90,7 @@ function isCacheableJson(response) {
 }
 
 async function cacheHtmlRoute(path) {
+  if (isSalesPath(path)) return;
   const cache = await caches.open(pageCacheName());
   const request = new Request(path, { credentials: "include", headers: { accept: "text/html" } });
   const response = await fetch(request);
@@ -110,7 +120,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(purgeSalesPages().then(() => self.clients.claim()));
 });
 
 self.addEventListener("message", (event) => {
@@ -126,7 +136,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin || isSalesPath(url.pathname)) return;
   if (url.pathname === "/sw.js" || url.pathname.startsWith("/auth/") || url.pathname.startsWith("/_astro/") || url.pathname.startsWith("/_image")) return;
 
   if (request.mode === "navigate") {

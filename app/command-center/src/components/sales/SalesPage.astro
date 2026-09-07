@@ -1,0 +1,14 @@
+---
+import AppShell from '../../layouts/AppShell.astro';
+import DesktopSales from './SalesWorkspace';
+import type {SalesRoute} from '@proexteriors/sales-workspace';
+import {getRuntimeEnv} from '@lib/runtime-env';
+interface Props {route:SalesRoute}
+const {route}=Astro.props;
+const enabled=getRuntimeEnv().CRM_SALES_WORKSPACE_ENABLED==='true';
+Astro.response.headers.set('Cache-Control','no-store');
+if(!enabled)Astro.response.status=404;
+---
+<AppShell title="Sales" eyebrow="Pro Exteriors" activePage="sales">
+ {enabled ? <DesktopSales initialRoute={route} client:load/> : <section class="panel"><h2>Sales workspace unavailable</h2><p>The shared CRM workspace has not been activated on this host.</p><a href="/sales">Return to Sales</a></section>}
+</AppShell>

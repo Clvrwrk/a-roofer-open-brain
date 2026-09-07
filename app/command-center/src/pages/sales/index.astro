@@ -1,8 +1,9 @@
 ---
 import DepartmentHome from "../../components/live/DepartmentHome.astro";
+import SalesPage from "../../components/sales/SalesPage.astro";
 import { loadDepartmentSurface } from "@lib/live-work";
-
-const surface = await loadDepartmentSurface("sales");
+import {getRuntimeEnv} from "@lib/runtime-env";
+const enabled=getRuntimeEnv().CRM_SALES_WORKSPACE_ENABLED==='true';
+const surface=enabled?undefined:await loadDepartmentSurface("sales");
 ---
-
-<DepartmentHome surface={surface} />
+{enabled ? <SalesPage route={{page:'Today'}}/> : surface && <DepartmentHome surface={surface}/>}

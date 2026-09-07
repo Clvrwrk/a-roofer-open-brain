@@ -1,10 +1,12 @@
 import { defineConfig } from "astro/config";
 import node from "@astrojs/node";
 import sentry from "@sentry/astro";
+import react from "@astrojs/react";
 
 export default defineConfig({
   output: "server",
   integrations: [
+    react(),
     // Loads sentry.client.config.ts + sentry.server.config.ts and, during a production build,
     // uploads source maps (needs SENTRY_AUTH_TOKEN at build time — passed as a Docker build secret).
     // When the token is absent (local builds) the upload is skipped with a warning; the app still builds.
