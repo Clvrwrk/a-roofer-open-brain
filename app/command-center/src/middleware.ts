@@ -1,3 +1,4 @@
+import {attachCrmStaffSession} from '@lib/crm-staff.server';
 import { defineMiddleware } from "astro:middleware";
 import * as Sentry from "@sentry/astro";
 import {
@@ -99,6 +100,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const pathname = url.pathname;
 
   locals.actor = null;
+  locals.crmStaffSession = undefined;
 
   // 0. Rate-limit the unauthenticated magic-link surface (per-IP token bucket).
   if (rateLimited(pathname, request)) {
@@ -166,6 +168,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   locals.actor = actor;
+  locals.crmStaffSession = attachCrmStaffSession(pathname,actor,sessionResult,env);
   applySentryUser(actor);
   recordCommandCenterActivity({ actor, pathname });
   return next();

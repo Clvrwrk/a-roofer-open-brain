@@ -19,7 +19,7 @@ export interface SessionUser {
 
 export type SessionResult =
   | { status: "unauthenticated"; reason: string }
-  | { status: "authenticated"; user: SessionUser; refreshedSealedSession: string | null };
+  | { status: "authenticated"; user: SessionUser; refreshedSealedSession: string | null; crmIdentity?: {accessToken:string;subject:string;organizationId:string;sessionId:string} };
 
 function toSessionUser(user: { id: string; email: string; firstName?: string | null; lastName?: string | null }): SessionUser {
   return {
@@ -54,7 +54,7 @@ export async function authenticateSession(
   try {
     const result = await session.authenticate();
     if (result.authenticated) {
-      return { status: "authenticated", user: toSessionUser(result.user), refreshedSealedSession: null };
+      return { status: "authenticated", user: toSessionUser(result.user), refreshedSealedSession: null, crmIdentity: result.organizationId ? {accessToken:result.accessToken,subject:result.user.id,organizationId:result.organizationId,sessionId:result.sessionId}:undefined };
     }
 
     if (result.reason === "no_session_cookie_provided") {
@@ -67,10 +67,14 @@ export async function authenticateSession(
   try {
     const refreshed = await session.refresh({ cookiePassword });
     if (refreshed.authenticated && refreshed.sealedSession && refreshed.user) {
+      // Verify the fresh sealed session again; never forward a stale token or infer its organization.
+      const fresh = await getWorkOs(env).userManagement.loadSealedSession({sessionData:refreshed.sealedSession,cookiePassword}).authenticate();
+      if(!fresh.authenticated || fresh.user.id!==refreshed.user.id) return {status:"unauthenticated",reason:"refresh_identity_invalid"};
       return {
         status: "authenticated",
-        user: toSessionUser(refreshed.user),
+        user: toSessionUser(fresh.user),
         refreshedSealedSession: refreshed.sealedSession,
+        crmIdentity: fresh.organizationId ? {accessToken:fresh.accessToken,subject:fresh.user.id,organizationId:fresh.organizationId,sessionId:fresh.sessionId}:undefined,
       };
     }
   } catch {

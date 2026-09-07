@@ -2,6 +2,7 @@
 
 declare namespace App {
   interface Locals {
+    crmStaffSession?: import("@proexteriors/crm-server").CrmStaffSession;
     actor: import("@lib/access-control").CommandCenterActor | null;
   }
 }
