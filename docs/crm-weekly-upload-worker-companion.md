@@ -1,0 +1,9 @@
+# CRM private upload worker connection companion
+
+September 7, 2026. Companion parent2e66183; root parent581a417. Root delivery/evidence: `/Users/chussey/Documents/ChatGPT/crm.proexteriorsus.net/docs/delivery/WEEKLY-UPLOAD-WORKER.md`, `docs/delivery/evidence/weekly-upload-worker.json`.
+
+Command Center's existing verified-human `/api/sales` adapter now optionally connects `CRM_UPLOAD_WORKER_ORIGIN` through the same guarded shared server transport as CRM. No environment/WorkOS flag was changed. Absent binding remains unavailable. The transport forwards only staff bearer and bytes to an exact internal route, omits cookies, rejects redirects and checks cancellation/deadlines before reporting success. The separate worker independently verifies staff signatures and derives subject/org; final canonical reads still govern UI state.
+
+Shared server0.1.9 archive SHA256 `04dba6487e0b305b7ab85946155bad0b23afa6199bb8c10656bf01d8368e0c3a`. Sales0.1.20/contracts0.1.10/design0.1.0 unchanged. CC340 tests/build passed;99 installed compiled/style comparisons match root and no third-party CC resolution changed. Root291 tests/type/build/design; seven builder actualHTTP/SQL/Storage groups, eight independent actualhandler/SQL/Storage groups and nine independent mock/crypto groups. Synthetic JWKS/issuer and metadata SQL bridge do not prove hosted authentication or isolated production issuer deployment. No Sentry release/source-map publication token supplied.
+
+No visible UI change or new UX score. Document task57/100 and whole-product UX42.2/Technical18.3 remain FAILED. Production service/issuer assembly, hosted auth/profile/revocation, scanner/catalog/viewer and human evidence submission remain open. No production/provider/financial/customer mutation, deployment, spending, communication or merge. The same canonical Wednesday Sales → Ops → Friday Accounting/Ops workflow remains mandatory.
