@@ -5,6 +5,8 @@ import react from "@astrojs/react";
 
 export default defineConfig({
   output: "server",
+  // Preserve Astro 6 whitespace behavior while the shared surfaces are revalidated.
+  compressHTML: true,
   integrations: [
     react(),
     // Loads sentry.client.config.ts + sentry.server.config.ts and, during a production build,
