@@ -21,7 +21,7 @@ const cash: CashFlowBoard = {
   provisionalNote: 'PROVISIONAL — synthetic forecast', error: null,
 };
 const fixed: FixedCostBoard = {
-  status: 'live', generatedAt: cash.generatedAt, basisVersion: 7, provisional: true,
+  status: 'live', generatedAt: cash.generatedAt, comparisonPeriod:{start:'2025-09-01',endExclusive:'2026-09-01'},basisNote:'Synthetic mixed-basis comparison; not a closed P&L.', basisVersion: 7, provisional: true,
   monthlyNut: 1200.5, ttmOverhead: 14000, ttmRevenue: 50000, overheadPctOfRevenue: 0.28,
   fixedShare: 0.8, rulingsOpen: 1, pools: [{ pool: 'facilities', label: 'Facilities', monthlyBudget: 1200.5, ttmAmount: 14000, lastMonthActual: 1300, avg3moActual: 1250, accounts: 1, rulingsOpen: 1 }],
   rows: [{ accountFqn: 'Synthetic rent', costPool: 'facilities', costBehavior: 'fixed', attribution: 'corporate', attributionRule: null, allocationBasis: 'billed_share', monthlyBudget: 1200.5, ttmAmount: 14000, lastMonthActual: 1300, avg3moActual: 1250, needsRuling: true, rulingRef: 'TEST-RULING', notes: null }],
@@ -58,7 +58,7 @@ describe('financial workbook dependency compatibility', () => {
   it('round-trips fixed-cost totals, ruling markers and provisional allocation basis', async () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await buildFixedCostWorkbook(fixed));
-    expect(wb.worksheets.map(s => s.name)).toEqual(['Pools', 'Register', 'Cost Structure', 'Allocation Preview']);
+    expect(wb.worksheets.map(s => s.name)).toEqual(['Pools', 'Register', 'Cost Structure', 'Allocation Preview', 'Basis']);
     expect(wb.getWorksheet('Pools')!.getCell('A1').text).toContain('basis_version 7 (PROVISIONAL');
     expect(wb.getWorksheet('Pools')!.getCell('B5').value).toBe(1200.5);
     expect(wb.getWorksheet('Register')!.getCell('K2').value).toBe('TEST-RULING');

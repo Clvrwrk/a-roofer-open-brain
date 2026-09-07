@@ -186,18 +186,18 @@ export async function buildFixedCostWorkbook(board: FixedCostBoard): Promise<Buf
   c.getColumn(1).width = 44;
   c.getColumn(2).width = 16;
   c.getColumn(3).width = 14;
-  c.addRow(["Cost structure — TTM, from transaction actuals (not a closed P&L)"]).font = { name: "Arial", bold: true, size: 11 };
+  c.addRow(["Provisional source-value comparison — mixed basis; see Basis sheet"]).font = { name: "Arial", bold: true, size: 11 };
   c.addRow([]);
-  styleHeader(c.addRow(["Layer", "TTM", "% of revenue"]));
+  styleHeader(c.addRow(["Layer", "Source amount", "% of invoice value"]));
   const rev = board.ttmRevenue;
-  const pctOf = (v: number) => (rev > 0 ? v / rev : 0);
+  const pctOf = (v: number) => (rev > 0 ? v / rev : null);
   const ladder: [string, number, boolean][] = [
-    ["Revenue", rev, true],
+    ["Invoice value (unadjusted)", rev, true],
     ["− Direct job costs (COGS) + commissions", board.cogsTtm, false],
-    ["= Gross margin", board.grossMarginTtm, true],
+    ["= Invoice value less direct costs", board.grossMarginTtm, true],
     ["− Variable overhead", board.variableOverheadTtm, false],
     ["− Fixed + step-fixed overhead", board.fixedOverheadTtm, false],
-    ["= Operating result (pre-interest/depreciation)", board.grossMarginTtm - board.ttmOverhead, true],
+    ["= Invoice value less listed costs (mixed basis)", board.grossMarginTtm - board.ttmOverhead, true],
   ];
   for (const [label, v, bold] of ladder) {
     const r = c.addRow([label, v, pctOf(v)]);
@@ -229,6 +229,11 @@ export async function buildFixedCostWorkbook(board: FixedCostBoard): Promise<Buf
     r.getCell(3).numFmt = CUR;
   }
 
+  const basis = wb.addWorksheet("Basis");
+  basis.getColumn(1).width=110;
+  basis.addRow([board.basisNote]);
+  basis.addRow([board.comparisonPeriod ? `Invoice/direct-cost period: ${board.comparisonPeriod.start} to ${board.comparisonPeriod.endExclusive} (end exclusive)` : "Period unavailable"]);
+  basis.addRow(["Blank ratio or allocation cells mean the denominator is not positive; they do not mean zero."]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 

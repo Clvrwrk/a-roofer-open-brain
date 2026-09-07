@@ -11,6 +11,8 @@
 // labeled placeholder — real location P&L arrives with the Jan 1 GL conversion
 // (QBO Locations + Classes, tag-at-entry).
 
+import { readCompleteFinancialRows } from "./financial-read";
+import { isFinancialNumber } from "./cash-flow-inputs";
 import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export interface RegisterRow {
@@ -44,8 +46,8 @@ export interface PoolSummary {
 
 export interface OfficeAllocation {
   location: string;
-  billedShare: number;
-  corporateAllocated: number;
+  billedShare: number | null;
+  corporateAllocated: number | null;
 }
 
 /** Direct-cost (COGS) account actuals from the matview — context beside the
@@ -60,13 +62,15 @@ export interface CogsRow {
 export interface FixedCostBoard {
   status: "live" | "unconfigured";
   generatedAt: string;
+  comparisonPeriod: {start:string;endExclusive:string} | null;
+  basisNote: string;
   basisVersion: number;
   provisional: boolean;
   monthlyNut: number;
   ttmOverhead: number;
   ttmRevenue: number;
-  overheadPctOfRevenue: number;
-  fixedShare: number;
+  overheadPctOfRevenue: number | null;
+  fixedShare: number | null;
   rulingsOpen: number;
   pools: PoolSummary[];
   rows: RegisterRow[];
@@ -76,7 +80,7 @@ export interface FixedCostBoard {
   cogsRows: CogsRow[];
   cogsTtm: number;
   grossMarginTtm: number;
-  grossMarginPct: number;
+  grossMarginPct: number | null;
   variableOverheadTtm: number;
   fixedOverheadTtm: number;
   lastFullMonth: string | null;
@@ -110,6 +114,8 @@ function emptyBoard(error: string): FixedCostBoard {
   return {
     status: "unconfigured",
     generatedAt: new Date().toISOString(),
+    comparisonPeriod: null,
+    basisNote: "Financial inputs are unavailable.",
     basisVersion: 0,
     provisional: true,
     monthlyNut: 0,
@@ -132,26 +138,23 @@ function emptyBoard(error: string): FixedCostBoard {
   };
 }
 
-/** TTM revenue from qbo_invoices, paginated past the PostgREST 1000-row cap (playbook #2). */
-async function loadTtmRevenue(client: NonNullable<ReturnType<typeof createServerSupabaseClient>["client"]>): Promise<number> {
-  const since = isoMonthStart(new Date(), -12);
-  let total = 0;
-  const page = 1000;
-  for (let from = 0; from < 20000; from += page) {
-    const { data, error } = await client
-      .from("qbo_invoices")
-      .select("total_amt")
-      .gte("txn_date", since)
-      .order("qbo_id", { ascending: true })
-      .range(from, from + page - 1);
-    if (error || !data?.length) break;
-    for (const r of data) total += num(r.total_amt);
-    if (data.length < page) break;
-  }
+/** The legacy ttmRevenue wire field is invoice value, not reconciled ledger revenue. */
+async function loadTtmRevenue(client: NonNullable<ReturnType<typeof createServerSupabaseClient>["client"]>,start:string,end:string): Promise<number> {
+  const rows=await readCompleteFinancialRows("Invoice values",(from,to)=>client.from("qbo_invoices")
+    .select("qbo_id,total_amt",{count:"exact"}).gte("txn_date",start).lt("txn_date",end)
+    .order("qbo_id",{ascending:true}).range(from,to),r=>String(r.qbo_id ?? ""));
+  if(rows.some(r=>!isFinancialNumber(r.total_amt)))throw Error("Invoice amounts are missing or invalid.");
+  const total=rows.reduce((sum,r)=>sum+Number(r.total_amt),0);
+  if(!Number.isFinite(total))throw Error("Invoice totals cannot be represented safely.");
   return total;
 }
 
 export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
+  try {return await loadFixedCostInputs();}
+  catch {return emptyBoard("Financial inputs could not be read completely. Try again.");}
+}
+
+async function loadFixedCostInputs(): Promise<FixedCostBoard> {
   const { client, config } = createServerSupabaseClient();
   if (!client) return emptyBoard(`Supabase unconfigured: ${config.missing.join(", ")}`);
 
@@ -160,30 +163,22 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
   const threeMonthsBack = isoMonthStart(now, -3);
 
   const ttmStart = isoMonthStart(now, -12);
-  const [registerRes, actualsRes, cogsRes, wipRes, ttmRevenue] = await Promise.all([
-    client.from("fixed_cost_register").select("*").eq("basis_version", 0).order("cost_pool").order("ttm_amount", { ascending: false }),
-    client.from("mv_overhead_account_month").select("account_fqn, month, amount").gte("month", threeMonthsBack),
-    // COGS actuals live in the same matview (QBO classifies COGS accounts under
-    // classification='Expense'; the account_type column separates them). Full
-    // TTM window so the direct-cost split gets real trailing figures.
-    client
-      .from("mv_overhead_account_month")
-      .select("account_fqn, month, amount")
-      .eq("account_type", "Cost of Goods Sold")
-      .gte("month", ttmStart),
-    client.from("wip_ar_master").select("location, billed_total").eq("in_ar_population", true).limit(1000),
-    loadTtmRevenue(client),
+  const currentMonth = isoMonthStart(now, 0);
+  const [registerData,actualsData,cogsData,wipData,ttmRevenue] = await Promise.all([
+    readCompleteFinancialRows("Cost register",(from,to)=>client.from("fixed_cost_register").select("*",{count:"exact"}).eq("basis_version",0).order("id").range(from,to),r=>String(r.id ?? "")),
+    readCompleteFinancialRows("Overhead actuals",(from,to)=>client.from("mv_overhead_account_month").select("account_fqn,month,amount",{count:"exact"}).gte("month",threeMonthsBack).lt("month",currentMonth).order("account_fqn").order("month").range(from,to),r=>r.account_fqn && r.month ? JSON.stringify([r.account_fqn,r.month]):""),
+    readCompleteFinancialRows("Direct costs",(from,to)=>client.from("mv_overhead_account_month").select("account_fqn,month,amount",{count:"exact"}).eq("account_type","Cost of Goods Sold").gte("month",ttmStart).lt("month",currentMonth).order("account_fqn").order("month").range(from,to),r=>r.account_fqn && r.month ? JSON.stringify([r.account_fqn,r.month]):""),
+    readCompleteFinancialRows("Office allocation population",(from,to)=>client.from("wip_ar_master").select("acculynx_job_id,location,billed_total",{count:"exact"}).eq("in_ar_population",true).order("acculynx_job_id").range(from,to),r=>String(r.acculynx_job_id ?? "")),
+    loadTtmRevenue(client,ttmStart,currentMonth),
   ]);
-
-  const firstError = registerRes.error ?? actualsRes.error ?? cogsRes.error ?? wipRes.error;
-  if (firstError) return emptyBoard(firstError.message);
+  if(!registerData.length || registerData.some(r=>!isFinancialNumber(r.ttm_amount)||!isFinancialNumber(r.monthly_budget)))return emptyBoard("Cost register amounts are missing or invalid.");
+  if([...actualsData,...cogsData].some(r=>!isFinancialNumber(r.amount)) || wipData.some(r=>!isFinancialNumber(r.billed_total)))return emptyBoard("Cost or allocation amounts are missing or invalid.");
 
   // account → { lastMonth, threeMoTotal } from the matview (months are complete
   // calendar months; the current partial month is excluded from both figures).
   const lastMonthByAccount = new Map<string, number>();
   const threeMoByAccount = new Map<string, number>();
-  const currentMonth = isoMonthStart(now, 0);
-  for (const r of actualsRes.data ?? []) {
+  for (const r of actualsData) {
     const month = String(r.month).slice(0, 10);
     if (month >= currentMonth) continue;
     const fqn = String(r.account_fqn);
@@ -192,7 +187,7 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
     if (month === lastFullMonth) lastMonthByAccount.set(fqn, num(lastMonthByAccount.get(fqn)) + amt);
   }
 
-  const rows: RegisterRow[] = (registerRes.data ?? []).map((r) => ({
+  const rows: RegisterRow[] = (registerData).map((r) => ({
     accountFqn: String(r.account_fqn),
     costPool: String(r.cost_pool),
     costBehavior: String(r.cost_behavior),
@@ -240,7 +235,7 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
   // basis until the Jan 1 GL conversion gives real location P&L).
   const billedByLocation = new Map<string, number>();
   let billedTotal = 0;
-  for (const r of wipRes.data ?? []) {
+  for (const r of wipData) {
     const loc = String(r.location ?? "unassigned");
     const billed = num(r.billed_total);
     billedByLocation.set(loc, num(billedByLocation.get(loc)) + billed);
@@ -252,15 +247,15 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
   const officeAllocations: OfficeAllocation[] = [...billedByLocation.entries()]
     .map(([location, billed]) => ({
       location,
-      billedShare: billedTotal > 0 ? billed / billedTotal : 0,
-      corporateAllocated: billedTotal > 0 ? Math.round((billed / billedTotal) * corporateBudget) : 0,
+      billedShare: billedTotal > 0 ? billed / billedTotal : null,
+      corporateAllocated: billedTotal > 0 ? Math.round((billed / billedTotal) * corporateBudget) : null,
     }))
-    .sort((a, b) => b.billedShare - a.billedShare);
+    .sort((a, b) => (b.billedShare ?? 0) - (a.billedShare ?? 0));
 
   // COGS split: per-account TTM / last-full-month / trailing-3-month average
   // (the current partial month is excluded, mirroring the overhead figures).
   const cogsByAccount = new Map<string, { ttm: number; lastMonth: number; threeMo: number }>();
-  for (const r of cogsRes.data ?? []) {
+  for (const r of cogsData) {
     const month = String(r.month).slice(0, 10);
     if (month >= currentMonth) continue;
     const fqn = String(r.account_fqn);
@@ -274,24 +269,27 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
   const cogsRows: CogsRow[] = [...cogsByAccount.entries()]
     .map(([accountFqn, v]) => ({
       accountFqn,
-      ttmAmount: Math.round(v.ttm),
-      lastMonthActual: Math.round(v.lastMonth),
+      ttmAmount: v.ttm,
+      lastMonthActual: v.lastMonth,
       avg3moActual: Math.round(v.threeMo / 3),
     }))
     .sort((a, b) => b.ttmAmount - a.ttmAmount);
   const cogsTtm = cogsRows.reduce((s, r) => s + r.ttmAmount, 0);
   const grossMarginTtm = ttmRevenue - cogsTtm;
 
+  if(![monthlyNut,ttmOverhead,fixedTtm,billedTotal,corporateBudget,cogsTtm,grossMarginTtm].every(Number.isFinite))return emptyBoard("Financial totals cannot be represented safely.");
   return {
     status: "live",
     generatedAt: now.toISOString(),
+    comparisonPeriod: {start:ttmStart,endExclusive:currentMonth},
+    basisNote: "Invoice values exclude credit/ledger reconciliation. Direct costs use the same closed-month window; overhead TTM values are stored register figures with an unverified period. Comparisons are provisional, not a closed P&L or verified margin.",
     basisVersion: 0,
-    provisional: (registerRes.data ?? []).some((r) => Boolean(r.provisional)),
+    provisional: (registerData).some((r) => Boolean(r.provisional)),
     monthlyNut,
     ttmOverhead,
     ttmRevenue,
-    overheadPctOfRevenue: ttmRevenue > 0 ? ttmOverhead / ttmRevenue : 0,
-    fixedShare: ttmOverhead > 0 ? fixedTtm / ttmOverhead : 0,
+    overheadPctOfRevenue: ttmRevenue > 0 ? ttmOverhead / ttmRevenue : null,
+    fixedShare: ttmOverhead > 0 ? fixedTtm / ttmOverhead : null,
     rulingsOpen: rows.filter((r) => r.needsRuling).length,
     pools,
     rows,
@@ -299,9 +297,9 @@ export async function loadFixedCostBoard(): Promise<FixedCostBoard> {
     cogsRows,
     cogsTtm,
     grossMarginTtm,
-    grossMarginPct: ttmRevenue > 0 ? grossMarginTtm / ttmRevenue : 0,
-    variableOverheadTtm: Math.round(ttmOverhead - fixedTtm),
-    fixedOverheadTtm: Math.round(fixedTtm),
+    grossMarginPct: ttmRevenue > 0 ? grossMarginTtm / ttmRevenue : null,
+    variableOverheadTtm: ttmOverhead - fixedTtm,
+    fixedOverheadTtm: fixedTtm,
     lastFullMonth,
     error: null,
   };
