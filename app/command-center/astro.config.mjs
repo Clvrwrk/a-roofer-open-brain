@@ -28,6 +28,9 @@ export default defineConfig({
     ...(process.env.VITE_CACHE_DIR ? { cacheDir: process.env.VITE_CACHE_DIR } : {}),
   },
   security: {
+    // Traefik terminates TLS. Trust only this deployed host when Astro restores
+    // the external origin used by the canonical Sales BFF's origin/CSRF checks.
+    allowedDomains: [{hostname: "cc.proexteriorsus.net", protocol: "https"}],
     // Agent OAuth endpoints accept machine-to-machine form and SET POSTs.
     checkOrigin: false,
   },
