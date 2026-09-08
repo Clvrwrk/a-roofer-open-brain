@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { canonicalFridayLegacyConflict } from "@lib/friday-wip-legacy-guard";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -34,6 +35,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
   if (!actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden" }, { status: 403 });
   }
+  const canonicalConflict = canonicalFridayLegacyConflict();
+  if (canonicalConflict) return canonicalConflict;
 
   const raw = url.searchParams.get("cutoff");
   const cutoff = raw && DATE_PATTERN.test(raw) ? raw : new Date().toISOString().slice(0, 10);

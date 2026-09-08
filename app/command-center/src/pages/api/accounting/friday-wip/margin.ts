@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { canonicalFridayLegacyConflict } from "@lib/friday-wip-legacy-guard";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -28,6 +29,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden" }, { status: 403 });
   }
+  const canonicalConflict = canonicalFridayLegacyConflict();
+  if (canonicalConflict) return canonicalConflict;
 
   const body = await request.json().catch(() => ({}));
   const location = String(body.location ?? "").trim().toLowerCase();

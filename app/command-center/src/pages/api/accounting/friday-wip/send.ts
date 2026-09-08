@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { canonicalFridayLegacyConflict } from "@lib/friday-wip-legacy-guard";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
 import { loadFridayWipBoard } from "@lib/friday-wip";
@@ -42,6 +43,8 @@ export const POST: APIRoute = async ({ locals }) => {
   if (!actorCanAccessDepartment(actor, "accounting")) {
     return jsonApiResponse({ error: "forbidden" }, { status: 403 });
   }
+  const canonicalConflict = canonicalFridayLegacyConflict();
+  if (canonicalConflict) return canonicalConflict;
 
   const env = getRuntimeEnv();
   const apiKey = env.AGENTMAIL_API_KEY?.trim();
