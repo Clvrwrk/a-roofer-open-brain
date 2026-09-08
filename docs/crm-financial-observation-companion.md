@@ -1,0 +1,9 @@
+# CRM financial observation integrity
+
+September8,2026. PEC-300 ↔ CAT-189; CODEX receipt docs/linear/teams/PEC/2026-09-07-crm-pwa-weekly-data.md. Root counterpart: /Users/chussey/Documents/ChatGPT/crm.proexteriorsus.net/docs/delivery/FINANCIAL-OBSERVATION-INTEGRITY.md.
+
+The AccuLynx walk previously mapped any object financial response, including HTTP401/500 error bodies, overwriting known values with null and stamping a fresh observation. The financial branch now requires HTTP200 and explicit approvedJobValue/balanceDue values that are finite numbers or null; mapped optional totals are validated when present. Failed or malformed responses retain the existing typed row and timestamps, preserve archive-first raw evidence, and use the existing walk-error record. Valid zero, negative and nullable balances remain supported. No source classifications or balances are guessed.
+
+Worker validation:54 cached-only Deno tests passed (33 walk, including18 new adverse cases;21 mapper). Replaying the new401 regression against original HEAD failed as expected, proving the prior data-loss behavior. Lead independently inspected the source/test diff and approved this bounded correction. Lint reports the same pre-existing unused resolveCompanyRepName on original and patched source; unrelated code retained. No provider calls, deploy, grants, or production database changes occurred.
+
+This fix does not establish provider census completeness, correct job-walk skip/watermark semantics, or repair previously overwritten data. Those require successful account-pinned enumeration and fresh financial observations with a reconciled denominator. Preserve US worker placement and existing data; deploy only the reviewed function revision after the source release gate. Source files: supabase/functions/acculynx-sync/resources/job-walk.ts and job-walk.test.ts.

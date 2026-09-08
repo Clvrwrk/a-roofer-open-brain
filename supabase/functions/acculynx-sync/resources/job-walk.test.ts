@@ -36,6 +36,7 @@ const ACCT = {
 function makeJobWalkFetch(
   jobIds: string[],
   invoiceIdsPerJob: Record<string, string[]>,
+  financialsResponse?: { status: number; body: unknown },
 ): { mockFetch: (url: string | URL | Request) => Promise<Response>; fetchedUrls: string[] } {
   const fetchedUrls: string[] = [];
 
@@ -72,9 +73,14 @@ function makeJobWalkFetch(
 
     // /jobs/{id}/financials
     if (urlStr.includes("/financials")) {
-      const body = JSON.stringify({ approvedJobValue: 30368.48, balanceDue: 17532.48 });
+      const body = JSON.stringify(
+        financialsResponse ? financialsResponse.body : { approvedJobValue: 30368.48, balanceDue: 17532.48 },
+      );
       return Promise.resolve(
-        new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+        new Response(body, {
+          status: financialsResponse?.status ?? 200,
+          headers: { "content-type": "application/json" },
+        }),
       );
     }
 
@@ -112,6 +118,7 @@ const DEFAULT_USERS = [
 
 interface WalkSbOptions {
   users?: unknown[];
+  financialRows?: Record<string, unknown>[];
   /** jobId -> newest prior acculynx_raw fetched_at (ISO string). Absent = first-sight. */
   priorRawArchiveByJobId?: Record<string, string>;
 }
@@ -122,6 +129,10 @@ function makeWalkSb(options: WalkSbOptions = {}) {
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
   const insertCalls: { table: string; row: unknown }[] = [];
   const watermarkUpserts: unknown[] = [];
+  const financialRows = new Map(
+    (options.financialRows ?? []).map((row) => [row.job_id, { ...row }]),
+  );
+  const events: { operation: "insert" | "upsert"; table: string }[] = [];
 
   // forceErrorOnTable: when set, upsert() into that table resolves { error: {...} }
   let forceErrorOnTable: string | null = null;
@@ -134,6 +145,7 @@ function makeWalkSb(options: WalkSbOptions = {}) {
     },
     from: (table: string) => ({
       upsert: (rows: unknown[]) => {
+        events.push({ operation: "upsert", table });
         upsertCalls.push({ table, rows: Array.isArray(rows) ? rows : [rows] });
         if (table === "acculynx_sync_watermark") {
           watermarkUpserts.push(Array.isArray(rows) ? rows[0] : rows);
@@ -141,9 +153,15 @@ function makeWalkSb(options: WalkSbOptions = {}) {
         if (table === forceErrorOnTable) {
           return Promise.resolve({ error: { message: forceErrorMessage } });
         }
+        if (table === "acculynx_job_financials") {
+          for (const row of rows as Record<string, unknown>[]) {
+            financialRows.set(row.job_id, { ...financialRows.get(row.job_id), ...row });
+          }
+        }
         return Promise.resolve({ error: null });
       },
       insert: (row: unknown) => {
+        events.push({ operation: "insert", table });
         insertCalls.push({ table, row });
         return Promise.resolve({ error: null });
       },
@@ -190,12 +208,122 @@ function makeWalkSb(options: WalkSbOptions = {}) {
     }),
   };
 
-  return { sb, upsertCalls, insertCalls, watermarkUpserts };
+  return { sb, upsertCalls, insertCalls, watermarkUpserts, financialRows, events };
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+const PRIOR_FINANCIALS = {
+  job_id: "job-abc",
+  approved_job_value: 30368.48,
+  balance_due: 17532.48,
+  synced_at: "2026-08-01T00:00:00.000Z",
+  last_seen_by_api: "2026-08-01T00:00:00.000Z",
+  raw: { approvedJobValue: 30368.48, balanceDue: 17532.48 },
+};
+
+for (const response of [
+  { name: "401 error object", status: 401, body: { message: "Unauthorized" } },
+  { name: "500 error object", status: 500, body: { error: "Internal server error" } },
+  { name: "500 with financial fields", status: 500, body: { approvedJobValue: 0, balanceDue: 0 } },
+  { name: "201 with financial fields", status: 201, body: { approvedJobValue: 0, balanceDue: 0 } },
+  { name: "200 error envelope", status: 200, body: { error: "Unavailable" } },
+  { name: "200 empty object", status: 200, body: {} },
+  { name: "200 missing balance", status: 200, body: { approvedJobValue: 100 } },
+  { name: "200 missing approved value", status: 200, body: { balanceDue: 100 } },
+  { name: "200 array", status: 200, body: [{ approvedJobValue: 0, balanceDue: 0 }] },
+  { name: "200 null body", status: 200, body: null },
+  { name: "200 string amount", status: 200, body: { approvedJobValue: 100, balanceDue: "0" } },
+  { name: "200 boolean amount", status: 200, body: { approvedJobValue: false, balanceDue: 0 } },
+  {
+    name: "200 malformed optional total",
+    status: 200,
+    body: { approvedJobValue: 100, balanceDue: 0, worksheetTotal: {} },
+  },
+]) {
+  Deno.test(`syncJobWalk — ${response.name} is archived and logged without replacing financials`, async () => {
+    const { mockFetch } = makeJobWalkFetch(["job-abc"], {}, response);
+    const { sb, insertCalls, upsertCalls, financialRows, events } = makeWalkSb({
+      financialRows: [PRIOR_FINANCIALS],
+    });
+
+    const reps = await syncJobWalk(
+      sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1",
+    );
+
+    assertEquals(financialRows.get("job-abc"), PRIOR_FINANCIALS);
+    assertEquals(upsertCalls.filter((call) => call.table === "acculynx_job_financials"), []);
+    const archives = insertCalls.filter((call) =>
+      call.table === "acculynx_raw" && (call.row as Record<string, unknown>).resource_type === "job_financials"
+    );
+    assertEquals(archives.length, 1);
+    assertEquals(archives[0].row, {
+      sync_batch_id: "batch-1",
+      resource_type: "job_financials",
+      api_endpoint: "/jobs/job-abc/financials",
+      http_status: response.status,
+      page_index: null,
+      payload: response.body,
+    });
+    const errors = insertCalls.filter((call) => call.table === "acculynx_job_walk_errors");
+    assertEquals(errors.length, 1);
+    assertEquals(errors[0].row, {
+      account_key: "kansas_city",
+      job_id: "job-abc",
+      resource_type: "job_financials",
+      sync_batch_id: "batch-1",
+      http_status: response.status,
+      error_message: response.status === 200
+        ? "Invalid financials response shape; existing financials preserved"
+        : `Financials request returned HTTP ${response.status}; existing financials preserved`,
+    });
+    // Contacts archive is first, financials archive second; the failure follows it.
+    assertEquals(events.slice(0, 3), [
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_job_walk_errors" },
+    ]);
+    assertEquals(reps.get("job-abc"), "Bob Smolek", "The remaining job walk must still complete");
+  });
+}
+
+for (const amounts of [
+  { approvedJobValue: 0, balanceDue: 0 },
+  { approvedJobValue: null, balanceDue: null },
+  { approvedJobValue: 100, balanceDue: null },
+  { approvedJobValue: null, balanceDue: 0 },
+  { approvedJobValue: 100, balanceDue: -10 },
+]) {
+  Deno.test(`syncJobWalk — HTTP 200 financials ${JSON.stringify(amounts)} updates the stored snapshot`, async () => {
+    const body = { ...amounts, worksheetTotal: null, changeOrderTotal: 0, amendments: [], futureField: "kept" };
+    const { mockFetch } = makeJobWalkFetch(["job-abc"], {}, { status: 200, body });
+    const { sb, financialRows, events, insertCalls, upsertCalls } = makeWalkSb({
+      financialRows: [PRIOR_FINANCIALS],
+    });
+
+    await syncJobWalk(
+      sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1",
+    );
+
+    const stored = financialRows.get("job-abc")!;
+    assertEquals(upsertCalls.filter((call) => call.table === "acculynx_job_financials").length, 1);
+    assertEquals(stored.approved_job_value, amounts.approvedJobValue);
+    assertEquals(stored.balance_due, amounts.balanceDue);
+    assertEquals(stored.worksheet_total, null);
+    assertEquals(stored.change_order_total, 0);
+    assertEquals(stored.raw, body);
+    assertEquals(stored.synced_at === PRIOR_FINANCIALS.synced_at, false);
+    assertEquals(stored.last_seen_by_api, stored.synced_at);
+    assertEquals(insertCalls.filter((call) => call.table === "acculynx_job_walk_errors"), []);
+    assertEquals(events.slice(0, 3), [
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "upsert", table: "acculynx_job_financials" },
+    ]);
+  });
+}
 
 Deno.test("syncJobWalk — fetches /jobs/{id}/invoices for each job (level 1)", async () => {
   const jobIds = ["job-abc", "job-def"];
