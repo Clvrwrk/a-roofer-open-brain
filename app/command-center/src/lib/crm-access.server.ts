@@ -14,7 +14,10 @@ export async function resolveCrmHumanAccess(result: SessionResult, env: RuntimeE
     const actor = resolveActorFromSessionUser(result.user, env);
     return actor ? {actor, salesOnly: false} : null;
   }
-  if (env.COMMAND_CENTER_AUTH_MODE !== 'workos' || result.user.emailVerified !== true) return null;
+  if (env.COMMAND_CENTER_AUTH_MODE !== 'workos' || result.user.emailVerified !== true
+    || !env.CRM_WORKOS_ORGANIZATION_ID || !result.crmIdentity?.sessionId
+    || result.crmIdentity.subject !== result.user.id
+    || result.crmIdentity.organizationId !== env.CRM_WORKOS_ORGANIZATION_ID) return null;
   const preserved = resolvePreservedLegacyHuman(result, env);
   if (preserved) return {actor: preserved, salesOnly: false};
   const explicit = resolveActorFromSessionUser(result.user, {...env, COMMAND_CENTER_OPEN_ACCESS: 'false', COMMAND_CENTER_VIEWER_DOMAINS: ''});

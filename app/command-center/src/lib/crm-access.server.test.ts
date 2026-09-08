@@ -17,6 +17,13 @@ describe('canonical Sales access',()=>{
   const transport=response({code:'42501'},403);const access=await resolveCrmHumanAccess(result,{...env,COMMAND_CENTER_HUMAN_ADMIN_EMAILS:'rep@example.invalid'},transport);
   expect(access?.salesOnly).toBe(false);expect(access?.actor.departmentAccess).toBe('all');expect(transport).not.toHaveBeenCalled();
  });
+ it.each(['COMMAND_CENTER_HUMAN_ADMIN_EMAILS','COMMAND_CENTER_ROLE_ACCOUNTING_EMAILS','COMMAND_CENTER_ROLE_PURCHASING_EMAILS'])('requires organization and subject continuity before explicit %s grants',async(key)=>{
+  for(const identity of [undefined,{...result.crmIdentity!,organizationId:'other-org'},{...result.crmIdentity!,subject:'other-user'},{...result.crmIdentity!,sessionId:''}]){
+   const transport=response(membership);
+   expect(await resolveCrmHumanAccess({...result,crmIdentity:identity},{...env,[key]:result.user.email},transport)).toBeNull();
+   expect(transport).not.toHaveBeenCalled();
+  }
+ });
  it.each([401,403,500])('fails closed on canonical %s including revoked membership',async(status)=>{expect(await resolveCrmHumanAccess(result,env,response({code:'42501'},status))).toBeNull();});
  it('fails closed on network errors and malformed successful responses',async()=>{
   expect(await resolveCrmHumanAccess(result,env,vi.fn(async()=>{throw Error('offline');}) as typeof fetch)).toBeNull();

@@ -21,3 +21,8 @@ This change does not alter `crm-access.server.ts`, legacy preservation, membersh
 Final logs:
 - `/private/tmp/crm-cc-sales-login-tests-final.log` SHA256 `53b272a9d38b21e038ace71e517430a972cffdb3e944b27a85ee50c0e6cd669a`
 - `/private/tmp/crm-cc-sales-login-build-final.log` SHA256 `d107e7924f5bd72a6dc03bc614810580d24f433e21a6be54e97cd065219f0c01`
+
+
+## Existing-session organization correction
+
+The rollout review reproduced an older-session bypass of organization validation in the explicit legacy role branch. The canonical human resolver now checks verified email, nonempty configured organization and session ID, exact subject continuity and exact organization before any preserved or explicit legacy human role. Existing service-token resolution stays separate.460 tests and the full build passed; nine independent groups passed, including the private approved roster and wrong-org/missing-session cases. Initial reproduced failures are preserved in root CC-STAFF-ROLLOUT-REVIEW.md evidence. No public cutover is inferred.
