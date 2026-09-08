@@ -1,6 +1,7 @@
 import {CanonicalCrmClient} from '@proexteriors/crm-server';
 import {resolveActorFromSessionUser, type CommandCenterActor} from './access-control';
 import {attachCrmStaffSession} from './crm-staff.server';
+import {resolvePreservedLegacyHuman} from './crm-legacy-preservation.server';
 import type {SessionResult} from './session.server';
 import type {RuntimeEnv} from './runtime-env';
 
@@ -14,6 +15,8 @@ export async function resolveCrmHumanAccess(result: SessionResult, env: RuntimeE
     return actor ? {actor, salesOnly: false} : null;
   }
   if (env.COMMAND_CENTER_AUTH_MODE !== 'workos' || result.user.emailVerified !== true) return null;
+  const preserved = resolvePreservedLegacyHuman(result, env);
+  if (preserved) return {actor: preserved, salesOnly: false};
   const explicit = resolveActorFromSessionUser(result.user, {...env, COMMAND_CENTER_OPEN_ACCESS: 'false', COMMAND_CENTER_VIEWER_DOMAINS: ''});
   if (explicit) return {actor: explicit, salesOnly: false};
   if (env.CRM_SALES_WORKSPACE_ENABLED !== 'true' || !env.CRM_WORKOS_ORGANIZATION_ID || result.crmIdentity?.organizationId !== env.CRM_WORKOS_ORGANIZATION_ID) return null;
