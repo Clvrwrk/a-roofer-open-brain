@@ -1,10 +1,10 @@
+import {resolveCrmHumanAccess, salesOnlyRoute} from '@lib/crm-access.server';
 import {attachCrmStaffSession} from '@lib/crm-staff.server';
 import { defineMiddleware } from "astro:middleware";
 import * as Sentry from "@sentry/astro";
 import {
   buildUnauthorizedResponse,
   localActor,
-  resolveActorFromSessionUser,
   resolveServiceActorFromBearer,
 } from "@lib/access-control";
 import { resolveRegistryServiceActorFromBearer } from "@lib/agent-service-token.server";
@@ -137,6 +137,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
+  if (env.CRM_CANONICAL_ENABLED === 'true' && env.COMMAND_CENTER_AUTH_MODE !== 'workos') {
+    return new Response('Staff access is not configured.', {status: 503, headers: {'cache-control': 'no-store'}});
+  }
+
   // 3. Dev fallback: anything but explicit workos mode keeps the Local Operator.
   if (env.COMMAND_CENTER_AUTH_MODE !== "workos") {
     const actor = localActor();
@@ -155,7 +159,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return redirect(`/auth/login?returnTo=${returnTo}`, 302);
   }
 
-  const actor = resolveActorFromSessionUser(sessionResult.user, env);
+  if (sessionResult.refreshedSealedSession) {
+    cookies.set(SESSION_COOKIE, sessionResult.refreshedSealedSession, SESSION_COOKIE_OPTIONS);
+  }
+
+  const access = await resolveCrmHumanAccess(sessionResult, env);
+  const actor = access?.actor;
 
   if (!actor) {
     // Authenticated identity, but not on any allowlist.
@@ -163,8 +172,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return redirect("/auth/denied", 302);
   }
 
-  if (sessionResult.refreshedSealedSession) {
-    cookies.set(SESSION_COOKIE, sessionResult.refreshedSealedSession, SESSION_COOKIE_OPTIONS);
+
+  if (access?.salesOnly) {
+    const decision = salesOnlyRoute(pathname);
+    if (decision === 'redirect') return redirect('/sales/wip-ar', 302);
+    if (decision === 'deny') return buildForbiddenJsonResponse();
   }
 
   locals.actor = actor;

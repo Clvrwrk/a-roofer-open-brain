@@ -11,6 +11,7 @@ export const SESSION_COOKIE_OPTIONS = {
 } as const;
 
 export interface SessionUser {
+  emailVerified?: boolean;
   id: string;
   email: string;
   firstName: string | null;
@@ -21,9 +22,10 @@ export type SessionResult =
   | { status: "unauthenticated"; reason: string }
   | { status: "authenticated"; user: SessionUser; refreshedSealedSession: string | null; crmIdentity?: {accessToken:string;subject:string;organizationId:string;sessionId:string} };
 
-function toSessionUser(user: { id: string; email: string; firstName?: string | null; lastName?: string | null }): SessionUser {
+function toSessionUser(user: { id: string; email: string; firstName?: string | null; lastName?: string | null; emailVerified?: boolean }): SessionUser {
   return {
     id: user.id,
+    emailVerified: user.emailVerified === true,
     email: user.email.trim().toLowerCase(),
     firstName: user.firstName ?? null,
     lastName: user.lastName ?? null,
@@ -54,7 +56,7 @@ export async function authenticateSession(
   try {
     const result = await session.authenticate();
     if (result.authenticated) {
-      return { status: "authenticated", user: toSessionUser(result.user), refreshedSealedSession: null, crmIdentity: result.organizationId ? {accessToken:result.accessToken,subject:result.user.id,organizationId:result.organizationId,sessionId:result.sessionId}:undefined };
+      return { status: "authenticated", user: toSessionUser(result.user), refreshedSealedSession: null, crmIdentity: result.user.emailVerified === true && result.organizationId ? {accessToken:result.accessToken,subject:result.user.id,organizationId:result.organizationId,sessionId:result.sessionId}:undefined };
     }
 
     if (result.reason === "no_session_cookie_provided") {
@@ -74,7 +76,7 @@ export async function authenticateSession(
         status: "authenticated",
         user: toSessionUser(fresh.user),
         refreshedSealedSession: refreshed.sealedSession,
-        crmIdentity: fresh.organizationId ? {accessToken:fresh.accessToken,subject:fresh.user.id,organizationId:fresh.organizationId,sessionId:fresh.sessionId}:undefined,
+        crmIdentity: fresh.user.emailVerified === true && fresh.organizationId ? {accessToken:fresh.accessToken,subject:fresh.user.id,organizationId:fresh.organizationId,sessionId:fresh.sessionId}:undefined,
       };
     }
   } catch {

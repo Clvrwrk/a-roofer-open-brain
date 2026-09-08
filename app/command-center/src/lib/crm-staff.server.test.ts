@@ -4,10 +4,10 @@ vi.mock('./workos.server',()=>({getWorkOs:()=>({userManagement:sdk})}));
 import {authenticateSession} from './session.server';
 import {attachCrmStaffSession} from './crm-staff.server';
 const token=(c:object)=>`header.${Buffer.from(JSON.stringify(c)).toString('base64url')}.signature`;
-const claims={sub:'user-a',org_id:'org-a',sid:'sid-a',role:'authenticated',exp:Math.floor(Date.now()/1000)+600};
-const user={id:'user-a',email:'test@example.invalid',firstName:'Synthetic',lastName:'Person'};
+const claims={sub:'user-a',org_id:'org-a',sid:'sid-a',role:'member',exp:Math.floor(Date.now()/1000)+600};
+const user={id:'user-a',email:'test@example.invalid',firstName:'Synthetic',lastName:'Person',emailVerified:true};
 const success={authenticated:true,user,organizationId:claims.org_id,sessionId:claims.sid,accessToken:token(claims)};
-const env={CRM_CANONICAL_ENABLED:'true',COMMAND_CENTER_AUTH_MODE:'workos',WORKOS_COOKIE_PASSWORD:'synthetic-cookie-password-more-than32',COMMAND_CENTER_PUBLIC_URL:'https://cc.example'};
+const env={CRM_WORKOS_ORGANIZATION_ID:'org-a',CRM_CANONICAL_ENABLED:'true',COMMAND_CENTER_AUTH_MODE:'workos',WORKOS_COOKIE_PASSWORD:'synthetic-cookie-password-more-than32',COMMAND_CENTER_PUBLIC_URL:'https://cc.example'};
 const human={type:'human',source:'workos'};
 beforeEach(()=>vi.clearAllMocks());
 it('uses verified sealed session identity only on the staff sales namespace',async()=>{
@@ -33,3 +33,5 @@ it('does not substitute CC email roles for missing or mismatched canonical organ
  for(const identity of [{...success,organizationId:undefined},{...success,organizationId:'wrong-org'},{...success,accessToken:token({...claims,role:'service_role'})}]){
  sdk.loadSealedSession.mockReturnValue({authenticate:vi.fn(async()=>identity)});const result=await authenticateSession('sealed',env);expect(attachCrmStaffSession('/api/sales/v1/session',human,result,env)).toBeUndefined();}
 });
+
+it('does not attach canonical authority for an unverified email',async()=>{sdk.loadSealedSession.mockReturnValue({authenticate:vi.fn(async()=>({...success,user:{...user,emailVerified:false}}))});const result=await authenticateSession('sealed',env);expect(attachCrmStaffSession('/api/sales/v1/session',human,result,env)).toBeUndefined();});

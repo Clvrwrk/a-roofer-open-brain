@@ -398,7 +398,7 @@ export function localActor(): CommandCenterActor {
 function isHumanAdminEmail(email: string | null, env: RuntimeEnv) {
   const adminEmails = splitCsv(env.COMMAND_CENTER_HUMAN_ADMIN_EMAILS);
   const normalized = cleanEmail(email);
-  const allowlist = adminEmails.length > 0 ? adminEmails : ["admin@cc.proexteriorsus.net"];
+  const allowlist = adminEmails.length > 0 ? adminEmails : env.CRM_CANONICAL_ENABLED === "true" ? [] : ["admin@cc.proexteriorsus.net"];
   return Boolean(normalized && allowlist.map((item) => item.toLowerCase()).includes(normalized));
 }
 
