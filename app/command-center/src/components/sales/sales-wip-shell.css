@@ -1,0 +1,15 @@
+.cc-sales-wip-shell{min-width:0;color:var(--text)}
+.cc-sales-wip-nav{display:flex;flex-wrap:wrap;align-items:stretch;gap:.5rem;margin-bottom:1rem}
+.cc-sales-wip-nav a,.cc-sales-wip-nav button{box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:.15rem;min-height:48px;padding:.6rem .85rem;border:1px solid var(--border);border-radius:.65rem;font:inherit;font-size:.875rem;line-height:1.3;text-decoration:none;text-align:left}
+.cc-sales-wip-nav a{background:var(--surface);color:var(--text);font-weight:700;box-shadow:inset 0 -3px var(--primary)}
+.cc-sales-wip-nav button:disabled{background:var(--surface-alt);color:var(--text-muted);cursor:not-allowed}
+.cc-sales-wip-nav small{font-size:.75rem;font-weight:400}
+.cc-sales-wip-content{min-width:0}
+.cc-sales-wip-access,.cc-sales-wip-message{padding:1rem 1.25rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface);overflow-wrap:anywhere}
+.cc-sales-wip-access h2{font-size:1.25rem;line-height:1.35;margin:0 0 .5rem}
+.cc-sales-wip-access p{max-width:65ch;line-height:1.5}
+.cc-sales-wip-access>div{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+.cc-sales-wip-access button,.cc-sales-wip-access a{min-height:48px;display:inline-flex;align-items:center;padding:.65rem .9rem;font:inherit}
+.cc-sales-wip-access button{border:1px solid var(--border);border-radius:.5rem;background:var(--surface);cursor:pointer}
+.cc-sales-wip-shell :is(a,button):focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+@media(max-width:480px){.cc-sales-wip-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.cc-sales-wip-nav a{grid-column:1/-1}.cc-sales-wip-nav a,.cc-sales-wip-nav button{padding:.6rem .7rem}.cc-sales-wip-access,.cc-sales-wip-message{padding:.85rem}}
