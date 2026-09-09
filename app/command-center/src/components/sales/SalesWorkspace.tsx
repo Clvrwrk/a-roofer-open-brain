@@ -55,7 +55,7 @@ export default function DesktopSales({initialRoute}:{initialRoute:SalesRoute}) {
    {notice&&<p className="cc-sales-wip-message" role="status">{notice}</p>}
    {error?<section className="cc-sales-wip-access" role="alert"><h2>Let’s reconnect your workspace</h2><p>{error}</p><div><button type="button" onClick={()=>setAttempt(value=>value+1)}>Check access again</button><a href="/auth/login?returnTo=%2Fsales">Sign in</a></div></section>
     :!ready?<section className="cc-sales-wip-access" role="status"><h2>Opening your weekly review</h2><p>Checking your staff access and assigned contracts.</p></section>
-    :<div className="sales-workspace"><WeeklyWorkspace client={client} embedded onDirty={value=>{dirty.current=value;}} onPending={value=>{pending.current=value;if(!value)setNotice('');}}/></div>}
+    :<div className="sales-workspace"><WeeklyWorkspace client={client} embedded desktopBoard onDirty={value=>{dirty.current=value;}} onPending={value=>{pending.current=value;if(!value)setNotice('');}}/></div>}
   </section>
  </div>;
 }
