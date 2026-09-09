@@ -3,7 +3,13 @@ import node from "@astrojs/node";
 import sentry from "@sentry/astro";
 import react from "@astrojs/react";
 
+const mirrorAssetsPrefix = process.env.CRM_SALES_MIRROR_ASSETS_PREFIX || '';
+if (mirrorAssetsPrefix && mirrorAssetsPrefix !== '/sales-mirror-assets') {
+  throw new Error('CRM_SALES_MIRROR_ASSETS_PREFIX must be /sales-mirror-assets or unset');
+}
+
 export default defineConfig({
+  ...(mirrorAssetsPrefix ? { build: { assetsPrefix: mirrorAssetsPrefix } } : {}),
   output: "server",
   // Preserve Astro 6 whitespace behavior while the shared surfaces are revalidated.
   compressHTML: true,
@@ -22,6 +28,7 @@ export default defineConfig({
     }),
   ],
   vite: {
+    define: { 'import.meta.env.CRM_SALES_MIRROR_ASSETS_PREFIX': JSON.stringify(mirrorAssetsPrefix) },
     envDir: "../..",
     // Sandboxed/CI builds can relocate the vite cache when node_modules/.vite
     // is not writable; defaults to node_modules/.vite when unset.

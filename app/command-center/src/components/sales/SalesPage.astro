@@ -1,14 +1,19 @@
 ---
-import AppShell from '../../layouts/AppShell.astro';
 import DesktopSales from './SalesWorkspace';
 import type {SalesRoute} from '@proexteriors/sales-workspace';
 import {getRuntimeEnv} from '@lib/runtime-env';
+import '@proexteriors/design-system/fonts.css';
+import '@proexteriors/design-system/tokens.css';
+import '@proexteriors/design-system/primitives.css';
+import './sales-wip-shell.css';
 interface Props {route:SalesRoute}
 const {route}=Astro.props;
-const enabled=getRuntimeEnv().CRM_SALES_WORKSPACE_ENABLED==='true';
+const env=getRuntimeEnv();
+const enabled=env.CRM_SALES_WORKSPACE_ENABLED==='true';
+if(env.COMMAND_CENTER_BUILD_SHA)Astro.response.headers.set('X-CRM-Sales-Build',env.COMMAND_CENTER_BUILD_SHA);
 Astro.response.headers.set('Cache-Control','no-store');
 if(!enabled)Astro.response.status=404;
 ---
-<AppShell title="Sales" eyebrow="Pro Exteriors" activePage="sales">
- {enabled ? <DesktopSales initialRoute={route} client:load/> : <section class="panel"><h2>Sales workspace unavailable</h2><p>The shared CRM workspace has not been activated on this host.</p><a href="/sales">Return to Sales</a></section>}
-</AppShell>
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><meta name="theme-color" content="#11133f"/><meta name="robots" content="noindex,nofollow"/><link rel="icon" href="/favicon.svg"/><title>Sales workspace · Pro Exteriors</title></head><body>
+ {enabled ? <DesktopSales initialRoute={route} client:load/> : <section><h1>Sales workspace unavailable</h1><p>The shared CRM workspace has not been activated on this host.</p><a href="/">Return to Command Center</a></section>}
+</body></html>

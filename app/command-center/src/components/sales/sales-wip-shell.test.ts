@@ -2,26 +2,52 @@ import {describe,it,expect} from 'vitest';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import vm from 'node:vm';
 import DesktopSales from './SalesWorkspace';
+import CrmSalesMirror from './CrmSalesMirror';
+const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
 
-describe('desktop WIP-only Sales entry',()=>{
- it('keeps every entry in the embedded weekly release while staff access loads',()=>{
+describe('optional CRM mirror confined to CC Sales',()=>{
+ it('renders all five CRM journey groups and honest unavailable links while access loads',()=>{
   for(const page of ['Today','Pipeline','WIP/AR','More'] as const){
    const html=renderToStaticMarkup(createElement(DesktopSales,{initialRoute:{page}}));
-   expect(html).toContain('Opening your weekly review');expect(html).not.toContain('<h1');
-   expect(html).toContain('aria-current="page"');expect(html.match(/disabled=""/g)).toHaveLength(5);
-   for(const label of ['Lead management','Prospecting','Inspections','Agreements','Sales performance'])expect(html).toContain(label);
+   expect(html).toContain('Opening your weekly review');expect(html).toContain('aria-label="Customer journey"');
+   for(const label of ['Prospecting','Lead Management','Job Operations Management','Job Finance Management','Sales Team (Rep) Management/Training'])expect(html).toContain(label);
+   expect(html.match(/Coming later/g)).toHaveLength(6);expect(html).toContain('aria-current="page"');expect(html).toContain('aria-disabled="true"');
+   expect(html).not.toContain('Department navigation');expect(html).not.toContain('Download Pack');
   }
  });
- it('honestly explains deferred effort links without rendering an effort editor',()=>{
+ it('keeps deferred effort links honest and uses supplied host URLs for home/sign-in/sign-out',()=>{
   const html=renderToStaticMarkup(createElement(DesktopSales,{initialRoute:{page:'Pipeline',effortId:'00000000-0000-4000-8000-000000000001'}}));
-  expect(html).toContain('Prospect and agreement workflows are not available yet.');expect(html).not.toContain('Save review');
+  expect(html).toContain('Prospect and agreement workflows are not available yet.');
+  const hosted=renderToStaticMarkup(createElement(CrmSalesMirror,{client:{} as any,practice:false,homeHref:'/sales',loginHref:'/auth/login?returnTo=%2Fsales',logoutAction:'/auth/logout',logoSrc:'/sales-mirror-assets/pro-exteriors-logo.svg'}));
+  expect(hosted).toContain('href="/sales"');expect(hosted).toContain('action="/auth/logout"');expect(hosted).toContain('src="/sales-mirror-assets/pro-exteriors-logo.svg"');
  });
- it('uses only session bootstrap and shared weekly workspace, preserving host guards',async()=>{
-  const source=await readFile(new URL('./SalesWorkspace.tsx',import.meta.url),'utf8');
-  expect(source).toContain('client.session()');expect(source).toContain('<WeeklyWorkspace');
-  expect(source).not.toContain('<SalesWorkspace');expect(source).not.toContain('/efforts');
-  expect(source).toContain("session.capabilities.includes('wip_read')");expect(source).toContain('beforeunload');
-  expect(source).toContain('onDirty=');expect(source).toContain('onPending=');
+ it('keeps the vendored shell exactly equal to CRM after the documented host-only substitutions',async()=>{
+  let source=await readFile(new URL('./CrmSalesMirror.tsx',import.meta.url),'utf8');
+  source=source.replace("import './crm-mirror.css';","import '../styles/wip-release.css';")
+   .replace("export default function CrmSalesMirror({client,practice,homeHref='/',loginHref='/auth/login?returnTo=%2Fsales',logoutAction='/auth/logout',logoSrc='/pro-exteriors-logo.svg'}:{client:SalesClient;practice:boolean;homeHref?:string;loginHref?:string;logoutAction?:string;logoSrc?:string}){",'export default function WipRelease({client,practice}:{client:SalesClient;practice:boolean}){')
+   .replace('href={homeHref} aria-label="Pro Exteriors home"','href="/" aria-label="Pro Exteriors home"').replace('action={logoutAction}','action="/auth/logout"').replace('href={loginHref}','href="/auth/login"').replace('src={logoSrc}','src="/pro-exteriors-logo.svg"');
+  expect(sha(source)).toBe('3ce316a5d088dec8f9e2df5f8856276bd80271d1594195aca7922d1816d901e5');
+  expect(sha(await readFile(new URL('./crm-mirror.css',import.meta.url),'utf8'))).toBe('a349549df1f3550363d8c06f73944742636dcfd58e688b9c87588546185bb2bd');
+  expect(source).toContain('beforeunload');expect(source).toContain('pending.current||dirty.current');expect(source).toContain('onDirty=');expect(source).toContain('onPending=');
+ });
+ it('preserves the original Friday consumer and avoids changing the global shell',async()=>{
+  const friday=await readFile(new URL('./FridayWeeklyWorkspace.tsx',import.meta.url),'utf8');
+  expect(sha(friday)).toBe('6f290b963fa381a9f3ed007c1394809e5cbdf9706cafe971f94832b222a2ca5c');
+  const page=await readFile(new URL('./SalesPage.astro',import.meta.url),'utf8');expect(page).not.toContain('AppShell');expect(page).toContain("Astro.response.headers.set('Cache-Control','no-store')");expect(page).toContain('viewport-fit=cover');expect(page).toContain("Astro.response.headers.set('X-CRM-Sales-Build',env.COMMAND_CENTER_BUILD_SHA)");
+  const wrapper=await readFile(new URL('./SalesWorkspace.tsx',import.meta.url),'utf8');expect(wrapper).toContain("apiBase:'/api/sales'");expect(wrapper).not.toContain('CRM_WEEKLY_CANONICAL_ENABLED');
+ });
+});
+
+describe('explicit Sales-only asset prefix',()=>{
+ async function config(value?:string){let source=await readFile(new URL('../../../astro.config.mjs',import.meta.url),'utf8');source=source.replace(/^import .*;$/gm,'').replace('export default defineConfig(', 'result=defineConfig(');const context={process:{env:value?{CRM_SALES_MIRROR_ASSETS_PREFIX:value}:{}},JSON,result:undefined,defineConfig:(v:any)=>v,node:()=>({}),sentry:()=>({}),react:()=>({})};vm.runInNewContext(source,context);return context.result as any;}
+ it('leaves default asset paths unchanged and enables only the explicit isolated prefix',async()=>{
+  expect((await config()).build).toBeUndefined();const enabled=await config('/sales-mirror-assets');expect(enabled.build.assetsPrefix).toBe('/sales-mirror-assets');expect(enabled.vite.define['import.meta.env.CRM_SALES_MIRROR_ASSETS_PREFIX']).toBe('"/sales-mirror-assets"');
+  for(const bad of ['/','/_astro','https://other.example','/sales-mirror-assets/'])await expect(config(bad)).rejects.toThrow('must be');
+ });
+ it('passes the optional build argument only in the build stage',async()=>{
+  const docker=await readFile(new URL('../../../Dockerfile',import.meta.url),'utf8');expect(docker).toContain('ARG CRM_SALES_MIRROR_ASSETS_PREFIX=""');expect(docker).toContain('CRM_SALES_MIRROR_ASSETS_PREFIX="$CRM_SALES_MIRROR_ASSETS_PREFIX"');expect(docker.split(' AS runner')[1]).not.toContain('CRM_SALES_MIRROR_ASSETS_PREFIX');
  });
 });
