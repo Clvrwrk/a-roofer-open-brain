@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import vm from 'node:vm';
 import DesktopSales from './SalesWorkspace';
 import CrmSalesMirror from './CrmSalesMirror';
+import {financeHref,parseFinanceView} from '@proexteriors/sales-workspace';
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
 
 describe('optional CRM mirror confined to CC Sales',()=>{
@@ -18,6 +19,13 @@ describe('optional CRM mirror confined to CC Sales',()=>{
    expect(html).not.toContain('Department navigation');expect(html).not.toContain('Download Pack');
   }
  });
+ it('exposes both finance evaluation queues with same-path Sales links',()=>{
+  const html=renderToStaticMarkup(createElement(CrmSalesMirror,{client:{} as any,practice:false}));
+  expect(html).toContain('Canceled with balance');expect(html).toContain('Invoice issues');
+  expect(html).toContain('href="?evaluation=canceled-balance#wip-main"');expect(html).toContain('href="?evaluation=invoice-issues#wip-main"');
+  expect(html).not.toContain('/accounting/friday-wip');
+  for(const queue of ['cancellation_review','invoice_review'] as const){const link=financeHref(queue,'?practice=1');expect(link.startsWith('?')).toBe(true);expect(parseFinanceView(link.split('#')[0])).toBe(queue);expect(link).toContain('practice=1');}
+ });
  it('keeps deferred effort links honest and uses supplied host URLs for home/sign-in/sign-out',()=>{
   const html=renderToStaticMarkup(createElement(DesktopSales,{initialRoute:{page:'Pipeline',effortId:'00000000-0000-4000-8000-000000000001'}}));
   expect(html).toContain('Prospect and agreement workflows are not available yet.');
@@ -29,7 +37,7 @@ describe('optional CRM mirror confined to CC Sales',()=>{
   source=source.replace("import './crm-mirror.css';","import '../styles/wip-release.css';")
    .replace("export default function CrmSalesMirror({client,practice,homeHref='/',loginHref='/auth/login?returnTo=%2Fsales',logoutAction='/auth/logout',logoSrc='/pro-exteriors-logo.svg'}:{client:SalesClient;practice:boolean;homeHref?:string;loginHref?:string;logoutAction?:string;logoSrc?:string}){",'export default function WipRelease({client,practice}:{client:SalesClient;practice:boolean}){')
    .replace('href={homeHref} aria-label="Pro Exteriors home"','href="/" aria-label="Pro Exteriors home"').replace('action={logoutAction}','action="/auth/logout"').replace('href={loginHref}','href="/auth/login"').replace('src={logoSrc}','src="/pro-exteriors-logo.svg"');
-  expect(sha(source)).toBe('3ce316a5d088dec8f9e2df5f8856276bd80271d1594195aca7922d1816d901e5');
+  expect(sha(source)).toBe('9f79a014f7b8ec4923b1f363326b076d807ddbbc4434e604feef4aa5ea3017ec');
   expect(sha(await readFile(new URL('./crm-mirror.css',import.meta.url),'utf8'))).toBe('a349549df1f3550363d8c06f73944742636dcfd58e688b9c87588546185bb2bd');
   expect(source).toContain('beforeunload');expect(source).toContain('pending.current||dirty.current');expect(source).toContain('onDirty=');expect(source).toContain('onPending=');
  });
