@@ -31,3 +31,21 @@ SHA-256: `b0f3c43cd08c2d655f3b352abb798c4403be297c7bc6205dafb2c7390ab8d0b7`.
 All 83 installed package files match the archive. The package dependency and peer requirements match the previous release, and the lockfile integrity is derived from the exact local archive. The same scoped Sales consumer TypeScript check and 177 tests across six Sales/authorization/Friday-compatibility files pass. The final version-marker commit requires the post-commit build result in the parent handoff. This CI result predates the pending EX-118 source commit and is not evidence that the admin increment has run in GitHub CI.
 
 Reciprocal authority remains CRM `docs/delivery/STATUS.md` and `docs/product/CRM-EXPANSION-DECISIONS.md` EX-118. That source record must bind the admin source commit and this companion commit before release acceptance. Actual-actor private draft isolation is provided by the separately reviewed CRM migration; installing the UI package does not apply that migration or reopen any deployed member write gate. This companion is committed locally only, with no branch push, merge or deployment.
+
+## Submitted-record locks and shared audit history — EX-119
+
+The preceding admin package was committed locally as `b753bfa1946ca8b321207f096f9fc8931532e85a`; its post-version-marker production build passed. The CRM admin source is now commit `d828ea6`. This continuation adopts the pending EX-119 source output: contracts/server 0.1.20 and sales-workspace 0.1.35. The final source commit remains to be bound by the reciprocal CRM STATUS receipt.
+
+Accepted handoffs expose a locked read-only review. Explicit authorized unlock requires a reason, and a saved amendment consumes that unlock. Both shared consumers present the actual editor, prior/new business values and database timestamp, with customer/order identity and a latest-change note. Editor refresh is applied before its reset after an accepted unlock; draft and lock-reason dirty state remain independent. Source-correction entry controls require the current actor's unlock. History clears cached data after session-invalidating failures, pauses polling during inspection, and measures the existing list height before appending earlier entries.
+
+Exact package SHA-256 values:
+
+- `proexteriors-contracts-0.1.20.tgz`: `dd49b2ca38f9ee7a97b8bfd97ca5388fa9917ff2f42a53f1d7f2659999d15d56`
+- `proexteriors-crm-server-0.1.20.tgz`: `30880ef7bc94a71f4bcd1a079ac6119f5f65dcb6f625ae68915104f0cde164d8`
+- `proexteriors-sales-workspace-0.1.35.tgz`: `04997fcd6b86826d507874612c24f10474650d3c132fa660448e7d9a39e490d8`
+
+All 37 contracts, 22 server and 87 workspace installed files match their archives. Lockfile changes are limited to these three package entries, their root pointers and the new internal contracts version. Both Sales and canonical Friday consumers pass the scoped TypeScript check. The six scoped companion test files pass 177 tests. An additional Node smoke test against the installed server package proves `/api` and `/api/sales` audit-history routes dispatch the same read-only RPC and reject absent sessions before transport. The final post-version-marker production build belongs in the parent handoff.
+
+Independent CRM UI coverage passes nine tests, including asynchronous 403 session invalidation and the actual parent unlock callback with a deferred refresh: the editor key remains stable while refresh is pending, then resets against the refreshed item version. This supplements the parent's synthetic browser checks; it does not establish hosted authorization or production activation.
+
+`FridayWeeklyWorkspace` still renders the same shared `WeeklyWorkspace`. When `CRM_WEEKLY_CANONICAL_ENABLED` is true, the Accounting Friday route selects that consumer, and its legacy update endpoint returns 409 after authorization and before parsing or writing legacy data. The false flag preserves the legacy route. No flag, hosted migration, write grant, deployment, branch push or main merge is performed by this package adoption. Source lock enforcement and historical privacy depend on the separately reviewed EX-119 database migration; package installation alone does not activate them.
