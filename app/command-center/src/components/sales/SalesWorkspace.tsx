@@ -6,7 +6,7 @@ import './sales-wip-shell.css';
 /** Every Sales URL opens the same WIP-only release. Authorization stays in the staff BFF. */
 export default function DesktopSales({initialRoute}:{initialRoute:SalesRoute}) {
  const client=useMemo(()=>createSalesClient({apiBase:'/api/sales'}),[]);
- const [ready,setReady]=useState(false),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+ const [admin,setAdmin]=useState(false),[ready,setReady]=useState(false),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  const [online,setOnline]=useState(true),[notice,setNotice]=useState('');
  const dirty=useRef(false),pending=useRef(false),region=useId();
  useEffect(()=>{
@@ -16,7 +16,7 @@ export default function DesktopSales({initialRoute}:{initialRoute:SalesRoute}) {
    if(!Array.isArray(session.capabilities)||!session.capabilities.includes('wip_read')){
     setError('Your account does not have WIP/AR access. Your administrator needs to assign your review permissions.');return;
    }
-   setReady(true);
+   setAdmin(session.role==='admin');setReady(true);
   }).catch(()=>{if(live)setError('Your staff access could not be verified. Reconnect, then try again or sign in.');});
   return()=>{live=false;};
  },[client,attempt]);
@@ -55,7 +55,7 @@ export default function DesktopSales({initialRoute}:{initialRoute:SalesRoute}) {
    {notice&&<p className="cc-sales-wip-message" role="status">{notice}</p>}
    {error?<section className="cc-sales-wip-access" role="alert"><h2>Let’s reconnect your workspace</h2><p>{error}</p><div><button type="button" onClick={()=>setAttempt(value=>value+1)}>Check access again</button><a href="/auth/login?returnTo=%2Fsales">Sign in</a></div></section>
     :!ready?<section className="cc-sales-wip-access" role="status"><h2>Opening your weekly review</h2><p>Checking your staff access and assigned contracts.</p></section>
-    :<div className="sales-workspace"><WeeklyWorkspace client={client} embedded desktopBoard onDirty={value=>{dirty.current=value;}} onPending={value=>{pending.current=value;if(!value)setNotice('');}}/></div>}
+    :<div className="sales-workspace"><WeeklyWorkspace client={client} embedded desktopBoard canManageRepAccess={admin} onDirty={value=>{dirty.current=value;}} onPending={value=>{pending.current=value;if(!value)setNotice('');}}/></div>}
   </section>
  </div>;
 }

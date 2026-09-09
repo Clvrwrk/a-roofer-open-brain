@@ -18,23 +18,24 @@ export async function resolveCrmHumanAccess(result: SessionResult, env: RuntimeE
     || !env.CRM_WORKOS_ORGANIZATION_ID || !result.crmIdentity?.sessionId
     || result.crmIdentity.subject !== result.user.id
     || result.crmIdentity.organizationId !== env.CRM_WORKOS_ORGANIZATION_ID) return null;
-  const preserved = resolvePreservedLegacyHuman(result, env);
-  if (preserved) return {actor: preserved, salesOnly: false};
-  const explicit = resolveActorFromSessionUser(result.user, {...env, COMMAND_CENTER_OPEN_ACCESS: 'false', COMMAND_CENTER_VIEWER_DOMAINS: ''});
-  if (explicit) return {actor: explicit, salesOnly: false};
-  if (env.CRM_SALES_WORKSPACE_ENABLED !== 'true' || !env.CRM_WORKOS_ORGANIZATION_ID || result.crmIdentity?.organizationId !== env.CRM_WORKOS_ORGANIZATION_ID) return null;
+  if (env.CRM_SALES_WORKSPACE_ENABLED !== 'true') return null;
   const staff = attachCrmStaffSession('/api/sales/v1/session', {type: 'human', source: 'workos'}, result, env);
   if (!staff) return null;
   try {
     const session = await new CanonicalCrmClient({url: env.CRM_SUPABASE_URL ?? '', publishableKey: env.CRM_SUPABASE_PUBLISHABLE_KEY ?? '', accessToken: staff.accessToken}, transport).session(staff.csrfToken);
+    // Current canonical role takes precedence over stale email/legacy rosters.
+    if (['manager','project_manager','sales_rep'].includes(session.role)) return null;
+    if (session.role === 'admin') {
+      const actor = resolveActorFromSessionUser(result.user, {...env, COMMAND_CENTER_OPEN_ACCESS:'false', COMMAND_CENTER_HUMAN_ADMIN_EMAILS:result.user.email});
+      return actor ? {actor:{...actor,id:session.membership_id},salesOnly:false} : null;
+    }
+    if (session.role !== 'operations') return null;
+    const preserved = resolvePreservedLegacyHuman(result, env);
+    if (preserved) return {actor:preserved,salesOnly:false};
+    const explicit = resolveActorFromSessionUser(result.user, {...env, COMMAND_CENTER_OPEN_ACCESS:'false', COMMAND_CENTER_VIEWER_DOMAINS:''});
+    if (explicit) return {actor:explicit,salesOnly:false};
     if (!session.capabilities.includes('wip_read')) return null;
-    return {salesOnly: true, actor: {
-      id: session.membership_id, type: 'human', source: 'workos',
-      displayName: [result.user.firstName, result.user.lastName].filter(Boolean).join(' ') || result.user.email,
-      email: result.user.email, roles: ['human', session.role],
-      permissions: ['command_center.read', 'desktop.command_center_ui'],
-      departmentAccess: ['sales'], desktopEnabled: true,
-    }};
+    return {salesOnly:true,actor:{id:session.membership_id,type:'human',source:'workos',displayName:[result.user.firstName,result.user.lastName].filter(Boolean).join(' ')||result.user.email,email:result.user.email,roles:['human','operations'],permissions:['command_center.read','desktop.command_center_ui'],departmentAccess:['sales'],desktopEnabled:true}};
   } catch { return null; }
 }
 

@@ -49,3 +49,27 @@ All 37 contracts, 22 server and 87 workspace installed files match their archive
 Independent CRM UI coverage passes nine tests, including asynchronous 403 session invalidation and the actual parent unlock callback with a deferred refresh: the editor key remains stable while refresh is pending, then resets against the refreshed item version. This supplements the parent's synthetic browser checks; it does not establish hosted authorization or production activation.
 
 `FridayWeeklyWorkspace` still renders the same shared `WeeklyWorkspace`. When `CRM_WEEKLY_CANONICAL_ENABLED` is true, the Accounting Friday route selects that consumer, and its legacy update endpoint returns 409 after authorization and before parsing or writing legacy data. The false flag preserves the legacy route. No flag, hosted migration, write grant, deployment, branch push or main merge is performed by this package adoption. Source lock enforcement and historical privacy depend on the separately reviewed EX-119 database migration; package installation alone does not activate them.
+
+## Explicit rep authorization and Command Center role boundary — EX-120
+
+EX-119 source is CRM `16c4042`, adopted by companion `ec5e65a2b925cfd7075fc2f55e65f7626a97316b`; that final production build passed. This continuation adopts contracts/server0.1.21 and sales-workspace0.1.36 for the pending EX-120 source commit. Parent CRM STATUS must bind the final source commit and this companion commit.
+
+The Command Center resolver now verifies the current canonical session before any legacy/email roster. Canonical admin receives full CC administration with its canonical UUID; manager/project_manager/sales_rep deny CC access and use CRM. Operations may retain explicitly preserved or configured back-office permissions; an unlisted Operations WIP reader remains confined to Sales. Revoked/missing/malformed canonical sessions cannot fall back to a legacy grant. Both shared Sales and canonical Friday consumers derive the rep-access administration entry from the verified canonical admin role. No browser request chooses its actor or grants itself a role.
+
+Exact package SHA-256 values:
+
+- `proexteriors-contracts-0.1.21.tgz`: `bb4e1009349625553827b5680b3979fc68029363d0c154074d5aad3d2563010f`
+- `proexteriors-crm-server-0.1.21.tgz`: `5cf6e8b35c13e7efed3ca7e97c98153397d2946a7e9402597871e713b99671b7`
+- `proexteriors-sales-workspace-0.1.36.tgz`: `d900a680d5940d9e4c36b183a8d59b8824ee48f56e808fc9e317a95bc316f500`
+
+All150installed files (39contracts/22server/89workspace) match the exact archives. Their SHA-512 lock integrities derive from those bytes; unrelated lock entries are unchanged. Local archive extraction uses the previously documented offline installation method; no external dependency resolution or install script was introduced.
+
+Both shared consumers and the CC resolver pass scoped TypeScript using the actual app aliases; the pre-commit production build passes. The six scoped Sales/host/staff/access/legacy/Friday test files pass178tests after updating stale bypass expectations to the explicit new policy. This includes manager/rep denial even when an email roster would formerly grant admin or Accounting, global-admin full access without an email roster, Operations preservation only after current canonical verification, and subsequent canonical revocation denial. The initial four Operations-positive failures against installed contracts0.1.20 are retained in the task evidence; they closed after exact0.1.21 adoption, whose Session enum accepts Operations/project_manager. No denial was weakened to obtain the pass.
+
+Independent root UI/API tests pass11cases for required reasons, dirty discard refusal, stable same-body retry keys after errors, duplicate-submit/pending controls, clearing cached assignment data on session invalidation, verified-host admin UI entry, both BFF bases, missing-session/CSRF denial and rejection of client-supplied role/actor/duplicate UUIDs. These are local checks, not actual production user acceptance.
+
+This companion changes code and committed package artifacts only. The user has authorized deployment, but the parent owns actual publication, migrations, private candidate staging and public routing. No companion branch push, database mutation, write-grant change or deployment is performed here. The final post-version-marker production build belongs in the parent handoff; existing production legacy data bindings must remain intact during cutover.
+
+The initial uncommitted0.1.36 archive (`b6ec0f506f28458be40d7e24526145661c7f966e4dae4c9644313754cebd9d7e`) is superseded by the digest above. Both new rep-selection and assignment-history panes now use the shared first-ten disclosure, measured unchanged expanded height and persistent reveal preference; hardcoded340/440px scroll panes were removed. Two added runtime tests prove measured623px expansion and741px persisted restoration, alongside the prior nine UI/API cases. Final178companion tests and scoped consumer/resolver TypeScript pass against the refreshed archive.
+
+**Deployed UI acceptance remains FAIL.** The user requires the exact earlier requested screen to be deployed and reviewed on both CRM and Command Center. Local previews, package equality, unit tests, build success and this commit do not mean that UI has been delivered or accepted. Parent must record actual final hosted image/commit identity and signed-in screen review before changing that status.

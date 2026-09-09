@@ -86,36 +86,21 @@ describe('exact existing-user back-office preservation', () => {
     expect(resolvePreservedLegacyHuman(result, {...env, CRM_LEGACY_BACKOFFICE_IDENTITIES: roster([])})).toBeNull();
   });
 
-  it('uses effective legacy member rights before narrower explicit email branches', async () => {
-    const transport = vi.fn(async () => new Response('{}', {status: 403}));
-    const access = await resolveCrmHumanAccess(result, {...env, COMMAND_CENTER_HUMAN_ADMIN_EMAILS: entry.email}, transport);
-    expect(access?.salesOnly).toBe(false);
-    expect(access?.actor.roles).toEqual(['human', 'member']);
-    expect(transport).not.toHaveBeenCalled();
+  it('never bypasses a missing canonical membership through a preserved roster', async () => {
+    const transport=vi.fn(async()=>new Response(JSON.stringify({code:'42501'}),{status:403}));
+    const claims={sub:entry.subject,org_id:entry.organization_id,sid:'sid-a',role:'member',exp:Date.now()/1000+600};
+    const signed={...result,crmIdentity:{...result.crmIdentity!,accessToken:`header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`}};
+    const configured={...env,CRM_SALES_WORKSPACE_ENABLED:'true',WORKOS_COOKIE_PASSWORD:'synthetic-cookie-password-longer-than-32-characters',COMMAND_CENTER_PUBLIC_URL:'https://cc.example',CRM_SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co',CRM_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_synthetic',COMMAND_CENTER_HUMAN_ADMIN_EMAILS:entry.email};
+    expect(await resolveCrmHumanAccess(signed,configured,transport)).toBeNull();expect(transport).toHaveBeenCalledOnce();
   });
-
-  it('a preserved actor does not contain a canonical membership or token', async () => {
-    const access = await resolveCrmHumanAccess(result, env);
-    expect(access?.actor.id).toBe(entry.email);
-    expect(JSON.stringify(access)).not.toContain('not-used-by-preservation');
-    expect(access?.actor).not.toHaveProperty('capabilities');
-    expect(access).not.toHaveProperty('crmStaffSession');
-  });
-
-  it('preserved back-office access cannot bypass missing or revoked CRM membership at the shared BFF', async () => {
-    const claims = {sub: entry.subject, org_id: entry.organization_id, sid: 'sid-a', role: 'member', exp: Math.floor(Date.now() / 1000) + 600};
-    const signedFixture = {...result, crmIdentity: {...result.crmIdentity!, accessToken: `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`}};
-    const configured = {...env, WORKOS_COOKIE_PASSWORD: 'synthetic-cookie-password-longer-than-32-characters', COMMAND_CENTER_PUBLIC_URL: 'https://cc.example'};
-    const access = await resolveCrmHumanAccess(signedFixture, configured);
-    expect(access?.salesOnly).toBe(false);
-    const session = attachCrmStaffSession('/api/sales/v1/session', access!.actor, signedFixture, configured);
-    expect(session).toBeDefined();
-    const transport = vi.fn(async () => new Response(JSON.stringify({code: '42501', message: 'unauthenticated'}), {status: 403}));
-    const response = await canonicalHttp({request: new Request('https://cc.example/api/sales/v1/session'), apiBase: '/api/sales', session,
-      config: {enabled: true, url: 'https://abcdefghijklmnopqrst.supabase.co', publishableKey: 'sb_publishable_synthetic', publicOrigin: 'https://cc.example'}, transport});
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({code: 'forbidden'});
-    expect(transport).toHaveBeenCalledOnce();
-    expect(transport.mock.calls[0][0]).toContain('/rpc/get_session');
+  it('preserves exact existing back-office rights only after current operations verification, without returning token data',async()=>{
+    const claims={sub:entry.subject,org_id:entry.organization_id,sid:'sid-a',role:'member',exp:Date.now()/1000+600};
+    const signed={...result,crmIdentity:{...result.crmIdentity!,accessToken:`header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`}};
+    const configured={...env,CRM_SALES_WORKSPACE_ENABLED:'true',WORKOS_COOKIE_PASSWORD:'synthetic-cookie-password-longer-than-32-characters',COMMAND_CENTER_PUBLIC_URL:'https://cc.example',CRM_SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co',CRM_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_synthetic'};
+    const transport=vi.fn(async()=>new Response(JSON.stringify({membership_id:'00000000-0000-4000-8000-000000000001',organization_id:'00000000-0000-4000-8000-000000000002',role:'operations',capabilities:['wip_read'],design_system_version:'1.0.0'})));
+    const access=await resolveCrmHumanAccess(signed,configured,transport);expect(access?.salesOnly).toBe(false);expect(access?.actor.id).toBe(entry.email);expect(access?.actor.roles).toEqual(['human','member']);expect(transport).toHaveBeenCalledOnce();expect(JSON.stringify(access)).not.toContain(signed.crmIdentity.accessToken);expect(access).not.toHaveProperty('crmStaffSession');
+    const session=attachCrmStaffSession('/api/sales/v1/session',access!.actor,signed,configured);expect(session).toBeDefined();
+    const denied=vi.fn(async()=>new Response(JSON.stringify({code:'42501'}),{status:403}));
+    const response=await canonicalHttp({request:new Request('https://cc.example/api/sales/v1/session'),apiBase:'/api/sales',session,config:{enabled:true,url:configured.CRM_SUPABASE_URL,publishableKey:configured.CRM_SUPABASE_PUBLISHABLE_KEY,publicOrigin:'https://cc.example'},transport:denied});expect(response.status).toBe(403);expect(denied).toHaveBeenCalledOnce();
   });
 });
