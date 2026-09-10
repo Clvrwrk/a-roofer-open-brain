@@ -13,9 +13,9 @@ describe('optional CRM mirror confined to CC Sales',()=>{
  it('renders all five CRM journey groups and honest unavailable links while access loads',()=>{
   for(const page of ['Today','Pipeline','WIP/AR','More'] as const){
    const html=renderToStaticMarkup(createElement(DesktopSales,{initialRoute:{page}}));
-   expect(html).toContain('Opening your weekly review');expect(html).toContain('aria-label="Customer journey"');
+   expect(html).toContain('Opening your workspace');expect(html).toContain('aria-label="Customer journey"');
    for(const label of ['Prospecting','Lead Management','Job Operations Management','Job Finance Management','Sales Team (Rep) Management/Training'])expect(html).toContain(label);
-   expect(html.match(/Coming later/g)).toHaveLength(6);expect(html).toContain('aria-current="page"');expect(html).toContain('aria-disabled="true"');
+   expect(html.match(/Coming later/g)).toHaveLength(3);expect(html).toContain('aria-current="page"');expect(html).toContain('aria-disabled="true"');
    expect(html).not.toContain('Department navigation');expect(html).not.toContain('Download Pack');
   }
  });
@@ -28,7 +28,7 @@ describe('optional CRM mirror confined to CC Sales',()=>{
  });
  it('keeps deferred effort links honest and uses supplied host URLs for home/sign-in/sign-out',()=>{
   const html=renderToStaticMarkup(createElement(DesktopSales,{initialRoute:{page:'Pipeline',effortId:'00000000-0000-4000-8000-000000000001'}}));
-  expect(html).toContain('Prospect and agreement workflows are not available yet.');
+  expect(html).toContain('saved legacy effort links do not select a record here.');
   const hosted=renderToStaticMarkup(createElement(CrmSalesMirror,{client:{} as any,practice:false,homeHref:'/sales',loginHref:'/auth/login?returnTo=%2Fsales',logoutAction:'/auth/logout',logoSrc:'/sales-mirror-assets/pro-exteriors-logo.svg'}));
   expect(hosted).toContain('href="/sales"');expect(hosted).toContain('action="/auth/logout"');expect(hosted).toContain('src="/sales-mirror-assets/pro-exteriors-logo.svg"');
  });
@@ -37,7 +37,7 @@ describe('optional CRM mirror confined to CC Sales',()=>{
   source=source.replace("import './crm-mirror.css';","import '../styles/wip-release.css';")
    .replace("export default function CrmSalesMirror({client,practice,homeHref='/',loginHref='/auth/login?returnTo=%2Fsales',logoutAction='/auth/logout',logoSrc='/pro-exteriors-logo.svg'}:{client:SalesClient;practice:boolean;homeHref?:string;loginHref?:string;logoutAction?:string;logoSrc?:string}){",'export default function WipRelease({client,practice}:{client:SalesClient;practice:boolean}){')
    .replace('href={homeHref} aria-label="Pro Exteriors home"','href="/" aria-label="Pro Exteriors home"').replace('action={logoutAction}','action="/auth/logout"').replace('href={loginHref}','href="/auth/login"').replace('src={logoSrc}','src="/pro-exteriors-logo.svg"');
-  expect(sha(source)).toBe('9f79a014f7b8ec4923b1f363326b076d807ddbbc4434e604feef4aa5ea3017ec');
+  expect(sha(source)).toBe('30edde1776cfaffbeef533ad1a1b934b5867e80c2424a4ee5a8d00874dd079d6');
   expect(sha(await readFile(new URL('./crm-mirror.css',import.meta.url),'utf8'))).toBe('a349549df1f3550363d8c06f73944742636dcfd58e688b9c87588546185bb2bd');
   expect(source).toContain('beforeunload');expect(source).toContain('pending.current||dirty.current');expect(source).toContain('onDirty=');expect(source).toContain('onPending=');
  });
