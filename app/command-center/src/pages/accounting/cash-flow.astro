@@ -14,6 +14,8 @@ import { loadCashFlowBoard } from "@lib/cash-flow";
 import "../../styles/cash-surface.css";
 
 const board = await loadCashFlowBoard();
+const available = board.status === "live" && !board.error;
+Astro.response.headers.set("Cache-Control", "no-store");
 const money = (v: number) =>
   (v < 0 ? "(" : "") + "$" + Math.round(Math.abs(v)).toLocaleString("en-US") + (v < 0 ? ")" : "");
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -28,7 +30,7 @@ const asOf = board.generatedAt.slice(0, 10);
 const avgWeeklyDisb = board.weeks.length
   ? board.weeks.reduce((s, w) => s + w.totalDisbursements, 0) / board.weeks.length
   : 0;
-const months = (weeks: number) => (weeks / 4.345).toFixed(1);
+const months = (weeks: number | null) => weeks === null ? "—" : (weeks / 4.345).toFixed(1);
 const wk1 = board.weeks[0];
 const wkLast = board.weeks[board.weeks.length - 1];
 const pctKeys = new Set(["undated_collection_pct"]);
@@ -36,14 +38,14 @@ const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) 
 ---
 
 <AppShell title="13-Week Cash Flow" eyebrow="Accounting" activePage="accounting">
-  <section class="cfx" id="cfx" data-theme="light" data-pref="system">
+  <section class="cfx" id="cfx" data-availability={available ? "ready" : "unavailable"} data-theme="light" data-pref="system">
     <div class="cfx-toolbar">
       <h2 class="cfx-title">13-Week Cash Flow</h2>
       <span class="cfx-sub">receipts live from the <a href="/accounting/friday-wip">WIP/AR board</a> · drivers audited · basis_version 0 (CPA rulings pending)</span>
       <span class="cfx-spacer"></span>
       <a class="cfx-btn" href="/executive/cash-runway">Executive view</a>
-      <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download title="PE_13WCF_asof-date.xlsx — exactly what this page shows, at this moment">Download workbook</a>
-      <span class="cfx-count">as of {asOf}</span>
+      {available && <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download title="PE_13WCF_asof-date.xlsx — exactly what this page shows, at this moment">Download workbook</a>}
+      <span class="cfx-count">{available ? `as of ${asOf}` : "Data unavailable"}</span>
       <div class="cfx-theme" role="group" aria-label="Theme">
         <button type="button" data-set-theme="system" class="is-active">System</button>
         <button type="button" data-set-theme="light">Light</button>
@@ -51,11 +53,15 @@ const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) 
       </div>
     </div>
 
-    {board.error && <p class="cfx-error">{board.error}</p>}
+    {!available ? <section class="cfx-group" aria-labelledby="cash-unavailable-title">
+      <div class="cfx-unavailable-content"><h3 id="cash-unavailable-title">Financial data unavailable</h3>
+      <p>We could not load the inputs needed for this forecast. Cash balances, projections and floor status cannot be assessed.</p>
+      <a class="cfx-btn" href="/accounting/cash-flow">Try again</a></div>
+    </section> : <>
 
     <div class="cfx-kpis">
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Cash today</span><span class="cfx-kpi-val">{money(board.beginningCash)}</span><span class="cfx-kpi-sub">{board.bankAccounts.length} bank accounts, QBO mirror</span></div>
-      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1 ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1?.weeksOfCash != null ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
       <div class="cfx-kpi"><span class="cfx-kpi-lab">Ending cash, week 13</span><span class="cfx-kpi-val">{wkLast ? money(wkLast.endingCash) : "—"}</span><span class="cfx-kpi-sub">net {wkLast ? money(board.weeks.reduce((s, w) => s + w.net, 0)) : "—"} over the quarter</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">13-week low vs floor</span><span class="cfx-kpi-val">{money(board.minEndingCash)}</span><span class="cfx-kpi-sub">{board.minEndingWeek ? `wk of ${wk(board.minEndingWeek)} · ` : ""}floor {money(board.minCashFloor)}{board.floorBreached ? " — BREACHED" : ""}</span></div>
       <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.datedShare < 0.5 }]}><span class="cfx-kpi-lab">AR dated by value</span><span class="cfx-kpi-val">{pct(board.datedShare)}</span><span class="cfx-kpi-sub">{money(board.undatedCash)} undated across {board.undatedJobs} jobs</span></div>
@@ -105,7 +111,7 @@ const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) 
             <tr class="cfx-bold"><td>Total disbursements</td>{board.weeks.map((w) => <td class="num">{money(w.totalDisbursements)}</td>)}</tr>
             <tr class="cfx-bold"><td>Net cash flow</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-neg": w.net < 0 }]}>{money(w.net)}</td>)}</tr>
             <tr class="cfx-endrow"><td>Ending cash</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-breach": w.belowFloor }]}>{money(w.endingCash)}</td>)}</tr>
-            <tr><td class="ind">Weeks of cash on hand</td>{board.weeks.map((w) => <td class="num" title={`≈ ${months(w.weeksOfCash)} months`}>{w.weeksOfCash.toFixed(1)}</td>)}</tr>
+            <tr><td class="ind">Weeks of cash on hand</td>{board.weeks.map((w) => <td class="num" title={`≈ ${months(w.weeksOfCash)} months`}>{(w.weeksOfCash === null ? "—" : w.weeksOfCash.toFixed(1))}</td>)}</tr>
           </tbody>
         </table>
       </div>
@@ -165,6 +171,7 @@ const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) 
         )}
       </div>
     </div>
+    </>}
   </section>
 </AppShell>
 

@@ -13,5 +13,7 @@ export const GET: APIRoute = async ({ locals }) => {
   if (!actorCanAccessDepartment(actor, "executive")) {
     return jsonApiResponse({ error: "forbidden" }, { status: 403 });
   }
-  return jsonApiResponse(await loadCashFlowBoard());
+  const board = await loadCashFlowBoard();
+  if(board.status !== "live") return jsonApiResponse({error:"unavailable",error_description:board.error},{status:503});
+  return jsonApiResponse(board);
 };

@@ -128,3 +128,8 @@
 .cfx .cfx-chart svg { width: 100%; height: auto; display: block; }
 
 .cfx [hidden] { display: none !important; }
+
+/* Failed data loads retain the shell without stretching a two-row status panel. */
+.cfx[data-availability="unavailable"] { align-content: start; }
+.cfx .cfx-unavailable-content { padding:24px; max-width:72ch; }
+.cfx .cfx-unavailable-content .cfx-btn { display:inline-flex; align-items:center; min-height:44px; }

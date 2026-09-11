@@ -86,7 +86,7 @@ export async function buildCashFlowWorkbook(board: CashFlowBoard): Promise<Buffe
   // Definition audited 2026-08-26: ending cash ÷ average weekly TOTAL
   // disbursements. Months shown alongside (4.345 weeks/month) so the two
   // scales can never be confused.
-  const moc = s.addRow(["  ≈ months of cash (4.345 wks/mo)", ...board.weeks.map((w) => Math.round((w.weeksOfCash / 4.345) * 10) / 10)]);
+  const moc = s.addRow(["  ≈ months of cash (4.345 wks/mo)", ...board.weeks.map((w) => w.weeksOfCash === null ? null : Math.round((w.weeksOfCash / 4.345) * 10) / 10)]);
   moc.eachCell((cell, col) => {
     cell.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF666666" } };
     if (col > 1) cell.numFmt = "0.0";
