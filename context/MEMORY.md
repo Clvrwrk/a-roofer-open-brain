@@ -2,8 +2,8 @@
 # Working Memory
 
 ## ▶ Pick up here
-**8/26: CEO project LIVE (mig 281)** — 13WCF `/accounting/cash-flow` (receipts live from wip_ar_master dates) + Exec **Cash Runway** & **Fixed Costs** (59-acct register, **PROVISIONAL bv0 — R1–R11 await CPA meeting**). #1 lever: AR dating 5% ($2.28M/110 jobs — Roberto). Next: rulings→v1+artifact v0.4; diligence studios (WorkOS); accrual plan; ADP feed. Artifacts 46784631/2f170ec4; PDFs: Dropbox GL-Acrual.
-**Blocked on Chris:** CPA rulings; PEC-244/240/242/111/221/214 (older). PEC-216 shipped post-hold — confirm or revert mig 276.
+**9/11: `/agents` = runtime uptime board (docs/109, migs 285–287)** — R/Y/G per API/feed/pg_cron/systemd/edge/agent; Better Stack 9 monitors + 19 heartbeats (provision script). Job 13 failed 893× since 9/2 → mig 285. **Coolify builds `codex/crm-shared-design`, NOT main** — name the live branch (D15). Next: Q4 Coolify token (401) → BETTERSTACK_API_TOKEN on prod; Q5 JT grant key in host master.env; Q6 Aspose licence; Q7 BS→Slack.
+**Blocked on Chris:** CPA rulings; PEC-257/258/244/240/242/111/221/214; PEC-216 confirm/revert mig 276.
 
 ## Standing instructions (Chris)
 - **Silo doctrine: price agreement = (vendor, PE office). No pricing join crosses either; unknown office ⇒ No-Price; fail closed. Every money table keys (vendor_slug, invoice_number).**
@@ -17,4 +17,4 @@
 1. UOM: compare in pricing UOM `price_per_uom` via `v_item_uom_map` (docs/46). 2. PostgREST truncation: "exactly 1000"=cap→paginate; chunk `.in()`; partition upserts. 3. Structured source before OCR; tie vision output to printed totals server-side. 4. ABC mapping drift → COALESCE from `raw`. 5. Worktree agents: stage ONLY your files. 6. AccuLynx watermark PK `(account_key,resource_type)` (171). 7. Rotating OAuth: persist successor; diagnose via fingerprints, never values. 8. After host rebuilds ALL stored ids go stale — re-verify, never trust. 9. **Never read a per-row-LATERAL view via PostgREST** — the 8s `statement_timeout` is inherited by `service_role`; materialise. 10. **EXPLAIN a matcher predicate before shipping**; counts can be right while the plan is wrong.
 
 ## Environment / Deploy
-GitHub `Clvrwrk/a-roofer-open-brain`; LIVE=`origin/main` (Coolify; verify `/healthz`). Supabase `rnhmvcpsvtqjlffpsayu`, schemas thru **281**. Dev port **4399**. Hetzner AGENT `178.156.203.23` (`~/.ssh/hetzner_office`). Linear PE-CC-DevTeam. **Full service map + Orgo/WorkOS ids: `docs/handoffs/current.md`.**
+GitHub `Clvrwrk/a-roofer-open-brain`; LIVE=`origin/main` (Coolify; verify `/healthz`). Supabase `rnhmvcpsvtqjlffpsayu`, schemas thru **287**. Dev port **4399**. Hetzner AGENT `178.156.203.23` (`~/.ssh/hetzner_office`). Linear PE-CC-DevTeam. **Full service map + Orgo/WorkOS ids: `docs/handoffs/current.md`.**
