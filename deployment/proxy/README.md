@@ -7,7 +7,7 @@
 | everything else | Coolify app `command-center` (builds `origin/main`) | this repo | Coolify docker labels (auto) |
 | `/sales`, `/sales/*`, `/api/sales`, `/api/sales/*`, `/sales-mirror-assets/*` | `cc-sales-<sha>` (isolated Sales companion built by the CRM release) | `Clvrwrk/CRM_PWA` | `/data/coolify/proxy/dynamic/crm-cc-sales-mirror.yml` (priority 1100) |
 
-`crm-cc-sales-mirror.yml` here is a **read-only mirror** of the CRM-owned file for review; the CRM release runbook writes the live copy.
+`crm-cc-sales-mirror.yml` here is a **read-only mirror** of the CRM-owned file for review; the CRM release runbook writes the live copy. The CRM side of this contract: [CRM_PWA/docs/integration/COMMAND-CENTER.md](https://github.com/Clvrwrk/CRM_PWA/blob/main/docs/integration/COMMAND-CENTER.md); index of that repo from here: [docs/111](../../docs/111-crm-pwa-companion-repo.md).
 
 ## Rules (docs/110 §3)
 
