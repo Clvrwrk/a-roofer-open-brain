@@ -103,12 +103,27 @@ The common thread: **every failure above was invisible on `/agents`**, and three
 | F16 | Two more silent 8 s statement timeouts, pre-existing: `v_order_acculynx_match` (operations surface — fires on every `/agents` SSR because the page loads all six department surfaces for the Agent Access "open items" column) and the site-sweep received-credit check. Candidates for materialisation (playbook 9) | dev-server log 08:19; site-sweep journal 11:00 UTC |
 | F17 | Local verification on dev:4399 against prod: 66 components — 0 red / 9 yellow / 45 green / 12 unknown; API 0.43 s; long-list disclosure keeps the Agents pane at its measured 10-row height (978 px) when expanded, scrolls internally, state persists in localStorage | browser + JS probe |
 
+| F18 | **jt-sentinel real cause** (after the HOME fix): `Missing JT_SUPABASE_MIRROR_GRANT_KEY (source ~/.config/cleverwork/master.env)` — the host's `master.env` (242 bytes) does not carry the JobTread mirror grant key. A credential the human must add; the unit now reports the failure to the board instead of failing silently | `/root/.jt-sentinel/logs/jt-sentinel.log` 15:28 UTC |
+| F19 | **wip-pack real cause**: `build_pack.py` → `apply_cells_license()` → `RuntimeError: The license has expired` (Aspose.Cells). Step 1 (`refresh_wip_ar_master`, 321 jobs) succeeds; the Excel pack cannot be written. Needs a renewed license or an openpyxl fallback — a purchase/engineering decision, not an ops fix | `/root/.wip-pack/logs/wip-pack.log` 15:28 UTC |
+| F20 | **Coolify builds `codex/crm-shared-design`, not `main`.** Pushing `main` (4b80b4a3) changed nothing on `/healthz`; the CRM tip stayed deployed. Per Chris's ship decision, `origin/main` was merged into the CRM branch (merge 381097bd, one conflict in the auto-bumped `version.ts`, resolved to 0.6.562A) and pushed | `/healthz` 15:29 UTC; git |
+| F21 | Host applied 15:28 UTC via `deployment/remote/apply-runtime-board-host.sh`: checkout realigned to `origin/main` (host-local script diffs saved to `/root/host-local-scripts-2026-09-11.patch`, 86 lines), 7 units reinstalled with `HOME` + `ExecStopPost`, both failing units re-run and **reported** (`runtime_job_report` HTTP 200) | ssh run log |
+
+### D14 — Alerts route to Slack `#pe-cc-dev-team` only
+**Decision:** Better Stack monitors/heartbeats keep email/SMS/call/push off; paging goes through the Better Stack → Slack integration to `#pe-cc-dev-team` (enable once in the Better Stack UI — not exposed by the API). Chris 2026-09-11.
+**Why:** Standing rule: all app/code alerting lives in that channel.
+
+### D15 — Ship path: `main` first, then `main` → `codex/crm-shared-design`, push both
+**Decision:** Chris 2026-09-11. Keeps one lineage whichever branch Coolify builds; F20 then proved Coolify builds the CRM branch. Follow-up: either point Coolify back at `main` after fast-forwarding `main` to the CRM branch, or record the CRM branch as the canonical live branch in the daily log (CLAUDE.md rule 11 requires the live branch to be named).
+
 ## 2. Open questions (answer → becomes a decision above)
 
-- Q1 Which branch does Coolify actually build? — unanswerable until a valid Coolify token exists (F11). `/healthz` says the codex tip is what runs.
-- Q2 Is `codex/crm-shared-design` intended to be production? If yes, fast-forward `main`.
-- Q3 Better Stack alert routing: Slack only, or email/SMS for red on the site monitor? (Monitors were created with email/SMS/call/push all off; wire the Slack integration in the Better Stack UI.)
-- Q4 Mint a new Coolify API token and store it in 1Password + root `.env`; then set `BETTERSTACK_API_TOKEN` (and optionally `GITHUB_TOKEN` for the deploy-drift light) on the command-center app.
+- ~~Q1 Which branch does Coolify build?~~ → F20: the CRM branch.
+- ~~Q2 Is the CRM branch intended to be production?~~ → D15 (converge both ways; pick the canonical name next session).
+- ~~Q3 Alert routing~~ → D14.
+- Q4 **Coolify API token** — Chris is minting a new one into 1Password `cw_master → coolify.proexteriorsus.net - Root API`; the read at 15:30 UTC still returned 401. Once valid: set `BETTERSTACK_API_TOKEN` (+ optional `GITHUB_TOKEN`) on the command-center app and redeploy.
+- Q5 **JobTread sentinel credential** — add `JT_SUPABASE_MIRROR_GRANT_KEY` to `/root/.config/cleverwork/master.env` on the agent host (F18).
+- Q6 **Aspose.Cells license** for `build_pack.py` — renew, or approve an openpyxl fallback (F19).
+- Q7 **Better Stack → Slack integration** — enable in the Better Stack UI for `#pe-cc-dev-team` (D14).
 
 ## 3. Changelog
 
