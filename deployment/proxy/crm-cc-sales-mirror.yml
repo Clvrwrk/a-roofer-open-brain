@@ -1,0 +1,33 @@
+{
+  "http": {
+    "routers": {
+      "crm-cc-sales-https": {
+        "entryPoints": ["https"],
+        "rule": "Host(`cc.proexteriorsus.net`) && (Path(`/sales`) || PathPrefix(`/sales/`) || Path(`/api/sales`) || PathPrefix(`/api/sales/`) || PathPrefix(`/sales-mirror-assets/_astro/`) || Path(`/sales-mirror-assets/pro-exteriors-logo.svg`))",
+        "priority": 1100,
+        "service": "crm-cc-sales-mirror",
+        "middlewares": ["crm-cc-sales-assets"],
+        "tls": { "certResolver": "letsencrypt" }
+      },
+      "crm-cc-sales-http": {
+        "entryPoints": ["http"],
+        "rule": "Host(`cc.proexteriorsus.net`) && (Path(`/sales`) || PathPrefix(`/sales/`) || Path(`/api/sales`) || PathPrefix(`/api/sales/`) || PathPrefix(`/sales-mirror-assets/_astro/`) || Path(`/sales-mirror-assets/pro-exteriors-logo.svg`))",
+        "priority": 1100,
+        "service": "crm-cc-sales-mirror",
+        "middlewares": ["crm-cc-sales-redirect"]
+      }
+    },
+    "middlewares": {
+      "crm-cc-sales-assets": { "stripPrefix": { "prefixes": ["/sales-mirror-assets"] } },
+      "crm-cc-sales-redirect": { "redirectScheme": { "scheme": "https", "permanent": true } }
+    },
+    "services": {
+      "crm-cc-sales-mirror": {
+        "loadBalancer": {
+          "passHostHeader": true,
+          "servers": [{ "url": "http://cc-sales-53e93af47f2e:3000" }]
+        }
+      }
+    }
+  }
+}
