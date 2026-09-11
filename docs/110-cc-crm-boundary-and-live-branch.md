@@ -1,6 +1,6 @@
 # 110 — Command Center ⇄ CRM boundary: back to `main`, keep the Sales mirror
 
-**Date:** 2026-09-11 · **Asked by:** Chris · **Status:** recommendation, awaiting go on §4
+**Date:** 2026-09-11 · **Asked by:** Chris · **Status:** Option A approved and **executed 17:07 UTC** (§4 steps 1, 3, 4, 6-archive done; step 2 not needed — `COMMAND_CENTER_PUBLIC_URL` falls back to the request origin; step 5 due 2026-09-12; the CRM-runbook contract in §3 still to be filed in `CRM_PWA`)
 **Companion:** [docs/109](109-runtime-uptime-dashboard-decision-log.md) (runtime board, F4/F20/F22 are the symptoms this document explains)
 
 ## 1. What actually exists (verified on the host, not inferred)

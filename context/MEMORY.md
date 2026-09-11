@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**9/11: `/agents` = runtime uptime board (docs/109, migs 285–287)** — R/Y/G per API/feed/pg_cron/systemd/edge/agent; Better Stack 9 monitors + 19 heartbeats (provision script). Job 13 failed 893× since 9/2 → mig 285. **Coolify builds `codex/crm-shared-design`, NOT main** — name the live branch (D15). Next: Q4 Coolify token (401) → BETTERSTACK_API_TOKEN on prod; Q5 JT grant key in host master.env; Q6 Aspose licence; Q7 BS→Slack.
+**9/11: `/agents` = runtime uptime board (docs/109, migs 285–287)** — R/Y/G per API/feed/pg_cron/systemd/edge/agent; Better Stack 9 monitors + 19 heartbeats (provision script). Job 13 failed 893× since 9/2 → mig 285. **LIVE = main again (9/11 17:07 UTC)**: the CRM release had hijacked the host via a Traefik override (docs/110); `/sales*` stays mounted from the CRM companion. Next: mint Coolify API token (root login now in 1Password) → BETTERSTACK_API_TOKEN on prod; stop `cc-production-e4344d8` 9/12; Q5 JT grant key in host master.env; Q6 Aspose licence; Q7 BS→Slack.
 **Blocked on Chris:** CPA rulings; PEC-257/258/244/240/242/111/221/214; PEC-216 confirm/revert mig 276.
 
 ## Standing instructions (Chris)
