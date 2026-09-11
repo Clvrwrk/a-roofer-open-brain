@@ -126,7 +126,9 @@ The common thread: **every failure above was invisible on `/agents`**, and three
 - Q7 **Better Stack → Slack integration** — enable in the Better Stack UI for `#pe-cc-dev-team` (D14).
 - Q8 **Trigger the deploy.** Pushes to `main` (15:2x UTC) and to the CRM branch (15:31 and 15:38 UTC) did NOT start a Coolify build — `/healthz` still reported `e4344d8` at 15:50 UTC (F22). Either the GitHub → Coolify webhook is not wired for this branch or deploys have always been manual. With a valid token: `scripts/coolify-redeploy.sh`; otherwise click Deploy in the Coolify UI. Then verify `GET /api/system/runtime-status` with the conductor service token (per `/workos-agent-auth`) and open `/agents`.
 
-| F22 | No auto-deploy: 20 min after the pushes, prod still runs `e4344d8` | `/healthz` polled 15:31–15:50 UTC |
+| F22 | ~~No auto-deploy~~ **Corrected by F23**: Coolify DID build and start `main` (`c2c93b16`) on the push; the public hostname just never reached it | `/healthz` polled 15:31–15:50 UTC; `docker ps` 17:00 UTC |
+| F23 | **The "wrong branch on prod" is a Traefik override, not a Coolify setting.** `/data/coolify/proxy/dynamic/crm-cc-staff.yml` (priority 1000, written by the CRM release scripts) routes all of `cc.proexteriorsus.net` to `cc-production-e4344d8`; `crm-cc-sales-mirror.yml` (priority 1100) routes `/sales*` and `/api/sales*` to `cc-sales-53e93af47f2e`. Coolify's own label router is shadowed. Full analysis and the fix in [docs/110](110-cc-crm-boundary-and-live-branch.md). D15's "name the canonical live branch" resolves to: **`main`, served by the Coolify app, with `/sales*` mounted from the CRM** | host inspection 17:00 UTC |
+| F24 | Coolify root password reset via `php artisan root:reset-password` (root user `chussey@cleverwork.io`, no MFA); new value stored in 1Password cw_master → "coolify.proexteriorsus.net - Root Login". Self-serve reset was impossible because transactional email is not configured on the instance. The SSH path is `root@178.105.220.14` with `~/.ssh/a_roofers_open_brain_ed25519` (the `hetzner_office` key only opens the agent host) | 16:5x UTC |
 |---|---|---|
 
 ## 3. Changelog
