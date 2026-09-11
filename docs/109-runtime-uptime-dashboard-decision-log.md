@@ -124,6 +124,10 @@ The common thread: **every failure above was invisible on `/agents`**, and three
 - Q5 **JobTread sentinel credential** — add `JT_SUPABASE_MIRROR_GRANT_KEY` to `/root/.config/cleverwork/master.env` on the agent host (F18).
 - Q6 **Aspose.Cells license** for `build_pack.py` — renew, or approve an openpyxl fallback (F19).
 - Q7 **Better Stack → Slack integration** — enable in the Better Stack UI for `#pe-cc-dev-team` (D14).
+- Q8 **Trigger the deploy.** Pushes to `main` (15:2x UTC) and to the CRM branch (15:31 and 15:38 UTC) did NOT start a Coolify build — `/healthz` still reported `e4344d8` at 15:50 UTC (F22). Either the GitHub → Coolify webhook is not wired for this branch or deploys have always been manual. With a valid token: `scripts/coolify-redeploy.sh`; otherwise click Deploy in the Coolify UI. Then verify `GET /api/system/runtime-status` with the conductor service token (per `/workos-agent-auth`) and open `/agents`.
+
+| F22 | No auto-deploy: 20 min after the pushes, prod still runs `e4344d8` | `/healthz` polled 15:31–15:50 UTC |
+|---|---|---|
 
 ## 3. Changelog
 
