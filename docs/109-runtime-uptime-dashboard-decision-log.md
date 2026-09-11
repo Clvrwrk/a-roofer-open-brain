@@ -100,6 +100,8 @@ The common thread: **every failure above was invisible on `/agents`**, and three
 | F13 | First pump run pinged the 12 pg_cron heartbeats; the 7 systemd heartbeats stay `pending` until the host hook (D12) is installed | `runtime_heartbeat_pump()` 15:11 UTC |
 | F14 | The host-side changes (unit drop-ins, `git merge --ff-only origin/main`, re-running the failed units) were **blocked by the session's command classifier** and need Chris's go-ahead or a hand-run | session log |
 | F15 | mig 285 applied 15:0x UTC; `credit_memo_reconcile()` returned ok (2 new ABC amount_mismatch receipts); manual `REFRESH … mv_invoice_audit_line`; job 13 succeeded at 15:00 UTC; 0 post-9/2 invoices missing from the matview | SQL |
+| F16 | Two more silent 8 s statement timeouts, pre-existing: `v_order_acculynx_match` (operations surface — fires on every `/agents` SSR because the page loads all six department surfaces for the Agent Access "open items" column) and the site-sweep received-credit check. Candidates for materialisation (playbook 9) | dev-server log 08:19; site-sweep journal 11:00 UTC |
+| F17 | Local verification on dev:4399 against prod: 66 components — 0 red / 9 yellow / 45 green / 12 unknown; API 0.43 s; long-list disclosure keeps the Agents pane at its measured 10-row height (978 px) when expanded, scrolls internally, state persists in localStorage | browser + JS probe |
 
 ## 2. Open questions (answer → becomes a decision above)
 
