@@ -58,6 +58,33 @@ const MAX_RETRIES = 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * A financial snapshot must explicitly carry its two core amounts. Missing
+ * values map to null, so accepting an error envelope or incomplete snapshot
+ * would erase trusted balances and give them a fresh observation timestamp.
+ * Zero and explicit null are valid; optional totals may be absent or null.
+ */
+function isJobFinancialsBody(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const financials = body as Record<string, unknown>;
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(financials, key);
+  if (!hasOwn("approvedJobValue") || !hasOwn("balanceDue")) return false;
+  return [
+    "approvedJobValue",
+    "balanceDue",
+    "worksheetTotal",
+    "changeOrderTotal",
+    "insuranceClaimTotal",
+    "upgradeTotal",
+    "discountTotal",
+    "supplementTotal",
+    "workNotDoingTotal",
+  ].every((key) =>
+    !hasOwn(key) || financials[key] === null ||
+    (typeof financials[key] === "number" && Number.isFinite(financials[key]))
+  );
+}
+
+/**
  * Fetch a URL with 429 retry + exponential backoff.
  * apiKey is an explicit parameter to prevent cross-account key bleed (T-02-04).
  */
@@ -215,7 +242,7 @@ async function resolveRepNameWithFetch(
 }
 
 /**
- * Record a typed-upsert failure as a counted, queryable row instead of console.warn-only.
+ * Record a response validation or typed-upsert failure as a counted, queryable row.
  * Feeds check_acculynx_alerts() condition (e) — migration 186.
  */
 async function recordWalkError(
@@ -415,7 +442,7 @@ export async function syncJobWalk(
       fetchFn,
     );
     await archiveRaw(sb, syncBatchId, "job_financials", financialsEndpoint, financialsStatus, financialsBody);
-    if (financialsBody && typeof financialsBody === "object" && !Array.isArray(financialsBody)) {
+    if (financialsStatus === 200 && isJobFinancialsBody(financialsBody)) {
       const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
       if (error) {
@@ -429,6 +456,18 @@ export async function syncJobWalk(
           financialsStatus,
         );
       }
+    } else {
+      await recordWalkError(
+        sb,
+        acct.account_key,
+        jobId,
+        "job_financials",
+        syncBatchId,
+        financialsStatus === 200
+          ? "Invalid financials response shape; existing financials preserved"
+          : `Financials request returned HTTP ${financialsStatus}; existing financials preserved`,
+        financialsStatus,
+      );
     }
 
     // 3. Insurance (single object)
