@@ -8,6 +8,10 @@ Type=oneshot
 # Repo clone + master.env live on the US agent host (178.156.203.23, PE-US-AGENTS).
 ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/jt-sync-sentinel.sh
 User=root
+# systemd starts oneshots with no HOME; the script (set -u) and the master.env loader need it (docs/109 D8).
+Environment=HOME=/root
+# Report the result to the runtime board on success AND failure (docs/109 D7/D12, mig 286).
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-jt-sentinel
 # Full sweep of ~28k JT nodes at <=4 req/s stays well under an hour; hard stop at 2h.
 TimeoutStartSec=7200
 StandardOutput=journal

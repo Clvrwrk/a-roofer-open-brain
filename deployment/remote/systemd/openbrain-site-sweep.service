@@ -20,6 +20,11 @@ Type=oneshot
 WorkingDirectory=/opt/openbrain/a-roofers-open-brain
 ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/site-sweep.sh
 User=root
+# systemd starts oneshots with no HOME; the wrappers and the master.env loader need it (docs/109 D8).
+Environment=HOME=/root
+# Report the result to the runtime board on success AND failure (docs/109 D7/D12, mig 286).
+# SuccessExitStatus below means a reporting exit 1 is recorded as success with exit_code 1 (board: yellow).
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-site-sweep
 # Static analysis is seconds; live probes are network-bound. 15m is generous.
 TimeoutStartSec=900
 StandardOutput=journal

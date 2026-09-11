@@ -34,6 +34,10 @@ interface ImportMetaEnv {
   readonly AGENTMAIL_WEBHOOK_SECRET?: string;
   readonly AGENTMAIL_WEBHOOK_SECRETS?: string;
   readonly LINEAR_API_KEY?: string;
+  /** docs/109: Better Stack Uptime API token (server-only) — powers the /agents runtime board. */
+  readonly BETTERSTACK_API_TOKEN?: string;
+  /** docs/109: optional read token used only to compare the deployed commit with origin/main. */
+  readonly GITHUB_TOKEN?: string;
   readonly GITHUB_WEBHOOK_SECRET?: string;
   readonly SENTRY_WEBHOOK_SECRET?: string;
   readonly PEC78_ADAPTER_MODE?: "disabled" | "shadow" | "enabled";
