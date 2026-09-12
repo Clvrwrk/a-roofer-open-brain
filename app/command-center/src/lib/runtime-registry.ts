@@ -6,7 +6,7 @@
 // runtime_heartbeats.component_key (mig 286) and the Better Stack names created by
 // scripts/betterstack-provision.sh.
 
-export type RuntimeKind = "api" | "page" | "pg_cron" | "systemd" | "edge_function" | "feed" | "agent" | "deploy";
+export type RuntimeKind = "api" | "page" | "pg_cron" | "systemd" | "edge_function" | "feed" | "agent" | "deploy" | "integration";
 
 export interface PgCronSpec {
   key: string;            // pgcron.<jobname>
@@ -32,6 +32,33 @@ export interface MonitoredRouteSpec {
   label: string;
   kind: "api" | "page";
   purpose: string;
+  /** The healthy answer to an anonymous ping (D10: 401 on an API route means the gate is up). */
+  expect: number;
+  expectBody?: string;
+}
+
+/**
+ * A system we depend on, pinged directly by the Command Center (docs/109 D16).
+ * `url` may carry `{ENV_NAME}` placeholders. When `authEnv` is set on this deployment
+ * the ping authenticates and expects `expectAuthed` (default 200); otherwise it pings
+ * `anonUrl ?? url` anonymously and expects `expectAnon` — the code that endpoint gives
+ * every anonymous caller, so a network or server fault is still visible.
+ */
+export interface IntegrationSpec {
+  key: string;            // int.<system>
+  label: string;
+  purpose: string;
+  url: string;
+  anonUrl?: string;
+  method?: "GET" | "POST";
+  body?: string;
+  authEnv?: string;
+  auth?: "bearer" | "apikey" | "raw";
+  expectAuthed?: number;
+  expectAnon: number;
+  expectBody?: string;
+  /** Where the real credential lives when it is deliberately not on this app. */
+  credentialHome?: string;
 }
 
 export interface FeedSpec {
@@ -91,15 +118,31 @@ export const SYSTEMD_JOBS: SystemdSpec[] = [
 ];
 
 export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
-  { key: "site.healthz", path: "/healthz", label: "/healthz", kind: "page", purpose: "Public liveness + buildCommit" },
-  { key: "page.agents", path: "/agents", label: "/agents (WorkOS gate)", kind: "page", purpose: "Human surface behind the WorkOS gate — a 302 to login proves the gate" },
-  { key: "page.auth-md", path: "/auth.md", label: "/auth.md", kind: "page", purpose: "Agent auth discovery document" },
-  { key: "api.accounting.kpi-pills", path: "/api/accounting/kpi-pills", label: "accounting/kpi-pills", kind: "api", purpose: "Invoice Audit KPI strip" },
-  { key: "api.invoice-audit.pending-verification", path: "/api/invoice-audit/pending-verification", label: "invoice-audit/pending-verification", kind: "api", purpose: "Pay-It verification queue" },
-  { key: "api.executive.cash-runway", path: "/api/executive/cash-runway.json", label: "executive/cash-runway", kind: "api", purpose: "Cash runway (13WCF)" },
-  { key: "api.agent.work-queue", path: "/api/agent/work-queue", label: "agent/work-queue", kind: "api", purpose: "Agent work queue" },
-  { key: "api.credit-memos.pending", path: "/api/credit-memos/pending", label: "credit-memos/pending", kind: "api", purpose: "Claim-It pending CM lines" },
-  { key: "api.accounting.friday-wip", path: "/api/accounting/friday-wip.json", label: "accounting/friday-wip", kind: "api", purpose: "Friday WIP/AR board" },
+  { key: "site.healthz", path: "/healthz", label: "/healthz", kind: "page", purpose: "Public liveness + buildCommit", expect: 200, expectBody: '"status":"ok"' },
+  { key: "page.agents", path: "/agents", label: "/agents (WorkOS gate)", kind: "page", purpose: "Human surface behind the WorkOS gate — a 302 to login proves the gate", expect: 302 },
+  { key: "page.auth-md", path: "/auth.md", label: "/auth.md", kind: "page", purpose: "Agent auth discovery document", expect: 200 },
+  { key: "api.accounting.kpi-pills", path: "/api/accounting/kpi-pills", label: "accounting/kpi-pills", kind: "api", purpose: "Invoice Audit KPI strip", expect: 401 },
+  { key: "api.invoice-audit.pending-verification", path: "/api/invoice-audit/pending-verification", label: "invoice-audit/pending-verification", kind: "api", purpose: "Pay-It verification queue", expect: 401 },
+  { key: "api.executive.cash-runway", path: "/api/executive/cash-runway.json", label: "executive/cash-runway", kind: "api", purpose: "Cash runway (13WCF)", expect: 401 },
+  { key: "api.agent.work-queue", path: "/api/agent/work-queue", label: "agent/work-queue", kind: "api", purpose: "Agent work queue", expect: 401 },
+  { key: "api.credit-memos.pending", path: "/api/credit-memos/pending", label: "credit-memos/pending", kind: "api", purpose: "Claim-It pending CM lines", expect: 401 },
+  { key: "api.accounting.friday-wip", path: "/api/accounting/friday-wip.json", label: "accounting/friday-wip", kind: "api", purpose: "Friday WIP/AR board", expect: 401 },
+];
+
+export const INTEGRATIONS: IntegrationSpec[] = [
+  { key: "int.supabase-rest", label: "Supabase PostgREST (shared prod DB)", purpose: "Every work surface reads through it", url: "{SUPABASE_URL}/rest/v1/roof_system_category?select=key&limit=1", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.supabase-auth", label: "Supabase Auth", purpose: "GoTrue health behind the same project", url: "{SUPABASE_URL}/auth/v1/health", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.workos", label: "WorkOS", purpose: "Staff sign-in for cc and crm", url: "https://api.workos.com/user_management/users?limit=1", authEnv: "WORKOS_API_KEY", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.jobtread", label: "JobTread (Pave API)", purpose: "Job mirror + sync sentinel", url: "https://api.jobtread.com/pave", method: "POST", body: '{"query":{}}', expectAnon: 200, credentialHome: "grant key on the agent host (master.env)" },
+  { key: "int.acculynx", label: "AccuLynx API", purpose: "Hourly sync for 8 accounts (edge function)", url: "https://api.acculynx.com/api/v2/users", expectAnon: 401, credentialHome: "per-account keys in Supabase edge-function secrets" },
+  { key: "int.quickbooks", label: "QuickBooks Online (Intuit platform)", purpose: "Read-only mirror (hard rule 13)", url: "https://oauth.platform.intuit.com/op/v1/jwks", expectAnon: 200, credentialHome: "OAuth tokens on the agent host" },
+  { key: "int.slack", label: "Slack API", purpose: "Agent bot identities post here", url: "https://slack.com/api/auth.test", anonUrl: "https://slack.com/api/api.test", authEnv: "MAYA_CHEN_BOT_TOKEN", expectAuthed: 200, expectAnon: 200, expectBody: '"ok":true', credentialHome: "bot tokens per agent (slack-agents skill)" },
+  { key: "int.abc-supply", label: "ABC Supply Partners API", purpose: "Nightly invoice / order mirror", url: "https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357/.well-known/openid-configuration", expectAnon: 200, credentialHome: "client credentials on the agent host (partners.abcsupply.com)" },
+  { key: "int.coolify", label: "Coolify (deploy host)", purpose: "Builds and runs this app", url: "https://coolify.proexteriorsus.net/api/health", expectAnon: 200 },
+  { key: "int.betterstack", label: "Better Stack Uptime API", purpose: "Outside-in site monitors + job heartbeats", url: "https://uptime.betterstack.com/api/v2/monitors?per_page=1", authEnv: "BETTERSTACK_API_TOKEN", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.github", label: "GitHub API", purpose: "origin/main for the deploy-drift light", url: "https://api.github.com/user", anonUrl: "https://api.github.com/", authEnv: "GITHUB_TOKEN", expectAuthed: 200, expectAnon: 200 },
+  { key: "int.linear", label: "Linear", purpose: "Issue tracking (PEC tickets)", url: "https://api.linear.app/graphql", anonUrl: "https://api.linear.app/graphql", method: "POST", body: '{"query":"{ viewer { id } }"}', authEnv: "LINEAR_API_KEY", auth: "raw", expectAuthed: 200, expectAnon: 400 },
+  { key: "int.agentmail", label: "AgentMail", purpose: "Agent mailboxes (Maya intake)", url: "https://api.agentmail.to/v0/inboxes", authEnv: "AGENTMAIL_API_KEY", expectAuthed: 200, expectAnon: 401 },
 ];
 
 export const FEEDS: FeedSpec[] = [
@@ -132,7 +175,8 @@ export const AGENTS: AgentSpec[] = [
 ];
 
 export const GROUP_ORDER: Array<{ id: string; label: string; description: string }> = [
-  { id: "site", label: "Site & APIs", description: "External reachability from Better Stack (a 401 on an API route means the app and its auth gate are up)." },
+  { id: "site", label: "Site & APIs", description: "Outside-in from Better Stack when it is configured; otherwise the app pings its own public routes (a 401 on an API route means the app and its auth gate are up)." },
+  { id: "integrations", label: "Connected systems · direct pings", description: "The Command Center pings each system we depend on itself, once a minute — no third-party monitor in the path. Green = the documented healthy answer: 200, or the code that endpoint gives every anonymous caller where the credential deliberately lives elsewhere." },
   { id: "feeds", label: "Data feeds", description: "Is the data the work surfaces read actually current? Green-but-empty is yellow on purpose." },
   { id: "pg_cron", label: "Scheduled jobs · database (pg_cron)", description: "Latest run result, time since last success, and the Better Stack heartbeat." },
   { id: "systemd", label: "Scheduled jobs · agent host (systemd)", description: "Reported by each unit's ExecStopPost hook (mig 286); heartbeat from Better Stack." },

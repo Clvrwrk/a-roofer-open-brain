@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cadenceFromCron, classifyFeed, classifyScheduled, heartbeatEvidence, monitorLight, worst } from "./runtime-status";
+import { cadenceFromCron, classifyFeed, classifyProbe, classifyScheduled, heartbeatEvidence, monitorLight, worst } from "./runtime-status";
+import { resolveProbeUrl } from "./integration-probes.server";
 
 const NOW = Date.parse("2026-09-11T15:00:00Z");
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
@@ -72,5 +73,44 @@ describe("helpers", () => {
     expect(cadenceFromCron("45 10 * * *")).toBe(86400);
     expect(cadenceFromCron("30 10 * * 4")).toBe(604800);
     expect(cadenceFromCron("0 11 1 1,4,7,10 *")).toBe(7862400);
+  });
+});
+
+describe("classifyProbe (docs/109 D16 — direct pings)", () => {
+  const base = { key: "int.x", url: "https://x.example/", ms: 120, error: null, checkedAt: ago(0), credentialConfigured: null as boolean | null };
+  it("is green when an anonymous ping returns the documented code (JT 200 → green)", () => {
+    const r = classifyProbe({ ...base, mode: "reachability", status: 200, ok: true }, 200, false);
+    expect(r.light).toBe("green");
+    expect(r.headline).toMatch(/ping HTTP 200/);
+  });
+  it("is green when a 401 is the documented anonymous answer (AccuLynx)", () => {
+    expect(classifyProbe({ ...base, mode: "reachability", status: 401, ok: true }, 401, false).light).toBe("green");
+  });
+  it("is red when the system is unreachable or times out", () => {
+    const r = classifyProbe({ ...base, mode: "reachability", status: null, ok: false, error: "timeout after 6000 ms" }, 200, false);
+    expect(r.light).toBe("red");
+    expect(r.headline).toMatch(/unreachable/);
+  });
+  it("is red when an authenticated ping is rejected", () => {
+    const r = classifyProbe({ ...base, mode: "authenticated", status: 401, ok: false, credentialConfigured: true }, 200, true);
+    expect(r.light).toBe("red");
+    expect(r.headline).toMatch(/credential rejected/);
+  });
+  it("is yellow when the credential this deployment should hold is missing, even though the system answers", () => {
+    const r = classifyProbe({ ...base, mode: "reachability", status: 401, ok: true, credentialConfigured: false }, 401, true);
+    expect(r.light).toBe("yellow");
+    expect(r.headline).toMatch(/credential not configured/);
+  });
+  it("is yellow on an unexpected but non-fatal code and red on 5xx", () => {
+    expect(classifyProbe({ ...base, mode: "reachability", status: 404, ok: false }, 200, false).light).toBe("yellow");
+    expect(classifyProbe({ ...base, mode: "reachability", status: 503, ok: false }, 200, false).light).toBe("red");
+  });
+});
+
+describe("resolveProbeUrl", () => {
+  it("fills env placeholders and refuses when one is missing", () => {
+    expect(resolveProbeUrl("{SUPABASE_URL}/rest/v1/", { SUPABASE_URL: "https://p.supabase.co/" })).toBe("https://p.supabase.co/rest/v1/");
+    expect(resolveProbeUrl("{SUPABASE_URL}/rest/v1/", {})).toBeNull();
+    expect(resolveProbeUrl("{SUPABASE_URL}/rest/v1/", { SUPABASE_URL: "__set_me__" })).toBeNull();
   });
 });
