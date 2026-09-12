@@ -103,7 +103,10 @@ aging as-of stays a QBO report.
   must be present. **Tabitha's address is unknown to the repo — needs Chris.**
 - **Agent host:** install + enable `openbrain-wip-pack-thursday.timer`
   (copy both unit files, `systemctl daemon-reload && systemctl enable --now
-  openbrain-wip-pack-thursday.timer`).
+  openbrain-wip-pack-thursday.timer`). Python dependency for the builder:
+  `python3 -m pip install -r scripts/analytics/requirements.txt` (openpyxl —
+  the pack moved off Aspose.Cells on 2026-09-12 when Chris chose not to renew
+  the licence; the PDF brief became `<audience>-<as_of>-brief.html`).
 - **PEC-101** deposit fields still make the two Approved buckets provisional
   (same as the workbook).
 - Worksheet-detail cost mirror (gap #2) — propose as the next PEC issue.
