@@ -1,6 +1,6 @@
 # 107 — Rank coverage gaps by dollars, not by branch count
 
-**Initial date:** 2026-08-20 · **Last updated:** 2026-08-26 · **Migrations:** 286, 287, 288, 289, 290 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-09-12 · **Migrations:** 289, 290, 291, 292, 293 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -45,7 +45,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 286 — the two views
+## Migration 289 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -58,7 +58,7 @@ invoice in the system resolves a branch — migration 243's ingest-time resoluti
 at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
 identity one.
 
-## Migration 287 — the address was never missing
+## Migration 290 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -86,7 +86,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 287 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 290 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -124,22 +124,22 @@ read `245_…`/`246_…`/`248_…`/`249_…`, which is cosmetic — Supabase key
 existed. Applied order is unchanged.
 
 - **245 says WHY** a pair has no agreement — `no_book | pending | not_pursued | unrecorded`
-- **268 says HOW MUCH** it costs — `invoice_count`, `spend`
+- **289 says HOW MUCH** it costs — `invoice_count`, `spend`
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 270** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 291** joins the two so the
 surface can never make that mistake.
 
-### Migration 289 — the gate was asking the wrong question
+### Migration 292 — the gate was asking the wrong question
 
-288's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
+291's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
 
 > **Denver × SRS has a live, in-territory, 22-item agreement that the office ring cannot
 > reach, so the coverage surface reports `priced_items = 0` for the pair.**
 
-289 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
+292 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
 that matters. The queue is two rows: Denver × SRS (`unrecorded`) and Atlanta × ABC (`pending`).
 As measured on 2026-08-20 that was $17,437.63 and $5,226.90; the Denver figure has since moved
 with a credit memo — see the 2026-09-02 addendum for the current pair of numbers.
@@ -200,7 +200,7 @@ Different numbers, so the join never meets.
 > duplicate rows described further down have since been tidied away. Do not size the Denver
 > repair from this table — see *Addendum, 2026-08-24* at the end of this document.
 
-`v_agreement_unreachable` (migration 289) showed, on 2026-08-20, **all three live numbered SRS
+`v_agreement_unreachable` (migration 292) showed, on 2026-08-20, **all three live numbered SRS
 agreements — 136 items — unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
@@ -226,7 +226,7 @@ Repointing the agreement join to `vendor_branch_id` is pricing-affecting and ear
 equivalence proof migration 244 ran before switching (FK == text on every row, 0
 disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
 decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
-a guess cannot become a fact. 289 only makes the failure visible.
+a guess cannot become a fact. 292 only makes the failure visible.
 
 ---
 
@@ -340,9 +340,9 @@ different result: exact-token on description-only sheets is close to a no-op, an
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
 
-## Addendum — 2026-08-21: a defect migration 287 introduced, and 4 rows a human should look at
+## Addendum — 2026-08-21: a defect migration 290 introduced, and 4 rows a human should look at
 
-Migration 287's `geocode_status` assignment was keyed on the wrong condition. It read:
+Migration 290's `geocode_status` assignment was keyed on the wrong condition. It read:
 
 ```sql
 WHEN vb.city IS NULL AND rb.b->>'addressLine1' IS NOT NULL THEN 'pending'
@@ -354,7 +354,7 @@ data and does it still lack a geom":
 1. **It demoted already-geocoded rows.** A branch that had a `geom` but a NULL `city` was
    flipped from `ok` to `pending` — re-queueing a perfectly good geocode. The applied run
    did this to **branches 21 (Raleigh NC) and 684 (Norman OK)**, both stamped
-   `2026-08-20 10:59:17+00`, which is migration 287's run.
+   `2026-08-20 10:59:17+00`, which is migration 290's run.
 2. **It missed address-only recovery.** A branch whose `city` was already set but whose
    `address` was NULL would gain an address and keep its old status — so a row that had
    become geocodable stayed marked `no_address` and was never picked up. This matches
@@ -378,8 +378,8 @@ Four rows violate it:
 
 | Branch | City | `updated_at` | Attributable to |
 |---|---|---|---|
-| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 287 |
-| 684 | Norman OK | 2026-08-20 10:59:17 | migration 287 |
+| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 290 |
+| 684 | Norman OK | 2026-08-20 10:59:17 | migration 290 |
 | 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
 | 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
 
@@ -424,7 +424,7 @@ That is a **third** independent blocker, on top of the two this document already
 
 ## Addendum, 2026-08-22 (2) — access posture and two standing assumptions
 
-### Migration 290: the coverage views were world-readable
+### Migration 293: the coverage views were world-readable
 
 > **Ledger note (2026-08-26).** This migration was originally executed *directly* against
 > prod on 2026-08-22, with no `schema_migrations` row. The lockdown was live, but a freshly
@@ -434,7 +434,7 @@ That is a **third** independent blocker, on top of the two this document already
 > idempotent statement through the migration path — grants verified unchanged before and
 > after. **A security fix applied out-of-band protects today's database and no other.**
 
-The Cursor security review flagged that the four views added by 286–289 carry no
+The Cursor security review flagged that the four views added by 289–292 carry no
 `GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
 
 ```sql
@@ -457,7 +457,7 @@ invoice tables never applied. Aggregated office × vendor spend and agreement-ru
 metadata were readable through PostgREST with the publishable key — outside the
 WorkOS gate.
 
-**Migration 290** revokes `anon`/`authenticated` and grants `service_role` on all four,
+**Migration 293** revokes `anon`/`authenticated` and grants `service_role` on all four,
 copying the `v_price_list_global` shape. Verified in both directions; `service_role` still
 returns all 10 rows. The Command Center is unaffected because every reader goes through
 `createServerSupabaseClient` (`SUPABASE_SERVICE_ROLE_KEY`); no browser code touches these
@@ -474,7 +474,7 @@ than changed. **Needs a human decision.**
 
 ### Standing assumption: ABC branch payloads are bimodal
 
-Migration 287 picks the branch payload with the longest `addressLine1`. A review asked what
+Migration 290 picks the branch payload with the longest `addressLine1`. A review asked what
 happens if that payload lacks a `city`/`state` some other payload carries. Measured across
 all 1,093 branch-linked invoices:
 
@@ -487,7 +487,7 @@ all 1,093 branch-linked invoices:
 There is no partial payload, so the longest-address ordering always selects a full block and
 city/state travel with it. The migration is correct **for this vendor's data shape**, not in
 general. **If a vendor ever emits partial branch payloads, the correct shape becomes a
-per-field `max()`** rather than one winning payload. 287 is already applied to prod, so it
+per-field `max()`** rather than one winning payload. 290 is already applied to prod, so it
 was left alone rather than superseded by a migration that provably changes no row.
 
 ---
@@ -607,3 +607,51 @@ What is worth carrying is the shape, and it has not changed since 2026-08-20: **
 needing opposite actions.** Denver × SRS has signed agreements the ring cannot reach — repair
 the branch link. Atlanta × ABC has none yet — the paperwork is genuinely being pursued. The
 branch-identity decision below is untouched by either movement.
+
+---
+
+## Addendum — 2026-09-12: twelfth renumber, 286–290 → 289–293
+
+Main landed its own **285–288** (credit-memo unassigned-record guard, runtime status
+plumbing, runtime feed freshness, materialised order/AccuLynx match) while this work was
+still open, colliding with three of this set's five numbers. Main is canonical, so this
+branch yielded again — the twelfth time.
+
+| Was | Now | File |
+|---|---|---|
+| 286 | **289** | `office-vendor-spend-exposure` |
+| 287 | **290** | `backfill-branch-address-from-raw` |
+| 288 | **291** | `gap-exposure-with-ruling` |
+| 289 | **292** | `agreement-unreachable-detector` |
+| 290 | **293** | `coverage-views-service-role-only` |
+
+**The prod labels are unchanged** — `245`, `246`, `248`, `249`/`249b` and
+`290_coverage_views_service_role_only` (`20260826193359`). Supabase keys on TIMESTAMP, so
+the applied order never depended on these filenames and nothing needs re-applying.
+
+Two things worth recording about how this one was done:
+
+**The whole set moves, never just the colliding file.** Only 286, 287 and 288 actually
+collided. Moving those three alone would have put the spend view *after* the two migrations
+that read it — the numbering would be legal and the reading order wrong.
+
+**The edits were made by line number with an assertion on the expected text**, not by
+substitution. A sweep for `287` across this repo would also rewrite `285 lines` in migration
+233, the SRS agreement number `0049828559`, the address `2822 N. Mead St`, and `1,284 Kansas
+rows`, none of which are migration numbers. Every one of the 25 reference edits named the
+file, the line, and the exact string it expected to find; any mismatch aborted the run
+before a single file was written. All four trap strings were re-verified present and
+unaltered afterwards.
+
+**Three stale cross-references surfaced while doing it**, all pointing at this set's own
+migrations by numbers that stopped existing several renumbers ago: migration 291's header
+called the spend view **268**, and this document called it **268** in one place and called
+the ruling join **270** in another. They now read 289, 289 and 291.
+
+That is the real lesson of this renumber. The mechanical check — each file's number equals
+the number on its own first line — passed on every one of these, because it only looks at
+line 1. A cross-reference is only visibly wrong if you go and look the number up, so a stale
+one can survive renumber after renumber. The searchable form of the check: after moving a
+set, grep for **every intermediate number the set has ever used** (here 245–253, 263–271,
+281–290), and confirm each surviving hit is either deliberate renumber history or another
+team's file. Filename-vs-header agreement is necessary and nowhere near sufficient.
