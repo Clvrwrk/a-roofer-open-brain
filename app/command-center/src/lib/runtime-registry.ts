@@ -76,6 +76,7 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
   { key: "pgcron.nightly-silo-assertions", jobname: "nightly-silo-assertions", label: "Silo assertions (nightly)", purpose: "Vendor / office silo invariants (docs/105)", cadenceS: 86_400 },
   { key: "pgcron.service-matview-refresh-requests", jobname: "service-matview-refresh-requests", label: "On-demand matview refresh", purpose: "Serves matview_refresh_request rows every minute", cadenceS: 300 },
   { key: "pgcron.refresh-overhead-matview", jobname: "refresh-overhead-matview", label: "Overhead matview (nightly)", purpose: "mv_overhead_account_month for Fixed Costs / Cash Runway", cadenceS: 86_400 },
+  { key: "pgcron.refresh-order-acculynx-match", jobname: "refresh-order-acculynx-match", label: "Order ↔ AccuLynx match matview (15 min)", purpose: "mv_order_acculynx_match for the Operations order audit (mig 288)", cadenceS: 900 },
   { key: "pgcron.runtime-heartbeat-pump", jobname: "runtime-heartbeat-pump", label: "Heartbeat pump (5 min)", purpose: "Pings one Better Stack heartbeat per new successful run (mig 286)", cadenceS: 300 },
 ];
 
