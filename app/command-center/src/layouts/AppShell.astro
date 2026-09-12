@@ -1,4 +1,10 @@
 ---
+// Inter 400/600/700/800 — the shared design system's typeface. Declared in --font-sans since day
+// one but never loaded, so every surface rendered the fallback (CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11).
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
 import "../styles/global.css";
 import { getCommandCenterUser, isWorkOsConfigured } from "@lib/auth";
 import { type LiveDepartmentSurface } from "@lib/live-work";

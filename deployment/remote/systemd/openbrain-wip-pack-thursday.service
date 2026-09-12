@@ -7,6 +7,10 @@ Wants=network-online.target
 Type=oneshot
 ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/wip-pack-thursday.sh
 User=root
+# systemd starts oneshots with no HOME; the wrapper's log dir and master.env loader need it (docs/109 D8).
+Environment=HOME=/root
+# Report the result to the runtime board on success AND failure (docs/109 D7/D12, mig 286).
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-wip-pack-thursday
 TimeoutStartSec=3600
 StandardOutput=journal
 StandardError=journal

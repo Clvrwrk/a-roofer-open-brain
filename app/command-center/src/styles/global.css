@@ -94,7 +94,8 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  font-size: 15px;
+  /* Design.md typography: body 14px / 1.5 (was 15px — drift caught 2026-09-11, CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11). */
+  font-size: 14px;
   line-height: 1.5;
 }
 

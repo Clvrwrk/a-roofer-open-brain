@@ -197,7 +197,7 @@ const payload = JSON.stringify(initialPayload).replace(/</g, "\u003c");
 <style is:global>
   .iv{
     --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
-    --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --brand:var(--primary,#11133f); --brand-bg:#e7e8f5; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
     --orange:#a4480d; --orange-bg:#fbe7d6; --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4; --shadow:0 6px 18px rgba(20,28,40,.08);
     /* Full-bleed panel: the horizontal bleed MUST equal `.app-main main` horizontal padding
        (28px) so the panel reaches the column edges exactly — bleeding more pushed it under the

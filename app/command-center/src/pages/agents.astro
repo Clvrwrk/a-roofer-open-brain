@@ -1,12 +1,15 @@
 ---
 import AppShell from "../layouts/AppShell.astro";
-import LiveMetricGrid from "../components/live/LiveMetricGrid.astro";
 import { AGENT_AUTH_SOURCE, buildAuthorizationServerMetadata } from "@lib/agent-auth";
 import { SERVICE_AGENT_IDENTITIES, getAgentAccessRuntimeConfig } from "@lib/access-control";
 import { loadDepartmentSurface } from "@lib/live-work";
+import { loadRuntimeBoard } from "@lib/runtime-status";
+import { renderBoard, renderLegend } from "../scripts/runtime-board-render";
 
+// Runtime uptime board (docs/109). Server-rendered once here, then re-rendered by
+// src/scripts/runtime-board.ts from /api/system/runtime-status every 30 s.
 const DEPARTMENTS = ["accounting", "operations", "sales", "marketing", "executive", "system"] as const;
-const surfaces = await Promise.all(DEPARTMENTS.map((department) => loadDepartmentSurface(department)));
+const [board, ...surfaces] = await Promise.all([loadRuntimeBoard(), ...DEPARTMENTS.map((department) => loadDepartmentSurface(department))]);
 const surface = surfaces[DEPARTMENTS.indexOf("system")];
 const allItems = surfaces.flatMap((departmentSurface) => departmentSurface.items);
 const authConfig = getAgentAccessRuntimeConfig();
@@ -18,30 +21,48 @@ const authRows = [
   { label: "Token", value: metadata.token_endpoint },
   { label: "Revoke", value: metadata.agent_auth.revocation_uri },
 ];
+const boardHtml = renderBoard(board, new Set());
+const legendHtml = renderLegend();
+const boardJson = JSON.stringify(board).replace(/</g, "\\u003c");
+const worstLight = board.summary.red > 0 ? "red" : board.summary.yellow > 0 || board.summary.unknown > 0 ? "yellow" : "green";
+const asOf = new Date(board.generatedAt).toLocaleTimeString();
 ---
 
-<AppShell title="Agent Monitor" eyebrow="Live Runtime" activePage="agents" surface={surface}>
-  <section class="live-department-hero" aria-label="Agent runtime summary">
+<AppShell title="Runtime Uptime" eyebrow="Agent Monitor" activePage="agents" surface={surface}>
+  <section class="live-department-hero rb-hero" aria-label="Runtime uptime summary">
     <div class="surface-heading">
       <div>
         <p class="eyebrow">Conductor / Auditor</p>
-        <h2>Agent visibility from live workflow, sync, and auth state.</h2>
+        <h2>Every API, agent, scheduled job and data feed — one light each.</h2>
+        <p class="rb-hero-note">
+          Lights come from the system that actually knows: pg_cron run history, the agent host's own job reports,
+          feed freshness, and Better Stack probes from outside. Rules in
+          <code>docs/109-runtime-uptime-dashboard-decision-log.md</code>.
+        </p>
       </div>
-      <div class="surface-meta">
-        <span class="runtime-pill" data-tone={surface.status === "live" ? "ready" : "watch"}>
+      <div class="surface-meta rb-hero-meta">
+        <span class="runtime-pill" data-tone={worstLight === "green" ? "ready" : worstLight === "yellow" ? "watch" : "critical"}>
           <span class="signal-dot" aria-hidden="true"></span>
-          {surface.status}
+          {worstLight === "green" ? "all green" : worstLight === "yellow" ? "attention" : "action needed"}
         </span>
+        <span class="runtime-pill" data-tone="ready" data-rb-poll>live · 30 s</span>
+        <span class="runtime-pill rb-as-of">as of <strong data-rb-as-of>{asOf}</strong></span>
       </div>
     </div>
-    <LiveMetricGrid metrics={surface.metrics} />
   </section>
 
-  <section class="monitor-grid" aria-label="Agent runtime monitor">
+  <div id="runtime-board" class="rb-board" set:html={boardHtml}></div>
+
+  <section class="rb-legend-wrap" aria-label="Legend">
+    <h3>How to read the lights</h3>
+    <Fragment set:html={legendHtml} />
+  </section>
+
+  <section class="monitor-grid" aria-label="Agent access and auth">
     <div class="agent-table-panel">
       <div class="panel-heading">
         <h2>Agent Access</h2>
-        <span class="runtime-pill" data-tone={authConfig.serviceAuthConfigured ? "ready" : "blocked"}>
+        <span class="runtime-pill" data-tone={authConfig.serviceAuthConfigured ? "ready" : "critical"}>
           <span class="signal-dot" aria-hidden="true"></span>
           {authConfig.serviceTokenCount} service tokens
         </span>
@@ -112,4 +133,78 @@ const authRows = [
       </div>
     </aside>
   </section>
+
+  <script type="application/json" id="runtime-board-data" set:html={boardJson} />
+  <script src="/src/scripts/runtime-board.ts"></script>
 </AppShell>
+
+<style is:global>
+  /* Runtime board (docs/109). Global because the client re-renders via innerHTML. */
+  .rb-hero-note { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; max-width: 72ch; }
+  .rb-hero-note code { font-size: 12px; }
+  .rb-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .runtime-pill[data-tone="critical"] .signal-dot { background: var(--error); }
+  .rb-as-of strong { margin-left: 4px; color: var(--text); }
+
+  .rb-board { display: grid; gap: 14px; margin: 14px 0 0; }
+  .rb-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .rb-tile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; display: grid; gap: 4px; }
+  .rb-tile-n { font-size: 26px; font-weight: 800; line-height: 1; color: var(--text); }
+  .rb-tile-l { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .rb-tile[data-light="red"] { border-color: var(--error); }
+  .rb-tile[data-light="red"] .rb-tile-n { color: var(--error); }
+  .rb-tile[data-light="yellow"] .rb-tile-n { color: var(--warning); }
+  .rb-tile[data-light="green"] .rb-tile-n { color: var(--success); }
+
+  .rb-dot { display: inline-block; width: 11px; height: 11px; border-radius: 999px; background: var(--text-muted); flex: none; box-shadow: 0 0 0 2px var(--surface); }
+  .rb-dot[data-light="green"] { background: var(--success); }
+  .rb-dot[data-light="yellow"] { background: var(--warning); }
+  .rb-dot[data-light="red"] { background: var(--error); }
+  .rb-dot[data-light="unknown"] { background: var(--text-muted); opacity: 0.7; }
+
+  .rb-sources { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .rb-sources li { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 6px 10px; font-size: 12px; color: var(--text-secondary); }
+  .rb-sources li strong { color: var(--text); }
+  .rb-errors { margin: 0; padding: 8px 12px; border: 1px solid var(--error); border-radius: var(--radius); background: var(--color-error-surface, transparent); color: var(--error); font-size: 12px; }
+
+  .rb-groups { display: grid; gap: 14px; }
+  .rb-group { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px 10px; }
+  .rb-group-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px; }
+  .rb-group-head h3 { margin: 0; font-size: 15px; }
+  .rb-group-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; max-width: 80ch; }
+  .rb-group-counts { display: flex; gap: 6px; flex: none; }
+  .rb-count { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+
+  .rb-rows { list-style: none; margin: 0; padding: 0; display: grid; }
+  .rb-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px 10px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: start; }
+  .rb-row:last-child { border-bottom: 0; }
+  .rb-row[hidden] { display: none; }
+  .rb-row-light { padding-top: 4px; display: flex; justify-content: center; }
+  .rb-row-title { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .rb-row-title strong { font-size: 13px; color: var(--text); }
+  .rb-row-title a { color: inherit; text-decoration: underline dotted; }
+  .rb-row-purpose { font-size: 12px; color: var(--text-muted); }
+  .rb-row-headline { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+  .rb-row[data-light="red"] .rb-row-headline { color: var(--error); font-weight: 700; }
+  .rb-row[data-light="yellow"] .rb-row-headline { color: var(--warning); }
+  .rb-row-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; word-break: break-word; }
+  .rb-evidence { margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+  .rb-evidence summary { cursor: pointer; color: var(--text-secondary); }
+  .rb-evidence ul { margin: 4px 0 0; padding-left: 18px; }
+  .rb-row-meta { display: grid; justify-items: end; gap: 2px; font-size: 12px; color: var(--text-muted); white-space: nowrap; padding-top: 3px; }
+  .rb-cadence { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+  .rb-show-all { margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 700; padding: 6px 10px; cursor: pointer; }
+  .rb-show-all:hover { border-color: var(--text-muted); }
+
+  .rb-legend-wrap { margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
+  .rb-legend-wrap h3 { margin: 0 0 6px; font-size: 14px; }
+  .rb-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .rb-legend li { display: flex; gap: 8px; align-items: baseline; }
+  .rb-legend .rb-dot { position: relative; top: 1px; }
+
+  @media (max-width: 900px) {
+    .rb-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rb-row { grid-template-columns: 24px minmax(0, 1fr); }
+    .rb-row-meta { grid-column: 2; justify-items: start; }
+  }
+</style>
