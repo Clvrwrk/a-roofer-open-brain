@@ -1,0 +1,32 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "maya-runtime-template-1.0.0-rc.4",
+  "documentNamespace": "https://cleverwork.example/spdx/maya-runtime-template/1.0.0-rc.4/build",
+  "creationInfo": {
+    "created": "2026-08-03T00:00:00Z",
+    "creators": ["Tool: cw-codex"]
+  },
+  "packages": [
+    {
+      "name": "@open-brain/maya-runtime-template",
+      "SPDXID": "SPDXRef-Package-MayaRuntime",
+      "versionInfo": "1.0.0-rc.4",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": []
+    }
+  ],
+  "externalDocumentRefs": [],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-MayaRuntime"
+    }
+  ]
+}

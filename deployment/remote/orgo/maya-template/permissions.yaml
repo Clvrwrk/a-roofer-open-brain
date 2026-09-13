@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "default": "deny",
+  "trust_tier": "T0-build-only",
+  "claims": false,
+  "schedules": false,
+  "memory_reads": false,
+  "memory_writes": false,
+  "communications": {
+    "email": "off",
+    "slack": "off",
+    "linear": "off",
+    "publishing": "off"
+  },
+  "provider_adapters": [],
+  "privileged_bootstrap": "disabled_after_install"
+}

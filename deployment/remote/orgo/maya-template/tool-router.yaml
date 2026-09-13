@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "default": "deny",
+  "adapters": [],
+  "required_effect_context": [
+    "issue_id",
+    "run_id",
+    "occurrence_id",
+    "agent_id",
+    "client_id",
+    "trust_tier",
+    "tool",
+    "effect_kind",
+    "approval",
+    "cost_reservation",
+    "idempotency_key",
+    "runtime_version"
+  ],
+  "reservation_before_provider": true,
+  "unknown_provider_result": "ambiguous_and_park"
+}
