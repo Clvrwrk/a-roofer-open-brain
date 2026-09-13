@@ -9,7 +9,9 @@
 #      (the pg_cron nightly already ran; this is belt-and-braces so the pack
 #      and the board agree to the minute).
 #   2. scripts/analytics/build_pack.py --audience ar-wip — the full Excel pack
-#      (13 sheets incl. 11_Friday_Meeting), same generator as always.
+#      (13 sheets incl. 11_Friday_Meeting), same generator as always. Written
+#      with openpyxl (Aspose retired 2026-09-12 — no licence file needed);
+#      deps: python3 -m pip install -r scripts/analytics/requirements.txt
 #   3. Upload the xlsx to the private Supabase storage bucket `wip-packs` as
 #      AR_WIP_Pack_<date>.xlsx. The Command Center "Download Thursday pack"
 #      button serves the newest file from that bucket via a signed URL.
@@ -22,10 +24,6 @@ set -euo pipefail
 AS_OF="${1:-$(date +%F)}"
 REPO_ROOT="${WIP_PACK_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export PATH="/opt/homebrew/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
-# aspose-cells (bundled .NET) on Linux hosts: ICU discovery fails on Ubuntu 24
-# even with libicu74 installed — invariant globalization is the supported
-# workaround and is safe for this workbook (all en-US content).
-export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 LOG_DIR="$HOME/.wip-pack/logs"
 mkdir -p "$LOG_DIR"
@@ -50,6 +48,12 @@ curl -sS -X POST "$SUPABASE_URL/rest/v1/rpc/refresh_wip_ar_master" \
   -H "Content-Type: application/json" \
   -d "{\"p_asof\": \"$AS_OF\"}" | tee -a "$LOG_FILE"
 echo | tee -a "$LOG_FILE"
+
+# Preflight: the pack builder needs openpyxl (pure Python; see scripts/analytics/requirements.txt).
+python3 -c "import openpyxl" 2>/dev/null || {
+  log "ERROR: python3 cannot import openpyxl — run: python3 -m pip install -r $REPO_ROOT/scripts/analytics/requirements.txt"
+  exit 1
+}
 
 log "2/3 build_pack.py --audience ar-wip --as-of $AS_OF"
 python3 "$REPO_ROOT/scripts/analytics/build_pack.py" --audience ar-wip --as-of "$AS_OF" >> "$LOG_FILE" 2>&1

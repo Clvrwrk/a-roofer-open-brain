@@ -5,13 +5,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SERVICE_AGENT_IDENTITIES, getServiceTokenHashEnvKey } from "./access-control";
 import { loadBetterStackSnapshot, type BetterStackHeartbeat, type BetterStackMonitor } from "./betterstack.server";
+import { expectedStatus, probeIntegrations, type ProbeResult } from "./integration-probes.server";
 import { getRuntimeEnv, type RuntimeEnv } from "./runtime-env";
 import {
   AGENTS,
   EDGE_FUNCTIONS,
   FEEDS,
   GROUP_ORDER,
+  INTEGRATIONS,
   MONITORED_ROUTES,
+  type IntegrationSpec,
   PG_CRON_JOBS,
   SYSTEMD_JOBS,
   type RuntimeKind,
@@ -187,6 +190,30 @@ interface PgCronRow {
   last_success_end: string | null; n_failed_since_success: number | null;
 }
 interface HostRunRow { component_key: string; host: string | null; status: string; exit_code: number | null; summary: string | null; finished_at: string; }
+/**
+ * D16 — a direct ping judged against the documented healthy answer. Authenticated pings
+ * that come back 401/403 are red (the credential is wrong); a reachability ping that
+ * gets the expected anonymous code is green; a credential this deployment should hold
+ * but does not caps the light at yellow so the gap stays visible.
+ */
+export function classifyProbe(r: ProbeResult, expected: number, needsCredential: boolean): { light: Light; headline: string } {
+  if (r.error) return { light: "red", headline: `unreachable · ${r.error}` };
+  const s = r.status ?? 0;
+  if (r.mode === "authenticated") {
+    if (r.ok) return { light: "green", headline: `authenticated · HTTP ${s} · ${r.ms} ms` };
+    if (s === 401 || s === 403) return { light: "red", headline: `credential rejected · HTTP ${s}` };
+    if (s >= 500 || s === 0) return { light: "red", headline: `server error · HTTP ${s}` };
+    return { light: "yellow", headline: `unexpected HTTP ${s} (expected ${expected})` };
+  }
+  if (r.ok) {
+    return needsCredential && r.credentialConfigured === false
+      ? { light: "yellow", headline: `reachable · HTTP ${s} · credential not configured on this deployment` }
+      : { light: "green", headline: `ping HTTP ${s} · ${r.ms} ms` };
+  }
+  if (s >= 500 || s === 0) return { light: "red", headline: `server error · HTTP ${s}` };
+  return { light: "yellow", headline: `unexpected HTTP ${s} (expected ${expected})` };
+}
+
 interface HeartbeatRow { component_key: string; betterstack_id: string | null; name: string; last_pinged_success_at: string | null; }
 interface FeedRow { feed_key: string; last_row_at: string | null; rows_24h: number | null; lagging_rows: number | null; }
 interface CronOutcomeRow { fired_at: string | null; outcome: string | null; error_msg: string | null; }
@@ -232,6 +259,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const { client, config } = createServerSupabaseClient(env);
   const betterStackPromise = loadBetterStackSnapshot(env, now);
   const mainCommitPromise = loadMainCommit(env, now);
+  const integrationProbesPromise = probeIntegrations(INTEGRATIONS, env, now);
 
   const [cronRows, hostRows, hbRows, feedRows, outcomeRows] = client
     ? await Promise.all([
@@ -258,13 +286,36 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
 
   const push = (c: RuntimeComponent) => { components.push(c); lightByKey.set(c.key, c.light); };
 
-  // Site & APIs — external probes (D10: a 401 on an API route is the healthy answer).
+  // Site & APIs — Better Stack from outside when configured (D10: a 401 on an API route is
+  // the healthy answer); otherwise the app pings its own public routes (D16) so the group
+  // never sits on "not configured" because a token is missing.
+  const selfPings = betterStack.state === "ok" ? new Map<string, ProbeResult>() : new Map(
+    (await probeIntegrations(MONITORED_ROUTES.map((route): IntegrationSpec => ({ key: route.key, label: route.label, purpose: route.purpose, url: `${site}${route.path}`, expectAnon: route.expect, expectBody: route.expectBody })), env, now)).map((r) => [r.key, r]),
+  );
   for (const route of MONITORED_ROUTES) {
     const m = monitorsByUrl.get(`${site}${route.path}`);
-    const { light, headline } = betterStack.state === "ok" ? monitorLight(m) : { light: "unknown" as Light, headline: betterStack.state === "unconfigured" ? "Better Stack not configured" : `Better Stack error: ${betterStack.detail}` };
-    push({ key: route.key, group: "site", kind: route.kind, label: route.label, purpose: route.purpose, light, headline,
-      detail: m ? `Better Stack monitor ${m.id} · last check ${m.lastCheckedAt ? humanAge(now - Date.parse(m.lastCheckedAt)) : "n/a"}` : "Run scripts/betterstack-provision.sh to create the monitor.",
-      cadenceLabel: m?.checkFrequency ? `every ${m.checkFrequency} s` : null, lastAt: m?.lastCheckedAt ?? null, evidence: [], href: `${site}${route.path}` });
+    const self = selfPings.get(route.key);
+    const { light, headline } = betterStack.state === "ok"
+      ? monitorLight(m)
+      : self ? classifyProbe(self, route.expect, false) : { light: "unknown" as Light, headline: `Better Stack ${betterStack.state}` };
+    const why = betterStack.state === "unconfigured" ? "Better Stack not configured on this deployment" : betterStack.state === "error" ? `Better Stack error: ${betterStack.detail}` : null;
+    push({ key: route.key, group: "site", kind: route.kind, label: route.label, purpose: route.purpose, light, headline: self && why ? `self-ping · ${headline}` : headline,
+      detail: m ? `Better Stack monitor ${m.id} · last check ${m.lastCheckedAt ? humanAge(now - Date.parse(m.lastCheckedAt)) : "n/a"}` : `expects HTTP ${route.expect}${route.expectBody ? ` with ${route.expectBody}` : ""}${why ? ` · ${why}` : ""}`,
+      cadenceLabel: m?.checkFrequency ? `every ${m.checkFrequency} s` : self ? "every 60 s (self-ping)" : null, lastAt: m?.lastCheckedAt ?? self?.checkedAt ?? null, evidence: [], href: `${site}${route.path}` });
+  }
+
+  // Connected systems — direct pings from this app (D16).
+  const probes = new Map((await integrationProbesPromise).map((r) => [r.key, r]));
+  for (const spec of INTEGRATIONS) {
+    const r = probes.get(spec.key);
+    const expected = r ? expectedStatus(spec, r.mode) : spec.expectAnon;
+    const { light, headline } = r ? classifyProbe(r, expected, Boolean(spec.authEnv)) : { light: "unknown" as Light, headline: "probe did not run" };
+    const evidence: string[] = [];
+    if (spec.authEnv) evidence.push(r?.credentialConfigured ? `${spec.authEnv} present → authenticated ping` : `${spec.authEnv} not set here → reachability ping`);
+    if (spec.credentialHome) evidence.push(`credential lives: ${spec.credentialHome}`);
+    push({ key: spec.key, group: "integrations", kind: "integration", label: spec.label, purpose: spec.purpose, light, headline,
+      detail: `${r?.mode ?? "ping"} ${spec.method ?? "GET"} ${r?.url ?? spec.url} · expects HTTP ${expected}${spec.expectBody ? ` with ${spec.expectBody}` : ""}`,
+      cadenceLabel: "every 60 s", lastAt: r?.checkedAt ?? null, evidence, href: r?.url ?? undefined });
   }
 
   // Data feeds.
@@ -372,6 +423,12 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
     { name: "Supabase (prod)", light: client ? (errors.length ? "yellow" : "green") : "red", detail: client ? (errors.length ? errors.join(" · ") : `project ${config.projectRef ?? "configured"}`) : "unconfigured" },
     { name: "Better Stack", light: betterStack.state === "ok" ? "green" : betterStack.state === "unconfigured" ? "yellow" : "red", detail: betterStack.detail },
     { name: "Agent host reports", light: hostRows.length ? "green" : "yellow", detail: hostRows.length ? `${hostRows.length} units reporting` : "no runtime_job_runs rows yet — install the ExecStopPost hook on the host" },
+    (() => {
+      const all = [...probes.values()];
+      const failed = all.filter((r) => r.error).length;
+      const slowest = all.reduce((max, r) => Math.max(max, r.ms), 0);
+      return { name: "Direct pings", light: (failed ? "red" : "green") as Light, detail: `${all.length} systems pinged from this app${failed ? ` · ${failed} unreachable` : ""} · slowest ${slowest} ms · 60 s cache` };
+    })(),
   ];
   return { generatedAt: new Date(now).toISOString(), summary, groups, sources, deploy: { buildCommit, mainCommit }, errors };
 }

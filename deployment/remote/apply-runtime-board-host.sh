@@ -32,6 +32,14 @@ fi
 git merge -q --ff-only origin/main
 echo "   now at $(git log -1 --format='%h %cs %s' | cut -c1-90)"
 
+echo "== 1b. python deps for the Thursday pack (openpyxl; Aspose retired 2026-09-12)"
+# Ubuntu 24 marks the system Python externally managed; the host runs these jobs
+# as root with system python3, so allow the site-packages install there and fall
+# back to a plain install elsewhere.
+python3 -m pip install --quiet -r scripts/analytics/requirements.txt --break-system-packages 2>/dev/null \
+  || python3 -m pip install --quiet -r scripts/analytics/requirements.txt
+python3 -c "import openpyxl; print('   openpyxl', openpyxl.__version__)"
+
 echo "== 2. install systemd units (HOME + ExecStopPost report hook)"
 for u in abc-sync jt-sentinel maya-gate maya-qa qbo-thursday-sync site-sweep wip-pack-thursday; do
   install -m 0644 "deployment/remote/systemd/openbrain-$u.service" "/etc/systemd/system/openbrain-$u.service"

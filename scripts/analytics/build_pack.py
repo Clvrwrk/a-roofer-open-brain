@@ -2,6 +2,16 @@
 """
 /analytics five-surface pack builder (v3 — Variables + Inputs feeder + formula sheets).
 
+Engine: openpyxl (pure Python, MIT). Aspose.Cells / Aspose.PDF were retired on
+2026-09-12 when the Cells licence file lapsed and Chris decided not to renew;
+the workbook is written with openpyxl and the executive brief is a standalone
+HTML file (`<audience>-<as_of>-brief.html`) instead of a PDF.
+
+Formulas-only design: 00_Variables → Inputs_Jobs (one feeder) → every other
+sheet is Excel formulas over those two. openpyxl writes formula strings without
+cached results, so the workbook is flagged fullCalcOnLoad and Excel / Google
+Sheets / LibreOffice compute every cell on first open.
+
 Design: PE Design.md tokens (navy / green / accent / surfaces).
 Buckets: docs/75 + PEC-100 locked dashboard buckets (provisional AccuLynx map).
 Funnel money:
@@ -29,6 +39,16 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.workbook.properties import CalcProperties
+except ImportError as exc:  # pragma: no cover - environment guard
+    raise SystemExit(
+        "openpyxl is required: python3 -m pip install -r scripts/analytics/requirements.txt"
+    ) from exc
 
 REPO = Path(__file__).resolve().parents[2]
 OUT_ROOT = REPO / "outputs" / "analytics"
@@ -212,26 +232,50 @@ def days_in_current_bucket(
     return days_in_ms
 
 
-def apply_cells_license() -> None:
-    from aspose.cells import License
+# ---------------------------------------------------------------------------
+# Design helpers (openpyxl)
+#
+# The sheet writers below address cells 0-indexed (row, col) — the convention
+# the pack was authored in — so these adapters translate to openpyxl's
+# 1-indexed API in one place. `_v("")` maps an empty string to None so a blank
+# never counts as a populated cell.
+# ---------------------------------------------------------------------------
 
-    path = os.environ.get("ASPOSE_CELLS_LICENSE_PATH") or str(
-        Path.home() / ".config/cleverwork/licenses/Aspose.CellsProductFamily.lic"
+FONT_NAME = "Calibri"
+_THIN = Side(style="thin", color=BORDER)
+_BORDER_ALL = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+
+
+def _v(value: Any) -> Any:
+    """Cell value normaliser: '' → None (blank), everything else unchanged."""
+    return None if value == "" else value
+
+
+def cell_at(ws, r: int, c: int):
+    """0-indexed (row, col) → openpyxl cell."""
+    return ws.cell(row=r + 1, column=c + 1)
+
+
+def merge_at(ws, r: int, c: int, n_rows: int, n_cols: int) -> None:
+    """0-indexed anchor + extent → openpyxl merge (skips degenerate 1x1)."""
+    if n_rows <= 1 and n_cols <= 1:
+        return
+    ws.merge_cells(
+        start_row=r + 1, start_column=c + 1, end_row=r + n_rows, end_column=c + n_cols
     )
-    if not Path(path).exists():
-        raise SystemExit(f"Cells license not found: {path}")
-    License().set_license(path)
 
 
-# ---------------------------------------------------------------------------
-# Design helpers (Aspose)
-# ---------------------------------------------------------------------------
+def set_col_width(ws, c: int, width: float) -> None:
+    ws.column_dimensions[get_column_letter(c + 1)].width = float(width)
 
-def _color(hex6: str):
-    from aspose.pydrawing import Color
 
-    h = hex6.lstrip("#")
-    return Color.from_argb(255, int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+def set_row_height(ws, r: int, height: float) -> None:
+    ws.row_dimensions[r + 1].height = float(height)
+
+
+def freeze_at(ws, r: int, c: int) -> None:
+    """Freeze `r` rows and `c` columns (0-indexed counts, like the old API)."""
+    ws.freeze_panes = ws.cell(row=r + 1, column=c + 1)
 
 
 def style_cell(
@@ -245,80 +289,36 @@ def style_cell(
     number: Optional[str] = None,
     wrap: bool = False,
 ) -> None:
-    from aspose.cells import BackgroundType, TextAlignmentType
-
-    st = cell.get_style()
-    st.font.name = "Calibri"
-    st.font.size = size
-    st.font.is_bold = bold
-    st.font.color = _color(font_color)
+    cell.font = Font(name=FONT_NAME, size=size, bold=bold, color=font_color)
     if fill:
-        st.foreground_color = _color(fill)
-        st.pattern = BackgroundType.SOLID
-    align = {
-        "left": TextAlignmentType.LEFT,
-        "center": TextAlignmentType.CENTER,
-        "right": TextAlignmentType.RIGHT,
-    }.get(h_align, TextAlignmentType.LEFT)
-    st.horizontal_alignment = align
-    st.is_text_wrapped = wrap
+        cell.fill = PatternFill(fill_type="solid", start_color=fill, end_color=fill)
+    cell.alignment = Alignment(
+        horizontal=h_align if h_align in ("left", "center", "right") else "left",
+        vertical="center",
+        wrap_text=wrap,
+    )
     if number:
-        st.custom = number
-    cell.set_style(st)
-
-
-def paint_range(ws, r1: int, c1: int, r2: int, c2: int, fill: str) -> None:
-    from aspose.cells import BackgroundType, Range, StyleFlag
-
-    # r1/c1 0-indexed inclusive
-    rng = ws.cells.create_range(r1, c1, r2 - r1 + 1, c2 - c1 + 1)
-    st = ws.workbook.create_style() if hasattr(ws, "workbook") else None
-    # apply cell by cell for reliability
-    for r in range(r1, r2 + 1):
-        for c in range(c1, c2 + 1):
-            cell = ws.cells.get(r, c)
-            s = cell.get_style()
-            s.foreground_color = _color(fill)
-            s.pattern = BackgroundType.SOLID
-            cell.set_style(s)
-
-
-def set_money(cell, value: float) -> None:
-    cell.put_value(float(value) if value is not None else 0.0)
-    style_cell(cell, number="$#,##0.00", h_align="right")
-
-
-def set_int(cell, value: Any) -> None:
-    if value is None or value == "":
-        cell.put_value("")
-        return
-    cell.put_value(int(value))
-    style_cell(cell, number="#,##0", h_align="right")
-
-
-def set_pct(cell, value: Optional[float]) -> None:
-    if value is None:
-        cell.put_value("")
-        return
-    cell.put_value(float(value))
-    style_cell(cell, number="0%", h_align="right")
+        cell.number_format = number
 
 
 def header_row(ws, row: int, headers: List[str], fill: str = NAVY) -> None:
     for c, h in enumerate(headers):
-        cell = ws.cells.get(row, c)
-        cell.put_value(h)
+        cell = cell_at(ws, row, c)
+        cell.value = h
         style_cell(cell, bold=True, size=10, font_color=ON_NAVY, fill=fill, h_align="center", wrap=True)
-    ws.cells.set_row_height(row, 28.0)
+    set_row_height(ws, row, 28.0)
 
 
 def autosize(ws, cols: int, max_w: float = 28.0) -> None:
+    """Deterministic stand-in for Aspose auto-fit: width from the longest
+    rendered value in the first 80 rows (+2 padding, clamped to max_w)."""
     for c in range(cols):
         best = 10.0
-        for r in range(min(ws.cells.max_data_row + 1, 80)):
-            v = ws.cells.get(r, c).string_value or ""
-            best = max(best, min(max_w, len(v) + 2))
-        ws.cells.set_column_width(c, float(best))
+        for r in range(min(ws.max_row, 80)):
+            v = cell_at(ws, r, c).value
+            text = "" if v is None else str(v)
+            best = max(best, min(max_w, len(text) + 2))
+        set_col_width(ws, c, best)
 
 
 # ---------------------------------------------------------------------------
@@ -931,10 +931,7 @@ def write_excel(
     audience: str, as_of: str, data: Dict[str, Any], built: Dict[str, Any], out_dir: Path
 ) -> Path:
     """True workbook: 00_Variables + Inputs_Jobs feeder + formula calc sheets only."""
-    from aspose.cells import Workbook
-
-    apply_cells_license()
-    wb = Workbook()
+    wb = openpyxl.Workbook()
     jobs = built["jobs"]
     n = len(jobs)
     last = n + 1  # excel last data row (1-indexed header + n)
@@ -990,13 +987,13 @@ def write_excel(
     # ------------------------------------------------------------------
     # 00_Variables — ONLY place for assumption constants (editable)
     # ------------------------------------------------------------------
-    var = wb.worksheets[0]
-    var.name = "00_Variables"
+    var = wb.active
+    var.title = "00_Variables"
     for c in range(4):
-        cell = var.cells.get(0, c)
-        cell.put_value("" if c else "VARIABLES — edit values in column B only. All calc sheets read these cells.")
+        cell = cell_at(var, 0, c)
+        cell.value = _v("" if c else "VARIABLES — edit values in column B only. All calc sheets read these cells.")
         style_cell(cell, bold=True, size=12, font_color=ON_NAVY, fill=NAVY)
-    var.cells.merge(0, 0, 1, 4)
+    merge_at(var, 0, 0, 1, 4)
     header_row(var, 1, ["Key", "Value", "Unit / type", "Notes"], fill=NAVY)
 
     variables = [
@@ -1027,52 +1024,52 @@ def write_excel(
         r = 2 + i
         excel_row = r + 1
         key_row[k] = excel_row
-        var.cells.get(r, 0).put_value(k)
-        style_cell(var.cells.get(r, 0), bold=True, size=10, fill=SURFACE_ALT)
-        cell = var.cells.get(r, 1)
+        cell_at(var, r, 0).value = _v(k)
+        style_cell(cell_at(var, r, 0), bold=True, size=10, fill=SURFACE_ALT)
+        cell = cell_at(var, r, 1)
         if k.startswith("Prob_"):
-            cell.put_value(float(v))
+            cell.value = _v(float(v))
             style_cell(cell, number="0%", bold=True, size=11, fill=ACCENT_SOFT)
         elif k == "AsOf":
             d = parse_date(v)
             if d:
-                cell.put_value(datetime(d.year, d.month, d.day))
+                cell.value = _v(datetime(d.year, d.month, d.day))
                 style_cell(cell, number="YYYY-MM-DD", bold=True, size=11, fill=ACCENT_SOFT)
             else:
-                cell.put_value(str(v))
+                cell.value = _v(str(v))
                 style_cell(cell, size=10, fill=ACCENT_SOFT)
         elif isinstance(v, float) and "USD" in unit:
-            cell.put_value(float(v))
+            cell.value = _v(float(v))
             style_cell(cell, number="$#,##0.00", bold=True, size=11, fill=ACCENT_SOFT)
         elif isinstance(v, (int, float)) and not isinstance(v, bool):
-            cell.put_value(float(v))
+            cell.value = _v(float(v))
             style_cell(cell, number="0", bold=True, size=11, fill=ACCENT_SOFT)
         else:
-            cell.put_value(str(v))
+            cell.value = _v(str(v))
             style_cell(cell, size=10, fill=ACCENT_SOFT)
-        var.cells.get(r, 2).put_value(unit)
-        var.cells.get(r, 3).put_value(notes)
-        style_cell(var.cells.get(r, 2), size=9, font_color=MUTED)
-        style_cell(var.cells.get(r, 3), size=9, wrap=True)
+        cell_at(var, r, 2).value = _v(unit)
+        cell_at(var, r, 3).value = _v(notes)
+        style_cell(cell_at(var, r, 2), size=9, font_color=MUTED)
+        style_cell(cell_at(var, r, 3), size=9, wrap=True)
 
     def V(key: str) -> str:
         return f"'00_Variables'!$B${key_row[key]}"
 
-    var.cells.get(22, 0).put_value("EDIT RULE")
-    style_cell(var.cells.get(22, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
-    var.cells.get(22, 1).put_value(
+    cell_at(var, 22, 0).value = _v("EDIT RULE")
+    style_cell(cell_at(var, 22, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
+    cell_at(var, 22, 1).value = _v(
         "Change amber Value cells only. Money SoT: L Contract, N Outstanding AR, O Balance Remaining = job_financials.balance_due."
     )
-    style_cell(var.cells.get(22, 1), size=10, fill=ERROR_SURF, wrap=True)
-    var.cells.merge(22, 1, 1, 3)
+    style_cell(cell_at(var, 22, 1), size=10, fill=ERROR_SURF, wrap=True)
+    merge_at(var, 22, 1, 1, 3)
     for c, w in enumerate([26.0, 18.0, 14.0, 52.0]):
-        var.cells.set_column_width(c, w)
+        set_col_width(var, c, w)
 
     # ------------------------------------------------------------------
     # Inputs_Jobs — single feeder + calc formulas
     # ------------------------------------------------------------------
 
-    inp = wb.worksheets.add("Inputs_Jobs")
+    inp = wb.create_sheet("Inputs_Jobs")
     headers = [
         "Location",  # A 0
         "Job #",
@@ -1122,9 +1119,9 @@ def write_excel(
     def put_date_cell(cell, iso_s: str) -> None:
         d = parse_date(iso_s)
         if not d:
-            cell.put_value("")
+            cell.value = _v("")
             return
-        cell.put_value(datetime(d.year, d.month, d.day))
+        cell.value = _v(datetime(d.year, d.month, d.day))
         style_cell(cell, number="YYYY-MM-DD", size=9)
 
     asof_ref = V("AsOf")
@@ -1138,137 +1135,137 @@ def write_excel(
             j["location"], str(j["job_num"]), j["client"], j["job_name"],
             j["milestone"], j["bucket"], j["funnel_layer"], j["salesperson"], j["category"],
         ]):
-            inp.cells.get(r, c).put_value(v if v is not None else "")
-            style_cell(inp.cells.get(r, c), size=9)
+            cell_at(inp, r, c).value = _v(v if v is not None else "")
+            style_cell(cell_at(inp, r, c), size=9)
 
         # J Estimated Revenue — only when no invoice date
-        cell = inp.cells.get(r, 9)
-        cell.put_value(float(j.get("estimate_j") or 0))
+        cell = cell_at(inp, r, 9)
+        cell.value = _v(float(j.get("estimate_j") or 0))
         style_cell(cell, number="$#,##0.00", size=9, h_align="right")
         # K dropped
-        inp.cells.get(r, 10).put_value("")
+        cell_at(inp, r, 10).value = _v("")
         # L Contract
-        cell = inp.cells.get(r, 11)
-        cell.put_value(float(j["contract"] or 0))
+        cell = cell_at(inp, r, 11)
+        cell.value = _v(float(j["contract"] or 0))
         style_cell(cell, number="$#,##0.00", size=9, h_align="right")
         # M invoice count
-        inp.cells.get(r, 12).put_value(float(j["invoice_count"] or 0))
-        style_cell(inp.cells.get(r, 12), number="0", size=9)
+        cell_at(inp, r, 12).value = _v(float(j["invoice_count"] or 0))
+        style_cell(cell_at(inp, r, 12), number="0", size=9)
         # N Outstanding AR
-        cell = inp.cells.get(r, 13)
-        cell.put_value(float(j["outstanding_ar"] or 0))
+        cell = cell_at(inp, r, 13)
+        cell.value = _v(float(j["outstanding_ar"] or 0))
         style_cell(cell, number="$#,##0.00", size=9, h_align="right")
         # P Billed, Q Remaining (values) before O/R formulas
-        cell = inp.cells.get(r, 15)
-        cell.put_value(float(j["billed"] or 0))
+        cell = cell_at(inp, r, 15)
+        cell.value = _v(float(j["billed"] or 0))
         style_cell(cell, number="$#,##0.00", size=9)
-        cell = inp.cells.get(r, 16)
-        cell.put_value(float(j["remaining_balance"] or 0))
+        cell = cell_at(inp, r, 16)
+        cell.value = _v(float(j["remaining_balance"] or 0))
         style_cell(cell, number="$#,##0.00", size=9)
         # R Collected Revenue = P-Q
-        inp.cells.get(r, 17).formula = f"=P{er}-Q{er}"
-        style_cell(inp.cells.get(r, 17), number="$#,##0.00", size=9, fill=SURFACE_INSET)
+        cell_at(inp, r, 17).value = f"=P{er}-Q{er}"
+        style_cell(cell_at(inp, r, 17), number="$#,##0.00", size=9, fill=SURFACE_INSET)
         # O Uncollected Contract = L-R
-        inp.cells.get(r, 14).formula = f"=IF(L{er}=\"\",\"\",L{er}-R{er})"
-        style_cell(inp.cells.get(r, 14), number="$#,##0.00", size=9, fill=SURFACE_INSET)
+        cell_at(inp, r, 14).value = f"=IF(L{er}=\"\",\"\",L{er}-R{er})"
+        style_cell(cell_at(inp, r, 14), number="$#,##0.00", size=9, fill=SURFACE_INSET)
         # S Collection status (traffic light)
         st = j.get("collection_status") or STATUS_PENDING
-        inp.cells.get(r, 18).put_value(st)
-        style_status_cell(inp.cells.get(r, 18), st)
+        cell_at(inp, r, 18).value = _v(st)
+        style_status_cell(cell_at(inp, r, 18), st)
 
         # Dates T-AA = 19-26
-        put_date_cell(inp.cells.get(r, 19), j["d_lead"])
-        put_date_cell(inp.cells.get(r, 20), j["d_prospect"])
-        put_date_cell(inp.cells.get(r, 21), j["d_accrual"])
-        put_date_cell(inp.cells.get(r, 22), j["d_completed"])
-        put_date_cell(inp.cells.get(r, 23), j["d_wip_start"])
-        put_date_cell(inp.cells.get(r, 24), j["d_invoice_last"])
-        put_date_cell(inp.cells.get(r, 25), j["d_wip_close"])
-        put_date_cell(inp.cells.get(r, 26), j["d_closed"])
+        put_date_cell(cell_at(inp, r, 19), j["d_lead"])
+        put_date_cell(cell_at(inp, r, 20), j["d_prospect"])
+        put_date_cell(cell_at(inp, r, 21), j["d_accrual"])
+        put_date_cell(cell_at(inp, r, 22), j["d_completed"])
+        put_date_cell(cell_at(inp, r, 23), j["d_wip_start"])
+        put_date_cell(cell_at(inp, r, 24), j["d_invoice_last"])
+        put_date_cell(cell_at(inp, r, 25), j["d_wip_close"])
+        put_date_cell(cell_at(inp, r, 26), j["d_closed"])
 
         # Dwell AB-AH = 27-33  (T=19 Lead ... X=23 inv sent, W=22 completed, Z=25 invoiced ms, AA=26 closed)
         # Days_Lead: U-T or AsOf-T if Lead
-        inp.cells.get(r, 27).formula = (
+        cell_at(inp, r, 27).value = (
             f'=IF(T{er}="","" ,IF(U{er}<>"",U{er}-T{er},IF(OR(E{er}="lead",E{er}="unassigned_lead",E{er}="assigned_lead"),{asof_ref}-T{er},"")))'
         )
-        inp.cells.get(r, 28).formula = (
+        cell_at(inp, r, 28).value = (
             f'=IF(U{er}="","" ,IF(V{er}<>"",V{er}-U{er},IF(E{er}="prospect",{asof_ref}-U{er},"")))'
         )
-        inp.cells.get(r, 29).formula = (
+        cell_at(inp, r, 29).value = (
             f'=IF(V{er}="","" ,IF(X{er}<>"",X{er}-V{er},IF(E{er}="approved",{asof_ref}-V{er},"")))'
         )
         # Days_WIP: Invoice Sent X → Completed W
-        inp.cells.get(r, 30).formula = f'=IF(OR(X{er}="",W{er}=""),"",W{er}-X{er})'
+        cell_at(inp, r, 30).value = f'=IF(OR(X{er}="",W{er}=""),"",W{er}-X{er})'
         # Days_Supplement: Completed W → Invoiced ms Z
-        inp.cells.get(r, 31).formula = f'=IF(OR(W{er}="",Z{er}=""),"",Z{er}-W{er})'
+        cell_at(inp, r, 31).value = f'=IF(OR(W{er}="",Z{er}=""),"",Z{er}-W{er})'
         # Days_Final: Invoiced ms Z → Closed AA
-        inp.cells.get(r, 32).formula = f'=IF(OR(Z{er}="",AA{er}=""),"",AA{er}-Z{er})'
+        cell_at(inp, r, 32).value = f'=IF(OR(Z{er}="",AA{er}=""),"",AA{er}-Z{er})'
         # Days_Critical_AR
-        inp.cells.get(r, 33).formula = (
+        cell_at(inp, r, 33).value = (
             f'=IF(AND(N{er}>0,OR(E{er}="invoiced",E{er}="closed",F{er}="Invoiced",F{er}="Closed",F{er}="Closed w/AR")),'
             f'IF(Z{er}<>"",{asof_ref}-Z{er},IF(X{er}<>"",{asof_ref}-X{er},"")),"")'
         )
         for c in range(27, 34):
-            style_cell(inp.cells.get(r, c), number="0", size=9, fill=SURFACE_INSET)
+            style_cell(cell_at(inp, r, c), number="0", size=9, fill=SURFACE_INSET)
 
         # Weighted revenue AI=34: risked from Python as value (also formula option from class)
         # Store probability AJ=35, weighted = face * prob when face in J or L
         prob = j.get("lead_prob")
         face = j.get("gross") or 0
         if prob is not None:
-            inp.cells.get(r, 35).put_value(float(prob))
-            style_cell(inp.cells.get(r, 35), number="0%", size=9)
+            cell_at(inp, r, 35).value = _v(float(prob))
+            style_cell(cell_at(inp, r, 35), number="0%", size=9)
             # Weighted uses J if lead/prospect estimate class else L
             if j["funnel_layer"] == FIN_LEAD_10 or j["funnel_layer"] == FIN_PROSPECT_50:
-                inp.cells.get(r, 34).formula = f"=IF(J{er}=\"\",\"\",J{er}*AJ{er})"
+                cell_at(inp, r, 34).value = f"=IF(J{er}=\"\",\"\",J{er}*AJ{er})"
             else:
-                inp.cells.get(r, 34).formula = f"=IF(L{er}=\"\",\"\",L{er}*AJ{er})"
-            style_cell(inp.cells.get(r, 34), number="$#,##0.00", size=9, fill=SURFACE_INSET)
+                cell_at(inp, r, 34).value = f"=IF(L{er}=\"\",\"\",L{er}*AJ{er})"
+            style_cell(cell_at(inp, r, 34), number="$#,##0.00", size=9, fill=SURFACE_INSET)
         else:
-            inp.cells.get(r, 35).put_value("")
-            inp.cells.get(r, 34).put_value(0.0)
-            style_cell(inp.cells.get(r, 34), number="$#,##0.00", size=9, fill=SURFACE_INSET)
+            cell_at(inp, r, 35).value = _v("")
+            cell_at(inp, r, 34).value = _v(0.0)
+            style_cell(cell_at(inp, r, 34), number="$#,##0.00", size=9, fill=SURFACE_INSET)
 
-        inp.cells.get(r, 36).formula = f'=IF(N{er}>={V("AR_Flag_Threshold")},1,0)'
-        style_cell(inp.cells.get(r, 36), number="0", size=9, fill=SURFACE_INSET)
+        cell_at(inp, r, 36).value = f'=IF(N{er}>={V("AR_Flag_Threshold")},1,0)'
+        style_cell(cell_at(inp, r, 36), number="0", size=9, fill=SURFACE_INSET)
 
-        inp.cells.get(r, 37).put_value(str(j["job_id"]))
-        style_cell(inp.cells.get(r, 37), size=8)
-        inp.cells.get(r, 38).put_value(j["acculynx_url"])
-        style_cell(inp.cells.get(r, 38), size=8)
-        inp.cells.get(r, 39).put_value((j.get("finance_class") or "") + " · " + (j.get("fin_note") or j.get("lead_prob_note") or ""))
-        style_cell(inp.cells.get(r, 39), size=8)
-        inp.cells.get(r, 40).put_value(j["has_insurance"])
-        inp.cells.get(r, 41).put_value(j["insurance_co"])
+        cell_at(inp, r, 37).value = _v(str(j["job_id"]))
+        style_cell(cell_at(inp, r, 37), size=8)
+        cell_at(inp, r, 38).value = _v(j["acculynx_url"])
+        style_cell(cell_at(inp, r, 38), size=8)
+        cell_at(inp, r, 39).value = _v((j.get("finance_class") or "") + " · " + (j.get("fin_note") or j.get("lead_prob_note") or ""))
+        style_cell(cell_at(inp, r, 39), size=8)
+        cell_at(inp, r, 40).value = _v(j["has_insurance"])
+        cell_at(inp, r, 41).value = _v(j["insurance_co"])
 
     if n:
-        inp.auto_filter.range = f"A1:AP{last}"
-    inp.freeze_panes(1, 3, 1, 3)
+        inp.auto_filter.ref = f"A1:AP{last}"
+    freeze_at(inp, 1, 3)
     for c in range(len(headers)):
-        inp.cells.set_column_width(c, 12.0)
-    inp.cells.set_column_width(2, 20.0)
-    inp.cells.set_column_width(6, 32.0)
-    inp.cells.set_column_width(11, 14.0)
-    inp.cells.set_row_height(0, 42.0)
+        set_col_width(inp, c, 12.0)
+    set_col_width(inp, 2, 20.0)
+    set_col_width(inp, 6, 32.0)
+    set_col_width(inp, 11, 14.0)
+    set_row_height(inp, 0, 42.0)
 
     # ------------------------------------------------------------------
     # 01_Cover
     # ------------------------------------------------------------------
-    cover = wb.worksheets.add("01_Cover")
+    cover = wb.create_sheet("01_Cover")
     for c in range(6):
-        cell = cover.cells.get(0, c)
-        cell.put_value("" if c else "PRO EXTERIORS · FRIDAY AR/WIP · CALCULATION WORKBOOK")
+        cell = cell_at(cover, 0, c)
+        cell.value = _v("" if c else "PRO EXTERIORS · FRIDAY AR/WIP · CALCULATION WORKBOOK")
         style_cell(cell, bold=True, size=16, font_color=ON_NAVY, fill=NAVY)
-    cover.cells.merge(0, 0, 1, 6)
-    cover.cells.set_row_height(0, 30.0)
-    cover.cells.get(1, 0).put_value("Architecture")
-    style_cell(cover.cells.get(1, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
-    cover.cells.get(1, 1).put_value(
-        "00_Variables (assumptions) → Inputs_Jobs (one feeder) → all other sheets are FORMULAS only. Aspose.Cells licensed."
+    merge_at(cover, 0, 0, 1, 6)
+    set_row_height(cover, 0, 30.0)
+    cell_at(cover, 1, 0).value = _v("Architecture")
+    style_cell(cell_at(cover, 1, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
+    cell_at(cover, 1, 1).value = _v(
+        "00_Variables (assumptions) → Inputs_Jobs (one feeder) → all other sheets are FORMULAS only. Built with openpyxl; values compute on open."
     )
-    style_cell(cover.cells.get(1, 1), size=10, fill=ACCENT_SOFT, wrap=True)
-    cover.cells.merge(1, 1, 1, 5)
-    cover.cells.set_row_height(1, 32.0)
+    style_cell(cell_at(cover, 1, 1), size=10, fill=ACCENT_SOFT, wrap=True)
+    merge_at(cover, 1, 1, 1, 5)
+    set_row_height(cover, 1, 32.0)
 
     meta = [
         (3, "As-of", f"={V('AsOf')}"),
@@ -1283,48 +1280,48 @@ def write_excel(
         (12, "Gap Ops−QB", "=B11-B12"),
     ]
     for r, lab, form in meta:
-        cover.cells.get(r, 0).put_value(lab)
-        style_cell(cover.cells.get(r, 0), bold=True, size=10, fill=SURFACE_ALT)
+        cell_at(cover, r, 0).value = _v(lab)
+        style_cell(cell_at(cover, r, 0), bold=True, size=10, fill=SURFACE_ALT)
         if form.startswith("="):
-            cover.cells.get(r, 1).formula = form
+            cell_at(cover, r, 1).value = form
         else:
-            cover.cells.get(r, 1).put_value(form)
+            cell_at(cover, r, 1).value = _v(form)
         if "AR" in lab or "Gap" in lab:
-            style_cell(cover.cells.get(r, 1), number="$#,##0.00", bold=True, size=11)
+            style_cell(cell_at(cover, r, 1), number="$#,##0.00", bold=True, size=11)
         else:
-            style_cell(cover.cells.get(r, 1), size=10)
+            style_cell(cell_at(cover, r, 1), size=10)
 
-    cover.cells.get(14, 0).put_value("SIGN-OFF")
-    style_cell(cover.cells.get(14, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
+    cell_at(cover, 14, 0).value = _v("SIGN-OFF")
+    style_cell(cell_at(cover, 14, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
     for i, who in enumerate(["Chris", "Ops/Lucinda", "Sales (lead P%)", "CPA recon"]):
-        cover.cells.get(15 + i, 0).put_value(who)
-        cover.cells.get(15 + i, 1).put_value("")
-        style_cell(cover.cells.get(15 + i, 0), size=10, fill=SURFACE_ALT)
-    cover.cells.get(20, 0).put_value(
+        cell_at(cover, 15 + i, 0).value = _v(who)
+        cell_at(cover, 15 + i, 1).value = _v("")
+        style_cell(cell_at(cover, 15 + i, 0), size=10, fill=SURFACE_ALT)
+    cell_at(cover, 20, 0).value = _v(
         "MEETING PATH: 02_Exec_Dashboard → 07_Critical_AR → 08_Future_Revenue → 03_Funnel_Money. Edit 00_Variables to stress-test lead %."
     )
-    style_cell(cover.cells.get(20, 0), size=10, bold=True, fill=INFO_SOFT, wrap=True)
-    cover.cells.merge(20, 0, 1, 6)
+    style_cell(cell_at(cover, 20, 0), size=10, bold=True, fill=INFO_SOFT, wrap=True)
+    merge_at(cover, 20, 0, 1, 6)
     for c in range(6):
-        cover.cells.set_column_width(c, 16.0)
-    cover.cells.set_column_width(0, 22.0)
-    cover.cells.set_column_width(1, 42.0)
+        set_col_width(cover, c, 16.0)
+    set_col_width(cover, 0, 22.0)
+    set_col_width(cover, 1, 42.0)
 
     # ------------------------------------------------------------------
     # 02_Exec_Dashboard — 100% formulas for KPI numbers
     # ------------------------------------------------------------------
-    dash = wb.worksheets.add("02_Exec_Dashboard")
+    dash = wb.create_sheet("02_Exec_Dashboard")
     for c in range(8):
-        cell = dash.cells.get(0, c)
-        cell.put_value("" if c else "EXEC DASHBOARD — all KPI values are Excel formulas over Inputs_Jobs + 00_Variables")
+        cell = cell_at(dash, 0, c)
+        cell.value = _v("" if c else "EXEC DASHBOARD — all KPI values are Excel formulas over Inputs_Jobs + 00_Variables")
         style_cell(cell, bold=True, size=14, font_color=ON_NAVY, fill=NAVY)
-    dash.cells.merge(0, 0, 1, 8)
-    dash.cells.set_row_height(0, 28.0)
+    merge_at(dash, 0, 0, 1, 8)
+    set_row_height(dash, 0, 28.0)
 
-    dash.cells.get(1, 0).put_value("Metric")
-    dash.cells.get(1, 1).put_value("Value")
-    dash.cells.get(1, 2).put_value("Formula logic")
-    dash.cells.get(1, 3).put_value("Basis")
+    cell_at(dash, 1, 0).value = _v("Metric")
+    cell_at(dash, 1, 1).value = _v("Value")
+    cell_at(dash, 1, 2).value = _v("Formula logic")
+    cell_at(dash, 1, 3).value = _v("Basis")
     header_row(dash, 1, ["Metric", "Value", "Formula logic", "Basis"], fill=NAVY)
 
     # KPI rows — pure formulas
@@ -1364,27 +1361,27 @@ def write_excel(
 
     for i, (metric, formula, logic, basis) in enumerate(kpis):
         r = 2 + i
-        dash.cells.get(r, 0).put_value(metric)
-        style_cell(dash.cells.get(r, 0), bold=True, size=10, fill=SURFACE_ALT if i % 2 == 0 else WHITE)
-        dash.cells.get(r, 1).formula = formula
+        cell_at(dash, r, 0).value = _v(metric)
+        style_cell(cell_at(dash, r, 0), bold=True, size=10, fill=SURFACE_ALT if i % 2 == 0 else WHITE)
+        cell_at(dash, r, 1).value = formula
         is_money = "$" in metric or "gap" in metric.lower()
         is_pct = "prob over stale" in metric.lower()
         if is_pct:
-            style_cell(dash.cells.get(r, 1), number="0%", bold=True, size=12, font_color=NAVY)
+            style_cell(cell_at(dash, r, 1), number="0%", bold=True, size=12, font_color=NAVY)
         elif is_money:
-            style_cell(dash.cells.get(r, 1), number="$#,##0.00", bold=True, size=12, font_color=ERROR if "gap" in metric.lower() or "Critical" in metric else NAVY)
+            style_cell(cell_at(dash, r, 1), number="$#,##0.00", bold=True, size=12, font_color=ERROR if "gap" in metric.lower() or "Critical" in metric else NAVY)
         else:
-            style_cell(dash.cells.get(r, 1), number="#,##0", bold=True, size=12)
-        dash.cells.get(r, 2).put_value(logic)
-        style_cell(dash.cells.get(r, 2), size=9, font_color=MUTED)
-        dash.cells.get(r, 3).put_value(basis)
-        style_cell(dash.cells.get(r, 3), size=9)
+            style_cell(cell_at(dash, r, 1), number="#,##0", bold=True, size=12)
+        cell_at(dash, r, 2).value = _v(logic)
+        style_cell(cell_at(dash, r, 2), size=9, font_color=MUTED)
+        cell_at(dash, r, 3).value = _v(basis)
+        style_cell(cell_at(dash, r, 3), size=9)
 
 
     so_r = 2 + len(kpis) + 1
-    dash.cells.get(so_r, 0).put_value("SO WHAT — money SoT + dwell (live formulas above)")
-    style_cell(dash.cells.get(so_r, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
-    dash.cells.merge(so_r, 0, 1, 4)
+    cell_at(dash, so_r, 0).value = _v("SO WHAT — money SoT + dwell (live formulas above)")
+    style_cell(cell_at(dash, so_r, 0), bold=True, font_color=ON_NAVY, fill=NAVY)
+    merge_at(dash, so_r, 0, 1, 4)
     tips = [
         "1. Funnel layer G = Dashboard bucket. Closed $0 AR excluded. 05/06 = open AR jobs only nested by location/rep.",
         "2. Closed w/AR only closed jobs in report. 05 Location + 06 Salesperson nest jobs with N>0 + Bucket.",
@@ -1393,12 +1390,12 @@ def write_excel(
         "5. Stress-test: edit Prob_Lead_Estimate / Prob_Prospect_* on Variables (rebuild applies class rules).",
     ]
     for i, t in enumerate(tips):
-        dash.cells.get(so_r + 1 + i, 0).put_value(t)
-        style_cell(dash.cells.get(so_r + 1 + i, 0), size=10, fill=SURFACE_INSET if i % 2 == 0 else WHITE)
-        dash.cells.merge(so_r + 1 + i, 0, 1, 4)
+        cell_at(dash, so_r + 1 + i, 0).value = _v(t)
+        style_cell(cell_at(dash, so_r + 1 + i, 0), size=10, fill=SURFACE_INSET if i % 2 == 0 else WHITE)
+        merge_at(dash, so_r + 1 + i, 0, 1, 4)
 
     for c, w in enumerate([34.0, 16.0, 48.0, 12.0]):
-        dash.cells.set_column_width(c, w)
+        set_col_width(dash, c, w)
 
     # ------------------------------------------------------------------
     # 03_Funnel_Money — formula
@@ -1418,10 +1415,10 @@ def write_excel(
     ) -> None:
         """Location/bucket/rep header bands + job rows (N>0) with SUMIF money from Inputs."""
         for c in range(13):
-            cell = ws.cells.get(0, c)
-            cell.put_value("" if c else title)
+            cell = cell_at(ws, 0, c)
+            cell.value = _v("" if c else title)
             style_cell(cell, bold=True, size=12, font_color=ON_NAVY, fill=NAVY)
-        ws.cells.merge(0, 0, 1, 12)
+        merge_at(ws, 0, 0, 1, 12)
         header_row(
             ws,
             1,
@@ -1442,6 +1439,17 @@ def write_excel(
             ],
             fill=NAVY,
         )
+        # Inputs_Jobs column that carries this grouping (bucket F, location A, salesperson H)
+        group_col = {"bucket": "F", "location": "A", "salesperson": "H"}[group_key]
+        ar_gate = f',Inputs_Jobs!$N$2:$N${last},">0"' if only_ar else ""
+
+        def band_sum(letter: str, gname: str) -> str:
+            g = gname.replace('"', '""')
+            return (
+                f"=SUMIFS(Inputs_Jobs!${letter}$2:${letter}${last},"
+                f'Inputs_Jobs!${group_col}$2:${group_col}${last},"{g}"{ar_gate})'
+            )
+
         pool = [j for j in jobs_src if (not only_ar) or (j.get("outstanding_ar") or 0) > 0]
         by: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for j in pool:
@@ -1454,54 +1462,52 @@ def write_excel(
             jobs_here = sorted(by[gname], key=lambda x: -x["outstanding_ar"])
             if not jobs_here:
                 continue
-            ar_sum = sum(j["outstanding_ar"] for j in jobs_here)
-            c_sum = sum(j["contract"] for j in jobs_here)
-            ws.cells.get(row_i, 0).put_value(f"▸ {gname}")
-            style_cell(ws.cells.get(row_i, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
+            cell_at(ws, row_i, 0).value = _v(f"▸ {gname}")
+            style_cell(cell_at(ws, row_i, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
             for c in range(1, 13):
-                style_cell(ws.cells.get(row_i, c), fill=NAVY, font_color=ON_NAVY)
-            ws.cells.get(row_i, 1).put_value(f"{len(jobs_here)} jobs")
-            style_cell(ws.cells.get(row_i, 1), bold=True, size=10, font_color=ON_NAVY, fill=NAVY)
-            ws.cells.get(row_i, 6).put_value(float(c_sum))
-            style_cell(ws.cells.get(row_i, 6), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
-            ws.cells.get(row_i, 7).put_value(float(ar_sum))
-            style_cell(ws.cells.get(row_i, 7), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
+                style_cell(cell_at(ws, row_i, c), fill=NAVY, font_color=ON_NAVY)
+            cell_at(ws, row_i, 1).value = _v(f"{len(jobs_here)} jobs")
+            style_cell(cell_at(ws, row_i, 1), bold=True, size=10, font_color=ON_NAVY, fill=NAVY)
+            cell_at(ws, row_i, 6).value = band_sum("L", gname)
+            style_cell(cell_at(ws, row_i, 6), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
+            cell_at(ws, row_i, 7).value = band_sum("N", gname)
+            style_cell(cell_at(ws, row_i, 7), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
             row_i += 1
             for j in jobs_here:
                 jid = str(j["job_id"]).replace('"', '""')
-                ws.cells.get(row_i, 0).put_value(str(j.get("job_num") or "") or "(no #)")
-                ws.cells.get(row_i, 1).put_value(j["client"])
-                ws.cells.get(row_i, 2).put_value(j["bucket"])
-                style_cell(ws.cells.get(row_i, 2), size=9, bold=True)
+                cell_at(ws, row_i, 0).value = _v(str(j.get("job_num") or "") or "(no #)")
+                cell_at(ws, row_i, 1).value = _v(j["client"])
+                cell_at(ws, row_i, 2).value = _v(j["bucket"])
+                style_cell(cell_at(ws, row_i, 2), size=9, bold=True)
                 dib = j.get("days_in_current_bucket")
                 if dib is not None:
-                    ws.cells.get(row_i, 3).put_value(int(dib))
-                    style_cell(ws.cells.get(row_i, 3), number="0", size=9, h_align="right")
+                    cell_at(ws, row_i, 3).value = _v(int(dib))
+                    style_cell(cell_at(ws, row_i, 3), number="0", size=9, h_align="right")
                 else:
-                    ws.cells.get(row_i, 3).put_value("")
-                ws.cells.get(row_i, 4).put_value(j["location"])
-                ws.cells.get(row_i, 5).put_value(j["salesperson"])
+                    cell_at(ws, row_i, 3).value = _v("")
+                cell_at(ws, row_i, 4).value = _v(j["location"])
+                cell_at(ws, row_i, 5).value = _v(j["salesperson"])
                 for col, letter in [(6, "L"), (7, "N"), (8, "P"), (9, "Q"), (10, "R")]:
-                    ws.cells.get(row_i, col).formula = (
+                    cell_at(ws, row_i, col).value = (
                         f'=IFERROR(SUMIF(Inputs_Jobs!$AL$2:$AL${last},"{jid}",Inputs_Jobs!${letter}$2:${letter}${last}),0)'
                     )
-                    style_cell(ws.cells.get(row_i, col), number="$#,##0.00", size=9)
+                    style_cell(cell_at(ws, row_i, col), number="$#,##0.00", size=9)
                 st = j.get("collection_status") or ""
-                ws.cells.get(row_i, 11).put_value(st)
-                style_status_cell(ws.cells.get(row_i, 11), st)
-                ws.cells.get(row_i, 12).put_value(j["acculynx_url"])
-                style_cell(ws.cells.get(row_i, 12), size=8)
+                cell_at(ws, row_i, 11).value = _v(st)
+                style_status_cell(cell_at(ws, row_i, 11), st)
+                cell_at(ws, row_i, 12).value = _v(j["acculynx_url"])
+                style_cell(cell_at(ws, row_i, 12), size=8)
                 row_i += 1
-        ws.cells.get(row_i, 0).put_value("TOTAL (open AR)")
-        style_cell(ws.cells.get(row_i, 0), bold=True, fill=ERROR_SURF)
-        ws.cells.get(row_i, 7).formula = f'=SUMIF(Inputs_Jobs!$N$2:$N${last},">0",Inputs_Jobs!$N$2:$N${last})'
-        style_cell(ws.cells.get(row_i, 7), number="$#,##0.00", bold=True, fill=ERROR_SURF, font_color=ERROR)
-        ws.freeze_panes(2, 0, 2, 0)
+        cell_at(ws, row_i, 0).value = _v("TOTAL (open AR)")
+        style_cell(cell_at(ws, row_i, 0), bold=True, fill=ERROR_SURF)
+        cell_at(ws, row_i, 7).value = f'=SUMIF(Inputs_Jobs!$N$2:$N${last},">0",Inputs_Jobs!$N$2:$N${last})'
+        style_cell(cell_at(ws, row_i, 7), number="$#,##0.00", bold=True, fill=ERROR_SURF, font_color=ERROR)
+        freeze_at(ws, 2, 0)
         for c, w in enumerate([16.0, 20.0, 26.0, 10.0, 12.0, 14.0, 12.0, 14.0, 11.0, 11.0, 11.0, 12.0, 24.0]):
-            ws.cells.set_column_width(c, float(w))
+            set_col_width(ws, c, float(w))
 
 
-    fun = wb.worksheets.add("03_Funnel_Money")
+    fun = wb.create_sheet("03_Funnel_Money")
     write_nested_ar_jobs(
         fun,
         title="03 FUNNEL BY BUCKET — nested open-AR jobs (N>0) under each bucket · same pattern as 05/06",
@@ -1516,7 +1522,7 @@ def write_excel(
     # 04_Buckets_Locked — counts/sums FORMULA; meaning text static
     # ------------------------------------------------------------------
 
-    bkt = wb.worksheets.add("04_Buckets_Locked")
+    bkt = wb.create_sheet("04_Buckets_Locked")
     write_nested_ar_jobs(
         bkt,
         title="04 BUCKETS LOCKED — docs/75 names · nested open-AR jobs only · Closed $0 AR excluded from Inputs",
@@ -1531,7 +1537,7 @@ def write_excel(
 
 
     # 05 / 06 — nested open-AR jobs (shared writer includes Days in current bucket)
-    loc = wb.worksheets.add("05_By_Location")
+    loc = wb.create_sheet("05_By_Location")
     write_nested_ar_jobs(
         loc,
         title="05 BY LOCATION — open AR (N>0) · nested jobs · Bucket · Days in current bucket",
@@ -1542,7 +1548,7 @@ def write_excel(
         only_ar=True,
     )
 
-    rep = wb.worksheets.add("06_By_Salesperson")
+    rep = wb.create_sheet("06_By_Salesperson")
     write_nested_ar_jobs(
         rep,
         title="06 BY SALESPERSON — open AR (N>0) · nested jobs · Bucket · Days in current bucket",
@@ -1562,21 +1568,21 @@ def write_excel(
     # ------------------------------------------------------------------
 
     # 07_Critical_AR — ONLY bucket Invoiced or Closed w/AR with N > 0
-    ars = wb.worksheets.add("07_Critical_AR")
+    ars = wb.create_sheet("07_Critical_AR")
     for c in range(12):
-        cell = ars.cells.get(0, c)
-        cell.put_value(
+        cell = cell_at(ars, 0, c)
+        cell.value = _v(
             ""
             if c
             else "07 CRITICAL AR — Bucket = Invoiced OR Closed w/AR · Outstanding AR (N) > $0 ONLY"
         )
         style_cell(cell, bold=True, size=12, font_color=ON_NAVY, fill=ERROR)
-    ars.cells.merge(0, 0, 1, 11)
-    ars.cells.get(1, 0).put_value(
+    merge_at(ars, 0, 0, 1, 11)
+    cell_at(ars, 1, 0).value = _v(
         "Not a general AR list (see 05/06). Dates = YYYY-MM-DD. Empty if no jobs currently in Invoiced/Closed w/AR with balance."
     )
-    style_cell(ars.cells.get(1, 0), size=9, fill=ACCENT_SOFT, wrap=True)
-    ars.cells.merge(1, 0, 1, 11)
+    style_cell(cell_at(ars, 1, 0), size=9, fill=ACCENT_SOFT, wrap=True)
+    merge_at(ars, 1, 0, 1, 11)
     header_row(
         ars,
         2,
@@ -1608,69 +1614,69 @@ def write_excel(
     for i, j in enumerate(crit, start=3):
         er = i + 1
         jid = str(j["job_id"]).replace('"', '""')
-        ars.cells.get(i, 0).formula = f"=ROW()-3"
-        style_cell(ars.cells.get(i, 0), number="0")
-        ars.cells.get(i, 1).put_value(j["job_id"])
-        ars.cells.get(i, 2).formula = (
+        cell_at(ars, i, 0).value = f"=ROW()-3"
+        style_cell(cell_at(ars, i, 0), number="0")
+        cell_at(ars, i, 1).value = _v(j["job_id"])
+        cell_at(ars, i, 2).value = (
             f'=IFERROR(SUMIF(Inputs_Jobs!$AL$2:$AL${last},"{jid}",Inputs_Jobs!$N$2:$N${last}),0)'
         )
-        style_cell(ars.cells.get(i, 2), number="$#,##0.00", bold=True, font_color=ERROR)
-        ars.cells.get(i, 3).put_value(j["bucket"])
-        style_cell(ars.cells.get(i, 3), bold=True, size=9)
-        ars.cells.get(i, 4).put_value(j["location"])
-        ars.cells.get(i, 5).put_value(str(j.get("job_num") or ""))
-        ars.cells.get(i, 6).put_value(j["client"])
-        ars.cells.get(i, 7).put_value(j["salesperson"])
-        ars.cells.get(i, 8).formula = (
+        style_cell(cell_at(ars, i, 2), number="$#,##0.00", bold=True, font_color=ERROR)
+        cell_at(ars, i, 3).value = _v(j["bucket"])
+        style_cell(cell_at(ars, i, 3), bold=True, size=9)
+        cell_at(ars, i, 4).value = _v(j["location"])
+        cell_at(ars, i, 5).value = _v(str(j.get("job_num") or ""))
+        cell_at(ars, i, 6).value = _v(j["client"])
+        cell_at(ars, i, 7).value = _v(j["salesperson"])
+        cell_at(ars, i, 8).value = (
             f'=IFERROR(SUMIF(Inputs_Jobs!$AL$2:$AL${last},"{jid}",Inputs_Jobs!$P$2:$P${last}),0)'
         )
-        ars.cells.get(i, 9).formula = (
+        cell_at(ars, i, 9).value = (
             f'=IFERROR(SUMIF(Inputs_Jobs!$AL$2:$AL${last},"{jid}",Inputs_Jobs!$Q$2:$Q${last}),0)'
         )
-        style_cell(ars.cells.get(i, 8), number="$#,##0.00")
-        style_cell(ars.cells.get(i, 9), number="$#,##0.00")
+        style_cell(cell_at(ars, i, 8), number="$#,##0.00")
+        style_cell(cell_at(ars, i, 9), number="$#,##0.00")
         # Dates as real dates
         for col, key in [(10, "d_wip_start"), (11, "d_wip_close"), (12, "d_closed")]:
             d = parse_date(j.get(key))
             if d:
-                ars.cells.get(i, col).put_value(datetime(d.year, d.month, d.day))
-                style_cell(ars.cells.get(i, col), number="YYYY-MM-DD", size=9)
+                cell_at(ars, i, col).value = _v(datetime(d.year, d.month, d.day))
+                style_cell(cell_at(ars, i, col), number="YYYY-MM-DD", size=9)
             else:
-                ars.cells.get(i, col).put_value("")
+                cell_at(ars, i, col).value = _v("")
         st = j.get("collection_status") or ""
-        ars.cells.get(i, 13).put_value(st)
-        style_status_cell(ars.cells.get(i, 13), st)
-        ars.cells.get(i, 14).put_value(j["acculynx_url"])
-        style_cell(ars.cells.get(i, 14), size=8)
+        cell_at(ars, i, 13).value = _v(st)
+        style_status_cell(cell_at(ars, i, 13), st)
+        cell_at(ars, i, 14).value = _v(j["acculynx_url"])
+        style_cell(cell_at(ars, i, 14), size=8)
     if crit:
         excel_last = 3 + len(crit)
-        ars.auto_filter.range = f"A3:O{excel_last}"
+        ars.auto_filter.ref = f"A3:O{excel_last}"
         tot = len(crit) + 3
-        ars.cells.get(tot, 1).put_value("TOTAL Critical AR")
-        style_cell(ars.cells.get(tot, 1), bold=True, fill=ERROR_SURF)
-        ars.cells.get(tot, 2).formula = f"=SUM(C4:C{excel_last})"
-        style_cell(ars.cells.get(tot, 2), bold=True, number="$#,##0.00", fill=ERROR_SURF, font_color=ERROR)
+        cell_at(ars, tot, 1).value = _v("TOTAL Critical AR")
+        style_cell(cell_at(ars, tot, 1), bold=True, fill=ERROR_SURF)
+        cell_at(ars, tot, 2).value = f"=SUM(C4:C{excel_last})"
+        style_cell(cell_at(ars, tot, 2), bold=True, number="$#,##0.00", fill=ERROR_SURF, font_color=ERROR)
     else:
-        ars.cells.get(3, 1).put_value(
+        cell_at(ars, 3, 1).value = _v(
             "No jobs currently in Bucket Invoiced or Closed w/AR with Outstanding AR > $0."
         )
-        style_cell(ars.cells.get(3, 1), size=10, fill=SURFACE_INSET)
-        ars.cells.merge(3, 1, 1, 8)
-    ars.freeze_panes(3, 0, 3, 0)
+        style_cell(cell_at(ars, 3, 1), size=10, fill=SURFACE_INSET)
+        merge_at(ars, 3, 1, 1, 8)
+    freeze_at(ars, 3, 0)
     for c, w in enumerate([6.0, 14.0, 14.0, 22.0, 12.0, 10.0, 20.0, 14.0, 11.0, 11.0, 12.0, 14.0, 12.0, 12.0, 24.0]):
-        ars.cells.set_column_width(c, float(w))
+        set_col_width(ars, c, float(w))
 
     # 08_Future_Revenue — weighted pipeline (10/50/90)
-    lead = wb.worksheets.add("08_Future_Revenue")
+    lead = wb.create_sheet("08_Future_Revenue")
     for c in range(10):
-        cell = lead.cells.get(0, c)
-        cell.put_value(
+        cell = cell_at(lead, 0, c)
+        cell.value = _v(
             ""
             if c
             else "FUTURE REVENUE — Lead 10% / Prospect est 50% / Prospect contract 90%. Job ID + formulas."
         )
         style_cell(cell, bold=True, size=11, font_color=NAVY, fill=ACCENT)
-    lead.cells.merge(0, 0, 1, 10)
+    merge_at(lead, 0, 0, 1, 10)
     header_row(
         lead,
         1,
@@ -1698,98 +1704,98 @@ def write_excel(
     fut.sort(key=lambda j: (-(j.get("risked") or 0), j["client"]))
     for i, j in enumerate(fut, start=2):
         er = i + 1
-        lead.cells.get(i, 0).put_value(j["job_id"])
-        lead.cells.get(i, 1).put_value(j.get("finance_class") or "")
-        lead.cells.get(i, 2).formula = (
+        cell_at(lead, i, 0).value = _v(j["job_id"])
+        cell_at(lead, i, 1).value = _v(j.get("finance_class") or "")
+        cell_at(lead, i, 2).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$AJ$2:$AJ${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
-        style_cell(lead.cells.get(i, 2), number="0%")
-        lead.cells.get(i, 3).formula = (
+        style_cell(cell_at(lead, i, 2), number="0%")
+        cell_at(lead, i, 3).value = (
             f'=SUMIF(Inputs_Jobs!$AL$2:$AL${last},A{er},Inputs_Jobs!$J$2:$J${last})'
         )
-        style_cell(lead.cells.get(i, 3), number="$#,##0.00")
-        lead.cells.get(i, 4).formula = (
+        style_cell(cell_at(lead, i, 3), number="$#,##0.00")
+        cell_at(lead, i, 4).value = (
             f'=SUMIF(Inputs_Jobs!$AL$2:$AL${last},A{er},Inputs_Jobs!$L$2:$L${last})'
         )
-        style_cell(lead.cells.get(i, 4), number="$#,##0.00")
-        lead.cells.get(i, 5).formula = (
+        style_cell(cell_at(lead, i, 4), number="$#,##0.00")
+        cell_at(lead, i, 5).value = (
             f'=SUMIF(Inputs_Jobs!$AL$2:$AL${last},A{er},Inputs_Jobs!$AI$2:$AI${last})'
         )
-        style_cell(lead.cells.get(i, 5), number="$#,##0.00", bold=True)
-        lead.cells.get(i, 6).formula = (
+        style_cell(cell_at(lead, i, 5), number="$#,##0.00", bold=True)
+        cell_at(lead, i, 6).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$A$2:$A${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
-        lead.cells.get(i, 7).formula = (
+        cell_at(lead, i, 7).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$C$2:$C${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
-        lead.cells.get(i, 8).formula = (
+        cell_at(lead, i, 8).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$H$2:$H${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
-        lead.cells.get(i, 9).formula = (
+        cell_at(lead, i, 9).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$AN$2:$AN${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
-        lead.cells.get(i, 10).formula = (
+        cell_at(lead, i, 10).value = (
             f'=IFERROR(INDEX(Inputs_Jobs!$AM$2:$AM${last},MATCH(A{er},Inputs_Jobs!$AL$2:$AL${last},0)),"")'
         )
     if fut:
         excel_last = 2 + len(fut)
-        lead.auto_filter.range = f"A2:K{excel_last}"
+        lead.auto_filter.ref = f"A2:K{excel_last}"
         tot = len(fut) + 2
-        lead.cells.get(tot, 0).put_value("TOTAL weighted")
-        lead.cells.get(tot, 5).formula = f"=SUM(F3:F{excel_last})"
-        style_cell(lead.cells.get(tot, 5), bold=True, number="$#,##0.00", fill=ACCENT_SOFT)
-    lead.freeze_panes(2, 0, 2, 0)
+        cell_at(lead, tot, 0).value = _v("TOTAL weighted")
+        cell_at(lead, tot, 5).value = f"=SUM(F3:F{excel_last})"
+        style_cell(cell_at(lead, tot, 5), bold=True, number="$#,##0.00", fill=ACCENT_SOFT)
+    freeze_at(lead, 2, 0)
     for c, w in enumerate([14.0, 32.0, 10.0, 12.0, 12.0, 12.0, 12.0, 20.0, 14.0, 28.0, 22.0]):
-        lead.cells.set_column_width(c, w)
+        set_col_width(lead, c, w)
 
     # ------------------------------------------------------------------
     # 09_Cash_Debt — account list values; total formula
     # ------------------------------------------------------------------
-    cash = wb.worksheets.add("09_Cash_Debt")
-    cash.cells.get(0, 0).put_value("CASH & DEBT — register lines are facts; total is formula. Bank total also on Variables.")
-    style_cell(cash.cells.get(0, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
-    cash.cells.merge(0, 0, 1, 3)
+    cash = wb.create_sheet("09_Cash_Debt")
+    cell_at(cash, 0, 0).value = _v("CASH & DEBT — register lines are facts; total is formula. Bank total also on Variables.")
+    style_cell(cell_at(cash, 0, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
+    merge_at(cash, 0, 0, 1, 3)
     header_row(cash, 1, ["Kind", "Account", "Balance $"], fill=NAVY)
     row = 2
     for reg in sorted(data["registers"], key=lambda r: (r.get("register_kind") or "", r.get("account_name") or "")):
-        cash.cells.get(row, 0).put_value(reg.get("register_kind") or "")
-        cash.cells.get(row, 1).put_value(reg.get("account_name") or "")
-        cash.cells.get(row, 2).put_value(money(reg.get("current_balance")))
-        style_cell(cash.cells.get(row, 2), number="$#,##0.00")
+        cell_at(cash, row, 0).value = _v(reg.get("register_kind") or "")
+        cell_at(cash, row, 1).value = _v(reg.get("account_name") or "")
+        cell_at(cash, row, 2).value = _v(money(reg.get("current_balance")))
+        style_cell(cell_at(cash, row, 2), number="$#,##0.00")
         row += 1
     if row > 2:
-        cash.cells.get(row, 0).put_value("TOTAL")
-        style_cell(cash.cells.get(row, 0), bold=True, fill=SURFACE_ALT)
-        cash.cells.get(row, 2).formula = f"=SUM(C3:C{row})"
-        style_cell(cash.cells.get(row, 2), bold=True, number="$#,##0.00", fill=SURFACE_ALT)
-        cash.cells.get(row + 2, 0).put_value("Variables Bank_Cash_Registers (should match bank kinds)")
-        cash.cells.get(row + 2, 1).formula = f"={V('Bank_Cash_Registers')}"
-        style_cell(cash.cells.get(row + 2, 1), number="$#,##0.00", bold=True)
+        cell_at(cash, row, 0).value = _v("TOTAL")
+        style_cell(cell_at(cash, row, 0), bold=True, fill=SURFACE_ALT)
+        cell_at(cash, row, 2).value = f"=SUM(C3:C{row})"
+        style_cell(cell_at(cash, row, 2), bold=True, number="$#,##0.00", fill=SURFACE_ALT)
+        cell_at(cash, row + 2, 0).value = _v("Variables Bank_Cash_Registers (should match bank kinds)")
+        cell_at(cash, row + 2, 1).value = f"={V('Bank_Cash_Registers')}"
+        style_cell(cell_at(cash, row + 2, 1), number="$#,##0.00", bold=True)
     autosize(cash, 3, 40)
 
     # ------------------------------------------------------------------
     # 10_Recon_Bridge — formulas
     # ------------------------------------------------------------------
-    recon = wb.worksheets.add("10_Recon_Bridge")
-    recon.cells.get(0, 0).put_value("AR RECON BRIDGE — formulas only for amounts")
-    style_cell(recon.cells.get(0, 0), bold=True, size=12, font_color=ON_NAVY, fill=NAVY)
-    recon.cells.merge(0, 0, 1, 3)
+    recon = wb.create_sheet("10_Recon_Bridge")
+    cell_at(recon, 0, 0).value = _v("AR RECON BRIDGE — formulas only for amounts")
+    style_cell(cell_at(recon, 0, 0), bold=True, size=12, font_color=ON_NAVY, fill=NAVY)
+    merge_at(recon, 0, 0, 1, 3)
     header_row(recon, 2, ["Line", "Amount $", "Notes"], fill=NAVY)
-    recon.cells.get(3, 0).put_value("A. QB A/R (CoA) — Variables")
-    recon.cells.get(3, 1).formula = f"={V('QB_AR_Cash')}"
-    style_cell(recon.cells.get(3, 1), number="$#,##0.00", bold=True)
-    recon.cells.get(3, 2).put_value("CASH books")
-    recon.cells.get(4, 0).put_value("B. AccuLynx open AR — Inputs sum")
-    recon.cells.get(4, 1).formula = f"=SUM(Inputs_Jobs!$N$2:$N${last})"
-    style_cell(recon.cells.get(4, 1), number="$#,##0.00", bold=True)
-    recon.cells.get(4, 2).put_value("OPS")
-    recon.cells.get(5, 0).put_value("C. Gap (B − A)")
-    recon.cells.get(5, 1).formula = "=B5-B4"
-    style_cell(recon.cells.get(5, 1), number="$#,##0.00", bold=True, font_color=ERROR)
-    recon.cells.get(5, 2).put_value("Label before bank send")
-    recon.cells.get(7, 0).put_value("Bank options: (1) QB AR only (2) QB+ops appendix labeled (3) hold send")
-    style_cell(recon.cells.get(7, 0), size=10, fill=ACCENT_SOFT)
-    recon.cells.merge(7, 0, 1, 3)
+    cell_at(recon, 3, 0).value = _v("A. QB A/R (CoA) — Variables")
+    cell_at(recon, 3, 1).value = f"={V('QB_AR_Cash')}"
+    style_cell(cell_at(recon, 3, 1), number="$#,##0.00", bold=True)
+    cell_at(recon, 3, 2).value = _v("CASH books")
+    cell_at(recon, 4, 0).value = _v("B. AccuLynx open AR — Inputs sum")
+    cell_at(recon, 4, 1).value = f"=SUM(Inputs_Jobs!$N$2:$N${last})"
+    style_cell(cell_at(recon, 4, 1), number="$#,##0.00", bold=True)
+    cell_at(recon, 4, 2).value = _v("OPS")
+    cell_at(recon, 5, 0).value = _v("C. Gap (B − A)")
+    cell_at(recon, 5, 1).value = "=B5-B4"
+    style_cell(cell_at(recon, 5, 1), number="$#,##0.00", bold=True, font_color=ERROR)
+    cell_at(recon, 5, 2).value = _v("Label before bank send")
+    cell_at(recon, 7, 0).value = _v("Bank options: (1) QB AR only (2) QB+ops appendix labeled (3) hold send")
+    style_cell(cell_at(recon, 7, 0), size=10, fill=ACCENT_SOFT)
+    merge_at(recon, 7, 0, 1, 3)
     autosize(recon, 3, 50)
 
     # ------------------------------------------------------------------
@@ -1797,22 +1803,22 @@ def write_excel(
     # ------------------------------------------------------------------
 
     # 11_Friday_Meeting — AR cashflow board (next 3 weeks) + dwell KPIs + editable dates
-    ag = wb.worksheets.add("11_Friday_Meeting")
+    ag = wb.create_sheet("11_Friday_Meeting")
     for c in range(14):
-        cell = ag.cells.get(0, c)
-        cell.put_value(
+        cell = cell_at(ag, 0, c)
+        cell.value = _v(
             ""
             if c
             else f"FRIDAY AR MEETING · {as_of} · Set expected cash dates · Review hit/miss next week · 3-week cash map"
         )
         style_cell(cell, bold=True, size=14, font_color=ON_NAVY, fill=NAVY)
-    ag.cells.merge(0, 0, 1, 13)
-    ag.cells.set_row_height(0, 28.0)
+    merge_at(ag, 0, 0, 1, 13)
+    set_row_height(ag, 0, 28.0)
 
     # KPI cards row 2-4
-    ag.cells.get(2, 0).put_value("DWELL KPI CARDS (formula averages from Inputs)")
-    style_cell(ag.cells.get(2, 0), bold=True, size=11, font_color=ON_NAVY, fill=ACCENT)
-    ag.cells.merge(2, 0, 1, 13)
+    cell_at(ag, 2, 0).value = _v("DWELL KPI CARDS (formula averages from Inputs)")
+    style_cell(cell_at(ag, 2, 0), bold=True, size=11, font_color=ON_NAVY, fill=ACCENT)
+    merge_at(ag, 2, 0, 1, 13)
 
     kpi_defs = [
         ("DAYS IN LEAD", f'=IFERROR(AVERAGEIF(Inputs_Jobs!$AB$2:$AB${last},">=0"),"")'),
@@ -1827,54 +1833,54 @@ def write_excel(
     for i, (lab, form) in enumerate(kpi_defs):
         c0 = (i % 4) * 3
         r0 = 3 + (i // 4) * 3
-        ag.cells.get(r0, c0).put_value(lab)
-        style_cell(ag.cells.get(r0, c0), bold=True, size=8, font_color=MUTED, fill=SURFACE_ALT)
-        ag.cells.merge(r0, c0, 1, 2)
-        ag.cells.get(r0 + 1, c0).formula = form
+        cell_at(ag, r0, c0).value = _v(lab)
+        style_cell(cell_at(ag, r0, c0), bold=True, size=8, font_color=MUTED, fill=SURFACE_ALT)
+        merge_at(ag, r0, c0, 1, 2)
+        cell_at(ag, r0 + 1, c0).value = form
         is_money = "$" in lab
         style_cell(
-            ag.cells.get(r0 + 1, c0),
+            cell_at(ag, r0 + 1, c0),
             bold=True,
             size=16,
             font_color=NAVY,
             fill=SURFACE_INSET,
             number="$#,##0" if is_money else "0.0",
         )
-        ag.cells.merge(r0 + 1, c0, 1, 2)
-        ag.cells.set_row_height(r0 + 1, 26.0)
+        merge_at(ag, r0 + 1, c0, 1, 2)
+        set_row_height(ag, r0 + 1, 26.0)
 
     # Instructions
-    ag.cells.get(9, 0).put_value(
+    cell_at(ag, 9, 0).value = _v(
         "MEETING USE: (1) Review every open-AR job below by location. (2) Enter Expected Invoice/Cash date "
         "(prospect→invoiced / cash to bank). (3) Enter Expected Paid-in-Full date for remaining balance. "
         "(4) Next Friday: mark Hit/Miss vs collected. Purple=Pending · Yellow=Invoiced path · Red=Critical AR · Green=Collected in Full."
     )
-    style_cell(ag.cells.get(9, 0), size=9, wrap=True, fill=INFO_SOFT)
-    ag.cells.merge(9, 0, 1, 13)
-    ag.cells.set_row_height(9, 40.0)
+    style_cell(cell_at(ag, 9, 0), size=9, wrap=True, fill=INFO_SOFT)
+    merge_at(ag, 9, 0, 1, 13)
+    set_row_height(ag, 9, 40.0)
 
     # 3-week cash map headers
-    ag.cells.get(11, 0).put_value("3-WEEK ANTICIPATED CASH MAP (sums of N where Expected Paid-In-Full falls in week — fill dates first)")
-    style_cell(ag.cells.get(11, 0), bold=True, size=10, font_color=ON_NAVY, fill=NAVY)
-    ag.cells.merge(11, 0, 1, 6)
+    cell_at(ag, 11, 0).value = _v("3-WEEK ANTICIPATED CASH MAP (sums of N where Expected Paid-In-Full falls in week — fill dates first)")
+    style_cell(cell_at(ag, 11, 0), bold=True, size=10, font_color=ON_NAVY, fill=NAVY)
+    merge_at(ag, 11, 0, 1, 6)
     # Week buckets as labels; SUMIFS once dates filled on this sheet column Expected Paid (col L = index 11)
     from datetime import timedelta
     as_of_d = date.fromisoformat(as_of)
     week_starts = [as_of_d, as_of_d + timedelta(days=7), as_of_d + timedelta(days=14)]
     for i, ws_d in enumerate(week_starts):
         we = ws_d + timedelta(days=6)
-        ag.cells.get(12, i * 2).put_value(f"Week {i+1}: {ws_d.isoformat()} → {we.isoformat()}")
-        style_cell(ag.cells.get(12, i * 2), bold=True, size=9, fill=ACCENT_SOFT)
-        ag.cells.merge(12, i * 2, 1, 2)
+        cell_at(ag, 12, i * 2).value = _v(f"Week {i+1}: {ws_d.isoformat()} → {we.isoformat()}")
+        style_cell(cell_at(ag, 12, i * 2), bold=True, size=9, fill=ACCENT_SOFT)
+        merge_at(ag, 12, i * 2, 1, 2)
         # Note: cash map totals filled manually or via SUMIF on Expected Paid column after user enters dates
-        ag.cells.get(13, i * 2).put_value("(sum Expected Paid-In-Full AR in week — after dates entered)")
-        style_cell(ag.cells.get(13, i * 2), size=8, font_color=MUTED)
+        cell_at(ag, 13, i * 2).value = _v("(sum Expected Paid-In-Full AR in week — after dates entered)")
+        style_cell(cell_at(ag, 13, i * 2), size=8, font_color=MUTED)
 
     # Worklist header
     hdr_row = 15
-    ag.cells.get(hdr_row, 0).put_value("ALL OPEN AR JOBS — nested by location · FILL yellow date columns · Hit/Miss reviewed next Friday")
-    style_cell(ag.cells.get(hdr_row, 0), bold=True, size=11, font_color=ON_NAVY, fill=ACCENT)
-    ag.cells.merge(hdr_row, 0, 1, 13)
+    cell_at(ag, hdr_row, 0).value = _v("ALL OPEN AR JOBS — nested by location · FILL yellow date columns · Hit/Miss reviewed next Friday")
+    style_cell(cell_at(ag, hdr_row, 0), bold=True, size=11, font_color=ON_NAVY, fill=ACCENT)
+    merge_at(ag, hdr_row, 0, 1, 13)
 
     headers_f = [
         "Location / Job #",
@@ -1907,75 +1913,79 @@ def write_excel(
     for loc_name in sorted(by_loc_f.keys(), key=lambda x: -sum(j["outstanding_ar"] for j in by_loc_f[x])):
         jobs_here = by_loc_f[loc_name]
         # location header
-        ag.cells.get(row_i, 0).put_value(f"▸ {loc_name}")
-        style_cell(ag.cells.get(row_i, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
+        cell_at(ag, row_i, 0).value = _v(f"▸ {loc_name}")
+        style_cell(cell_at(ag, row_i, 0), bold=True, size=11, font_color=ON_NAVY, fill=NAVY)
         for c in range(1, 14):
-            style_cell(ag.cells.get(row_i, c), fill=NAVY)
-        ag.cells.get(row_i, 1).put_value(f"{len(jobs_here)} AR jobs")
-        style_cell(ag.cells.get(row_i, 1), bold=True, font_color=ON_NAVY, fill=NAVY)
-        ag.cells.get(row_i, 4).put_value(float(sum(j["outstanding_ar"] for j in jobs_here)))
-        style_cell(ag.cells.get(row_i, 4), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
+            style_cell(cell_at(ag, row_i, c), fill=NAVY)
+        cell_at(ag, row_i, 1).value = _v(f"{len(jobs_here)} AR jobs")
+        style_cell(cell_at(ag, row_i, 1), bold=True, font_color=ON_NAVY, fill=NAVY)
+        loc_q = str(loc_name).replace('"', '""')
+        cell_at(ag, row_i, 4).value = (
+            f"=SUMIFS(Inputs_Jobs!$N$2:$N${last},"
+            f'Inputs_Jobs!$A$2:$A${last},"{loc_q}",Inputs_Jobs!$N$2:$N${last},">0")'
+        )
+        style_cell(cell_at(ag, row_i, 4), number="$#,##0.00", bold=True, font_color=ON_NAVY, fill=NAVY)
         row_i += 1
         for j in jobs_here:
             jid = str(j["job_id"]).replace('"', '""')
             er = row_i + 1
-            ag.cells.get(row_i, 0).put_value(str(j.get("job_num") or "") or "(no #)")
-            ag.cells.get(row_i, 1).put_value(j["client"])
-            ag.cells.get(row_i, 2).put_value(j["bucket"])
-            style_cell(ag.cells.get(row_i, 2), size=9, bold=True)
-            ag.cells.get(row_i, 3).put_value(j["salesperson"])
-            ag.cells.get(row_i, 4).formula = (
+            cell_at(ag, row_i, 0).value = _v(str(j.get("job_num") or "") or "(no #)")
+            cell_at(ag, row_i, 1).value = _v(j["client"])
+            cell_at(ag, row_i, 2).value = _v(j["bucket"])
+            style_cell(cell_at(ag, row_i, 2), size=9, bold=True)
+            cell_at(ag, row_i, 3).value = _v(j["salesperson"])
+            cell_at(ag, row_i, 4).value = (
                 f'=IFERROR(SUMIF(Inputs_Jobs!$AL$2:$AL${last},"{jid}",Inputs_Jobs!$N$2:$N${last}),0)'
             )
-            style_cell(ag.cells.get(row_i, 4), number="$#,##0.00", bold=True, size=9)
+            style_cell(cell_at(ag, row_i, 4), number="$#,##0.00", bold=True, size=9)
             st = j.get("collection_status") or ""
-            ag.cells.get(row_i, 5).put_value(st)
-            style_status_cell(ag.cells.get(row_i, 5), st)
+            cell_at(ag, row_i, 5).value = _v(st)
+            style_status_cell(cell_at(ag, row_i, 5), st)
             # FILL dates — amber
             for c in (6, 7):
-                ag.cells.get(row_i, c).put_value("")
-                style_cell(ag.cells.get(row_i, c), size=9, fill=ACCENT_SOFT, number="YYYY-MM-DD")
+                cell_at(ag, row_i, c).value = _v("")
+                style_cell(cell_at(ag, row_i, c), size=9, fill=ACCENT_SOFT, number="YYYY-MM-DD")
             # Prior expected — fill next week from archive / blank
-            ag.cells.get(row_i, 8).put_value("")
-            style_cell(ag.cells.get(row_i, 8), size=9, fill=SURFACE_ALT, number="YYYY-MM-DD")
+            cell_at(ag, row_i, 8).value = _v("")
+            style_cell(cell_at(ag, row_i, 8), size=9, fill=SURFACE_ALT, number="YYYY-MM-DD")
             # Hit/Miss formula: if prior expected filled and collected note Y → Hit else if prior < as_of and no collect → Miss
-            ag.cells.get(row_i, 9).formula = (
+            cell_at(ag, row_i, 9).value = (
                 f'=IF(I{er}="","",'
                 f'IF(AND(K{er}="Y",I{er}<>""),"HIT",'
                 f'IF(AND(I{er}<>"",I{er}<\'00_Variables\'!$B$3,OR(K{er}="",K{er}="N")),"MISS","")))'
             )
-            style_cell(ag.cells.get(row_i, 9), bold=True, size=9, h_align="center")
-            ag.cells.get(row_i, 10).put_value("")  # Y/N collected
-            style_cell(ag.cells.get(row_i, 10), size=9, fill=ACCENT_SOFT, h_align="center")
-            ag.cells.get(row_i, 11).put_value("")
-            style_cell(ag.cells.get(row_i, 11), size=9, fill=SURFACE_INSET)
-            ag.cells.get(row_i, 12).put_value(j["job_id"])
-            style_cell(ag.cells.get(row_i, 12), size=7)
-            ag.cells.get(row_i, 13).put_value(j["acculynx_url"])
-            style_cell(ag.cells.get(row_i, 13), size=7)
+            style_cell(cell_at(ag, row_i, 9), bold=True, size=9, h_align="center")
+            cell_at(ag, row_i, 10).value = _v("")  # Y/N collected
+            style_cell(cell_at(ag, row_i, 10), size=9, fill=ACCENT_SOFT, h_align="center")
+            cell_at(ag, row_i, 11).value = _v("")
+            style_cell(cell_at(ag, row_i, 11), size=9, fill=SURFACE_INSET)
+            cell_at(ag, row_i, 12).value = _v(j["job_id"])
+            style_cell(cell_at(ag, row_i, 12), size=7)
+            cell_at(ag, row_i, 13).value = _v(j["acculynx_url"])
+            style_cell(cell_at(ag, row_i, 13), size=7)
             row_i += 1
 
-    ag.cells.get(row_i, 0).put_value("TOTAL open AR")
-    style_cell(ag.cells.get(row_i, 0), bold=True, fill=ERROR_SURF)
-    ag.cells.get(row_i, 4).formula = f'=SUMIF(Inputs_Jobs!$N$2:$N${last},">0",Inputs_Jobs!$N$2:$N${last})'
-    style_cell(ag.cells.get(row_i, 4), number="$#,##0.00", bold=True, fill=ERROR_SURF, font_color=ERROR)
+    cell_at(ag, row_i, 0).value = _v("TOTAL open AR")
+    style_cell(cell_at(ag, row_i, 0), bold=True, fill=ERROR_SURF)
+    cell_at(ag, row_i, 4).value = f'=SUMIF(Inputs_Jobs!$N$2:$N${last},">0",Inputs_Jobs!$N$2:$N${last})'
+    style_cell(cell_at(ag, row_i, 4), number="$#,##0.00", bold=True, fill=ERROR_SURF, font_color=ERROR)
 
     # Week cash SUMIF notes below
     row_i += 2
-    ag.cells.get(row_i, 0).put_value(
+    cell_at(ag, row_i, 0).value = _v(
         "CASH MAP TIP: Filter/sort by Expected Paid-in-Full (col H). Sum AR (col E) for dates in next 7/14/21 days for bank forecast. "
         "Next meeting: copy col H → Prior Expected (col I), clear H, re-set dates, mark Hit/Miss."
     )
-    style_cell(ag.cells.get(row_i, 0), size=9, wrap=True, fill=SURFACE_INSET)
-    ag.cells.merge(row_i, 0, 1, 13)
-    ag.cells.set_row_height(row_i, 36.0)
+    style_cell(cell_at(ag, row_i, 0), size=9, wrap=True, fill=SURFACE_INSET)
+    merge_at(ag, row_i, 0, 1, 13)
+    set_row_height(ag, row_i, 36.0)
 
-    ag.freeze_panes(hdr_row + 2, 0, hdr_row + 2, 0)
+    freeze_at(ag, hdr_row + 2, 0)
     for c, w in enumerate([14.0, 18.0, 24.0, 12.0, 12.0, 11.0, 14.0, 14.0, 12.0, 10.0, 12.0, 16.0, 12.0, 20.0]):
-        ag.cells.set_column_width(c, float(w))
+        set_col_width(ag, c, float(w))
 
     # Reorder sheets: Variables, Cover, Dashboard, Funnel, Buckets, ...
-    # Aspose: move_to
+    # openpyxl: move_sheet by offset from the current index
     order = [
         "00_Variables",
         "01_Cover",
@@ -1992,18 +2002,20 @@ def write_excel(
         "Inputs_Jobs",
     ]
     for idx, name in enumerate(order):
-        for i in range(len(wb.worksheets)):
-            if wb.worksheets[i].name == name:
-                wb.worksheets[i].move_to(idx)
-                break
+        current = wb.sheetnames.index(name)
+        if current != idx:
+            wb.move_sheet(name, offset=idx - current)
 
-    wb.calculate_formula()
+    # openpyxl cannot evaluate formulas (Aspose's calculate_formula() did).
+    # Flag the workbook so Excel / Sheets / LibreOffice compute on first open.
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
 
     # Quality gate: count formulas on dashboard
-    dash_ws = wb.worksheets.get("02_Exec_Dashboard")
+    dash_ws = wb["02_Exec_Dashboard"]
     fcount = 0
     for r in range(2, 40):
-        if dash_ws.cells.get(r, 1).formula:
+        val = cell_at(dash_ws, r, 1).value
+        if isinstance(val, str) and val.startswith("="):
             fcount += 1
     print(f"quality: dashboard KPI formulas={fcount}")
     if fcount < 18:
@@ -2011,24 +2023,24 @@ def write_excel(
 
     out_path = out_dir / f"{audience}-{as_of}.xlsx"
     wb.save(str(out_path))
-    print("wrote excel", out_path, "sheets", [ws.name for ws in wb.worksheets])
+    print("wrote excel", out_path, "sheets", wb.sheetnames)
     return out_path
 
 
-def write_pdf(
+def write_brief_html(
     audience: str,
     as_of: str,
     built: Dict[str, Any],
     data: Dict[str, Any],
     excel_name: str,
     out_dir: Path,
-) -> Optional[Path]:
-    try:
-        from aspose.pdf import Document, HtmlFragment
-    except Exception as e:
-        print("PDF skip:", e)
-        return None
+) -> Path:
+    """Executive brief as a standalone HTML file next to the workbook.
 
+    Replaces the Aspose.PDF brief (retired 2026-09-12). Same content, same
+    Design.md palette; opens in any browser and prints to PDF from there when a
+    PDF is needed.
+    """
     f = built["funnel"]
     qb_ar = money(data.get("qb_ar"))
     gap = f["critical_ar"] - num(data.get("qb_ar"))
@@ -2046,17 +2058,26 @@ def write_pdf(
             f"<td style='text-align:right'>${a['ar']:,.0f}</td></tr>"
         )
 
-    html = f"""
-    <html><head><meta charset="utf-8"/></head>
-    <body style="font-family: Calibri, Arial, sans-serif; color:#111827; margin:28px;">
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Friday AR / WIP Executive Brief · {as_of}</title>
+<style>
+  body {{ font-family: Calibri, Arial, sans-serif; color:#111827; margin:28px; max-width: 900px; }}
+  h2 {{ color:#11133f; border-bottom:2px solid #eaa221; padding-bottom:4px; }}
+  table {{ width:100%; border-collapse:collapse; }}
+  th, td {{ padding: 4px 6px; }}
+  @media print {{ body {{ margin: 12mm; }} }}
+</style></head>
+<body>
     <div style="background:#11133f;color:#fff;padding:18px 22px;">
       <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#eaa221;font-weight:700;">Pro Exteriors LLC</div>
       <div style="font-size:22px;font-weight:800;margin-top:4px;">Friday AR / WIP Executive Brief</div>
       <div style="font-size:12px;opacity:.9;margin-top:6px;">As-of {as_of} · /analytics v2 · PEC-100 · Design.md</div>
     </div>
 
-    <h2 style="color:#11133f;border-bottom:2px solid #eaa221;padding-bottom:4px;">Funnel money (meeting language)</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <h2>Funnel money (meeting language)</h2>
+    <table style="font-size:12px;">
       <tr style="background:#11133f;color:#fff;"><th align="left">Layer</th><th align="right">Face / Gross</th><th align="right">Risked / Meeting</th></tr>
       <tr style="background:#fbedd2;"><td><b>Funny money (Leads)</b></td><td align="right">${f['funny_gross']:,.0f}</td><td align="right">${f['funny_risked']:,.0f}</td></tr>
       <tr><td>Planned money (Estimating)</td><td align="right">${f['planned']:,.0f}</td><td align="right">${f['planned']:,.0f}</td></tr>
@@ -2066,7 +2087,7 @@ def write_pdf(
     </table>
     <p style="font-size:11px;color:#4b5563;"><b>Lead rule:</b> age &gt;90 days → 10% auto. ≤90 days → sales assigns close % ({f['funny_need_prob']} jobs). Risked funny excludes unassigned ≤90d.</p>
 
-    <h2 style="color:#11133f;border-bottom:2px solid #eaa221;padding-bottom:4px;">Cash & recon</h2>
+    <h2>Cash &amp; recon</h2>
     <ul style="font-size:13px;">
       <li>Bank cash (registers): <b>${bank_total:,.0f}</b></li>
       <li>QB A/R CoA: <b>${qb_ar:,.0f}</b></li>
@@ -2074,14 +2095,14 @@ def write_pdf(
       <li>Gap (Ops − QB): <b>${gap:,.0f}</b> — label before bank send</li>
     </ul>
 
-    <h2 style="color:#11133f;border-bottom:2px solid #eaa221;padding-bottom:4px;">Locked buckets (docs/75 · PEC-100)</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <h2>Locked buckets (docs/75 · PEC-100)</h2>
+    <table style="font-size:11px;">
       <tr style="background:#11133f;color:#fff;"><th align="left">Bucket</th><th align="right">Jobs</th><th align="right">Gross</th><th align="right">AR</th></tr>
       {bucket_rows}
     </table>
     <p style="font-size:11px;color:#4b5563;">Do not re-debate bucket names. Deposit fields provisional until PEC-101.</p>
 
-    <h2 style="color:#11133f;border-bottom:2px solid #eaa221;padding-bottom:4px;">Date doctrine</h2>
+    <h2>Date doctrine</h2>
     <ul style="font-size:12px;">
       <li><b>Accrual state date</b> = date moved to <b>Approved</b></li>
       <li><b>WIP start</b> = date first invoice generated</li>
@@ -2089,28 +2110,21 @@ def write_pdf(
       <li>Payment applied / final payment dates: <b>not in mirror yet</b> (blank in workbook)</li>
     </ul>
 
-    <h2 style="color:#11133f;border-bottom:2px solid #eaa221;padding-bottom:4px;">How to use the workbook</h2>
+    <h2>How to use the workbook</h2>
     <ol style="font-size:12px;">
-      <li><b>01_Exec_Dashboard</b> — KPIs + so-what</li>
+      <li><b>02_Exec_Dashboard</b> — KPIs + so-what</li>
       <li><b>07_Critical_AR</b> — collections worklist</li>
       <li><b>08_Future_Revenue</b> — assign lead close %</li>
       <li><b>03_Funnel_Money</b> — funny / planned / contract language</li>
-      <li><b>02_Buckets_Locked</b> — only if staging fights</li>
+      <li><b>04_Buckets_Locked</b> — only if staging fights</li>
       <li><b>Inputs_Jobs</b> — full date spine (filter/sort)</li>
     </ol>
-    <p style="font-size:11px;color:#6b7280;">File: {excel_name} · PDF may show Aspose.PDF evaluation watermark until PDF license purchased.</p>
-    </body></html>
-    """
-    doc = Document()
-    page = doc.pages.add()
-    page.page_info.margin.left = 40
-    page.page_info.margin.right = 40
-    page.page_info.margin.top = 36
-    page.page_info.margin.bottom = 36
-    page.paragraphs.add(HtmlFragment(html))
-    out = out_dir / f"{audience}-{as_of}-brief.pdf"
-    doc.save(str(out))
-    print("wrote pdf", out, out.stat().st_size)
+    <p style="font-size:11px;color:#6b7280;">File: {excel_name} · Brief is standalone HTML; use the browser's Print → Save as PDF when a PDF copy is needed.</p>
+</body></html>
+"""
+    out = out_dir / f"{audience}-{as_of}-brief.html"
+    out.write_text(html, encoding="utf-8")
+    print("wrote brief", out, out.stat().st_size)
     return out
 
 
@@ -2118,11 +2132,15 @@ def write_brain_md(
     audience: str,
     as_of: str,
     excel: Path,
-    pdf: Optional[Path],
+    brief: Optional[Path],
     built: Dict[str, Any],
     data: Dict[str, Any],
     out_dir: Path,
+    *,
+    repo_doc: bool = True,
 ) -> Path:
+    """Markdown twin of the pack. Written next to the workbook always; also
+    into docs/analytics/ (the brain copy) unless this is an ad-hoc --out-dir build."""
     f = built["funnel"]
     gap = f["critical_ar"] - num(data.get("qb_ar"))
     md = f"""---
@@ -2130,7 +2148,7 @@ type: AnalyticsPack
 audience: {audience}
 as_of: {as_of}
 generated: {datetime.now(timezone.utc).isoformat()}
-engine: aspose-cells-26.6
+engine: openpyxl-{openpyxl.__version__}
 design: Design.md PE tokens
 linear: PEC-100
 version: 2
@@ -2143,7 +2161,7 @@ version: 2
 | Surface | Path |
 |---------|------|
 | Excel | `{excel}` |
-| PDF brief | `{pdf or "(failed)"}` |
+| HTML brief | `{brief or "(failed)"}` |
 | Google Sheet | pending upload twin |
 | CC HTML | pointer `/executive/cashflow-wip` |
 | Brain | `docs/analytics/{audience}-{as_of}.md` |
@@ -2186,10 +2204,14 @@ Locked list: docs/75 + PEC-100. Provisional AccuLynx map until PEC-101 deposit f
 
 `scripts/analytics/build_pack.py` · skill `/analytics`
 """
+    local = out_dir / f"{audience}-{as_of}.md"
+    local.write_text(md)
+    if not repo_doc:
+        print("wrote brain (local only)", local)
+        return local
     brain = REPO / "docs" / "analytics" / f"{audience}-{as_of}.md"
     brain.parent.mkdir(parents=True, exist_ok=True)
     brain.write_text(md)
-    (out_dir / f"{audience}-{as_of}.md").write_text(md)
     print("wrote brain", brain)
     return brain
 
@@ -2204,7 +2226,7 @@ def write_cc_pointer(audience: str, as_of: str, out_dir: Path) -> Path:
 **As-of pack:** {as_of}  
 **Data spine:** same Inputs_Jobs / funnel layers as Excel  
 
-Until route ships, Friday uses this Excel + PDF pack.
+Until route ships, Friday uses this Excel + HTML-brief pack.
 """
     )
     return p
@@ -2225,10 +2247,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--audience", choices=["ar-wip", "cpa", "bank"], default="ar-wip")
     ap.add_argument("--as-of", default=date.today().isoformat())
+    ap.add_argument(
+        "--out-dir",
+        default=None,
+        help="Override the output directory (default outputs/analytics/<audience>/<as-of>). "
+        "An override is an ad-hoc build: the brain copy under docs/analytics/ is not written.",
+    )
     args = ap.parse_args()
 
     load_env()
-    out_dir = OUT_ROOT / args.audience / args.as_of
+    out_dir = Path(args.out_dir).expanduser() if args.out_dir else OUT_ROOT / args.audience / args.as_of
     out_dir.mkdir(parents=True, exist_ok=True)
 
     data = fetch_data()
@@ -2238,8 +2266,10 @@ def main() -> int:
     print("funnel", json.dumps(built["funnel"], indent=2))
 
     excel = write_excel(args.audience, args.as_of, data, built, out_dir)
-    pdf = write_pdf(args.audience, args.as_of, built, data, excel.name, out_dir)
-    brain = write_brain_md(args.audience, args.as_of, excel, pdf, built, data, out_dir)
+    brief = write_brief_html(args.audience, args.as_of, built, data, excel.name, out_dir)
+    brain = write_brain_md(
+        args.audience, args.as_of, excel, brief, built, data, out_dir, repo_doc=args.out_dir is None
+    )
     write_cc_pointer(args.audience, args.as_of, out_dir)
     write_sheet_note(out_dir, excel)
 
@@ -2247,8 +2277,9 @@ def main() -> int:
         "audience": args.audience,
         "as_of": args.as_of,
         "version": 2,
+        "engine": f"openpyxl-{openpyxl.__version__}",
         "excel": str(excel),
-        "pdf": str(pdf) if pdf else None,
+        "brief": str(brief),
         "brain": str(brain),
         "jobs": len(built["jobs"]),
         "funnel": built["funnel"],
