@@ -1,0 +1,232 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+import DsToken from "../../components/design-system/DsToken.astro";
+import { token, tokensIn } from "@lib/design-system/tokens";
+
+const spaces = tokensIn("space");
+const radii = tokensIn("radius");
+const container = token("--container")?.resolved;
+const gutter = token("--gutter")?.resolved;
+
+const spaceUse: Record<string, string> = {
+  "--space-1": "Hairline gaps: nav link gap, chip inner gap, dept-items gap (2px is the one sub-token exception)",
+  "--space-2": "Tight inline gaps: pill rows, button groups, chip rows, KPI grid gap on cash surfaces (7px rounds to this)",
+  "--space-3": "Control padding, toolbar gap (10px rounds to this), nav-bar block padding",
+  "--space-4": "In-card gaps, between stacked cards, board grid gap (14px rounds to this), card padding on dense boards",
+  "--space-5": "Specimen and popup padding",
+  "--space-6": "Card padding, default block spacing, rail padding",
+  "--space-8": "Generous internal spacing; page body padding on the design-system site; main horizontal padding is 28px (the recorded full-bleed constant)",
+  "--space-10": "Band separation (masthead / nav to content)",
+  "--space-12": "Large block padding",
+  "--space-16": "Section-to-section rhythm on public pages",
+};
+
+const radiusUse: Record<string, string> = {
+  "--radius-sm": "Segments inside a segmented control; toolbar inputs on the shell; small chips",
+  "--radius-md": "Default — buttons, cards, inputs, tiles, chip on the rail (6px is the one recorded exception)",
+  "--radius-lg": "Larger documentation cards; board groups and cash-map cells use 10px, popups 10px",
+  "--radius-xl": "Reserved for oversized containers; audit KPI cards use 14px on the boards",
+  "--radius-full": "Pills, dots, meter tracks, badge discs",
+};
+---
+
+<DesignSystemShell slug="spacing" source="app/command-center/src/styles/global.css">
+  <DsSection id="scale" title="Spacing scale">
+    <p>
+      Every margin, padding and gap is a token on a 4px base, named by its multiple of 4. The scale is deliberately sparse
+      above 24px — large spacing wants a few decisive choices, not a continuum. Where a shipped surface uses an
+      off-scale value (7px, 10px, 14px, 18px, 28px on the boards) it is recorded beside the nearest token; new work
+      snaps to the token.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Token</th><th class="num">px</th><th>Bar</th><th>Common use</th></tr></thead>
+        <tbody>
+          {spaces.map((s) => (
+            <tr>
+              <td class="nowrap"><DsToken name={s.name} /></td>
+              <td class="num">{s.resolved}</td>
+              <td><span style={`display:block;height:10px;width:${s.resolved};background:var(--info);border-radius:2px`}></span></td>
+              <td>{spaceUse[s.name]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <h3>Radius</h3>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Token</th><th class="num">Value</th><th>Specimen</th><th>Use</th></tr></thead>
+        <tbody>
+          {radii.map((r) => (
+            <tr>
+              <td class="nowrap"><DsToken name={r.name} /></td>
+              <td class="num">{r.resolved}</td>
+              <td><span style={`display:inline-block;width:44px;height:28px;border:1px solid var(--border-strong);background:var(--surface-alt);border-radius:${r.resolved}`}></span></td>
+              <td>{radiusUse[r.name]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p>Radii within one visual group are uniform (DSN-015): a card group does not mix <code>xl</code> and <code>sm</code>. The board convention is 14px top-level card, 10–11px nested row, 8px input, 999px pill.</p>
+  </DsSection>
+
+  <DsSection id="app-frame" title="App frame">
+    <p>The Command Center is a fixed-rail application shell. Structural rails are fixed by intent; content within them is fluid.</p>
+    <DsSpec label="Frame anatomy at 1440 × 900" layout="block">
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:0;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;font-size:11px">
+        <div style="background:var(--primary);color:#fff;padding:12px;display:grid;gap:8px;align-content:start">
+          <div style="background:#fff;border-radius:4px;height:26px"></div>
+          <div style="height:10px;background:rgba(255,255,255,.25);border-radius:3px;width:70%"></div>
+          <div style="height:10px;background:rgba(255,255,255,.15);border-radius:3px"></div>
+          <div style="height:10px;background:rgba(255,255,255,.15);border-radius:3px"></div>
+          <div style="height:10px;background:rgba(255,255,255,.15);border-radius:3px"></div>
+          <div style="margin-top:auto;color:rgba(255,255,255,.7)">rail · 280px</div>
+        </div>
+        <div style="display:grid;grid-template-rows:auto 1fr;background:var(--surface-inset)">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px;background:var(--surface);border-bottom:1px solid var(--border)"><span>top bar · 24px 28px 16px</span><span style="color:var(--text-muted)">operator cluster</span></div>
+          <div style="padding:16px 28px 24px;display:grid;gap:8px;align-content:start"><div style="border:1px dashed var(--border-strong);border-radius:6px;padding:10px;color:var(--text-muted)">main · padding 16px 28px 24px · min-width 0</div><div style="border:1px dashed var(--border-strong);border-radius:6px;padding:10px;color:var(--text-muted)">a full-bleed board bleeds by exactly −28px horizontally (S-05)</div></div>
+        </div>
+      </div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Region</th><th>Size</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Side rail</td><td>280px (240px ≤ 1180px; hidden ≤ 820px or when collapsed)</td><td>Fixed. Navy, padding 24px 18px, gap 24px between blocks. Collapse persists in <code>cc-rail-collapsed</code> and is restored before first paint.</td></tr>
+          <tr><td>Top bar</td><td>auto height; padding 24px 28px 16px</td><td>Rail toggle 34×34 · eyebrow + h1 · runtime pill + version · operator card (min 168px) · sign out. No breadcrumbs: eyebrow + title carry hierarchy.</td></tr>
+          <tr><td>Main</td><td>1fr, <code>min-width: 0</code></td><td><code>min-width: 0</code> is what lets a wide table scroll inside instead of widening the page.</td></tr>
+          <tr><td>Main padding</td><td>16px 28px 24px</td><td>The 28px is a recorded constant: full-bleed boards negate exactly this much (client report 2026-06-28).</td></tr>
+          <tr><td>Design-system rail</td><td>272px (240px ≤ 1180px)</td><td>Same navy, same 36px link height; chapter nav instead of departments.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="container" title="The content rail">
+    <p>Reading surfaces (public pages, documentation, department overviews) use one content rail. Full-bleed regions put their background on the band and their content inside the rail, so every edge lines up without per-element matching.</p>
+    <div class="ds-pre"><code>.container &#123;
+  width: 100%;
+  max-width: var(--container);   /* {container} — caps the measure */
+  margin-inline: auto;           /* centres it */
+  padding-inline: var(--gutter); /* {gutter} — fluid side space */
+&#125;</code></div>
+    <ul>
+      <li><strong>Why hybrid:</strong> pure % gives 2000px lines on a wide monitor; pure fixed is cramped at 380px. <code>max-width</code> caps, <code>clamp()</code> gutters flex.</li>
+      <li><strong>Per-context exception:</strong> application chrome (the rail) stays fixed. Fluid-vs-fixed is chosen per context, never blanket.</li>
+      <li><strong>There is never a second container definition.</strong> A 24px stagger between two bands is always a second definition of "the column"; delete it, do not nudge it.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="breakpoints" title="Breakpoints">
+    <p>Four breakpoints, all <code>max-width</code>, all in the shell or in the surface that needs them. Coverage is deliberately thin: the Command Center is a desktop work surface, and the mobile-first companion (CRM PWA) is a separate app with this system's tokens. Every breakpoint's behaviour is in <a href="/design-system/mobile#breakpoint-behaviour">Mobile</a>.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th class="num">Width</th><th>Name</th><th>What changes</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td class="num">≤ 1280px</td><td>toc</td><td>The design-system's right-hand "On this page" list hides</td><td>design-system.css</td></tr>
+          <tr><td class="num">≤ 1180px</td><td>rail</td><td>Rail 280 → 240; 4-up metric grids → 2-up; two-column workbenches → 1; sticky detail panels → static; executive KPIs 4 → 3</td><td>global.css</td></tr>
+          <tr><td class="num">≤ 1100px</td><td>board</td><td>Board KPI grids 4 → 2 (Invoice Audit, Order Audit, Agreement Builder, Credit Memos)</td><td>per-surface CSS</td></tr>
+          <tr><td class="num">≤ 980px</td><td>—</td><td>Operator cluster wraps</td><td>global.css</td></tr>
+          <tr><td class="num">≤ 900px</td><td>—</td><td>Runtime board stacks</td><td>agents.astro</td></tr>
+          <tr><td class="num">≤ 820px</td><td>stack</td><td>Rail hides (frame becomes one column); heading rows stack; action rows go full width; executive KPIs → 2 and account bars wrap</td><td>global.css</td></tr>
+          <tr><td class="num">320px</td><td>floor</td><td><code>html &#123; min-width: 320px &#125;</code> — nothing narrower is supported</td><td>global.css</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="full-bleed" title="Full-bleed work surfaces">
+    <p>
+      Boards (Friday WIP/AR, Invoice Audit, the cash family, Order/Estimate Audit, Agreement Builder) fill the main column
+      edge to edge so their own background reads as the room the work happens in. The contract is exact, because getting it
+      wrong pushes the panel under the rail (as it did on 2026-06-28).
+    </p>
+    <div class="ds-pre"><code>.fw &#123;
+  margin: calc(-1 * var(--space-4)) -28px calc(-1 * var(--space-6));  /* negate main's padding exactly */
+  padding: 18px 28px 30px;                                             /* re-pad by the same amount */
+  min-height: 70vh;
+  overflow-x: clip;        /* the board never scrolls the page sideways; its .fw-tablewrap scrolls */
+  display: grid; gap: 14px;
+&#125;</code></div>
+    <ul>
+      <li>Horizontal bleed equals main's horizontal padding (28px). Not more, not less.</li>
+      <li><code>overflow-x: clip</code> on the root; <code>overflow: auto</code> on each table wrapper (never <code>overflow-y: visible</code> paired with <code>overflow-x: auto</code>).</li>
+      <li>The board's toolbar is the first child; its title is an <code>h2</code> at 18px, not a second page title.</li>
+      <li>Rail collapse exists for boards: a wide board is the reason the toggle was built.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="density" title="Density">
+    <p>Two densities, chosen by the job. A surface is one or the other; it does not mix them.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Property</th><th>Reading (shell, overviews, this site)</th><th>Working (boards, audit trees)</th></tr></thead>
+        <tbody>
+          <tr><td>Body size</td><td>14px / 1.5</td><td>12.5–13px / 1.45</td></tr>
+          <tr><td>Table row height</td><td>~46px (13px 14px cell padding)</td><td>29px (4px 8px cell padding) — WIP went from 67px to 29px rows and 3 → 11 visible rows at 1920×900</td></tr>
+          <tr><td>Card padding</td><td>16–24px</td><td>7–14px</td></tr>
+          <tr><td>Grid gap</td><td>16–24px</td><td>7–14px</td></tr>
+          <tr><td>Control height</td><td>44px buttons, 38px inputs</td><td>32–38px controls; 30px small buttons</td></tr>
+          <tr><td>Touch target</td><td>44px min</td><td>36px min on desktop-only boards; 44px if the board is ever used on a tablet</td></tr>
+          <tr><td>Headers</td><td>12px caps, 0 tracking</td><td>10–11px caps, 0.03–0.04em</td></tr>
+          <tr><td>Radius</td><td>8px</td><td>14 / 10 / 8 / 999</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="z-index" title="Stacking order">
+    <p>Six layers. A new element joins a layer; it does not invent a number.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th class="num">z</th><th>Layer</th><th>Members</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>Sticky table header</td><td>Board <code>thead th</code> (3 on frozen tables), spec-table headers</td></tr>
+          <tr><td class="num">2</td><td>Frozen column</td><td>First-column cells on frozen boards (header corner cell is 4)</td></tr>
+          <tr><td class="num">20</td><td>Toolbar dropdowns & sticky top bar</td><td><code>.iv-more-body</code>, the design-system top bar</td></tr>
+          <tr><td class="num">30</td><td>Map controls & legend</td><td>Territory Map overlays</td></tr>
+          <tr><td class="num">40</td><td>Popouts</td><td>The one shared popout node (WIP "best guess"), InfoWindow cards</td></tr>
+          <tr><td class="num">50</td><td>Toast</td><td>Single fixed bottom-centre node, <code>role="status"</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Recorded failure this prevents: the CRM companion's WIP sub-bar (z-40) covered its primary nav (z-30). A sub-bar is layer 20 at most.</p>
+  </DsSection>
+
+  <DsSection id="spacing-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="S-01" title="Every gap is a --space-* token; no raw pixel margins or paddings in component CSS." source="Design.md 'Layout & spacing'; DSN-014">
+        <p>Existing off-scale board values (7, 10, 14, 18px) are recorded, not precedent. New boards use 8 / 12 / 16 / 20.</p>
+      </DsRule>
+      <DsRule id="S-02" title="Reading surfaces align to one .container; structural rails are fixed." source="Design.md 'The container'">
+        <p>Background on the band, content in the container. Never a negative-margin hack to fake full-bleed on a reading page.</p>
+      </DsRule>
+      <DsRule id="S-03" title="Radius is 8px by default; pills are full; one radius per visual group." source="Design.md 'Shape'; DSN-015">
+        <p>Boards: 14 top-level, 10 nested, 8 inputs, 999 pills.</p>
+      </DsRule>
+      <DsRule id="S-04" title="Density is chosen per surface — reading or working — and never mixed within one." source="docs/40 §2; WIP density rework 2026-08-21">
+        <p>A board that needs a paragraph puts it in a note at 12.5px, not a 14px block.</p>
+      </DsRule>
+      <DsRule id="S-05" title="A full-bleed board negates main's padding by exactly 28px horizontally and re-pads the same amount." source="invoice-audit.astro:202-205 (client report 2026-06-28)">
+        <p>Bleeding more pushed the panel under the rail and past the right edge.</p>
+      </DsRule>
+      <DsRule id="S-06" title="Main has min-width: 0 and a wide table scrolls its own wrapper, never the page." source="global.css .app-main; invoice-audit.astro:209, :343">
+        <p><code>overflow-x: clip</code> on the surface root, <code>overflow: auto</code> on the table wrap.</p>
+      </DsRule>
+      <DsRule id="S-07" title="Breakpoints are 1280 / 1180 / 1100 / 820 and the 320 floor; a new one needs a recorded reason." source="global.css media queries; this chapter">
+        <p>Prefer <code>auto-fit, minmax()</code> grids that need no breakpoint at all.</p>
+      </DsRule>
+      <DsRule id="S-08" title="Stacking uses the six recorded layers; a sub-bar never outranks navigation." source="this chapter; CRM parity review P0 2026-09-11">
+        <p>Toast is the only element above a popout.</p>
+      </DsRule>
+      <DsRule id="S-09" title="Sticky offsets and pane heights are measured from the rendered DOM, never hardcoded." source="standards/design/v1.md § Long-list disclosure">
+        <p>A 5px-short offset is a 5px band of body rows above the header.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

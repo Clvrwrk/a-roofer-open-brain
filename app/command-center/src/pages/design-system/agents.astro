@@ -1,0 +1,156 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import { DS_BASE, dsChapters } from "@lib/design-system/nav";
+import { tokens } from "@lib/design-system/tokens";
+---
+
+<DesignSystemShell slug="agents" source="app/command-center/src/pages/design-system/agents.astro · CLAUDE.md · CONVENTIONS.md §11">
+  <DsSection id="recipe" title="Build recipe">
+    <p>The steps for any new or changed surface, desktop or mobile. An agent follows them in order and cites the rule ids it applied in the PR.</p>
+    <ol>
+      <li><strong>Answer the five questions</strong> (<a href={DS_BASE + "#first-principles"}>Overview → First-principles method</a>) in the PR description: the decision, the unit of work, the load-bearing facts, what the user already knows, what breaks on a phone / in the dark / for a screen reader.</li>
+      <li><strong>Place it in the tree.</strong> Department → surface → unit (office → vendor → branch → document → line). Add the nav leaf in <code>src/lib/nav.ts</code> as <code>soon</code> first, then <code>built</code> with an href when it ships.</li>
+      <li><strong>Pick the page shape</strong> (<a href={DS_BASE + "/dashboards#shapes"}>Dashboards → Page shapes</a>): work board, audit tree, executive dashboard, map + rail, or reading page.</li>
+      <li><strong>Start from a copy of the canonical surface</strong> for that shape: <code>friday-wip.astro</code> (board), <code>invoice-audit.astro</code> + <code>invoice-audit-tree.ts</code> (tree), <code>executive/pipeline.astro</code> (dashboard), <code>index.astro</code> + <code>VendorTerritoryMap.astro</code> (map). Keep its prefix convention; copy the <code>.fw</code> palette block verbatim under your prefix.</li>
+      <li><strong>Tokens only.</strong> Colour, radius, spacing, font from <code>global.css</code> (<a href={DS_BASE + "/tokens.json"}>tokens.json</a>). No literal hex outside the surface palette block, no off-scale spacing, no second typeface.</li>
+      <li><strong>Components from the library.</strong> Toolbar shape, KPI cards as queues, ten-row panes, pills with words, empty/loading/unavailable states, one primary, confirms that state non-effects.</li>
+      <li><strong>Both modes</strong> from <code>cc.theme</code> via <code>initThemePref</code>; the trio last in the toolbar.</li>
+      <li><strong>Loaders paginate</strong> (<code>.range()</code>), read materialised views, never cross a silo, never fabricate a number.</li>
+      <li><strong>Deep links in and out</strong> carry scope and pre-filter on land.</li>
+      <li><strong>Words</strong> per the content chapter: labels that state cost, messages that name the way out, figures from the formatter.</li>
+      <li><strong>Open the page.</strong> Both modes, 1440 and 390 wide, keyboard only once, greyscale once, axe clean. Two real regressions were caught only this way.</li>
+      <li><strong>Record.</strong> If a decision was made that this site does not already contain, add it to the <a href={DS_BASE + "/decisions"}>decisions log</a> in the same PR, and to <code>docs/</code> if it changes a contract.</li>
+      <li><strong>Ship</strong> per the deploy contract: state the change, its user-visible impact and the rollback; push; watch <code>/healthz</code> flip.</li>
+    </ol>
+  </DsSection>
+
+  <DsSection id="checklist" title="Ship checklist">
+    <p>Copy into the PR. Every line is a yes or a cited reason it does not apply.</p>
+    <div class="ds-pre"><code>## Design-system checklist (cc.proexteriorsus.net/design-system)
+- [ ] Five first-principles questions answered (Overview)
+- [ ] Placed in the department → surface → unit tree; nav leaf added (UX-01)
+- [ ] Page shape named; canonical surface copied (D-01…D-04)
+- [ ] Tokens only — no literal hex / spacing / font outside the surface palette block (C-01, S-01, T-01)
+- [ ] One flag-red primary per viewport (C-02); gold never a control (C-03)
+- [ ] Every status a pill with a word; TBD grey; no fabricated numbers (CMP-02, W-04)
+- [ ] KPI cards navigate or inform; ≤ 6 (CMP-03, D-03)
+- [ ] Unbounded lists: ten rows, measured pane, cost-stating control, filters before paging (CMP-04, UX-06)
+- [ ] Toolbar ≤ search · office · scope · More filters · pill · count · theme (CMP-05)
+- [ ] Empty / loading / unavailable states name the way out (CMP-07)
+- [ ] Confirms state effect, non-effects, parties; disabled keeps tooltip (CMP-08)
+- [ ] Deep links carry scope; unknown scope shows honest empty (CMP-10, UX-04)
+- [ ] Light and dark from cc.theme; both screenshotted (MD-01, MD-09)
+- [ ] Focus visible; targets ≥ 44 (36 on desktop boards); native elements (A-02, A-04, A-06)
+- [ ] Alt text per image kind; charts labelled with a table (I-03, A-05)
+- [ ] Reduced motion honoured; no new motion without a rule (MO-02, MO-06)
+- [ ] 390px checked: no horizontal page scroll; inputs 16px (M-03, M-05, M-09)
+- [ ] Loaders paginate; no silo-crossing aggregate; materialised view (D-10, UX-02)
+- [ ] Words: sentence case, cost-stating labels, formatter figures, no literal $ / % (W-01, W-02, W-05)
+- [ ] Decisions log updated for any new decision (UX-10)
+- [ ] npm run build + npm test green; page opened in a browser (G-02)
+- [ ] Deploy note: change · impact · rollback (G-03)</code></div>
+  </DsSection>
+
+  <DsSection id="file-map" title="File map">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>What</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Tokens (the only definition)</td><td><code>app/command-center/src/styles/global.css</code> <code>:root</code></td></tr>
+          <tr><td>Shared component CSS</td><td><code>global.css</code> (shell, buttons, pills, tables, nav, map popup, executive)</td></tr>
+          <tr><td>Board vocabulary (canonical)</td><td><code>src/pages/accounting/friday-wip.astro</code> <code>.fw</code>; shareable copy <code>src/styles/cash-surface.css</code> <code>.cfx</code></td></tr>
+          <tr><td>Shell</td><td><code>src/layouts/AppShell.astro</code>; nav tree <code>src/lib/nav.ts</code></td></tr>
+          <tr><td>Theme preference</td><td><code>src/scripts/theme-pref.ts</code> (<code>cc.theme</code>)</td></tr>
+          <tr><td>Long-list disclosure reference implementation</td><td><code>friday-wip.astro</code> <code>sizePane</code> / <code>applyFilters</code></td></tr>
+          <tr><td>Tree + progress reference</td><td><code>src/scripts/invoice-audit-tree.ts</code>, <code>src/scripts/progress-checklist.ts</code></td></tr>
+          <tr><td>Charts reference</td><td><code>src/scripts/executive-pipeline.ts</code></td></tr>
+          <tr><td>Runtime lights</td><td><code>src/scripts/runtime-board-render.ts</code>; rules <code>docs/109</code></td></tr>
+          <tr><td>Brand assets</td><td><code>config/brand/assets/</code>; served copies <code>app/command-center/public/</code></td></tr>
+          <tr><td>Vendor badges</td><td><code>app/command-center/public/vendor-icons/</code></td></tr>
+          <tr><td>Swag renders + script</td><td><code>public/design-system/swag/</code>; <code>scripts/design-system-swag.mjs</code></td></tr>
+          <tr><td>This site</td><td><code>src/pages/design-system/*.astro</code>; chapters <code>src/lib/design-system/nav.ts</code>; token parser <code>src/lib/design-system/tokens.ts</code>; layout <code>src/layouts/DesignSystemShell.astro</code>; styles <code>src/styles/design-system.css</code></td></tr>
+          <tr><td>Written spec (principles)</td><td><code>deployment/remote/dashboard/Design.md</code></td></tr>
+          <tr><td>Standard (pass/fail)</td><td><code>standards/design/v1.md</code></td></tr>
+          <tr><td>Dashboard design doc (canonical pattern)</td><td><code>docs/40-dashboard-design-system.md</code></td></tr>
+          <tr><td>Decision records</td><td><code>docs/82, 84, 90, 91, 96, 100, 109</code>; <code>context/memory/*.md</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="tokens-feed" title="Token feed">
+    <p>
+      <a href={DS_BASE + "/tokens.json"}><code>GET /design-system/tokens.json</code></a> returns every <code>:root</code> token
+      ({tokens.length} today) with its raw value, resolved literal, group and dark-mode value, plus the motion tokens, breakpoints and
+      the long-list constants. It is generated from <code>global.css</code> at build time, so it cannot drift. Requires a signed-in
+      session (or an agent bearer token per the <code>workos-agent-auth</code> skill), like every other route.
+    </p>
+    <div class="ds-pre"><code>&#123;
+  "name": "Pro Exteriors Command Center",
+  "version": "0.6.551A",
+  "source": "app/command-center/src/styles/global.css :root",
+  "modes": ["light", "dark"],
+  "tokens": [
+    &#123; "name": "--color-primary", "group": "color", "value": "#11133f", "resolved": "#11133f", "dark": null &#125;,
+    &#123; "name": "--color-surface", "group": "color", "value": "#ffffff", "resolved": "#ffffff", "dark": "#161d27" &#125;,
+    …
+  ],
+  "motion": &#123; "--motion-fast": "120ms", … &#125;,
+  "breakpoints": &#123; "rail": 1180, "stack": 820, "toc": 1280 &#125;,
+  "longList": &#123; "pageSize": 10, "control": "Show all N … ▾ (M more)" &#125;
+&#125;</code></div>
+    <p>An agent reads the feed once per session, then uses token names in CSS. It never writes a resolved hex into a component.</p>
+  </DsSection>
+
+  <DsSection id="escalation" title="When to escalate">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Situation</th><th>Do</th><th>Never</th></tr></thead>
+        <tbody>
+          <tr><td>A needed value is not a token</td><td>Add it to <code>:root</code> deliberately, document it in the relevant chapter, cite the reason</td><td>Inline it</td></tr>
+          <tr><td>A brand colour's role would change</td><td>Escalate to the account manager (DSN-011); do not proceed</td><td>Swap it locally</td></tr>
+          <tr><td>A surface wants monospace</td><td>Escalate the product question: is this a Property Card?</td><td>Grant mono inline</td></tr>
+          <tr><td>A user request conflicts with a rule here</td><td>Explain the rule and its evidence once; if the request is repeated, do it and add a decisions-log row with the evidence</td><td>Quietly diverge; quietly refuse</td></tr>
+          <tr><td>A figure's meaning would change (basis, denominator)</td><td>Flag it as a doctrine change before shipping (D-09)</td><td>Ship it silently</td></tr>
+          <tr><td>A new motion, breakpoint, page shape or component</td><td>Add the rule and specimen here in the same PR</td><td>Ship it undocumented</td></tr>
+          <tr><td>This site and a screen disagree</td><td>Fix the source (<code>global.css</code> or the surface) and this site together</td><td>Patch a screenshot; edit a copy</td></tr>
+          <tr><td>The client supplies new logo artwork</td><td>Replace the stand-ins in <code>config/brand/assets/</code>, re-render swag, update the Logo chapter</td><td>Keep both</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-rules">
+      <DsRule id="G-01" title="Every PR that touches a surface cites the rule ids it applied and any it broke, with the user evidence for the break." source="Overview G-00">
+        <p>The checklist above is the template.</p>
+      </DsRule>
+      <DsRule id="G-02" title="A surface is not done until it was opened in a browser in both modes and at 390px; build and tests green are necessary, not sufficient." source="docs/100:36-50; CLAUDE.md 'verify the live call path'">
+        <p>Two shipped regressions passed build and tests.</p>
+      </DsRule>
+      <DsRule id="G-03" title="Deploys are explain-then-ship: state the change, the user-visible impact and the rollback, then push and watch /healthz." source="CLAUDE.md Live ⇄ Dev alignment">
+        <p>The agent deploys; the human reads.</p>
+      </DsRule>
+      <DsRule id="G-04" title="This site is the design source of truth and is updated in the same PR as the change it describes." source="CONVENTIONS §11; this chapter">
+        <p>Design.md and standards/design/v1.md are updated when a principle or a pass/fail check changes.</p>
+      </DsRule>
+      <DsRule id="G-05" title="Rule ids are permanent; retire with a note, never renumber; new rules append." source="Overview → Rule index">
+        <p>Other docs, PRs and issues link to them.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="changelog" title="Changelog">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Date</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">2026-09-14</td><td>Site created: {dsChapters.length} chapters, rules C-, L-, T-, S-, I-, CMP-, MD-, MO-, D-, UX-, M-, A-, W-, P-, SW-, WEB-, G-; tokens.json feed; 12 fal.ai swag renders; dark mapping defined; fixed in the same change: <code>--error-surface</code> / <code>--error-text</code> were consumed by the destructive button but never declared in <code>:root</code>; recorded gaps: no <code>:focus-visible</code> in global.css, two resting shadows, Invoice Audit violet accent in dark, two surfaces on raw <code>prefers-color-scheme</code>, no mobile drawer for the rail.</td></tr>
+          <tr><td class="nowrap">2026-09-11</td><td>Parity fixes: body 15 → 14px; Inter loaded; purple segmented accent → navy / info.</td></tr>
+          <tr><td class="nowrap">2026-08-21</td><td>Long-list disclosure rule; Invoice Audit toolbar 10 → 4 and pills 7 → 4; theme key unified as <code>cc.theme</code>.</td></tr>
+          <tr><td class="nowrap">2026-06-17</td><td>Estimate Audit pattern approved as canonical; nav locked department-first; V3 list-detail chosen; per-surface dark mode.</td></tr>
+          <tr><td class="nowrap">2026-06-01</td><td>standards/design/v1.md and Design.md adopted.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+</DesignSystemShell>

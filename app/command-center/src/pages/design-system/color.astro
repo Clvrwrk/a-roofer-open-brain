@@ -1,0 +1,453 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+import DsToken from "../../components/design-system/DsToken.astro";
+import { contrast, darkOverrides, hexToCmyk, hexToRgb, token, tokensIn, wcag } from "@lib/design-system/tokens";
+
+const v = (name: string) => token(name)?.resolved ?? "";
+
+// Brand inks with their print identities. Pantone matches are the nearest solid-coated
+// swatches by visual comparison of the sRGB value; a print vendor must proof against a
+// physical Pantone fan before a large run (C-07). CMYK is derived from sRGB for reference
+// only — the Pantone number is what goes on the purchase order.
+const inks = [
+  { name: "Deep navy", tokenName: "--color-primary", pantone: "2766 C", pantoneAlt: "275 C", role: "Authority surfaces, structure, primary text, the roof and PRO in the logo" },
+  { name: "Darkest navy", tokenName: "--color-primary-container", pantone: "2768 C", pantoneAlt: "Black 6 C at 90%", role: "Rail gradient base, hover depth" },
+  { name: "Flag red", tokenName: "--color-tertiary", pantone: "186 C", pantoneAlt: "1795 C", role: "The one affirmative CTA per viewport; EXTERIORS / LLC in the logo" },
+  { name: "Deep flag red", tokenName: "--color-tertiary-container", pantone: "187 C", pantoneAlt: "7621 C", role: "Primary-action hover" },
+  { name: "Golden orange", tokenName: "--color-accent", pantone: "1235 C", pantoneAlt: "143 C", role: "Eyebrows on navy, active nav marker, badges, attention. Never a button" },
+  { name: "Hunter green", tokenName: "--color-secondary", pantone: "7733 C", pantoneAlt: "555 C", role: "Success and affirmative status only" },
+  { name: "Deep green", tokenName: "--color-secondary-container", pantone: "3435 C", pantoneAlt: "5535 C", role: "Text on green-soft pills" },
+  { name: "Smart blue", tokenName: "--color-info", pantone: "2935 C", pantoneAlt: "300 C", role: "Inline links, data meters, chart series" },
+];
+
+const neutrals = [
+  { name: "Ink", tokenName: "--color-on-surface", pantone: "Black 6 C", role: "Primary text" },
+  { name: "Ink secondary", tokenName: "--color-on-surface-secondary", pantone: "Cool Gray 11 C", role: "Secondary text, light-surface eyebrows" },
+  { name: "Ink muted", tokenName: "--color-on-surface-muted", pantone: "Cool Gray 10 C", role: "Muted labels, table headers, timestamps" },
+  { name: "Border", tokenName: "--color-border", pantone: "Cool Gray 1 C", role: "The workhorse separator" },
+  { name: "Border strong", tokenName: "--border-strong", pantone: "Cool Gray 3 C", role: "Keyboard keys, stronger dividers" },
+  { name: "Surface alt", tokenName: "--color-surface-alt", pantone: "Cool Gray 1 C at 50%", role: "Segmented track, hover fill" },
+  { name: "Surface inset", tokenName: "--color-surface-inset", pantone: "Paper", role: "Page background" },
+  { name: "Surface", tokenName: "--color-surface", pantone: "Paper", role: "Cards and work surfaces" },
+];
+
+const semantic = [
+  { name: "Success", tokenName: "--color-success", role: "Positive semantic (saved, live, paid)" },
+  { name: "Warning", tokenName: "--color-warning", role: "Warning semantic (late, provisional)" },
+  { name: "Error", tokenName: "--color-error", role: "Error semantic borders and emphasis — red that means stop, not go" },
+  { name: "Error surface", tokenName: "--color-error-surface", role: "Blocked pill fill, destructive button fill" },
+  { name: "Error text", tokenName: "--color-error-text", role: "Text on error surfaces" },
+];
+
+// Every foreground/background pairing the system actually uses, measured live.
+const pairs = [
+  ["Body text on surface", "--color-on-surface", "--color-surface"],
+  ["Secondary text on surface", "--color-on-surface-secondary", "--color-surface"],
+  ["Muted text on surface", "--color-on-surface-muted", "--color-surface"],
+  ["Muted text on inset", "--color-on-surface-muted", "--color-surface-inset"],
+  ["White on navy (rail)", "--color-on-primary", "--color-primary"],
+  ["Accent eyebrow on navy", "--color-accent", "--color-primary"],
+  ["Accent eyebrow on white (forbidden)", "--color-accent", "--color-surface"],
+  ["White on flag red (primary button)", "--color-on-tertiary", "--color-tertiary"],
+  ["Navy on white (ghost button)", "--color-primary", "--color-surface"],
+  ["Error text on error surface", "--color-error-text", "--color-error-surface"],
+  ["Deep green on green-soft pill", "--color-secondary-container", "--color-secondary-soft"],
+  ["Navy on accent-soft pill", "--color-on-accent-soft", "--color-accent-soft"],
+  ["Navy on info-soft pill", "--color-on-info-soft", "--color-info-soft"],
+  ["Smart blue link on surface", "--color-info", "--color-surface"],
+  ["Black on golden orange", "--color-on-accent", "--color-accent"],
+  ["Success on surface", "--color-success", "--color-surface"],
+  ["Warning on surface", "--color-warning", "--color-surface"],
+  ["Error on surface", "--color-error", "--color-surface"],
+].map(([label, fg, bg]) => {
+  const f = v(fg);
+  const b = v(bg);
+  const ratio = contrast(f, b);
+  return { label, fg, bg, f, b, ratio, grade: wcag(ratio) };
+});
+
+const darkPairs = [
+  ["Body text on surface", "--color-on-surface", "--color-surface"],
+  ["Secondary text on surface", "--color-on-surface-secondary", "--color-surface"],
+  ["Muted text on surface", "--color-on-surface-muted", "--color-surface"],
+  ["Muted text on inset", "--color-on-surface-muted", "--color-surface-inset"],
+  ["Accent (gold) on surface", "--color-accent", "--color-surface"],
+  ["Link on surface", "--color-info", "--color-surface"],
+  ["Success on surface", "--color-success", "--color-surface"],
+  ["Error on surface", "--color-error", "--color-surface"],
+  ["Error text on error surface", "--color-error-text", "--color-error-surface"],
+  ["Green text on green-soft", "--color-secondary-container", "--color-secondary-soft"],
+  ["Gold text on accent-soft", "--color-on-accent-soft", "--color-accent-soft"],
+  ["Blue text on info-soft", "--color-on-info-soft", "--color-info-soft"],
+  ["White on flag red (unchanged)", "--color-on-tertiary", "--color-tertiary"],
+].map(([label, fg, bg]) => {
+  const f = darkOverrides[fg] ?? v(fg);
+  const b = darkOverrides[bg] ?? v(bg);
+  const ratio = contrast(f, b);
+  return { label, fg, bg, f, b, ratio, grade: wcag(ratio) };
+});
+
+const rgb = (hex: string) => hexToRgb(hex)?.join(", ") ?? "";
+const cmyk = (hex: string) => hexToCmyk(hex).join(" / ");
+
+// Surface-local palettes: the audit boards define their own working palette on the
+// section root (`.fw`, `.iv`, `.cfx`) for light and dark. They are documented here so
+// a new surface copies the canonical one (WIP/AR) instead of inventing a fourth.
+const auditLight = [
+  ["--bg", "#f4f6f9", "Board background"],
+  ["--panel", "#ffffff", "Panels, table header, inputs"],
+  ["--panel2", "#f7f8fb", "Secondary panel"],
+  ["--ink", "#1c2733", "Text"],
+  ["--muted", "#6b7886", "Muted text, labels"],
+  ["--line", "#e3e8ef", "Borders"],
+  ["--zebra", "#f0f1f8", "Even rows, tinted with brand navy"],
+  ["--fill-bg", "#fbedd2", "Row hover, editable fill"],
+  ["--fill-cell", "#fffbeb", "Editable cell"],
+  ["--green", "#137a4d", "Positive"],
+  ["--green-bg", "#e3f5ec", "Positive pill fill"],
+  ["--yellow", "#946400", "Caution"],
+  ["--yellow-bg", "#fbf0d4", "Caution pill fill"],
+  ["--orange", "#a4480d", "Warning"],
+  ["--orange-bg", "#fbe7d6", "Warning pill fill"],
+  ["--red", "#a51f1f", "Negative / overdue"],
+  ["--red-bg", "#fbe2e2", "Negative pill fill"],
+  ["--grey", "#5a6573", "Neutral"],
+  ["--grey-bg", "#eceff4", "Neutral pill fill"],
+  ["--teal", "#0f766e", "Board-local primary action (WIP/Cash)"],
+];
+const auditDark = [
+  ["--bg", "#0f141b", "Board background"],
+  ["--panel", "#161d27", "Panels"],
+  ["--panel2", "#1c2530", "Secondary panel"],
+  ["--ink", "#e6edf5", "Text"],
+  ["--muted", "#8b98a8", "Muted text"],
+  ["--line", "#27313e", "Borders"],
+  ["--zebra", "#1a2230", "Even rows"],
+  ["--fill-bg", "#3a3115", "Row hover"],
+  ["--fill-cell", "#2a2410", "Editable cell"],
+  ["--green", "#7ee2ad", "Positive"],
+  ["--green-bg", "#123626", "Positive pill fill"],
+  ["--yellow", "#f2cf6b", "Caution (also gold in dark)"],
+  ["--yellow-bg", "#3a3115", "Caution pill fill"],
+  ["--orange", "#f3a766", "Warning"],
+  ["--orange-bg", "#3d2913", "Warning pill fill"],
+  ["--red", "#ff8585", "Negative"],
+  ["--red-bg", "#3d1a1a", "Negative pill fill"],
+  ["--grey", "#9aa6b4", "Neutral"],
+  ["--grey-bg", "#222c38", "Neutral pill fill"],
+  ["--gold", "#f2cf6b", "Accent lifts to pass AA"],
+];
+
+const vendors = [
+  { vendor: "ABC Supply", hex: "#0b3c8c", note: "Badge ring; brand blue from the vendor's own mark", badge: "/vendor-icons/abc-supply-badge-brand.png" },
+  { vendor: "SRS Distribution", hex: "#c8102e", note: "Badge ring; vendor red", badge: "/vendor-icons/srs-badge-brand.png" },
+  { vendor: "QXO", hex: "#1f2a44", note: "Badge ring; vendor navy", badge: "/vendor-icons/qxo-badge-brand.png" },
+  { vendor: "PE office", hex: "#11133f", note: "Office badge uses brand navy", badge: "/vendor-icons/pe-office-badge.png" },
+];
+---
+
+<DesignSystemShell slug="color" source="app/command-center/src/styles/global.css">
+  <DsSection id="brand-inks" title="Brand inks">
+    <p>
+      Five brand colors, each with one job. The two logo inks — deep navy and flag red — are the anchors; the other three
+      exist to keep those two honest. Every value below is read from <code>global.css</code>; the print columns are the
+      identities a vendor needs. Click a chip to copy the token name.
+    </p>
+    <div class="ds-swatches">
+      {inks.map((ink) => {
+        const hex = v(ink.tokenName);
+        const onWhite = contrast(hex, "#ffffff");
+        return (
+          <div class="ds-swatch">
+            <div class="ds-swatch-chip" style={`background:${hex};color:${onWhite > 3 ? "#fff" : "#000"}`}>{hex}</div>
+            <div class="ds-swatch-meta">
+              <strong>{ink.name}</strong>
+              <code>{ink.tokenName}</code>
+              <span>Pantone {ink.pantone}</span>
+              <span>{ink.role}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead>
+          <tr><th>Ink</th><th>Token</th><th>HEX (sRGB)</th><th>RGB</th><th>CMYK (derived)</th><th>Pantone solid coated</th><th>Alternate</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          {inks.map((ink) => {
+            const hex = v(ink.tokenName);
+            return (
+              <tr>
+                <td class="nowrap"><strong>{ink.name}</strong></td>
+                <td class="nowrap"><DsToken name={ink.tokenName} /></td>
+                <td class="nowrap"><code>{hex}</code></td>
+                <td class="nowrap">{rgb(hex)}</td>
+                <td class="nowrap">{cmyk(hex)}</td>
+                <td class="nowrap"><strong>{ink.pantone}</strong></td>
+                <td class="nowrap">{ink.pantoneAlt}</td>
+                <td>{ink.role}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    <h3>Tints the app uses</h3>
+    <p>Each brand ink has a "soft" tint for pill fills and a container shade for text on that tint. Tints are never used as text.</p>
+    <div class="ds-spec-body" style="padding:0;gap:8px">
+      <DsToken name="--color-primary-soft" />
+      <DsToken name="--color-secondary-soft" />
+      <DsToken name="--color-accent-soft" />
+      <DsToken name="--color-info-soft" />
+      <DsToken name="--color-error-surface" />
+      <DsToken name="--color-on-accent-soft" />
+      <DsToken name="--color-on-info-soft" />
+      <DsToken name="--color-on-accent" />
+      <DsToken name="--color-on-primary" />
+      <DsToken name="--color-on-tertiary" />
+    </div>
+  </DsSection>
+
+  <DsSection id="pantone" title="Pantone & print management">
+    <p>
+      Screen and print are different colour systems. The app is authored in sRGB HEX; everything printed or manufactured is
+      specified in <strong>Pantone solid coated</strong> (PMS) and re-separated by the vendor. The rules below decide which
+      identity to hand over for each reproduction path so the navy on a truck door matches the navy on a pen.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Reproduction path</th><th>Specify as</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Screen (app, web, email, PDF viewed on screen)</td><td>HEX token</td><td>sRGB, no colour profile embedded in raster assets beyond sRGB.</td></tr>
+          <tr><td>Offset print, 1–3 colours (letterhead, business cards, trifold covers)</td><td>Pantone spot: 2766 C + 186 C (+ 1235 C)</td><td>Spot inks give a consistent navy; CMYK navy drifts purple under warm lighting.</td></tr>
+          <tr><td>Offset / digital 4-colour (brochures, infographics, photos)</td><td>CMYK build from the Pantone bridge value, or Pantone → CMYK by the printer's profile</td><td>Ask for a Pantone-bridge conversion; our derived CMYK is a reference only.</td></tr>
+          <tr><td>Screen print (shirts, hats, tote)</td><td>Pantone spot, one colour per screen</td><td>One-colour white on navy garments; two-colour navy + red on white or grey. Gold only as a trim.</td></tr>
+          <tr><td>Embroidery (polos, caps)</td><td>Thread match to Pantone: Madeira or Isacord navy (≈ 1976 / 3554) and red (≈ 1147 / 1902)</td><td>Ask the embroiderer to supply a thread swatch against Pantone 2766 C and 186 C. Minimum letter height 6 mm.</td></tr>
+          <tr><td>Pad print (pens, markers)</td><td>Pantone spot, max 2 colours</td><td>At 8–10 mm logo height the roof mark fills in; use the one-colour logo below 25 mm width.</td></tr>
+          <tr><td>Vinyl / decal (trucks, yard signs, magnets)</td><td>Cut vinyl by Pantone; printed vinyl by CMYK with a Pantone proof</td><td>3M / Oracal navy and red stock; request the closest stock swatch to 2766 C and 186 C.</td></tr>
+          <tr><td>Large format (banners, site signs)</td><td>CMYK with Pantone reference</td><td>Proof at full size; navy tends to print black — hold the K channel down.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Neutrals</h3>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Neutral</th><th>Token</th><th>HEX</th><th>RGB</th><th>CMYK (derived)</th><th>Pantone reference</th><th>Role</th></tr></thead>
+        <tbody>
+          {neutrals.map((n) => {
+            const hex = v(n.tokenName);
+            return (
+              <tr>
+                <td class="nowrap"><strong>{n.name}</strong></td>
+                <td class="nowrap"><DsToken name={n.tokenName} /></td>
+                <td class="nowrap"><code>{hex}</code></td>
+                <td class="nowrap">{rgb(hex)}</td>
+                <td class="nowrap">{cmyk(hex)}</td>
+                <td class="nowrap">{n.pantone}</td>
+                <td>{n.role}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-callout">
+      <b>Rich black, not navy</b>
+      <p>Large dark floods in print use the navy spot or a rich black built C60 M50 Y40 K100 — never a four-colour navy at 100% coverage, which exceeds ink limits and dries badly. Body text in print is 100K only.</p>
+    </div>
+  </DsSection>
+
+  <DsSection id="roles" title="Five-color role discipline (DSN-011)">
+    <p>The rule the whole system hangs on. Each colour owns one job and is never borrowed for decoration.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Colour</th><th>Owns</th><th>Never used for</th><th>Specimen</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Primary</strong> (navy)</td><td>Authority surfaces (rail, section heads), structure, primary text, secondary buttons</td><td>Affirmative CTAs</td><td><button class="button button-secondary button-small">Navy secondary</button></td></tr>
+          <tr><td><strong>Secondary</strong> (hunter green)</td><td>Success / affirmative <em>status</em> (Ready, Approved)</td><td>Buttons, decoration</td><td><span class="health-badge health-ready">Ready</span></td></tr>
+          <tr><td><strong>Tertiary</strong> (flag red)</td><td>The one affirmative CTA per viewport</td><td>Decoration, status, error</td><td><button class="button button-primary button-small">Approve</button></td></tr>
+          <tr><td><strong>Accent</strong> (golden orange)</td><td>Eyebrows on navy, active nav marker, badges, attention</td><td>Buttons of any kind, eyebrows on white</td><td><span style="display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--color-on-accent-soft);font-size:12px;font-weight:700">In review</span></td></tr>
+          <tr><td><strong>Info</strong> (smart blue)</td><td>Inline links, data meters, chart series</td><td>Primary actions, status pills</td><td><a href="#roles">An inline link</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-dodont">
+      <div class="ds-do"><h4>Do</h4><ul><li>Keep one flag-red affirmative action in view.</li><li>Use accent for the active nav marker and for eyebrows on navy.</li><li>Reach for borders before shadows to separate surfaces.</li><li>Use the error family (<code>--error</code>) for "stop"; flag red means "go".</li></ul></div>
+      <div class="ds-dont"><h4>Don't</h4><ul><li>Make accent orange a button, or make the CTA green.</li><li>Put golden-orange eyebrows on white — it fails AA (measured below).</li><li>Introduce a hex value that is not a token.</li><li>Use flag red for a negative number or an overdue state.</li></ul></div>
+    </div>
+  </DsSection>
+
+  <DsSection id="surface-ink" title="Surface & ink tokens">
+    <p>Depth comes from borders and surface tints, not shadows. These are the only surfaces and inks a light-mode screen uses; their dark counterparts are in <a href="/design-system/modes#mapping">Modes</a>.</p>
+    <div class="ds-swatches">
+      {tokensIn("color").filter((t) => /surface|border|on-surface/.test(t.name)).map((t) => (
+        <div class="ds-swatch">
+          <div class="ds-swatch-chip" style={`background:${t.resolved};color:${contrast(t.resolved, "#ffffff") > 3 ? "#fff" : "#000"};border-bottom:1px solid var(--border)`}>{t.resolved}</div>
+          <div class="ds-swatch-meta"><code>{t.name}</code><span>dark: {darkOverrides[t.name] ?? "unchanged"}</span></div>
+        </div>
+      ))}
+    </div>
+  </DsSection>
+
+  <DsSection id="semantic" title="Semantic status colors">
+    <p>The error family is deliberately distinct from the flag-red tertiary. Status is never colour-only — every pill carries a word (see <a href="/design-system/accessibility#color-independence">A-03</a>).</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Status</th><th>Token</th><th>HEX</th><th>Dark</th><th>Role</th></tr></thead>
+        <tbody>
+          {semantic.map((s) => (
+            <tr>
+              <td class="nowrap"><strong>{s.name}</strong></td>
+              <td class="nowrap"><DsToken name={s.tokenName} /></td>
+              <td class="nowrap"><code>{v(s.tokenName)}</code></td>
+              <td class="nowrap"><code>{darkOverrides[s.tokenName] ?? "—"}</code></td>
+              <td>{s.role}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <DsSpec label="Status pills in production" code=".health-badge / .status-badge">
+      <span class="health-badge health-ready">Ready</span>
+      <span class="health-badge health-watch">Watch</span>
+      <span class="health-badge health-blocked">Blocked</span>
+      <span class="runtime-pill" data-tone="ready"><span class="signal-dot" aria-hidden="true"></span>Live</span>
+      <span class="runtime-pill" data-tone="watch"><span class="signal-dot" aria-hidden="true"></span>Degraded</span>
+    </DsSpec>
+    <h3>Runtime lights (docs/109)</h3>
+    <p>The Agent Monitor's R/Y/G lights are a separate, fixed vocabulary: <strong>green</strong> succeeded within 1.5× cadence; <strong>yellow</strong> late (1.5–2×) or warned; <strong>red</strong> failed, overdue past 2×, stale feed or monitor down; <strong>unknown</strong> no telemetry yet. They map to <code>--success</code>, <code>--warning</code>, <code>--error</code> and <code>--text-muted</code> and always carry the word beside the dot.</p>
+  </DsSection>
+
+  <DsSection id="surface-palettes" title="Audit-surface palettes">
+    <p>
+      The full-bleed work boards (Friday WIP/AR, Invoice Audit, the cash family, Order and Estimate Audit, Agreement Builder)
+      define a <em>working palette</em> on their section root so dense tables can zebra, tint and warn without touching the
+      brand roles. <strong>Friday WIP/AR (<code>.fw</code>) is canonical</strong>; the cash family (<code>.cfx</code>) mirrors
+      it by rule; Invoice Audit (<code>.iv</code>) predates it and carries one deviation noted below. A new board copies the
+      <code>.fw</code> block verbatim under its own prefix — it does not invent a fourth palette.
+    </p>
+    <div class="ds-grid-2">
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="3">Light (<code>.fw</code>)</th></tr><tr><th>Variable</th><th>Value</th><th>Use</th></tr></thead>
+          <tbody>{auditLight.map(([n, h, u]) => <tr><td class="nowrap"><DsToken name={n} value={h} /></td><td class="nowrap"><code>{h}</code></td><td>{u}</td></tr>)}</tbody>
+        </table>
+      </div>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="3">Dark (<code>.fw[data-theme="dark"]</code>)</th></tr><tr><th>Variable</th><th>Value</th><th>Use</th></tr></thead>
+          <tbody>{auditDark.map(([n, h, u]) => <tr><td class="nowrap"><DsToken name={n} value={h} /></td><td class="nowrap"><code>{h}</code></td><td>{u}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="ds-callout is-danger">
+      <b>Known deviation — do not extend</b>
+      <p>Invoice Audit's scope control and claim card use a surface-local <code>--brand</code> that resolves to brand navy in light but to a violet (<code>#8a7bff</code>) in dark, and the board defines a <code>--purple: #5b46d8</code>. Neither is a brand token. They are tolerated on that one surface until its next redesign; a new surface uses navy in light and gold in dark for the active state, exactly as <code>.fw</code> does.</p>
+    </div>
+  </DsSection>
+
+  <DsSection id="contrast" title="Contrast matrix (measured)">
+    <p>
+      Every pairing the app uses, computed from the live token values at build time against WCAG 2.2. AA for body text is
+      4.5:1; AA for large text (18px regular or 14px bold) is 3:1. A pairing that reads <strong>Fail</strong> is forbidden for
+      text and is listed here only so nobody has to rediscover it.
+    </p>
+    <div class="ds-grid-2">
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="4">Light mode</th></tr><tr><th>Pairing</th><th>Sample</th><th class="num">Ratio</th><th>Grade</th></tr></thead>
+          <tbody>
+            {pairs.map((p) => (
+              <tr>
+                <td>{p.label}<br /><small style="color:var(--text-muted)"><code>{p.fg}</code> on <code>{p.bg}</code></small></td>
+                <td class="nowrap"><span style={`display:inline-block;padding:3px 8px;border-radius:4px;background:${p.b};color:${p.f};border:1px solid var(--border);font-weight:600`}>Aa 12,480.00</span></td>
+                <td class="num">{p.ratio.toFixed(2)}:1</td>
+                <td><strong style={`color:${p.grade === "Fail" ? "var(--error)" : "var(--success)"}`}>{p.grade}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="4">Dark mode (this system's mapping)</th></tr><tr><th>Pairing</th><th>Sample</th><th class="num">Ratio</th><th>Grade</th></tr></thead>
+          <tbody>
+            {darkPairs.map((p) => (
+              <tr>
+                <td>{p.label}<br /><small style="color:var(--text-muted)"><code>{p.fg}</code> on <code>{p.bg}</code></small></td>
+                <td class="nowrap"><span style={`display:inline-block;padding:3px 8px;border-radius:4px;background:${p.b};color:${p.f};border:1px solid #27313e;font-weight:600`}>Aa 12,480.00</span></td>
+                <td class="num">{p.ratio.toFixed(2)}:1</td>
+                <td><strong style={`color:${p.grade === "Fail" ? "var(--error)" : "var(--success)"}`}>{p.grade}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p>Large-text-only pairings (3:1 to 4.5:1) may be used for 800-weight metric values ≥ 18px and for icons, never for body copy or table cells.</p>
+  </DsSection>
+
+  <DsSection id="vendor-colors" title="Vendor colors">
+    <p>
+      Vendor marks keep their own colours because the user recognises them; they are identity, not status. Status is carried by the
+      ring around the badge (green / yellow / red / grey variants in <code>public/vendor-icons/</code>) and by the word beside it.
+      Vendor colour never leaks into buttons, links or text.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Mark</th><th>Vendor</th><th>Ring colour</th><th>Note</th></tr></thead>
+        <tbody>
+          {vendors.map((x) => (
+            <tr>
+              <td><img src={x.badge} alt={`${x.vendor} badge`} width="36" height="36" style="display:block;border-radius:999px" /></td>
+              <td class="nowrap"><strong>{x.vendor}</strong></td>
+              <td class="nowrap"><span style={`display:inline-block;width:14px;height:14px;border-radius:999px;background:${x.hex};vertical-align:-2px;margin-right:6px`}></span><code>{x.hex}</code></td>
+              <td>{x.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p>Ring status variants: <strong>brand</strong> (neutral, the default), <strong>green</strong> (agreement active), <strong>yellow</strong> (renewal due / partial coverage), <strong>red</strong> (expired or no agreement), <strong>grey</strong> (inactive branch). The legend on the Territory Map mirrors these with a white disc and a coloured ring.</p>
+  </DsSection>
+
+  <DsSection id="color-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="C-01" title="Every colour on a screen resolves to a token in global.css :root." source="Design.md 'On-system or off'; standards/design/v1.md DSN-010, DSN-014">
+        <p>No literal hex in component CSS or inline styles, with one exception: the audit-surface working palettes, which are themselves defined once on the surface root and consumed by variable.</p>
+      </DsRule>
+      <DsRule id="C-02" title="One flag-red affirmative action per viewport." source="Design.md 'One affirmative action per field'; DSN-012">
+        <p>A second high-emphasis action demotes to navy. On a board where the primary action is board-local (WIP's teal "Email via Maya"), there is still exactly one of it in view.</p>
+      </DsRule>
+      <DsRule id="C-03" title="Accent gold is attention and wayfinding, never a control." source="DSN-011">
+        <p>Active nav marker, eyebrows on navy, provisional banners, editable-cell tint, and in dark mode the focus and active colour. Never a button, never a link.</p>
+      </DsRule>
+      <DsRule id="C-04" title="Status is a word plus a colour, never a colour alone." source="Design.md Accessibility; docs/109 legend">
+        <p>Pills, lights and rings always carry text or an accessible name. A colour-blind reader must get the same information.</p>
+      </DsRule>
+      <DsRule id="C-05" title="Negative money is red from the error family and means a credit or an overdue state, never an action." source="CONVENTIONS.md §10b 'Negative total = credit memo'">
+        <p>Use the surface's <code>--red</code> / <code>--error</code>. Flag red on a number is a bug.</p>
+      </DsRule>
+      <DsRule id="C-06" title="Charts use the brand series palette in order: navy, hunter green, smart blue, gold, flag red." source="app/command-center/src/scripts/executive-pipeline.ts CHART_PALETTE">
+        <p>Flag red is the fifth series and is reserved for the AR-outstanding / at-risk segment so it keeps its meaning. Single-hue charts use smart blue → navy.</p>
+      </DsRule>
+      <DsRule id="C-07" title="Print and manufacture are specified in Pantone; the vendor proofs against a physical fan before any run over 100 units." source="this chapter, 2026-09-14">
+        <p>Our CMYK values are derived and advisory. The purchase order carries the Pantone number.</p>
+      </DsRule>
+      <DsRule id="C-08" title="A new board copies the .fw working palette; it never defines a new colour vocabulary." source="cash-surface.css header; PEC-234/235">
+        <p>Name the prefix after the surface, keep the variable names identical, keep both modes.</p>
+      </DsRule>
+      <DsRule id="C-09" title="Anything that sets a background declares its own colour." source="Design.md 'Declared ink, never inherited'">
+        <p>Surfaces provide ink through contextual tokens; primitives consume them. An element must render correctly on light, navy and dark without a per-placement override.</p>
+      </DsRule>
+      <DsRule id="C-10" title="Vendor colours identify; they never signal." source="Territory Map legend; public/vendor-icons">
+        <p>Status around a vendor mark is carried by the ring variant and its label. Vendor colour never appears on a button, link, pill or chart series.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

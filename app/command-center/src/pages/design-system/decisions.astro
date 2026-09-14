@@ -1,0 +1,240 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+
+// Every entry: decision, why, where it is recorded, when. Sources are repo paths so a
+// reader can open the primary record. Entries are grouped by the question they answer.
+type Row = [string, string, string, string?];
+
+const nesting: Row[] = [
+  ["Canonical nesting is PE Office → Vendor Branch → Invoice → Line, site-wide.", "A reader learns one tree once; every work surface uses it.", "src/scripts/invoice-audit-tree.ts:1", "2026-06"],
+  ["Credit Memos was rebuilt onto that nesting because it was the sole flat holdout.", "One accounting surface with a flat table broke the learned tree.", "docs/96-credit-memo-work-surface.md:3", "2026-08-19"],
+  ["Credit-memo review sections adopted Office → Vendor → Branch, rolled up by default.", "Chris: the no-open-request section had too much vertical scroll.", "context/memory/2026-09-01.md:55", "2026-09-01"],
+  ["Agreement Builder nests six levels: Office → Vendor → Branch → Category → Item → Variation.", "Costs roll up from each branch's trailing-36-month volume at the set price.", "src/pages/accounting/price-agreement/builder.astro:105", ""],
+  ["Price Agreement Audit moved from a flat agreement table to Office → Vendor/Branch → Category → Item.", "To match the other dashboards.", "context/memory/2026-06-19.md:236", "2026-06-19"],
+  ["Price List Review nests Office → Global Price List → Vendor → Branch → Current → Archived.", "The global list is a sibling of the negotiated one and must be visible as such.", "context/memory/2026-06-22.md:47", "2026-06-22"],
+  ["Order Audit mirrors Invoice Audit: Office → Branch → Order → Line.", "Same tree, different document.", "src/pages/operations/order-audit.astro:120", "2026-06-18"],
+  ["A branch inside two office rings is listed under both offices; this is intentional, not a dedupe bug.", "Territory overlap is real; hiding it would misprice one office.", "builder.astro:136", ""],
+  ["Vendor, office and branch are silos the UI never crosses: any aggregate shown to a human is office-scoped.", "A cross-silo aggregate is a reporting bug even when the write path is safe.", "CONVENTIONS.md:133 (§10b)", ""],
+  ["Never join a branch by bare branch number; branch numbers collide across vendors.", "Migration 208 found the collision; the client enforces it too.", "CONVENTIONS.md:121; src/lib/branch-price-list.ts:119", ""],
+  ["Territory Map is the home of the app; roofing is regional so the map is the primary navigation surface.", "Chris's nav interview.", "src/lib/nav.ts:26-29", "2026-06-17"],
+  ["PE offices carry the roof badge on the map so our locations read differently from vendor branches.", "Identity at a glance.", "VendorTerritoryMap.astro:492-495", ""],
+];
+
+const filters: Row[] = [
+  ["The default office filter is 'All PE offices' (value ''). 'All' means no constraint on that dimension, never a synthetic aggregate row.", "A total that crosses offices would cross a silo.", "invoice-audit.astro:43; credit-memos.astro:263", ""],
+  ["Filters compose as AND across dimensions in one pass; a row is visible when it satisfies all of them.", "Two passes let a row be hidden by one filter and shown by another.", "invoice-audit-tree.ts:826; friday-wip.astro:636-641", ""],
+  ["A parent node hides when all its children are hidden.", "An empty branch is noise.", "docs/40 §5; invoice-audit-tree.ts:838-850", ""],
+  ["Rollup bars and headcounts track the active scope, not the drill filters.", "Tolerance, to-audit and search narrow what you see; they do not restate the denominator.", "invoice-audit-tree.ts:830-836", ""],
+  ["Filtering auto-opens the branches holding hits.", "A filtered search should reveal its hits, not make the user open every branch.", "credit-memos.astro:282", ""],
+  ["Trees auto-open when there are two or fewer top-level nodes.", "Progressive disclosure has nothing to hide at that size.", "docs/40 §5", ""],
+  ["One scope control (To audit · Due now · All) replaced three checkboxes on Invoice Audit.", "Three checkboxes were three answers to one question, and you had to know how they composed.", "invoice-audit.astro:51-59; docs/100", "2026-08-21"],
+  ["Date range and tolerance live behind a 'More filters' disclosure.", "Real controls, just not the first thing competing for attention.", "invoice-audit.astro:63-78", "2026-08-21"],
+  ["The default date window is the oldest open invoice date → today.", "Client request.", "src/lib/invoice-audit.ts:310", "2026-06-28"],
+  ["Open invoices need attention first and drive the default scope and ordering.", "Chris.", "src/lib/invoice-audit.ts:612", "2026-06-20"],
+  ["Deep links carry scope (?office=, ?branch=) and the target pre-filters and scrolls on land; never dump to the bare entry page.", "The user should land on the already-filtered list, never be left to re-find their office.", "docs/40 §6; invoice-audit-tree.ts:936-951", ""],
+  ["A ?branch= not present in the tree scopes the search box instead of silently rendering unfiltered.", "So the page honestly shows the empty result.", "invoice-audit-tree.ts:952-959; docs/82:88", "2026-08-05"],
+  ["Credit Memo toolbar is deliberately three controls: search, office, match confidence, with 'Needs review' selecting probable + weak + none.", "Confidence is the point of the matching protocol.", "docs/96:79-81", "2026-08-19"],
+  ["Territory map filters (vendor, geography, status) sit over the map, never hidden in accounting detail; planned-but-unlive vendors appear with an empty state that says 'planned'.", "The map is the entry point; a missing vendor must not read as broken.", "docs/35:195-202", ""],
+  ["Stale close-outs are off the working board by default and reachable only through their own pill.", "They are finished, paid work — an AccuLynx housekeeping list, not the meeting's business.", "friday-wip.astro:697-701", "2026-08-21"],
+  ["Filter, reveal and open state persist per surface in localStorage; WIP moved from sessionStorage to localStorage.", "A weekly planning surface should look the way it was left.", "standards/design/v1.md:110-112; context/memory/2026-08-21.md:315", "2026-08-21"],
+  ["Filtering is pure show/hide over server-rendered rows; no payload, no re-render.", "261 memos is a small set; nesting costs no client bundle.", "credit-memos.astro:247; docs/96:59", "2026-08-19"],
+];
+
+const tables: Row[] = [
+  ["Any unbounded list opens at ten rows with the rest behind 'Show all N …'; the pane is the same height collapsed and expanded.", "Cognitive load (63 jobs is not readable) and the scroll trap (the wheel must have one owner).", "standards/design/v1.md:79-116; CLAUDE.md", "2026-08-21"],
+  ["Pane height is measured (header + row × 10 + scrollbar gutter) in two passes; never hardcoded.", "A hardcoded height breaks on the first font or density change; a horizontal scrollbar steals 15px and clips row 10.", "friday-wip.astro:661-677", "2026-08-21"],
+  ["The show-more control states its cost: 'Show all 63 jobs ▾ (53 more)' / 'Show first 10 only ▴'.", "A reader should know what they are asking for.", "friday-wip.astro:722-724", "2026-08-21"],
+  ["Filters apply before paging: the ten shown are the first ten matching rows.", "Otherwise a filter could match rows the pane never shows.", "friday-wip.astro:711-714", "2026-08-21"],
+  ["Never pair overflow-x: auto with overflow-y: visible; use overflow: auto on both axes.", "A visible axis paired with a non-visible one computes to auto, so the pane silently becomes an unbounded scroll container and the sticky header anchors to nothing.", "standards/design/v1.md:122-126", "2026-08-21"],
+  ["Multi-row header offsets are measured; frozen-column selectors are scoped to thead tr:not(.fw-grouprow) / tbody; column-group colspan is recomputed on expand.", "Each of these failed at least once on the WIP/AR board (a 5px band of body rows above the header; a frozen column-group header; uncovered columns).", "standards/design/v1.md:127-136; context/memory/2026-08-21.md:302-306", "2026-08-21"],
+  ["Sticky cells need border-collapse: separate, and zebra/hover backgrounds are painted on td so frozen cells stay opaque.", "A transparent sticky cell shows the rows scrolling beneath it.", "context/memory/2026-08-18.md:7", "2026-08-18"],
+  ["Column-group expand state is global, not per office.", "So every table stays the same width and the eye can track a column down the page.", "friday-wip.astro:184-189", "2026-08-21"],
+  ["Line lists group into collapsible roof-system category sections, default-collapsed, ordered by sort_order; Uncategorized is visible, never hidden.", "Chris: 'the screens are a bit overwhelming'; Uncategorized is the honest bucket for not-yet-mapped items.", "docs/40 §5a", "2026-06-19"],
+  ["Never render a 15-wide table: headline columns as pills in the summary row, the rest in a labelled detail grid.", "Wide tables force horizontal scrolling past the columns that matter.", "docs/40 §5", ""],
+  ["A progress bar renders at every nesting level, rolled up from the deepest line; two leaf modes only (DISPOSITION from DB state, REVIEW from localStorage).", "Chris's ask, site-wide; reusing audit_status avoids a parallel checkbox.", "src/scripts/progress-checklist.ts:3-20", "2026-06-22"],
+  ["Default sort is money-first: offices/branches by at-risk desc, invoices by date then at-risk, lines by absolute variance desc; categories by DB sort_order.", "The most expensive thing is the first thing.", "src/lib/invoice-audit.ts:552-634", ""],
+  ["Every filtered list has an empty state that names the way out; no sample fallback, ever.", "The tree had none, so the default view could render blank.", "invoice-audit-tree.ts:856-870; docs/90:64-66", "2026-08-21"],
+  ["Numbers right-aligned with tabular numerals; labels left; no mixed alignments within a group; table-layout: fixed on the executive jobs table.", "Rows must align regardless of name length.", "global.css:3530-3536, :3643-3646", ""],
+  ["A wide table scrolls its own wrapper (overflow-x: auto) inside a surface that clips (overflow-x: clip), never the page or nav.", "Client report: the panel pushed under the left nav.", "invoice-audit.astro:202-209", "2026-06-28"],
+  ["Rows on WIP went from 67px to 29px; page height 4,465 → 1,021px; 3 → 11 visible rows.", "Measured at 1920×900 after Chris's screen recording of the scroll problems.", "context/memory/2026-08-21.md:295-298", "2026-08-21"],
+  ["Action text is shortened in the cell and spelled out in title; a column name that would widen past its numbers is abbreviated with the full name in the tooltip.", "The tallest thing in a row sets the row for every cell.", "friday-wip.astro:32-34, :207-209", "2026-08-21"],
+  ["List loaders paginate with .range(); a plain .select() caps at 1000 rows without an error.", "A silent undercount on money numbers.", "docs/40 §8; kpi-pills.ts:16-19; docs/95:52-58", ""],
+  ["Re-rendering an invoice body preserves which category sections are open.", "Chris: a 6-line review must not cost 12 clicks.", "invoice-audit-tree.ts:361-362", "2026-08-05"],
+];
+
+const feedback: Row[] = [
+  ["Chris approved the Estimate Audit pattern as the canonical look-and-feel: 'extremely well done, I want to use this.'", "Every new audit/drill-down surface matches it.", "docs/40:5-8", "2026-06-17"],
+  ["'Only have KPI boxes that take us to a better view or convey valuable information — too much causes cognitive overload.'", "The global work-queue status strip was removed for this reason.", "docs/40:65-71", "2026-06-17"],
+  ["Nav interview locked the IA: by department, then workflow within; accordion with one department open; Work Queue removed.", "Chris.", "context/memory/2026-06-17.md:292", "2026-06-17"],
+  ["Dashboard bake-off: V3 (queue cards + focused detail) won; dark mode is a per-dashboard toggle scoped to the surface, not a global theme.", "Chris.", "context/memory/2026-06-17.md:12", "2026-06-17"],
+  ["'The screens are a bit overwhelming' → category segmentation of line lists became a site-wide standard.", "Chris on Invoice Audit.", "docs/40:100-102", "2026-06-19"],
+  ["Punch-list IA-4/IA-5: Price List greys out when a branch has no negotiated lines; Price List + Invoice became matching left-justified pills; 'PDF' renamed 'Invoice'.", "Chris.", "context/memory/2026-06-19.md:216-217", "2026-06-19"],
+  ["TM-1: the logo spans the rail width (was 160px).", "Chris; verified 244px = nav button width.", "context/memory/2026-06-19.md:212; global.css:176-181", "2026-06-19"],
+  ["TM-2: expired agreements show [PA n] [Expired date] pills instead of reading as 'no agreement'.", "Chris.", "context/memory/2026-06-19.md:218", "2026-06-19"],
+  ["Full-bleed panel pushed under the left nav and past the right edge → bleed must equal main's 28px padding exactly.", "Client report.", "invoice-audit.astro:202-205", "2026-06-28"],
+  ["Lucinda authenticated but saw 'No export batches yet' while Chris saw the list → role gating removed from 17 surfaces (open access).", "A degraded empty experience for the primary user.", "docs/64; access-control.ts:445", "2026-06-29"],
+  ["'Only jobs with value should show' → zero-value jobs hidden from the executive drill-down with a caption.", "User feedback.", "src/lib/executive-pipeline.ts:271", "2026-07-03"],
+  ["'What's with the weird numbers for names' → numeric/GUID-ish job names treated as no name and never shown bare.", "User feedback.", "src/lib/executive-pipeline.ts:422-431", "2026-07"],
+  ["'Signed (7d)' KPI added; obeys the filter bar but not the window selector; trailing-7 pills are history-only.", "Dropping the milestone fallback removed a fake $1.5M closed-this-week spike from 71 jobs stamped the same day.", "src/lib/executive-pipeline.ts:249, :1671-1674", "2026-07-07"],
+  ["Leaderboard credits the rep at close, not at signing.", "Chris chose; Signed (7d) covers the signed-this-week view.", "context/memory/2026-07-07.md:14", "2026-07-07"],
+  ["Chris's review of the deployed Phase 3 dashboard: zero SRS/QXO invoices, no CM approval path, empty Price List button, CM link 404s → docs/82 remediation and the map lens cutover.", "The clickable inventory with verdicts.", "docs/82", "2026-08-05"],
+  ["'A 6-line review must not cost 12 clicks'; a checked variance line joins the credit-memo claim set; every claim line needs a human acknowledgment before Approve activates.", "Chris QA, corrected same day.", "invoice-audit-tree.ts:177-180, :361-362, :402-403", "2026-08-05"],
+  ["'No data → greyed with tooltip, pointer events kept alive.'", "Chris.", "invoice-audit-tree.ts:447; docs/88:33-35", "2026-08-09"],
+  ["'Every pill is a work queue with a count and a button. Numbers that never change what the human does next are context — they live in subtext.'", "Chris approved.", "src/lib/kpi-pills.ts:6-8", "2026-08-09"],
+  ["The Credit Memo pill reflects every vendor, one button per vendor, with written instructions for vendor N+1.", "Chris's directive.", "docs/88:3-7", "2026-08-09"],
+  ["Weekly CM page: vendor in the subject line and five context fields on every claim header, applied to Weekly and Sent so the surfaces cannot drift.", "Chris's mark-up.", "docs/100:111-133", "2026-08-21"],
+  ["Chris's screen recording of the WIP/AR scroll problems drove the navigation overhaul → the long-list rule.", "Measured before/after; four stacked sticky-header faults.", "context/memory/2026-08-21.md:287-325", "2026-08-21"],
+  ["'Audit every GUI surface and identify all data pills, links, tables, work surfaces that are not live' → the three-ring GUI rot audit; sample data classed as lying to the user; orphan and dead pages removed with reasons recorded.", "Chris.", "docs/84; docs/90; docs/91", "2026-08-05 → 08-19"],
+  ["CC ⇄ CRM parity review caught three drifts: 15px body (→ 14), Inter never loaded (→ @fontsource), purple segmented accent (→ navy / info).", "The only full UI/UX review of this app; lives in the sister repo.", "docs/111:12 → CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11; context/memory/2026-09-11.md", "2026-09-11"],
+  ["'Do not use Better Stack for third parties — just our active connections; if we ping JT and get a 200 it's green.'", "Chris; rewrote the runtime board's third-party group.", "docs/109 D16; integration-probes.server.ts:2", "2026-09-12"],
+  ["The SRS Wichita quote is the price agreement — recorded as a fact about the document (ceo_verified), never a per-vendor rule; the panel shows a quote was accepted, it does not hide what the document is.", "Chris ruled.", "docs/95:120-132", "2026-08-19"],
+];
+
+const actions: Row[] = [
+  ["At most one flag-red primary per viewport; a second high-emphasis action demotes to navy.", "DSN-012.", "standards/design/v1.md:42", ""],
+  ["Nothing leaves the building without a human: 'Mark sent' records that a human sent the email; it does not email.", "SOUL boundary.", "docs/100:262-264", ""],
+  ["Every stateful action is behind a confirm whose text states scope, effect and non-effects, and names every vendor or recipient.", "'This does not email anything. It records that you sent the email, moves them to Chase it, and starts the 14-day follow-up clock.'", "docs/100:249-257; friday-wip.astro:944", ""],
+  ["Approval is reversible until the weekly email generates; per-invoice 'Go back' re-pends lines and reverses internal effects only; after a reset the button removes itself.", "Recall of external comms is not possible, so it is not pretended.", "docs/82:39; docs/59 D3/D4; invoice-audit-tree.ts:288-328", ""],
+  ["Mark-sent is offered per vendor (the natural unit) and per invoice (a one-off).", "One email per vendor.", "docs/100:244-247", ""],
+  ["Post-action button state syncs through [data-kpi-btn] hooks, never a positional selector; state changes by clicking the switch, never by setting .checked.", "The positional version swapped the Due-Now Filter for an Export link; .checked does not fire change.", "docs/100:22-24, :41-46", "2026-08-21"],
+  ["Edits recalc locally and toast 'recalculated locally — not saved'; inline saves flash green (persisted) or red (rejected).", "The human must know what persisted.", "docs/40 §5; friday-wip.astro:498-499", ""],
+  ["Binding a line rejects its other candidates.", "A line is one product; two reviewers must not bind it twice.", "docs/103; categorize.astro:178", ""],
+  ["Interactive controls inside a summary stop propagation.", "Otherwise typing a rate collapses the group you are looking at.", "friday-wip.astro:755-758", ""],
+  ["The To Collect field clamps ('expecting to collect more than is owed is a typo, not a plan'); a passed planned date is marked, not cleared; currency reformats on blur, never per keystroke.", "Respect the caret and the estimate.", "friday-wip.astro:514-535", ""],
+  ["An office-level change reloads the page rather than patching cells one by one.", "It invalidates every row.", "friday-wip.astro:780-781", ""],
+  ["Agent and human actions are visually distinguished by badge (Alex, Maya, Lucinda).", "Provenance at a glance.", "docs/59:26; invoice-audit-tree.ts:41-43", ""],
+  ["The deploy gate is explain-then-ship: state the change, its impact and the rollback, then push.", "Agent ships; human reads.", "CONVENTIONS.md:110", "2026-06-29"],
+];
+
+const nav: Row[] = [
+  ["Nav is department-first, then workflow within; departments Accounting, Operations, Sales, Marketing, Executive, AI Agents.", "Chris's interview.", "context/memory/2026-06-17.md:292", "2026-06-17"],
+  ["nav.ts is a presentation layer, decoupled from cadence.ts departments; every leaf is built or soon; soon items render badged and never 404.", "Ship a surface by adding an href.", "src/lib/nav.ts:1-10", ""],
+  ["One department open at a time; the active department auto-expands by longest-prefix match.", "Accordion, not a wall.", "AppShell.astro:168-178; nav.ts:118-136", ""],
+  ["The rail collapses for wide boards; preference persists and is restored before first paint.", "Friday WIP/AR is why the toggle exists.", "global.css:122-131; AppShell.astro:62-63", ""],
+  ["Executive contains only the Pipeline dashboard; /executive redirects to it.", "Round 3, item G.", "src/lib/nav.ts:89-92", ""],
+  ["Retired surfaces stay as 301 stubs naming the successor; removing a route also edits the precache list and bumps the service-worker version.", "Deleting would create the broken links the audit exists to prevent.", "docs/91:50-56, :83", "2026-08-19"],
+  ["There are no breadcrumbs; eyebrow + h1 carry hierarchy.", "The tree is two levels deep.", "AppShell.astro:123-126", ""],
+  ["36 of 38 pages share AppShell; auth/denied and submit-agreement are the documented standalones.", "Consistency audit.", "docs/90:68-71", "2026-08-18"],
+  ["A duplicate surface is a defect (the second map page was removed); an orphan page is a defect the daily sweep flags.", "One path to each thing.", "docs/91:41-49; docs/92:19", ""],
+  ["/agents doubles as the shared 'is it up' surface for both the CC and the CRM.", "One board.", "docs/111:36", "2026-09-11"],
+  ["The design system lives at /design-system under AI Agents in the rail.", "Its audience is whoever builds the next surface.", "src/lib/nav.ts (2026-09-14)", "2026-09-14"],
+];
+
+const never: string[] = [
+  "Never use colour decoratively — colour always encodes status (docs/40).",
+  "Never leave a blank where data is unwired — grey TBD pill (docs/40 §3).",
+  "Never blank a missing field — name it: 'office not resolved' (docs/100).",
+  "Never render a blank page — every list has an empty state naming the way out (invoice-audit-tree.ts:856).",
+  "Never render a 15-wide table (docs/40 §5).",
+  "Never hide Uncategorized (docs/40 §5a).",
+  "Never hardcode a pane height, a sticky offset or a colspan (standards/design/v1.md).",
+  "Never pair overflow-x: auto with overflow-y: visible (standards/design/v1.md).",
+  "Never dump a drill-down link to the bare entry page (docs/40 §6).",
+  "Never present sample or fabricated data as live; the 'sample' status was deleted so it cannot be announced (docs/84, docs/91).",
+  "Never ship a module of invented SKUs or branches even if nothing renders it (docs/91).",
+  "Never a literal $ or % in page markup; the daily sweep fails on one (docs/90, docs/92).",
+  "Never fabricate a variance across mismatched units — 'Review (UOM)' (CONVENTIONS §10c).",
+  "Never show an aggregate that crosses a vendor or office silo (CONVENTIONS §10b).",
+  "Never pointer-events: none on a control with a tooltip (docs/88).",
+  "Never find a button by position; never set .checked and expect the UI to follow (docs/100).",
+  "Never introduce a token, hex, font or radius outside the system (DSN-010, DSN-014).",
+  "Never swap a brand colour's role; never make gold a button or the CTA green (DSN-011).",
+  "Never monospace outside Property Cards and SKU cells (DSN-013).",
+  "Never mix xl and sm radii in one group (DSN-015).",
+  "Never use the Phase 2 typeface before the token changes (DSN-020); never a partial font update (DSN-016).",
+  "Never a decorative or vanity KPI (docs/40 §4).",
+  "Never read the audit through v_invoice_audit_line; use the materialised view (CONVENTIONS §10b).",
+  "Never trust an unranged PostgREST select in a loader (docs/40 §8).",
+  "Never let the mouse wheel change owner except as the result of a click (standards/design/v1.md).",
+  "Never special-case a vendor to make a number look right (CONVENTIONS §10b).",
+  "Never mix a row that needs a system fix with one that needs a phone call (docs/103).",
+  "Never store a derived figure; compute it live (friday-wip.astro:250-252).",
+  "Never delete rows that fall off a board — flag them (docs/85, docs/103).",
+  "Never reformat a currency field on every keystroke (friday-wip.astro:532-535).",
+  "Never block the app shell on the cache worker (AppShell.astro:262).",
+  "Never profanity anywhere — docs, prompts, seed data, comments (CONVENTIONS §8).",
+];
+---
+
+<DesignSystemShell slug="decisions" source="docs/40 · docs/82 · docs/84 · docs/90 · docs/91 · docs/96 · docs/100 · docs/109 · standards/design/v1.md · context/memory/*">
+  <p class="ds-callout">
+    <b>How to use this log</b>
+    Each row is a decision, the reason, and where it is recorded. Before changing a surface, search this page for the
+    surface and the control. A decision here is reversed only with new user evidence, and the reversal is added as a new
+    row — rows are never deleted. Dates are when the decision was recorded.
+  </p>
+
+  <DsSection id="nesting" title="Office / vendor / branch nesting">
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Decision</th><th>Why</th><th>Recorded</th><th>When</th></tr></thead><tbody>{nesting.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+    <div class="ds-rules">
+      <DsRule id="UX-01" title="Every accounting and operations surface nests PE Office → Vendor Branch → Document → Line; a new surface that lists money nests the same way." source="invoice-audit-tree.ts:1; docs/96">
+        <p>Vendor before branch, branch before document. The office is the first level because price agreements are office silos.</p>
+      </DsRule>
+      <DsRule id="UX-02" title="Aggregates shown to a human are office-scoped; nothing on screen sums across a vendor or office silo." source="CONVENTIONS §10b">
+        <p>"All offices" hides nothing and adds nothing.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="filters" title="Filter rules">
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Decision</th><th>Why</th><th>Recorded</th><th>When</th></tr></thead><tbody>{filters.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+    <div class="ds-rules">
+      <DsRule id="UX-03" title="One office select, one scope control, one search, one 'More filters' disclosure; filters AND in one pass; the toolbar names the active filter with a clear control." source="docs/100; invoice-audit.astro toolbar">
+        <p>"All" is the empty value and means no constraint.</p>
+      </DsRule>
+      <DsRule id="UX-04" title="Deep links carry scope and pre-filter on land; an unknown scope shows an honest empty result." source="docs/40 §6; invoice-audit-tree.ts:936-959">
+        <p>Scroll the landed node into view and flash it once.</p>
+      </DsRule>
+      <DsRule id="UX-05" title="Filters, reveal and open state persist per surface in localStorage." source="standards/design/v1.md:110-112">
+        <p>A planning surface looks the way it was left.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="table-decisions" title="Table rules">
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Decision</th><th>Why</th><th>Recorded</th><th>When</th></tr></thead><tbody>{tables.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+    <div class="ds-rules">
+      <DsRule id="UX-06" title="Ten rows, measured pane, cost-stating control, filters before paging, sticky header rules — the long-list contract applies to every unbounded list." source="standards/design/v1.md § Long-list disclosure">
+        <p>Outstanding adopters: Invoice Audit, Price List Review, Categorize Price Lines, Credit Memos, Agreement Builder.</p>
+      </DsRule>
+      <DsRule id="UX-07" title="Group before you widen: category sections for lines, pills + detail grid instead of wide tables, global column-group state." source="docs/40 §5, §5a; friday-wip.astro:184-189">
+        <p>Uncategorized stays visible.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="feedback" title="Feedback-driven changes">
+    <p>What a person said or did, and what changed because of it. This is the evidence that outranks any preference (see <a href="/design-system/#user-first">User over designer</a>).</p>
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Evidence</th><th>Effect</th><th>Recorded</th><th>When</th></tr></thead><tbody>{feedback.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+    <div class="ds-rules">
+      <DsRule id="UX-08" title="A recorded observation of a user failing or working around a screen outranks every preference; the change and its evidence are logged here." source="this chapter">
+        <p>Two regressions were caught only by opening the page in a browser (positional selector, innerHTML wiping a KPI). Open the page.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="actions" title="Actions & approval gates">
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Decision</th><th>Why</th><th>Recorded</th><th>When</th></tr></thead><tbody>{actions.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+    <div class="ds-rules">
+      <DsRule id="UX-09" title="Human-in-the-loop is visible in the UI: the app records that a human acted, states the non-effects in the confirm, and never sends, pays or writes externally on its own." source="SOUL; docs/100; docs/74 (QBO read-only)">
+        <p>The Communications Dashboard (docs/45) is the designed, unbuilt central gate; until it exists each surface carries its own confirm.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="nav-decisions" title="Navigation">
+    <div class="ds-table-wrap"><table class="ds-table"><thead><tr><th>Decision</th><th>Why</th><th>Recorded</th><th>When</th></tr></thead><tbody>{nav.map((r) => <tr><td>{r[0]}</td><td>{r[1]}</td><td><code>{r[2]}</code></td><td class="nowrap">{r[3]}</td></tr>)}</tbody></table></div>
+  </DsSection>
+
+  <DsSection id="never" title="Never-do list">
+    <p>Every explicit "never" recorded in the repo, in one place.</p>
+    <ol>{never.map((n) => <li>{n}</li>)}</ol>
+    <div class="ds-rules">
+      <DsRule id="UX-10" title="A rule on this page is reversed only by a new row citing new user evidence; rows are never deleted." source="this chapter">
+        <p>An agent that finds a rule inconvenient records the tension and asks; it does not quietly diverge.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

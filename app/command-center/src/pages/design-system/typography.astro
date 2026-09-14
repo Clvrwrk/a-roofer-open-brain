@@ -1,0 +1,239 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+import { token } from "@lib/design-system/tokens";
+
+const fontSans = token("--font-sans")?.resolved ?? "";
+
+// The ramp as it ships. Each row is measured from global.css / Design.md / the audit
+// surfaces; "surface" says where the step is used so a builder picks by context, not by taste.
+const ramp = [
+  { step: "Display", px: "clamp(30px, 3vw, 44px)", weight: "800", lh: "1.05", track: "−0.02em", surface: "Public / masthead view titles only (Design.md). Not used inside the Command Center chrome.", sample: "Every invoice, audited." },
+  { step: "Stat", px: "28–30px", weight: "800", lh: "1.05", track: "−0.02em", surface: ".live-metric-card strong (28px), .metric strong (30px)", sample: "$48,210" },
+  { step: "Page title (h1)", px: "28px", weight: "700", lh: "1.15", track: "0", surface: "Top bar h1 (AppShell)", sample: "Invoice Audit" },
+  { step: "Executive KPI value", px: "24px", weight: "800", lh: "1.1", track: "0", surface: ".epl-kpi-val — one step above the audit KPI so the executive board reads bigger", sample: "$1,482,300" },
+  { step: "Audit KPI value", px: "22px", weight: "750", lh: "1.1", track: "0", surface: ".iv-kpi-val, .fw-kpi-val (17px on cash surfaces)", sample: "51 → 32 → 3" },
+  { step: "Section heading (h2)", px: "20px", weight: "600–700", lh: "1.2", track: "0", surface: "h2 in content; .section-head h3 in Design.md", sample: "Work ready for review" },
+  { step: "Board title", px: "18px", weight: "700", lh: "1.25", track: "0", surface: ".fw-title, .cfx-title", sample: "Friday AR Meeting board" },
+  { step: "Rail brand", px: "17px", weight: "700", lh: "1.2", track: "0", surface: ".brand-lockup strong", sample: "Pro Exteriors" },
+  { step: "Value", px: "15–16px", weight: "700", lh: "1.25", track: "0", surface: ".vmpop-title, .iv-mini strong, cash KPI values", sample: "ABC Supply · Denver" },
+  { step: "Body", px: "14px", weight: "400", lh: "1.5", track: "0", surface: "Default. Nav links, table rows in the shell, inputs.", sample: "The pane is exactly ten rows tall." },
+  { step: "Section h3", px: "14px", weight: "700", lh: "1.3", track: "0", surface: "h3 in cards and panels", sample: "Claim it" },
+  { step: "Meta / board body", px: "12.5–13px", weight: "400", lh: "1.45", track: "0", surface: "Board tables (td), notes, .logout-button, toolbar selects", sample: "Set expected cash dates · 3-week cash map" },
+  { step: "Label caps", px: "12px", weight: "700", lh: "1.3", track: "0 (shell) / 0.1em (Design.md eyebrow)", surface: ".eyebrow, .rail-label, table th in the shell", sample: "ACCOUNTING · INVOICE AUDIT" },
+  { step: "Pill", px: "11px", weight: "600–700", lh: "1.5", track: "0", surface: ".pill, .health-badge, .vmpop-chip", sample: "Ready" },
+  { step: "Board header caps", px: "10–11px", weight: "600–700", lh: "1.25", track: "0.03–0.04em", surface: "Board th, .iv-kpi-lab, .cfx-kpi-lab, .vmpop-eyebrow", sample: "EST EXP OUTSTANDING" },
+  { step: "Micro", px: "10–10.5px", weight: "600–700", lh: "1.3", track: "0.02–0.04em", surface: ".soon-badge, .vmpop-kpi span, .cfx-kpi-sub. Floor for any text.", sample: "SOON" },
+];
+---
+
+<DesignSystemShell slug="typography" source="app/command-center/src/styles/global.css">
+  <DsSection id="family" title="Family & loading">
+    <p>
+      One family, <strong>Inter</strong>, in four weights (400, 600, 700, 800), self-hosted through <code>@fontsource/inter</code>
+      and imported once in the shell. Inter was declared in <code>--font-sans</code> from day one but not loaded until
+      2026-09-11, so every surface rendered the system fallback — the drift was caught in the CC ⇄ CRM parity review. Any
+      new shell or standalone page must import the four weights or it will silently fall back again.
+    </p>
+    <div class="ds-pre"><code>--font-sans: {fontSans};</code></div>
+    <DsSpec label="The four weights" code="@fontsource/inter 400 · 600 · 700 · 800" layout="stack">
+      <p style="font-size:28px;font-weight:400;line-height:1.2;margin:0">Regular 400 — body copy, table cells, inputs</p>
+      <p style="font-size:28px;font-weight:600;line-height:1.2;margin:0">Semibold 600 — pills, section h3 in Design.md, toolbar buttons</p>
+      <p style="font-size:28px;font-weight:700;line-height:1.2;margin:0">Bold 700 — headings, labels caps, table headers</p>
+      <p style="font-size:28px;font-weight:800;line-height:1.2;margin:0">Extra bold 800 — stats, KPI values, buttons</p>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Context</th><th>Family</th><th>Fallback</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>App & web</td><td>Inter (self-hosted, woff2)</td><td>ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif</td><td>Metrics close to Inter so a failed load does not reflow badly.</td></tr>
+          <tr><td>Email</td><td>Inter where supported, else Arial / Helvetica</td><td>Arial, Helvetica, sans-serif</td><td>Most clients strip webfonts; design for Arial.</td></tr>
+          <tr><td>Print</td><td>Inter (embedded in the PDF)</td><td>—</td><td>Embed; never rely on the printer's fonts.</td></tr>
+          <tr><td>Code / identifiers</td><td>ui-monospace, SFMono-Regular, Menlo, Consolas</td><td>monospace</td><td>Mono is restricted (T-08): SKUs in audit tables, and documentation code. Never body copy.</td></tr>
+          <tr><td>Phase 2 (not yet)</td><td>Archivo for display</td><td>—</td><td>DSN-020: only when the brand token changes. No pre-emptive use.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="ramp" title="The ramp">
+    <p>Sizes are chosen by the job the text does, not by heading level. The ramp below is every step that ships, largest first, with the surface each belongs to. A new surface picks from this list; a size that is not on it needs a rule change, not a one-off.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Step</th><th>Size</th><th class="num">Weight</th><th>Line</th><th>Tracking</th><th>Where</th><th>Specimen</th></tr></thead>
+        <tbody>
+          {ramp.map((r) => (
+            <tr>
+              <td class="nowrap"><strong>{r.step}</strong></td>
+              <td class="nowrap"><code>{r.px}</code></td>
+              <td class="num">{r.weight}</td>
+              <td class="nowrap">{r.lh}</td>
+              <td class="nowrap">{r.track}</td>
+              <td>{r.surface}</td>
+              <td class="nowrap"><span style={`font-size:${String(r.px).includes("clamp") ? "34px" : String(r.px).split("–")[0].replace("px", "") + "px"};font-weight:${String(r.weight).split("–")[0]};line-height:1.1;letter-spacing:${r.track.startsWith("−") ? "-0.02em" : r.track.includes("0.1") ? "0.1em" : r.track.includes("0.03") ? "0.03em" : "0"};${/caps|Label|Micro|Pill/.test(r.step) ? "text-transform:uppercase;" : ""}${r.step.includes("Stat") || r.step.includes("KPI") ? "font-variant-numeric:tabular-nums;" : ""}`}>{r.sample}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <h3>Reading the ramp</h3>
+    <ul>
+      <li><strong>Board surfaces run one step smaller than the shell.</strong> Body 12.5–13px, headers 10–11px caps. Density is the point of a board; the shell's 14px body is for reading, not scanning.</li>
+      <li><strong>Executive reads one step larger than audit.</strong> KPI 24px vs 22px. An owner glances; an auditor works.</li>
+      <li><strong>Nothing below 10px, ever.</strong> 10px appears only in uppercase 600+ labels with tracking, never in sentence case.</li>
+      <li><strong>The h-tag is semantic, the class is visual.</strong> The top bar's <code>h1</code> is 28px; a board's <code>h2.fw-title</code> is 18px. Pick the heading level for the outline, the size for the job.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="weights" title="Weights">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th class="num">Weight</th><th>Owns</th><th>Never</th></tr></thead>
+        <tbody>
+          <tr><td class="num">400</td><td>Body, table cells, notes, inputs, meta</td><td>Anything under 12px (too light to render)</td></tr>
+          <tr><td class="num">600</td><td>Pills, toolbar buttons, active-state labels, Design.md section h3</td><td>Body copy emphasis — use 700 for <code>strong</code></td></tr>
+          <tr><td class="num">700</td><td>Headings, eyebrows, table headers, <code>strong</code>, nav active, group names</td><td>Long paragraphs</td></tr>
+          <tr><td class="num">750</td><td>Audit KPI values only (<code>.iv-kpi-val</code>) — a variable-font intermediate</td><td>New use; prefer 800</td></tr>
+          <tr><td class="num">800</td><td>Stats, KPI values, buttons, board legends</td><td>Text over 2 lines</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Italic is not used in the interface. The <code>em</code> element renders non-italic (metric delta notes) — emphasis in a data surface is weight or colour, never slant. The only italic in the brand is the logo's wordmark.</p>
+  </DsSection>
+
+  <DsSection id="tracking" title="Tracking, kerning & case">
+    <p>Tracking is opt-in per component: <code>:root</code> sets <code>letter-spacing: 0</code> so nothing inherits a surprise.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Text</th><th>Tracking</th><th>Case</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Display and stats ≥ 28px, weight 800</td><td class="nowrap">−0.02em</td><td>Sentence / numerals</td><td>Inter's default fit is loose at display sizes; tightening keeps large numbers compact.</td></tr>
+          <tr><td>Headings 18–24px</td><td class="nowrap">−0.01em to 0</td><td>Sentence case</td><td>Title Case reads as marketing; the app uses sentence case for every heading and button.</td></tr>
+          <tr><td>Body 12.5–14px</td><td class="nowrap">0</td><td>Sentence case</td><td>Inter is tuned for 0 at text sizes.</td></tr>
+          <tr><td>Label caps 12px (shell eyebrow, rail label)</td><td class="nowrap">0 (shell) · 0.06em (design-system rail) · 0.1em (Design.md)</td><td>UPPERCASE</td><td>Uppercase needs air; the shell chose 0 for density on the top bar, the spec allows up to 0.1em on a masthead. Pick one per surface and keep it.</td></tr>
+          <tr><td>Board header caps 10–11px</td><td class="nowrap">0.03–0.04em</td><td>UPPERCASE</td><td>Below 12px uppercase collapses without tracking.</td></tr>
+          <tr><td>Pills 11px</td><td class="nowrap">0</td><td>Sentence or Title as the status word demands ("In Review", "PA 1042")</td><td>Pills are read as a word, not scanned as a column.</td></tr>
+          <tr><td>Tabular numbers</td><td class="nowrap">0</td><td>—</td><td><code>font-variant-numeric: tabular-nums</code> does the aligning; tracking would break the columns.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Kerning</h3>
+    <ul>
+      <li>Kerning is the font's, always on (<code>font-kerning: normal</code> is the browser default; never set <code>none</code>).</li>
+      <li>Never hand-kern interface text. The one hand-kerned object is the logo's EXTERIORS (+1 unit at 74px in the stand-in SVG), and that lives in the artwork, not in CSS.</li>
+      <li>Do not fake small caps with <code>font-variant: small-caps</code>; Inter has none and the browser synthesises them badly. Use real uppercase at a label size.</li>
+      <li>Optical sizing: Inter's static weights are used; do not enable <code>font-optical-sizing</code> tricks or variable-axis widths — the ramp is tuned for the static cuts.</li>
+    </ul>
+    <DsSpec label="Case in practice" layout="stack">
+      <p style="margin:0"><span class="eyebrow">Accounting · Invoice Audit</span></p>
+      <p style="margin:0;font-size:28px;font-weight:700;color:var(--ds-heading);line-height:1.15">Invoice Audit</p>
+      <p style="margin:0">Buttons and headings are sentence case: <button class="button button-secondary button-small">Download pack</button> <button class="button button-ghost button-small">Show all 63 jobs ▾ (53 more)</button></p>
+    </DsSpec>
+  </DsSection>
+
+  <DsSection id="numerals" title="Numerals & money">
+    <p>Numbers are the first-class object on every board. The rules make columns of them comparable at a glance.</p>
+    <div class="ds-grid-2">
+      <DsSpec label="Tabular vs proportional numerals" layout="stack">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div><p class="eyebrow" style="margin-bottom:6px">tabular-nums (required)</p><div style="font-variant-numeric:tabular-nums;text-align:right;font-size:14px;line-height:1.6"><div>$12,480.00</div><div>$1,111.11</div><div>$948,000.75</div><div>$0.00</div></div></div>
+          <div><p class="eyebrow" style="margin-bottom:6px">proportional (forbidden in columns)</p><div style="font-variant-numeric:proportional-nums;text-align:right;font-size:14px;line-height:1.6"><div>$12,480.00</div><div>$1,111.11</div><div>$948,000.75</div><div>$0.00</div></div></div>
+        </div>
+      </DsSpec>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th>Value</th><th>Format</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>Money in a table</td><td>Right-aligned, tabular, 2 decimals, thousands separator, currency symbol from the formatter (never a literal <code>$</code> in markup)</td><td class="num" style="font-variant-numeric:tabular-nums">$12,480.00</td></tr>
+            <tr><td>Money on a KPI or chart axis</td><td>Compact: $5K · $50K · $500K · $1.2M — never full precision</td><td class="num">$1.2M</td></tr>
+            <tr><td>Negative money</td><td>Leading minus, error-family colour; parentheses are accounting-export only</td><td class="num" style="color:var(--error)">−$1,240.00</td></tr>
+            <tr><td>Percent</td><td>Right-aligned, 0–1 decimals, symbol from the formatter</td><td class="num">36.4%</td></tr>
+            <tr><td>Quantity with UOM</td><td>Number then unit, one space: <code>12 SQ</code>; never converted across units in the UI</td><td class="num">12 SQ</td></tr>
+            <tr><td>Counts in controls</td><td>Plain integer, state the denominator: "5 of 12", "(53 more)"</td><td>5 of 12</td></tr>
+            <tr><td>Dates</td><td>ISO in data attributes; <code>Sep 12, 2026</code> in prose; <code>09/12</code> only inside a dated cash-map cell</td><td>Sep 12, 2026</td></tr>
+            <tr><td>Days-in-status</td><td>Integer + "d" in a chip whose colour runs green (0d) → red (365d+), clamped</td><td>142d</td></tr>
+            <tr><td>Missing</td><td>Grey <code>TBD</code> pill or an em dash "—", never "0" or blank, never "0%" for zero coverage</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </DsSection>
+
+  <DsSection id="measure" title="Measure & line height">
+    <ul>
+      <li><strong>Reading copy:</strong> 60–76 characters per line. The content rail caps at 72rem for this reason; notes on boards cap at <code>max-width: 110ch</code> because they are scanned, not read.</li>
+      <li><strong>Line height by size:</strong> 1.5 at body, 1.45 at 12.5–13px meta, 1.25–1.3 for headings and values, 1.05–1.1 for stats. Tighter as it grows.</li>
+      <li><strong>Table rows:</strong> the tallest cell sets the row. Long action text is shortened in the cell and spelled out in <code>title</code>; a column name that would widen past its numbers is abbreviated with the full name in the tooltip (WIP: "Est Exp Outstanding").</li>
+      <li><strong>Truncation:</strong> single-line <code>text-overflow: ellipsis</code> for names and reps (WIP rep column at 110px); never truncate a number.</li>
+      <li><strong>Wrapping:</strong> <code>white-space: nowrap</code> on every board cell so a wide table scrolls instead of stacking; prose uses <code>text-wrap: pretty</code> where supported.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="mobile-print" title="Mobile & print ramps">
+    <div class="ds-grid-2">
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="3">Mobile (≤ 820px)</th></tr><tr><th>Step</th><th>Desktop</th><th>Mobile</th></tr></thead>
+          <tbody>
+            <tr><td>Page title</td><td>28px</td><td>22px</td></tr>
+            <tr><td>KPI value</td><td>22–24px</td><td>20px</td></tr>
+            <tr><td>Body</td><td>14px</td><td>15px (never below 14 on a phone; iOS zooms inputs under 16px, so inputs are 16px)</td></tr>
+            <tr><td>Board body</td><td>12.5–13px</td><td>13px, with rows becoming cards below 600px (see <a href="/design-system/mobile#tables-mobile">Mobile</a>)</td></tr>
+            <tr><td>Label caps</td><td>10–12px</td><td>11–12px; 10px only with 0.04em tracking</td></tr>
+            <tr><td>Inputs</td><td>13–14px</td><td>16px — prevents the iOS auto-zoom</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th colspan="3">Print (pt)</th></tr><tr><th>Step</th><th>Size</th><th>Note</th></tr></thead>
+          <tbody>
+            <tr><td>Poster headline</td><td>60pt+</td><td>Reads across a room; one dominant element</td></tr>
+            <tr><td>Brochure headline</td><td>24–32pt</td><td>800 weight, −0.02em</td></tr>
+            <tr><td>Subhead</td><td>14–18pt</td><td>700</td></tr>
+            <tr><td>Body</td><td>10.5–12pt</td><td>12pt floor for anything a homeowner must read; 10.5pt only on dense estimate line tables</td></tr>
+            <tr><td>Caption / legal</td><td>8–9pt</td><td>Never below 8pt; 100K ink</td></tr>
+            <tr><td>Table numerals</td><td>9–10pt tabular</td><td>Right-aligned, hairlines ≥ 0.25pt</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </DsSection>
+
+  <DsSection id="type-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="T-01" title="One family: Inter, four weights, self-hosted. Any shell or standalone page imports all four." source="AppShell.astro:1-7; CC-PARITY-UX-REVIEW 4.11 (2026-09-11)">
+        <p>A page that forgets the import renders the fallback silently. Check the computed font on a new page before shipping.</p>
+      </DsRule>
+      <DsRule id="T-02" title="Body is 14px / 1.5 in the shell; 12.5–13px / 1.45 on boards. Nothing under 10px, and 10px only as tracked uppercase." source="global.css body; docs/40 §2; drift caught 2026-09-11 (was 15px)">
+        <p>Inputs on a phone are 16px to stop iOS zooming.</p>
+      </DsRule>
+      <DsRule id="T-03" title="Every money, quantity and percent cell is right-aligned with tabular numerals." source="docs/40 §2; global.css .epl-* 'no mixed alignments'">
+        <p>Labels left, numbers right, never mixed within a column group.</p>
+      </DsRule>
+      <DsRule id="T-04" title="Sentence case everywhere except label caps. No Title Case headings or buttons." source="this chapter; existing surfaces">
+        <p>Uppercase is reserved for eyebrows, rail labels, table headers and KPI labels, always with a deliberate tracking value.</p>
+      </DsRule>
+      <DsRule id="T-05" title="Tracking is opt-in per component; :root is 0." source="global.css :root letter-spacing: 0">
+        <p>−0.02em for 800-weight display and stats; +0.03–0.04em for caps under 12px; 0 otherwise.</p>
+      </DsRule>
+      <DsRule id="T-06" title="No italics in the interface; emphasis is weight or colour." source="Design.md metric card (em non-italic)">
+        <p>The logo's wordmark is the only italic in the brand.</p>
+      </DsRule>
+      <DsRule id="T-07" title="Never a literal currency or percent symbol in markup; every figure comes from the formatter." source="docs/90 §, docs/92 daily sweep (zero literal $ / %)">
+        <p>The daily site sweep fails on one literal <code>$</code>.</p>
+      </DsRule>
+      <DsRule id="T-08" title="Monospace is restricted: Property Card surfaces (DSN-013), SKU / item-number cells on audit tables, and documentation code." source="standards/design/v1.md DSN-013; invoice-audit.astro:358">
+        <p>The SKU cell is a recorded exception to DSN-013, tolerated because an item number is an identifier the user copies. Do not widen it.</p>
+      </DsRule>
+      <DsRule id="T-09" title="Pick a heading level for the outline and a size for the job; they are independent." source="this chapter">
+        <p>A board's <code>h2</code> can be 18px; the shell's <code>h1</code> is 28px.</p>
+      </DsRule>
+      <DsRule id="T-10" title="Long text is shortened in the cell and completed in the tooltip; numbers are never truncated." source="friday-wip.astro:32-34, :207-209">
+        <p>The tallest thing in a row sets every row; keep actions and column names short.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

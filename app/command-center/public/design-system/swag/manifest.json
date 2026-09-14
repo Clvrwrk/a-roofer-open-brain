@@ -1,0 +1,110 @@
+{
+  "pen": {
+    "title": "Click pen",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A white plastic retractable click pen with a navy clip and navy click button, the logo pad-printed in full colour along the barrel, lying at a slight angle beside a second identical pen standing in a clear acrylic holder.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:31:35.608Z"
+  },
+  "marker": {
+    "title": "Permanent marker",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A navy-bodied chisel-tip permanent marker with a navy cap, the logo printed in white knockout along the barrel (one-colour white version: the whole lockup in white), cap removed and resting beside it, on a workshop bench.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:31:58.499Z"
+  },
+  "magnet": {
+    "title": "Refrigerator magnet",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A rectangular 3.5 by 2 inch glossy refrigerator magnet with rounded corners: white background, the full-colour logo centred, a thin gold rule beneath it and the phone-number line left blank as an empty white strip. Photographed on a stainless-steel refrigerator door with a soft reflection.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:32:19.830Z"
+  },
+  "hard-hat": {
+    "title": "Hard hat",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A white safety hard hat with the full-colour logo decal on the front, photographed three-quarter view on a job-site plank with blurred shingles behind.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:32:44.840Z"
+  },
+  "polo": {
+    "title": "Crew polo",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A navy pique polo shirt on a ghost mannequin, the logo embroidered on the left chest in the one-colour white version (entire lockup in white thread, roughly 3.5 inches wide), front view, studio lighting.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:33:07.301Z"
+  },
+  "tshirt": {
+    "title": "Crew t-shirt",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A heather-grey cotton t-shirt laid flat with the full-colour logo screen-printed large across the chest, about 10 inches wide, top-down photograph.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:33:35.385Z"
+  },
+  "yard-sign": {
+    "title": "Yard sign",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. An 18 by 24 inch corrugated plastic yard sign on an H-stake in a suburban front lawn: white background, the full-colour logo large at the top, a navy band across the bottom left blank, photographed at eye level with a house and new roof softly out of focus behind.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:34:00.917Z"
+  },
+  "truck-door": {
+    "title": "Truck door decal",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A white pickup truck door with the full-colour logo as a vinyl decal about 20 inches wide, centred on the door panel, photographed side-on in daylight in a driveway.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:34:23.469Z"
+  },
+  "mug": {
+    "title": "Coffee mug",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A white ceramic 11 oz coffee mug with a navy handle and navy interior, the full-colour logo printed on the side facing the camera, sitting on a light wood desk.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:34:46.762Z"
+  },
+  "notepad": {
+    "title": "Estimate notepad",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A 5.5 by 8.5 inch white notepad with the full-colour logo printed small at the top-left header and thin navy ruled lines below, a navy click pen resting on it, photographed top-down on a clipboard.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:35:12.375Z"
+  },
+  "cap": {
+    "title": "Crew cap",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A navy structured baseball cap with the one-colour white version of the logo embroidered on the front panel, three-quarter view on a plain surface.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:35:36.112Z"
+  },
+  "sticker": {
+    "title": "Die-cut sticker",
+    "model": "openai/gpt-image-2.5/flare/edit",
+    "prompt": "Brand: Pro Exteriors LLC, a roofing and exterior contractor. Reproduce the attached logo exactly as supplied: a navy roof-line silhouette with the word PRO in navy inside a white panel, the word EXTERIORS in flag red bold italic capitals, and a small LLC. Brand inks are deep navy (#11133F, Pantone 2766 C) and flag red (#C22326, Pantone 186 C); accent gold (#EAA221, Pantone 1235 C) may appear only as a thin rule or trim. No other logo, no extra text, no fake taglines, no watermarks. Product photography style: studio lighting, neutral light-grey seamless background, sharp focus, realistic materials. A die-cut vinyl sticker of the logo with a 2 millimetre white border following the outline of the lockup, peeling slightly off its backing paper, photographed close up.",
+    "reference": "config/brand/assets/logo_color.png",
+    "width": null,
+    "height": null,
+    "renderedAt": "2026-09-14T17:36:01.452Z"
+  }
+}

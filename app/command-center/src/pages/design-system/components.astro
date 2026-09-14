@@ -1,0 +1,564 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+import DsToken from "../../components/design-system/DsToken.astro";
+// The cash-family stylesheet is the shareable copy of the canonical board vocabulary
+// (.fw on Friday WIP/AR is page-scoped). Importing it lets the board specimens below
+// render with production CSS rather than a re-creation.
+import "../../styles/cash-surface.css";
+
+const jobs = [
+  ["J-10412", "Anderson re-roof", "Denver", "R. Ortiz", "$18,420.00", "$4,200.00", "Sep 19", "Collect"],
+  ["J-10398", "Maple St. hail", "Denver", "T. Nguyen", "$27,900.00", "$27,900.00", "Sep 26", "Invoice"],
+  ["J-10377", "Willow Ct. gutters", "Denver", "R. Ortiz", "$3,150.00", "$0.00", "—", "Closed"],
+  ["J-10360", "Birch Ave. siding", "Fort Collins", "A. Patel", "$41,000.00", "$12,500.00", "Oct 3", "Collect"],
+  ["J-10351", "Elm Dr. re-roof", "Denver", "T. Nguyen", "$22,780.00", "$22,780.00", "Sep 30", "Invoice"],
+];
+---
+
+<DesignSystemShell slug="components" source="app/command-center/src/styles/global.css">
+  <p class="ds-callout is-info">
+    <b>How to read a specimen</b>
+    Every frame below is production markup styled by production CSS. Switch the theme in the top bar to see the dark
+    variant. The code in each frame's header is the selector to use; anatomy and states follow, then the rule cards at
+    the end carry the ids to cite.
+  </p>
+
+  <DsSection id="buttons" title="Buttons">
+    <p>Four variants in a strict hierarchy. Exactly one primary per viewport (C-02). Buttons are sentence case, 800 weight, 44px minimum height in the shell, 30px for the small size on boards.</p>
+    <DsSpec label="Shell buttons" code=".button + .button-primary | -secondary | -ghost | -danger">
+      <button class="button button-primary">Approve credit memo</button>
+      <button class="button button-secondary">Run audit</button>
+      <button class="button button-ghost">Reset demo state</button>
+      <button class="button button-danger">Reject</button>
+    </DsSpec>
+    <DsSpec label="Small size and disabled" code=".button-small · :disabled keeps pointer events for the tooltip">
+      <button class="button button-primary button-small">Approve</button>
+      <button class="button button-secondary button-small">Download pack</button>
+      <button class="button button-ghost button-small">Filter</button>
+      <button class="button button-secondary button-small" style="opacity:.45;filter:grayscale(.2);cursor:not-allowed" title="No data — greyed with tooltip, pointer events kept alive" aria-disabled="true">Process (no data)</button>
+    </DsSpec>
+    <DsSpec label="Board buttons" code=".cfx-btn · .cfx-btn-primary (board-local primary, teal)" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px"><div class="cfx-toolbar"><a class="cfx-btn" href="#buttons">Download pack</a><a class="cfx-btn" href="#buttons">Accrual snapshot CSV</a><button class="cfx-btn cfx-btn-primary" type="button">Email via Maya</button></div></div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Variant</th><th>Fill / ink</th><th>Use</th><th>Hover</th><th>Height</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Primary</strong></td><td>flag red / white</td><td>The single affirmative action in view: Approve, Send, Mark sent, Email via Maya</td><td>tertiary-container (#9b1c1f)</td><td>44 / 30</td></tr>
+          <tr><td><strong>Secondary</strong></td><td>navy / white</td><td>High-emphasis secondary when a primary already exists: Run audit, Download pack</td><td>primary-container</td><td>44 / 30</td></tr>
+          <tr><td><strong>Ghost</strong></td><td>surface, navy ink, 1px border</td><td>Neutral and inline actions: Filter, Reset, Clear, Show all</td><td>surface-alt fill</td><td>44 / 30</td></tr>
+          <tr><td><strong>Destructive</strong></td><td>error-surface / error-text</td><td>Reject, delete, un-approve</td><td>darker error surface</td><td>44 / 30</td></tr>
+          <tr><td><strong>Board primary</strong></td><td>teal #0f766e / white (WIP, cash)</td><td>The one board-local primary; counts as the viewport's primary</td><td>#115e59</td><td>32</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-dodont">
+      <div class="ds-do"><h4>Do</h4><ul><li>Label with the verb and the object: "Mark sent", "Approve claim".</li><li>State the non-effects in the confirm: "This does not email anything."</li><li>Grey a button that has no data and keep its tooltip alive.</li><li>Put a link that downloads (<code>a.cfx-btn</code>) in the same row as buttons; they share the class.</li></ul></div>
+      <div class="ds-dont"><h4>Don't</h4><ul><li>Two flag-red buttons in one view.</li><li>Gold or green buttons of any kind.</li><li><code>pointer-events: none</code> on a disabled control — the tooltip dies with it.</li><li>Find a button by position in a card; use <code>[data-kpi-btn]</code> hooks.</li></ul></div>
+    </div>
+  </DsSection>
+
+  <DsSection id="pills" title="Status pills & badges">
+    <p>A pill is a word with a fill. Every status, yes/no, tier and TBD is a pill; a pill without a word is a bug. Geometry: 2px 9px padding, 999px radius, 11px, 600–700 weight, no wrap.</p>
+    <DsSpec label="Shell health badges" code=".health-badge .health-ready | -watch | -blocked">
+      <span class="health-badge health-ready">Ready</span><span class="health-badge health-watch">Watch</span><span class="health-badge health-blocked">Blocked</span>
+    </DsSpec>
+    <DsSpec label="Runtime pill with signal dot" code='.runtime-pill[data-tone="ready|watch|blocked"] > .signal-dot'>
+      <span class="runtime-pill" data-tone="ready"><span class="signal-dot" aria-hidden="true"></span>WorkOS session</span>
+      <span class="runtime-pill" data-tone="watch"><span class="signal-dot" aria-hidden="true"></span>Local auth</span>
+      <span class="runtime-pill" data-tone="blocked"><span class="signal-dot" aria-hidden="true"></span>Supabase pending</span>
+    </DsSpec>
+    <DsSpec label="Board pills (canonical five tones + brand)" code=".pill .pill-green | -yellow | -orange | -red | -grey | -brand">
+      {[["green", "#137a4d", "#e3f5ec", "Paid"], ["yellow", "#946400", "#fbf0d4", "Renewal due"], ["orange", "#a4480d", "#fbe7d6", "Moderate"], ["red", "#a51f1f", "#fbe2e2", "Overdue"], ["grey", "#5a6573", "#eceff4", "TBD"], ["brand", "#11133f", "#e7e8f5", "PA 1042"]].map(([n, fg, bg, label]) => (
+        <span style={`display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5;background:${bg};color:${fg}`} title={`.pill-${n}`}>{label}</span>
+      ))}
+      <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:#e3f5ec;color:#137a4d" title=".pill-pay"><input type="checkbox" style="width:13px;height:13px;margin:0;accent-color:#137a4d" checked /> Pay</span>
+    </DsSpec>
+    <DsSpec label="Popup chips (Territory Map InfoWindow)" code=".vmpop-chip .chip-ok | -muted | -pa | -expired">
+      <span class="vmpop-chip chip-ok">Covered</span><span class="vmpop-chip chip-muted">Out of drive time</span><span class="vmpop-chip chip-pa">PA 1042</span><span class="vmpop-chip chip-expired">Expired Jun 30</span>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Tone</th><th>Means</th><th>Examples</th></tr></thead>
+        <tbody>
+          <tr><td><strong>green</strong></td><td>Good, yes, healthy, paid, live, in-force</td><td>Paid · Ready · Approved · Live</td></tr>
+          <tr><td><strong>yellow</strong></td><td>Needs attention, partial, late, provisional</td><td>Renewal due · Watch · In review · Sent</td></tr>
+          <tr><td><strong>orange</strong></td><td>Moderate severity (variance 3–6%)</td><td>Moderate</td></tr>
+          <tr><td><strong>red</strong></td><td>Problem, no, overdue, blocked, major</td><td>Overdue · Blocked · Rejected · No agreement</td></tr>
+          <tr><td><strong>grey</strong></td><td>Neutral, out of scope, TBD, unknown</td><td>TBD · Closed · Inactive · Unknown</td></tr>
+          <tr><td><strong>brand</strong> (navy / info)</td><td>Identity or reference, not status</td><td>PA 1042 · Draft · vendor branch</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><code>TBD</code> is always grey. It is the honest signal for "not wired yet", never a blank cell.</li>
+      <li>Confidence tiers (credit-memo matching) are five labelled tones with tooltips: Exact / Confident = green, Probable / Weak = yellow, No match = red. A weak tier must never read like a confirmed match.</li>
+      <li>"Review (UOM)" is a pill, never a fabricated number across mismatched units.</li>
+      <li>A lapsed price list reads "Extended (awaiting replacement)", yellow — never an error.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="kpi" title="KPI & metric cards">
+    <p>Chris's law (2026-06-17): a KPI box navigates to a better view or conveys a decision-relevant number, or it does not exist. On the boards, every pill is a work queue with a count and a button; numbers that never change what the human does next are context and live in subtext.</p>
+    <DsSpec label="Shell metric card" code='.live-metric-card[data-tone] > span + strong + small' layout="block">
+      <div class="live-metric-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+        <a class="live-metric-card" href="#kpi" data-tone="ready"><span class="eyebrow">Open audits</span><strong>14</strong><small style="color:var(--text-muted)">3 blocked on pricing</small></a>
+        <a class="live-metric-card" href="#kpi" data-tone="review"><span class="eyebrow">Expected credit</span><strong>$48,210</strong><small style="color:var(--text-muted)">across 9 invoices</small></a>
+        <a class="live-metric-card" href="#kpi" data-tone="critical"><span class="eyebrow">Overdue</span><strong>6</strong><small style="color:var(--text-muted)">past 60 days</small></a>
+        <a class="live-metric-card" href="#kpi"><span class="eyebrow">Memos sent</span><strong>6</strong><small style="color:var(--text-muted)">this week</small></a>
+      </div>
+    </DsSpec>
+    <DsSpec label="Board KPI pills (each is a filter button)" code=".cfx-kpi / .fw-kpi — aria-pressed toggles the row filter" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px"><div class="cfx-kpis">
+        <button class="cfx-kpi" type="button" aria-pressed="true" style="border-color:var(--navy)"><span class="cfx-kpi-lab">To collect</span><span class="cfx-kpi-val">$66,900</span><span class="cfx-kpi-sub">12 jobs · expected this week</span></button>
+        <button class="cfx-kpi" type="button" aria-pressed="false"><span class="cfx-kpi-lab">To invoice</span><span class="cfx-kpi-val">$50,680</span><span class="cfx-kpi-sub">2 jobs</span></button>
+        <button class="cfx-kpi cfx-kpi-bad" type="button" aria-pressed="false"><span class="cfx-kpi-lab">Overdue 60d+</span><span class="cfx-kpi-val">$18,420</span><span class="cfx-kpi-sub">1 job</span></button>
+        <button class="cfx-kpi cfx-kpi-warn" type="button" aria-pressed="false"><span class="cfx-kpi-lab">Stale close-outs</span><span class="cfx-kpi-val">7</span><span class="cfx-kpi-sub">off the board by default</span></button>
+      </div></div>
+    </DsSpec>
+    <DsSpec label="Pipeline KPI (a direction, not three backlogs)" code=".iv-kpi-flow — 51 → 32 → 3 with a coloured left edge per question" layout="block">
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+        {[["Claim it", "var(--primary)", "51 → 32 → 3", "open · with lines · approved", "Approve 3"], ["Chase it", "var(--warning)", "12", "sent, awaiting vendor", "Mark received"], ["Pay it", "var(--success)", "$142,300", "cleared to pay", "Verify paid"], ["Fix it", "var(--text-muted)", "9", "UOM · no-price · routing", "Open queue"]].map(([lab, edge, val, sub, btn]) => (
+          <div style={`display:flex;flex-direction:column;gap:3px;background:var(--surface);border:1px solid var(--border);border-left:3px solid ${edge};border-radius:14px;padding:13px 15px`}>
+            <span style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:600">{lab}</span>
+            <span style="font-size:22px;font-weight:750;font-variant-numeric:tabular-nums">{val}</span>
+            <span style="font-size:11px;color:var(--text-muted)">{sub}</span>
+            <button class="button button-secondary button-small" style="align-self:flex-start;margin-top:6px" type="button">{btn}</button>
+          </div>
+        ))}
+      </div>
+    </DsSpec>
+    <ul>
+      <li>Anatomy: uppercase 10–11px label · 22–30px 800 value with tabular numerals · 10.5–13px subtext · optional one button.</li>
+      <li>Tone attributes: <code>data-tone="ready|review|critical"</code> on shell cards; <code>.cfx-kpi-bad</code> / <code>-warn</code> on boards.</li>
+      <li>A KPI that filters carries <code>aria-pressed</code> and the toolbar's filter label names it with a "Clear filter ✕".</li>
+      <li>Grids: 4-up in the shell (2-up ≤ 1180); boards use <code>auto-fit, minmax(170px, 1fr)</code>.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="tables" title="Tables">
+    <p>The table is the primary chart of this app. Uppercase muted headers, tabular numerals right-aligned, labels left, zebra rows on boards, sticky header, optional frozen first column, and the ten-row pane. Status lives in pills inside cells.</p>
+    <DsSpec label="Board table in a ten-row pane with show-more" code=".cfx-tablewrap > .cfx-table.cfx-frozen · .cfx-showmore" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px">
+        <details class="cfx-group" open>
+          <summary class="cfx-group-head" style="cursor:pointer;list-style:none"><span class="cfx-group-name">▾ Denver</span><span class="cfx-group-count">63 jobs · showing 5</span><span class="cfx-group-money">$113,250.00 outstanding</span></summary>
+          <div class="cfx-tablewrap cfx-pane" style="max-height:220px">
+            <table class="cfx-table cfx-frozen">
+              <thead><tr><th>Job #</th><th>Client</th><th>Office</th><th>Rep</th><th class="num">Contract</th><th class="num">Balance due</th><th>Expected</th><th>Action</th></tr></thead>
+              <tbody>
+                {jobs.map((j) => (
+                  <tr><td>{j[0]}</td><td>{j[1]}</td><td>{j[2]}</td><td>{j[3]}</td><td class="num">{j[4]}</td><td class={`num ${j[5] === "$0.00" ? "" : ""}`}>{j[5]}</td><td>{j[6]}</td><td><span style={`display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:${j[7] === "Collect" ? "#fbf0d4" : j[7] === "Closed" ? "#eceff4" : "#e3f5ec"};color:${j[7] === "Collect" ? "#946400" : j[7] === "Closed" ? "#5a6573" : "#137a4d"}`}>{j[7]}</span></td></tr>
+                ))}
+                <tr class="cfx-endrow"><td>Total</td><td></td><td></td><td></td><td class="num">$113,250.00</td><td class="num">$67,380.00</td><td></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <button class="cfx-showmore" type="button">Show all 63 jobs  ▾  (58 more)</button>
+        </details>
+      </div>
+    </DsSpec>
+    <DsSpec label="Shell queue table (reading density)" code=".queue-table-wrap > .queue-table" layout="block">
+      <div class="queue-table-wrap"><table class="queue-table" style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:13px 14px;text-align:left">Invoice</th><th style="padding:13px 14px;text-align:left">Vendor</th><th style="padding:13px 14px;text-align:left">Office</th><th style="padding:13px 14px;text-align:left">Status</th><th style="padding:13px 14px;text-align:right">Expected credit</th></tr></thead><tbody>
+        <tr><td>INV-4821</td><td>ABC Supply · Denver #412</td><td>Denver</td><td><span class="health-badge health-ready">Ready</span></td><td style="text-align:right;font-variant-numeric:tabular-nums">$5,140.00</td></tr>
+        <tr><td>INV-4822</td><td>SRS · Richardson TX</td><td>Dallas</td><td><span class="health-badge health-blocked">Blocked</span></td><td style="text-align:right;font-variant-numeric:tabular-nums">$2,980.00</td></tr>
+        <tr><td>INV-4823</td><td>QXO · Aurora</td><td>Denver</td><td><span class="health-badge health-watch">In review</span></td><td style="text-align:right;font-variant-numeric:tabular-nums">$7,420.00</td></tr>
+      </tbody></table></div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Property</th><th>Board</th><th>Shell</th></tr></thead>
+        <tbody>
+          <tr><td>Header</td><td>10–11px caps, 0.03em, muted, sticky (<code>position: sticky; top: 0; z-index: 3</code>), opaque panel background</td><td>12px caps 800, muted</td></tr>
+          <tr><td>Cell</td><td>12.5px, 4px 8px, <code>white-space: nowrap</code>, 1px bottom border</td><td>14px, 13px 14px, 1px bottom border</td></tr>
+          <tr><td>Row height</td><td>29px</td><td>~46px</td></tr>
+          <tr><td>Zebra</td><td>even rows <code>--zebra</code>, painted on <code>td</code> (sticky cells need it)</td><td>none</td></tr>
+          <tr><td>Hover</td><td><code>--fill-bg</code> amber tint on <code>td</code></td><td>none</td></tr>
+          <tr><td>Numbers</td><td><code>.num</code>: right, tabular; negative <code>.cfx-neg</code> red</td><td>right, tabular</td></tr>
+          <tr><td>Frozen column</td><td><code>.cfx-frozen</code>: first column sticky left, min 200px, 6px shadow; header corner z 4</td><td>—</td></tr>
+          <tr><td>End row</td><td><code>.cfx-endrow</code>: 2px navy top rule (gold in dark), bold</td><td>—</td></tr>
+          <tr><td>Section row</td><td><code>.cfx-secrow</code>: zebra fill, 10.5px caps</td><td>—</td></tr>
+          <tr><td>Breach cell</td><td><code>.cfx-breach</code>: white on red</td><td>—</td></tr>
+          <tr><td>Wrapper</td><td><code>overflow: auto</code> on both axes; max-height measured for 10 rows</td><td><code>overflow-x: auto</code></td></tr>
+          <tr><td>Layout</td><td><code>border-collapse: separate; border-spacing: 0</code> (sticky needs it)</td><td>collapse</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Sort, group, filter, page</h3>
+    <ul>
+      <li><strong>Default sort is money-first:</strong> offices and branches by at-risk descending; invoices by date then at-risk; lines by absolute variance descending. Categories by <code>sort_order</code> from the DB, never alphabetically.</li>
+      <li><strong>Group before you widen:</strong> lines group into collapsible roof-system category sections (default-collapsed); a 15-column detail becomes a labelled <code>dl.detail-grid</code>, never a 15-wide table.</li>
+      <li><strong>Filters apply before paging;</strong> the ten shown are the first ten matching rows; a parent hides when all its children hide.</li>
+      <li><strong>Column-group expand state is global</strong> across offices so the eye can track a column down the page; recompute <code>colspan</code> on expand.</li>
+      <li><strong>Empty state names the way out</strong> ("Nothing left to audit … Switch to Due now or All").</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="toolbar" title="Toolbar & filters">
+    <p>The board toolbar is one row: <em>search · scope select(s) · scope control · More filters · spacer · runtime pill · count · theme trio</em>. Flex-wrap, gap 10px, margin-bottom 16px. It went from ten controls to four on Invoice Audit (docs/100) and that is the ceiling.</p>
+    <DsSpec label="Board toolbar" code=".cfx-toolbar / .iv-toolbar / .fw-toolbar" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px"><div class="cfx-toolbar">
+        <h2 class="cfx-title">Friday AR Meeting board</h2><span class="cfx-sub">Set expected cash dates · 3-week cash map</span><span class="cfx-spacer"></span>
+        <label style="font-size:12px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:6px">Office <select class="cfx-input" style="width:auto;text-align:left"><option>All offices</option><option>Denver · GM 34%</option><option>Fort Collins · GM 31%</option></select></label>
+        <label style="font-size:12px;color:var(--muted);font-weight:600;display:inline-flex;align-items:center;gap:6px">Rep <select class="cfx-input" style="width:auto;text-align:left"><option>All reps</option></select></label>
+        <span class="runtime-pill" data-tone="ready"><span class="signal-dot" aria-hidden="true"></span>Live</span><span class="cfx-count">10:41 AM</span>
+        <div class="cfx-theme" role="group" aria-label="Theme"><button type="button" class="is-active">System</button><button type="button">Light</button><button type="button">Dark</button></div>
+      </div>
+      <p style="margin:8px 0 0;font-size:12px;color:var(--muted)"><span>Filtered: Office Denver · KPI To collect</span> <button class="cfx-btn" type="button" style="padding:2px 8px;font-size:11px">Clear filter ✕</button></p></div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Control</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Search</td><td><code>type="search"</code>, placeholder lists what it matches ("Search invoice, item, branch…"), min-width 240px, matches on keyup, hits auto-open their branches.</td></tr>
+          <tr><td>Office select</td><td>First option is "All PE offices" (value ""). "All" means no constraint, never a synthetic total. Deep links <code>?office=</code> pre-select it and scroll the node into view.</td></tr>
+          <tr><td>Scope control</td><td>One segmented control answers "which slice am I looking at": To audit · Due now · All. Never three checkboxes.</td></tr>
+          <tr><td>More filters</td><td>A <code>details</code> disclosure holding date range and tolerance — real controls, not the first thing competing for attention. Opens as a floating panel (z 20).</td></tr>
+          <tr><td>Filter label</td><td>When anything is active a line reads the active filters and offers "Clear filter ✕".</td></tr>
+          <tr><td>Count</td><td>States the denominator: "5 of 12", or the generated-at time on live boards.</td></tr>
+          <tr><td>Runtime pill</td><td>live / degraded / pending, from the loader, never assumed.</td></tr>
+          <tr><td>Theme trio</td><td>Last, right-aligned (see <a href="#theme-control">Theme control</a>).</td></tr>
+          <tr><td>Composition</td><td>Filters AND across dimensions in one pass; a row is visible when it satisfies all. Rollup bars track the active scope, not the drill filters.</td></tr>
+          <tr><td>Persistence</td><td>Reveal and open state per surface in <code>localStorage</code>; filters are URL-addressable where a deep link exists.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="segmented" title="Segmented scope control">
+    <DsSpec label="Shell segmented control" code=".segmented-control > .segment.is-active">
+      <div class="segmented-control"><button class="segment is-active" type="button">All</button><button class="segment" type="button">Ready</button><button class="segment" type="button">Blocked</button></div>
+    </DsSpec>
+    <DsSpec label="Board scope control" code=".iv-scope / .cfx-theme pattern — bordered group, active fills navy (gold in dark)">
+      <div class="ds-theme" role="group" aria-label="Invoice scope"><button type="button" class="is-active" title="Open, unpaid invoices that still have lines to audit">To audit</button><button type="button" title="Payment due — invoice date + 60 days or older">Due now</button><button type="button" title="Every invoice, including paid and credit memos">All</button></div>
+    </DsSpec>
+    <ul>
+      <li>Two to four options; every option has a <code>title</code> that defines the slice in one sentence.</li>
+      <li>Active: navy fill, white text (light); gold fill, navy text (dark). Hover on inactive: navy-soft fill.</li>
+      <li>Segment height 32px, radius 9px on the group (4px on the shell's segments), 1px border between segments.</li>
+      <li>It is a <code>role="group"</code> of buttons, not radio inputs, so the click handler can dispatch the tree's filter and hidden legacy inputs stay in sync (deep links keep working).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="inputs" title="Inputs & selects">
+    <DsSpec label="Shell input and select" code=".setting-input / .vendor-map-search-input · focus border → navy, no glow" layout="stack">
+      <label class="eyebrow" for="ds-i1">Variance threshold</label>
+      <input id="ds-i1" class="ds-search" style="max-width:260px;background:var(--surface-inset);color:var(--text);border-color:var(--border)" value="$250" />
+      <label class="eyebrow" for="ds-i2">Tolerance</label>
+      <select id="ds-i2" class="ds-search" style="max-width:260px;background:var(--surface-inset);color:var(--text);border-color:var(--border)"><option>All tolerance</option><option>Flagged ≥ Minor</option><option>Moderate +</option><option>Major only</option><option>No-Price lines</option></select>
+    </DsSpec>
+    <DsSpec label="Board inline number input" code=".cfx-input / .fw-gm-input — right-aligned, tabular, reformat on blur" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12.5px">To collect <input class="cfx-input" value="4,200.00" /><span class="cfx-unit">USD</span></label>
+        <label style="font-size:12.5px">GM <input class="cfx-input" style="width:64px" value="34" /><span class="cfx-unit">%</span></label>
+        <label style="font-size:12.5px">Expected <input class="cfx-input" type="date" style="width:140px;text-align:left" value="2026-09-19" /></label>
+        <span class="cfx-who">set by Lucinda · 2026-09-12</span>
+      </div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Property</th><th>Shell</th><th>Board</th></tr></thead>
+        <tbody>
+          <tr><td>Height</td><td>38px (min-height), 8px 10px padding</td><td>28–32px, 3px 7px padding</td></tr>
+          <tr><td>Font</td><td>14px, inherit family</td><td>12.5–13px</td></tr>
+          <tr><td>Fill / border</td><td>surface-inset / 1px border, radius 4px (sm)</td><td>panel / 1px line, radius 6–8px</td></tr>
+          <tr><td>Focus</td><td>border → navy, no outline glow</td><td>border → navy (gold in dark)</td></tr>
+          <tr><td>Numbers</td><td>—</td><td>right-aligned, tabular, 96px wide; reformat on blur, never on keystroke</td></tr>
+          <tr><td>Units</td><td>—</td><td><code>.cfx-unit</code> after the field, 10.5px muted</td></tr>
+          <tr><td>Attribution</td><td>—</td><td><code>.cfx-who</code> "set by … · date" beside an editable driver</td></tr>
+          <tr><td>Inside a summary</td><td>—</td><td>stop propagation on click/keydown so typing does not collapse the group</td></tr>
+          <tr><td>Validation</td><td colspan="2">Clamp and explain ("Expecting to collect more than is owed is a typo, not a plan"); a passed planned date is marked, not cleared. Saves flash green (persisted) or red (rejected).</td></tr>
+          <tr><td>Mobile</td><td colspan="2">16px font so iOS does not zoom; 44px height.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="disclosure" title="Disclosures & groups">
+    <p>Progressive disclosure is native <code>details/summary</code>, one chevron per level (›, rotating 90° on <code>[open]</code>). The expand-tree — Office → Branch → Invoice → Line — is the preferred drill-down and is mostly no-JS.</p>
+    <DsSpec label="Board group with head" code=".cfx-group > .cfx-group-head (gold left rule) — one chevron per level" layout="block">
+      <div class="cfx" style="margin:0;padding:12px;min-height:0;border-radius:8px;display:grid;gap:8px">
+        <details class="cfx-group" open><summary class="cfx-group-head" style="cursor:pointer;list-style:none"><span class="cfx-group-name">▾ Denver</span><span class="cfx-group-count">63 jobs</span><span class="cfx-group-money">$113,250.00</span></summary><div style="padding:10px 14px;font-size:12.5px;color:var(--muted)">10 rows shown · Show all 63 jobs ▾ (53 more)</div></details>
+        <details class="cfx-group"><summary class="cfx-group-head" style="cursor:pointer;list-style:none"><span class="cfx-group-name">▸ Fort Collins</span><span class="cfx-group-count">21 jobs</span><span class="cfx-group-money">$54,900.00</span></summary></details>
+        <details class="cfx-group"><summary class="cfx-group-head" style="cursor:pointer;list-style:none;border-left-color:var(--muted)"><span class="cfx-group-name">▸ Uncategorized</span><span class="cfx-group-count">4 lines</span><span class="cfx-group-money">$1,210.00</span></summary></details>
+      </div>
+    </DsSpec>
+    <DsSpec label="Rail department accordion" code=".dept > .dept-summary + .dept-items > .dept-link (one open at a time)" surface="navy" layout="block">
+      <div style="display:grid;gap:8px;max-width:260px">
+        <details class="dept" open><summary class="dept-summary"><span class="dept-label">Accounting</span><span class="dept-chevron" aria-hidden="true">›</span></summary><ul class="dept-items"><li><a class="dept-link is-active" href="#disclosure">Invoice Audit</a></li><li><a class="dept-link" href="#disclosure">Friday WIP/AR</a></li><li><span class="dept-link is-soon" aria-disabled="true">Fleet Audit<small class="soon-badge">soon</small></span></li></ul></details>
+        <details class="dept"><summary class="dept-summary"><span class="dept-label">Operations</span><span class="dept-chevron" aria-hidden="true">›</span></summary></details>
+      </div>
+    </DsSpec>
+    <ul>
+      <li>Summary rows show headline columns as pills; the full column set lives in a labelled detail grid inside the body.</li>
+      <li>Auto-open when there are ≤ 2 top-level nodes; filtering auto-opens branches holding hits.</li>
+      <li>Category sections default-collapsed, ordered by <code>sort_order</code>; in to-audit-only mode fully-audited sections hide; <strong>Uncategorized is visible, never hidden.</strong></li>
+      <li>Re-rendering a body preserves which sections are open (a 6-line review must not cost 12 clicks).</li>
+      <li>A progress bar renders at every nesting level, rolled up from the deepest line (<a href="#meters">Meters</a>).</li>
+      <li>Two deferred site-wide bugs are recorded: closing a nest while a line is selected must deselect; marking one line passed must not collapse the nest (docs/59).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="show-more" title="Show-more pane">
+    <p>The long-list disclosure rule made concrete. The pane is exactly ten rows tall collapsed and expanded; the control states the cost; height is measured in two passes; state persists. Full contract in <code>standards/design/v1.md</code>.</p>
+    <div class="ds-pre"><code>const PAGE_SIZE = 10;
+const sizePane = (wrap) =&gt; &#123;
+  const rowH  = wrap.querySelector("tbody tr[data-job]").getBoundingClientRect().height || 29;
+  const headH = wrap.querySelector("thead").getBoundingClientRect().height;
+  const base  = Math.ceil(headH + rowH * PAGE_SIZE + 2);
+  wrap.style.maxHeight = `$&#123;base&#125;px`;
+  const gutter = wrap.offsetHeight - wrap.clientHeight;   // a horizontal scrollbar steals ~15px
+  if (gutter &gt; 0) wrap.style.maxHeight = `$&#123;base + gutter&#125;px`;
+&#125;;
+more.textContent = showAll
+  ? `Show first $&#123;PAGE_SIZE&#125; only  ▴`
+  : `Show all $&#123;rows.length&#125; jobs  ▾  ($&#123;hidden&#125; more)`;</code></div>
+    <DsSpec label="The control" code=".cfx-showmore / .fw-showmore — full width, border-top, left-aligned, 12px" layout="block">
+      <div class="cfx" style="margin:0;padding:0;min-height:0;border-radius:8px;border:1px solid var(--line)"><button class="cfx-showmore" type="button">Show all 63 jobs  ▾  (53 more)</button><button class="cfx-showmore" type="button">Show first 10 only  ▴</button></div>
+    </DsSpec>
+    <p>Applied: Friday WIP/AR, cash family, runtime board. Outstanding: Invoice Audit, Price List Review, Categorize Price Lines, Credit Memos, Agreement Builder.</p>
+  </DsSection>
+
+  <DsSection id="nav" title="Side rail & top bar">
+    <DsSpec label="Rail anatomy" code=".side-rail > .brand-lockup + .primary-nav + .department-stack" surface="navy" layout="block">
+      <div style="display:grid;gap:16px;max-width:244px">
+        <a class="brand-lockup" href="#nav"><img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="160" height="58" style="width:100%;height:auto;border-radius:6px;background:#fff;object-fit:contain" /></a>
+        <nav class="primary-nav" style="display:grid;gap:8px"><a class="nav-link is-active" href="#nav" style="display:flex;min-height:44px;align-items:center;gap:10px;border-radius:8px;padding:10px 12px;color:#fff;background:rgba(255,255,255,.12)"><span class="nav-icon" aria-hidden="true" style="width:24px;height:24px;color:var(--color-accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"/><path d="M9 4v13M15 6.5v13"/></svg></span>Territory Map</a></nav>
+        <p class="rail-label" style="color:rgba(255,255,255,.58)">Departments</p>
+      </div>
+    </DsSpec>
+    <DsSpec label="Top bar" code=".top-bar > .top-bar-title (.rail-toggle + eyebrow/h1) + .operator-cluster" layout="block">
+      <header class="top-bar" style="margin:0;border:1px solid var(--border);border-radius:8px">
+        <div class="top-bar-title"><button type="button" class="rail-toggle" aria-label="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><div><p class="eyebrow">Accounting</p><h1 style="margin:0;font-size:28px;color:var(--ds-heading)">Invoice Audit</h1></div></div>
+        <div class="operator-cluster" style="display:flex;align-items:center;gap:12px"><div class="runtime-pill-stack"><span class="runtime-pill" data-tone="ready"><span class="signal-dot" aria-hidden="true"></span>WorkOS session</span><p class="app-version" style="margin:0;font-size:11px;color:var(--text-muted)">v0.6.551A · 2026-09-12</p></div><div class="operator-card" style="border:1px solid var(--border);border-radius:8px"><strong style="display:block">Lucinda</strong><span style="display:block;font-size:12px;color:var(--text-muted)">Accounting</span></div><button class="logout-button" type="button">Sign out</button></div>
+      </header>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Part</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td>Rail</td><td>280px, navy, padding 24px 18px, gap 24px. Logo chip spans the rail width. Home link (Territory Map) pinned above the department accordion. Collapses via the top-bar toggle; persists in <code>cc-rail-collapsed</code>.</td></tr>
+          <tr><td>Nav link</td><td>44px min height, 10px 12px padding, radius 8px, icon 24px in accent, white text at 88%; active = white 12% fill + white text.</td></tr>
+          <tr><td>Department summary</td><td>44px, chevron › rotates on open, one department open at a time (script closes the others), active department auto-expands by longest-prefix match.</td></tr>
+          <tr><td>Department link</td><td>36px min height, 2px left border white 12% (accent when active), 14px text at 78% white; "soon" items are non-navigating with a 10px caps badge and never 404.</td></tr>
+          <tr><td>Top bar</td><td>White, 1px bottom border, padding 24px 28px 16px. Eyebrow + h1 carry hierarchy (there are no breadcrumbs). Right cluster: runtime pill, version/date, operator card, sign out.</td></tr>
+          <tr><td>Rail toggle</td><td>34×34 ghost button, 18px icon, stroke 1.8; the reason it exists is wide boards.</td></tr>
+          <tr><td>Retired routes</td><td>Stay as 301 stubs with a comment naming the successor; the nav entry goes with the surface. Removing a route also edits the shell's precache list and bumps the service-worker version.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="surface" title="Work surface & section head">
+    <DsSpec label="Panel with heading" code=".queue-panel > .panel-heading + body · .surface-heading for hero rows" layout="block">
+      <section style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+        <div class="panel-heading"><div><p class="eyebrow">Queues</p><h2 style="margin:0;font-size:20px;color:var(--ds-heading)">Work ready for review</h2></div><div class="segmented-control"><button class="segment is-active" type="button">All</button><button class="segment" type="button">Ready</button></div></div>
+        <div style="padding:14px;color:var(--text-muted);font-size:13px">Body: cards, a table or a tree. Flat white, no shadow.</div>
+      </section>
+    </DsSpec>
+    <DsSpec label="Department hero" code=".live-department-hero > .surface-heading > (eyebrow + h2 + note)" layout="block">
+      <section class="live-department-hero" style="border:1px solid var(--border);border-radius:8px;padding:18px;background:var(--surface)"><div class="surface-heading"><div><p class="eyebrow">Conductor / Auditor</p><h2 style="margin:0;font-size:20px;color:var(--ds-heading)">Every API, agent, scheduled job and data feed — one light each.</h2><p style="margin:6px 0 0;color:var(--text-secondary);font-size:13px;max-width:70ch">Lights come from the system that actually knows. Rules in docs/109.</p></div><span class="health-badge health-ready">All green</span></div></section>
+    </DsSpec>
+    <ul>
+      <li>Depth by border, not shadow. Resting shadow is forbidden; the two shell cards that still carry <code>--shadow</code> at rest (<code>.metric-panel</code>, <code>.gap-metric-card</code>) are recorded drift to remove.</li>
+      <li>A Design.md navy <code>.section-head</code> band (white h3, accent eyebrow) is the public-page treatment; inside the app the panel heading is white with a border.</li>
+      <li>Two-column list-detail is the dominant page shape: queue left, selected record right (sticky at <code>top: 20px</code>, static ≤ 1180). <code>.wide-left</code> when the list is the primary object.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="queue" title="Queue item & list-detail">
+    <DsSpec label="Queue item" code=".queue-item (.is-selected) — navy left rule → accent + lift on hover/selection" layout="stack">
+      <button type="button" style="display:grid;gap:4px;width:100%;text-align:left;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;background:var(--surface);color:var(--text);padding:12px 14px;box-shadow:var(--shadow);font:inherit;cursor:pointer"><span style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>Invoice INV-4821</strong><span class="health-badge health-ready">Ready</span></span><span style="font-size:13px;color:var(--text-muted)">ABC Supply · Denver #412 · expected credit $5,140.00</span></button>
+      <button type="button" style="display:grid;gap:4px;width:100%;text-align:left;border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:8px;background:var(--surface);color:var(--text);padding:12px 14px;font:inherit;cursor:pointer"><span style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>Invoice INV-4822</strong><span class="health-badge health-blocked">Blocked</span></span><span style="font-size:13px;color:var(--text-muted)">SRS · Richardson TX · awaiting price agreement refresh</span></button>
+    </DsSpec>
+    <ul>
+      <li>The item is a <code>button</code> (or a link when it navigates), full width, left rule navy at rest, accent + selection-lift shadow when hovered or selected. This is the one place a shadow appears on interaction.</li>
+      <li>Top line: identifier bold + status pill right; second line: 13px muted context (vendor · branch · money).</li>
+      <li>Selecting one loads the detail panel beside it; the list keeps its scroll position and open sections.</li>
+      <li>Closing the panel or the nest deselects (recorded bug to fix, docs/59).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="notices" title="Banners & notices">
+    <DsSpec label="Provisional / attention banner" code=".cfx-banner · .snapshot-alert — gold left rule, never a button" layout="stack">
+      <div class="cfx" style="margin:0;padding:0;min-height:0;background:transparent"><div class="cfx-banner">Provisional basis (version 0) — fixed-cost pools are placeholders until the CPA rulings land. Numbers here change the week they do.</div></div>
+      <div class="snapshot-alert" style="margin:0">Price list extended (awaiting replacement) — the vendor has not issued a new sheet; the last one stays in effect.</div>
+    </DsSpec>
+    <DsSpec label="Error notice" code=".gap-alert · .cfx-error — error family, states the way out" layout="stack">
+      <div class="gap-alert">Territory data failed to load. The map keeps its last snapshot; retry from the toolbar or check the runtime board.</div>
+      <p style="margin:0;color:var(--error);font-size:13px">invoice audit query failed: canceling statement due to statement timeout — read through <code>mv_invoice_audit_line</code>, never the view.</p>
+    </DsSpec>
+    <DsSpec label="Boundary notice" code=".accounting-boundary-notice — states what this surface does not do" layout="block">
+      <div class="ds-callout is-info" style="max-width:none"><b>Read-only mirror</b><p>QuickBooks Online is mirror-only here. Nothing on this board writes to QBO; the CSV is loaded by a person.</p></div>
+    </DsSpec>
+    <ul>
+      <li>Gold left rule = attention or provisional; error family = something failed; info blue = a boundary or a fact about the surface.</li>
+      <li>A notice never contains the primary action. It may contain a ghost link.</li>
+      <li>Notices are one or two sentences and name the way out or the reason; never "Something went wrong".</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="states" title="Empty, loading & error states">
+    <p>Never a blank page. Every list, tree and chart has three named states, and the cache worker refuses to snapshot a page still in its loading state.</p>
+    <div class="ds-grid-3">
+      <div class="ds-card"><p class="eyebrow">Empty (honest)</p><p style="color:var(--text-muted);font-size:13px;padding:14px 4px;margin:0">Nothing left to audit — every open invoice has had its lines audited. Switch to <strong>Due now</strong> or <strong>All</strong> to see them.</p><small style="color:var(--text-muted)">.iv-empty — names the way out; no sample fallback, ever.</small></div>
+      <div class="ds-card"><p class="eyebrow">Loading</p><p style="color:var(--text-muted);font-size:13px;padding:14px 4px;margin:0">Loading invoice detail…</p><small style="color:var(--text-muted)">Text, not a spinner; the shell's <code>pageLooksComplete()</code> keys on it.</small></div>
+      <div class="ds-card"><p class="eyebrow">Unavailable</p><p style="color:var(--text-muted);font-size:13px;padding:14px 4px;margin:0">Cash flow is unavailable: the WIP/AR master has not refreshed since Sep 12. <button class="button button-ghost button-small" type="button" style="margin-top:8px">Open the runtime board</button></p><small style="color:var(--text-muted)"><code>[data-availability="unavailable"]</code> keeps the shell, aligns content to start, offers one action.</small></div>
+    </div>
+    <ul>
+      <li>Empty states name the way out; loading states name what is loading; unavailable states name the cause and one action.</li>
+      <li>A field that is missing is named ("office not resolved"), never blank; an unwired number is a grey TBD pill.</li>
+      <li>Zero coverage shows "—", not "0%". A number that would be a lie is not shown.</li>
+      <li>Planned-but-unlive vendors appear in filters with an empty state that says "planned", not "broken".</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="popup" title="Popups & dialogs">
+    <DsSpec label="Map popup (InfoWindow) KPI card" code=".vmpop > .vmpop-eyebrow + .vmpop-title + .vmpop-chips + .vmpop-kpis" layout="block">
+      <div class="vmpop" style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface);color:var(--text)"><p class="vmpop-eyebrow">ABC Supply · Branch #412</p><p class="vmpop-title">Denver, CO</p><div class="vmpop-chips"><span class="vmpop-chip chip-ok">Covered</span><span class="vmpop-chip chip-pa">PA 1042</span><span class="vmpop-chip chip-status">active</span></div><div class="vmpop-kpis"><div class="vmpop-kpi tone-ok"><strong>412</strong><span>Priced lines</span></div><div class="vmpop-kpi tone-warn"><strong>14</strong><span>Gaps</span></div><div class="vmpop-kpi"><strong>$1.2M</strong><span>Trailing 12mo</span></div></div><div style="display:flex;gap:6px"><a class="button button-secondary button-small" href="#popup">Invoice audit</a><a class="button button-ghost button-small" href="#popup">Price list</a></div></div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Kind</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td>Popout (board)</td><td>One shared node reused by every row (<code>#fw-guess</code>), <code>role="dialog" aria-modal="false"</code>, anchored to the row, z 40, closes on Escape and outside click. Never one node per row.</td></tr>
+          <tr><td>InfoWindow (map)</td><td>232–280px, eyebrow 11px caps, title 15px, chips, 3-up KPI grid, one navy + one ghost small button. The rail's detail card renders the same HTML — two paths to one card.</td></tr>
+          <tr><td>Dropdown (More filters)</td><td>Absolute below its summary, z 20, panel fill, 10px radius, float shadow.</td></tr>
+          <tr><td>Confirm</td><td>Native <code>window.confirm</code> today. Text states the scope, the effect and the non-effects ("This does not email anything. It records that you sent the email, moves them to Chase it, and starts the 14-day follow-up clock."). Names every vendor or recipient involved.</td></tr>
+          <tr><td>Prompt (copy)</td><td><code>window.prompt</code> with the value pre-selected, stating the agent will not send it and when it expires.</td></tr>
+          <tr><td>Modal</td><td>Not used. A modal that would be needed is a sign the flow belongs on a page.</td></tr>
+          <tr><td>Toast</td><td>One fixed bottom-centre node, <code>role="status" aria-live="polite"</code>, 2.2s, navy fill (dark: panel + gold rule). Says what happened and whether it persisted: "recalculated locally — not saved".</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="meters" title="Meters & progress">
+    <DsSpec label="Review progress (every nesting level)" code=".cc-progress > .cc-progress-head + .cc-progress-track > .cc-progress-fill" layout="stack">
+      <div class="cc-progress" style="max-width:360px"><div class="cc-progress-head" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)"><span>Denver · 412 lines</span><span>318 audited · 77%</span></div><div class="cc-progress-track" style="--line:var(--border)"><div class="cc-progress-fill" style="width:77%"></div></div></div>
+      <div class="cc-progress" style="max-width:360px"><div class="cc-progress-head" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)"><span>Fort Collins · 88 lines</span><span>88 audited · 100%</span></div><div class="cc-progress-track" style="--line:var(--border)"><div class="cc-progress-fill" style="width:100%;background:var(--success)"></div></div></div>
+    </DsSpec>
+    <DsSpec label="Match meter" code=".match-score > .meter — smart blue → navy, never flag red">
+      <div style="display:flex;align-items:center;gap:12px;max-width:360px;width:100%"><div style="flex:1;height:8px;border-radius:999px;background:var(--surface-alt);overflow:hidden"><span style="display:block;height:100%;width:86%;background:linear-gradient(90deg,var(--info),var(--primary))"></span></div><strong style="font-size:20px;font-weight:800">86%</strong></div>
+    </DsSpec>
+    <ul>
+      <li>Track 6–8px, radius full, <code>--line</code> / <code>surface-alt</code> fill; fill transitions width over 350ms ease (the one width animation).</li>
+      <li>Fill is blue → navy (blue → green on the review checklist), flipping to solid green at 100%. Never flag red.</li>
+      <li>Width 74px inline in a summary row (90px at office/branch level); full width in a head.</li>
+      <li>Two leaf modes only: DISPOSITION (rolls up DB state) or REVIEW (localStorage checkbox). Lazy subtrees declare <code>data-cc-total</code> so they roll up before mounting.</li>
+      <li>A 100% review may burst confetti (Agreement Builder) — the one celebratory motion, and only on completion.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="lights" title="Runtime lights">
+    <DsSpec label="R / Y / G / unknown with words" code=".rb-light + label — docs/109 D5">
+      {[["green", "var(--success)", "Nightly WIP refresh · 02:10"], ["yellow", "var(--warning)", "ABC invoice feed · fresh but empty"], ["red", "var(--error)", "Better Stack monitor · paused"], ["unknown", "var(--text-muted)", "pg_cron job 13 · no telemetry yet"]].map(([n, c, l]) => (
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px"><i style={`display:inline-block;width:12px;height:12px;border-radius:999px;background:${c};box-shadow:0 0 0 3px color-mix(in srgb, ${c} 20%, transparent)`} aria-hidden="true"></i>{l}<small style="color:var(--text-muted)">({n})</small></span>
+      ))}
+    </DsSpec>
+    <ul>
+      <li>Thresholds derive from cadence (1.5× late = yellow, 2× = red) so a weekly job is not yellow every Tuesday.</li>
+      <li>A paused monitor is red (a blind spot, not a resting state). Fresh-but-empty is yellow. A missing token is yellow "not configured", never a false green.</li>
+      <li>Third-party health comes from this app's own pings: 200 = green (D16). Better Stack watches only the site from outside.</li>
+      <li>The word beside the dot is mandatory; the legend is rendered once from code.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="theme-control" title="Theme control">
+    <DsSpec label="The trio" code='.fw-theme / .iv-theme / .cfx-theme > button[data-set-theme="system|light|dark"]'>
+      <div class="ds-theme" role="group" aria-label="Theme"><button type="button" class="is-active">System</button><button type="button">Light</button><button type="button">Dark</button></div>
+    </DsSpec>
+    <ul>
+      <li>Always three options, always in that order, always last in the toolbar's right cluster.</li>
+      <li>Wired with <code>initThemePref(root, "[data-set-theme]")</code>; the active class is set by the helper, never by hand.</li>
+      <li>7px 12px padding, 12px 600, group radius 9px, 1px border, active navy/white (gold/navy in dark).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="chips" title="Chips & tabs">
+    <DsSpec label="Filter chips" code=".pf-chip (.is-active) — toggleable, 12px, full radius">
+      <button class="pf-chip is-active" type="button">Needs review</button><button class="pf-chip" type="button">Exact</button><button class="pf-chip" type="button">Probable</button><button class="pf-chip" type="button">API · non-negotiated</button>
+    </DsSpec>
+    <DsSpec label="Tabs" code=".pf-tabs > .pf-tab (.is-active: navy text, flag-red underline) — the one place tertiary marks selection" layout="block">
+      <div class="pf-tabs" style="border-bottom:1px solid var(--border)"><button class="pf-tab is-active" type="button" style="border:0;border-bottom:2px solid var(--tertiary);background:none;padding:10px 12px;font:inherit;font-weight:700;color:var(--ds-heading)">Open <span class="pf-tab-count" style="color:var(--text-muted);font-weight:400">12</span></button><button class="pf-tab" type="button" style="border:0;border-bottom:2px solid transparent;background:none;padding:10px 12px;font:inherit;color:var(--text-muted)">Resolved <span class="pf-tab-count">48</span></button><button class="pf-tab" type="button" style="border:0;border-bottom:2px solid transparent;background:none;padding:10px 12px;font:inherit;color:var(--text-muted)">Deferred <span class="pf-tab-count">3</span></button></div>
+    </DsSpec>
+    <DsSpec label="Accounting mode tabs" code=".accounting-mode-tabs > .accounting-mode-tab — one tab today (Invoice audit)">
+      <a class="accounting-mode-tab is-active" href="#chips" style="display:inline-flex;align-items:center;min-height:36px;padding:6px 12px;border-radius:8px;background:var(--primary);color:#fff;font-weight:700;font-size:13px">Invoice audit</a>
+    </DsSpec>
+    <ul>
+      <li>Chips filter; tabs switch views; segments choose a scope. Do not use one for another's job.</li>
+      <li>Tabs carry counts as muted numerals; a tab with a count of zero still renders.</li>
+      <li>The tab underline is the one place flag red marks selection rather than action — recorded as legacy; new tab strips use navy.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="vendor-marks" title="Vendor marks & map markers">
+    <DsSpec label="Legend as rendered on the Territory Map" code=".vendor-map-legend > span > i.legend-ring | .legend-badge | .legend-territory">
+      <div class="vendor-map-legend" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;font-weight:850;text-transform:uppercase;color:var(--text-secondary)">
+        <span style="display:inline-flex;align-items:center;gap:4px"><i class="legend-ring" style="display:inline-block;width:13px;height:13px;border-radius:999px;background:#fff;border:3px solid var(--success);box-sizing:border-box"></i> Covered</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><i class="legend-ring" style="display:inline-block;width:13px;height:13px;border-radius:999px;background:#fff;border:3px solid var(--warning);box-sizing:border-box"></i> Renewal / routing</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><i class="legend-ring" style="display:inline-block;width:13px;height:13px;border-radius:999px;background:#fff;border:3px solid var(--error);box-sizing:border-box"></i> No agreement</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><img class="legend-badge" src="/vendor-icons/pe-office-badge.png" alt="" width="18" height="18" /> PE office</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><i class="legend-territory" style="display:inline-block;width:15px;height:11px;border-radius:3px;background:rgb(15 118 110 / 13%);border:2px solid rgb(15 118 110 / 85%);box-sizing:border-box"></i> Office territory</span>
+        <span class="legend-note" style="text-transform:none;font-weight:600;opacity:.75">Ring = coverage lens</span>
+      </div>
+    </DsSpec>
+    <ul>
+      <li>Marker = vendor logo on an opaque white disc, ring by the highest-priority active condition (routing problem → pricing problem → brand). Clusters are navy discs scaled 12/15/18.</li>
+      <li>PE offices carry the roof badge (46px) so our locations read differently at a glance; office territories are teal translucent polygons.</li>
+      <li>The rail detail card and the marker popup are the same HTML; assign-office lives in the popup.</li>
+      <li>Vendor colour identifies; ring colour signals; the word in the legend explains. Never recolour a logo.</li>
+    </ul>
+  </DsSection>
+
+  <div class="ds-rules">
+    <DsRule id="CMP-01" title="Reuse the component in this chapter before writing a new class; a new component needs a spec entry here and a specimen first." source="Design.md 'Adding to the system'; DSN-014">
+      <p>Search this page and <code>global.css</code>. If it exists under another prefix (<code>.fw-</code>, <code>.iv-</code>, <code>.cfx-</code>), copy the canonical one.</p>
+    </DsRule>
+    <DsRule id="CMP-02" title="Every status is a pill with a word; TBD is grey; a fake number is never shown in place of a pill." source="docs/40 §3; CONVENTIONS §10c">
+      <p>"Review (UOM)", "Extended (awaiting replacement)", "TBD".</p>
+    </DsRule>
+    <DsRule id="CMP-03" title="A KPI navigates or informs, and on a board every pill is a work queue with a count and a button." source="Chris 2026-06-17; kpi-pills.ts (Chris 2026-08-09)">
+      <p>Context numbers live in subtext. Vanity counts are removed.</p>
+    </DsRule>
+    <DsRule id="CMP-04" title="Tables: sticky header, tabular right-aligned numbers, zebra on td, ten-row pane with a show-more that states the cost." source="standards/design/v1.md § Long-list; docs/40 §2">
+      <p>Filters before paging; parent hides when children hide; measured heights only.</p>
+    </DsRule>
+    <DsRule id="CMP-05" title="The toolbar is at most: search · office · scope control · More filters · spacer · runtime pill · count · theme trio." source="docs/100 toolbar 10 → 4">
+      <p>A fifth primary control is a sign the surface is two surfaces.</p>
+    </DsRule>
+    <DsRule id="CMP-06" title="Progressive disclosure is native details/summary with one chevron per level; interactive controls inside a summary stop propagation." source="docs/40 §5; friday-wip.astro:755-758">
+      <p>Re-rendering preserves open state; Uncategorized is never hidden.</p>
+    </DsRule>
+    <DsRule id="CMP-07" title="Every list has an empty state that names the way out, a loading state in words, and an unavailable state with the cause and one action." source="invoice-audit-tree.ts:856-870; docs/90 honest empty states">
+      <p>No sample fallback, no blank page, no spinner-only loading.</p>
+    </DsRule>
+    <DsRule id="CMP-08" title="Confirmations state scope, effect and non-effects and name every party; disabled controls keep their tooltip." source="docs/100 §mark-sent; docs/88 §33-35">
+      <p>Approve activates only when every claim line carries a human acknowledgment.</p>
+    </DsRule>
+    <DsRule id="CMP-09" title="One shared popout / toast node per surface; toast is role=status, 2.2s, and says whether the change persisted." source="friday-wip.astro:107; invoice-audit.astro:194">
+      <p>"recalculated locally — not saved" is the model.</p>
+    </DsRule>
+    <DsRule id="CMP-10" title="Drill-down links carry scope (?office=, ?branch=) and the target pre-filters and scrolls on land; an unknown branch scopes the search so the page honestly shows empty." source="docs/40 §6; invoice-audit-tree.ts:936-959">
+      <p>Never dump a link to the bare entry page.</p>
+    </DsRule>
+    <DsRule id="CMP-11" title="Buttons are found by data hooks, never position; state is changed by clicking the control, never by setting .checked." source="docs/100 §41-46, §22-24">
+      <p>Assigning <code>.checked</code> does not fire <code>change</code>, and the toolbar silently disagrees with the tree.</p>
+    </DsRule>
+    <DsRule id="CMP-12" title="Resting shadow is forbidden; shadow appears on hover, selection and floating layers only." source="Design.md Elevation; docs/40 §2">
+      <p>The two shell metric cards with resting shadow are recorded drift.</p>
+    </DsRule>
+  </div>
+
+  <script>
+    // Board specimens use the cash-surface stylesheet, whose dark palette keys on the
+    // surface's own data-theme. Mirror the page theme onto every specimen board so the
+    // top-bar trio switches them too.
+    const root = document.getElementById("ds-root") as HTMLElement;
+    const sync = () => document.querySelectorAll<HTMLElement>(".cfx").forEach((el) => (el.dataset.theme = root.dataset.theme));
+    sync();
+    new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  </script>
+</DesignSystemShell>

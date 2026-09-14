@@ -1,0 +1,165 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+
+// The icon set in production, copied from AppShell.astro so the specimen is the real path data.
+const icons: Record<string, string> = {
+  map: '<path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"/><path d="M9 4v13M15 6.5v13"/>',
+  accounting: '<path d="M4 3h13l3 3v15H4Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  operations: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+  sales: '<path d="M4 19V5M4 19h16"/><path d="m7 14 3-4 3 3 5-7"/><path d="M18 6h2v2"/>',
+  executive: '<path d="M4 21V10M10 21V4M16 21v-7M22 21H2"/>',
+  "ai-agents": '<rect x="6" y="8" width="12" height="10" rx="2"/><path d="M12 8V4M9 4h6M9 13h.5M14.5 13h.5"/><path d="M4 12h2M18 12h2"/>',
+  "rail-toggle": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+};
+const svg = (d: string, size = 24, stroke = 1.6) =>
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+
+const slots = [
+  { slot: "Rail lockup", size: "rail width × auto (≈ 244×88)", ratio: "620:210 (2.95:1)", format: "SVG", note: "Declared 160×58 for aspect; CSS width 100%." },
+  { slot: "Department icon", size: "24×24 (18×18 in the toggle)", ratio: "1:1", format: "Inline SVG", note: "stroke currentColor, inherits accent." },
+  { slot: "Favicon / PWA", size: "16, 32, 48, 180, 192, 512", ratio: "1:1", format: "SVG (+ PNG for iOS)", note: "Roof mark only." },
+  { slot: "Vendor badge, legend", size: "18×18", ratio: "1:1", format: "PNG 128×128 source", note: "White disc + ring." },
+  { slot: "Vendor badge, table row", size: "36×36", ratio: "1:1", format: "PNG 128×128 source", note: "" },
+  { slot: "Map marker", size: "round(scale × 4.2), 46px for PE offices", ratio: "1:1", format: "PNG 128×128 source", note: "Cluster count pill parked lower-right so it never covers the logo." },
+  { slot: "Swag reference render", size: "960×960 displayed at ≤ 480", ratio: "1:1", format: "JPEG q82", note: "Downsampled from the 1024 fal.ai render; ≤ 250 KB each." },
+  { slot: "Email logo", size: "180px wide max", ratio: "620:210", format: "PNG", note: "Retina: supply 360 wide, display at 180." },
+  { slot: "PDF header logo", size: "38 mm wide", ratio: "620:210", format: "PNG 300 dpi (≈ 450 px)", note: "" },
+  { slot: "Public hero photo", size: "1600×900 max, art-directed crops at 1200×800 and 800×1000", ratio: "16:9 / 3:2 / 4:5", format: "AVIF + WebP + JPEG fallback", note: "≤ 200 KB at 1600 wide; LCP image is preloaded." },
+  { slot: "Public inline photo", size: "1200 wide max", ratio: "3:2", format: "AVIF/WebP", note: "≤ 120 KB; lazy below the fold." },
+  { slot: "Infographic / social", size: "1080×1080, 1080×1350, 1200×630", ratio: "1:1, 4:5, 1.91:1", format: "PNG (text) / JPEG (photo)", note: "Text ≥ 24px at 1080 wide." },
+];
+---
+
+<DesignSystemShell slug="iconography" source="app/command-center/src/layouts/AppShell.astro">
+  <DsSection id="icon-grammar" title="Icon grammar">
+    <p>
+      Icons are line drawings on a 24px grid, stroke 1.6, round caps and joins, no fill, <code>stroke="currentColor"</code>
+      so they take the ink of their context (white on the rail, accent when active, muted in a table). They are topical —
+      a map for the map, a ledger for accounting — and they never carry status; a pill or a light does that.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Property</th><th>Value</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Grid</td><td>24 × 24, 2px safe margin (drawing area 20 × 20)</td><td>Matches the rail's 44px row with 10px padding.</td></tr>
+          <tr><td>Stroke</td><td>1.6 at 24px; 1.8 at 18px (the rail toggle); 2 at 16px</td><td>Thinner strokes vanish at small sizes; thicker ones fill in.</td></tr>
+          <tr><td>Caps / joins</td><td>round / round</td><td>Consistent with Inter's rounded terminals.</td></tr>
+          <tr><td>Fill</td><td>none</td><td>Filled icons read as buttons; the system's controls are text.</td></tr>
+          <tr><td>Colour</td><td><code>currentColor</code></td><td>The surface provides ink (C-09); the icon never sets its own.</td></tr>
+          <tr><td>Sizes</td><td>16 (inline in text), 18 (toolbar), 20 (buttons), 24 (nav)</td><td>Four sizes only.</td></tr>
+          <tr><td>Emoji / dingbats</td><td>Never as icons</td><td>Uneven across platforms and uncontrollable in colour. The only glyph characters in use are ▾ ▴ › ✕ → · — as text.</td></tr>
+          <tr><td>Accessibility</td><td><code>aria-hidden="true"</code> beside a text label; <code>role="img"</code> + <code>aria-label</code> when alone</td><td>Icons never stand alone on a control without a label or <code>aria-label</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="icon-set" title="The set in use">
+    <DsSpec label="Production icons, 24px, on surface" code="AppShell.astro icons">
+      {Object.entries(icons).map(([name, d]) => (
+        <div style="display:grid;gap:6px;justify-items:center;min-width:88px"><span set:html={svg(d)} /><small style="color:var(--text-muted);font-size:11px">{name}</small></div>
+      ))}
+    </DsSpec>
+    <DsSpec label="Same set on navy (rail), accent when active" surface="navy">
+      {Object.entries(icons).map(([name, d], i) => (
+        <div style={`display:grid;gap:6px;justify-items:center;min-width:88px;color:${i === 1 ? "var(--color-accent)" : "rgba(255,255,255,.88)"}`}><span set:html={svg(d)} /><small style="font-size:11px;opacity:.8">{name}{i === 1 ? " (active)" : ""}</small></div>
+      ))}
+    </DsSpec>
+    <DsSpec label="At the four sizes" code="16 · 18 · 20 · 24">
+      <span set:html={svg(icons.accounting, 16, 2)} /><span set:html={svg(icons.accounting, 18, 1.8)} /><span set:html={svg(icons.accounting, 20, 1.7)} /><span set:html={svg(icons.accounting, 24, 1.6)} />
+    </DsSpec>
+    <p>Adding an icon: draw it on the 24 grid in the same stroke, add the path string to the <code>icons</code> record in the shell, and use it through <code>deptIcon()</code>. Unknown ids fall back to the map icon rather than rendering nothing.</p>
+  </DsSection>
+
+  <DsSection id="image-sizing" title="Image sizing">
+    <p>Every image slot has a fixed size, aspect ratio and file budget. Declared <code>width</code>/<code>height</code> on every <code>img</code> (so layout never shifts), <code>max-width: 100%</code>, and the slot decides the crop, never the file.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Slot</th><th>Rendered size</th><th>Aspect</th><th>Format</th><th>Note</th></tr></thead>
+        <tbody>
+          {slots.map((s) => (
+            <tr><td class="nowrap"><strong>{s.slot}</strong></td><td>{s.size}</td><td class="nowrap">{s.ratio}</td><td class="nowrap">{s.format}</td><td>{s.note}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>Photos of work</strong> (roofs, crews, trucks) are the only photography. No stock people, no hands-shaking, no drone shots we did not take.</li>
+      <li><strong>Crops:</strong> the horizon is level, the roof line fills at least a third of the frame, the subject is off-centre on the thirds. A house at the kerb, not a satellite view.</li>
+      <li><strong>The logo on a photo</strong> sits on a solid white or navy panel with clear space, never directly on the image.</li>
+      <li><strong>Screenshots</strong> in docs are captured at 1440 wide in light mode unless the point is dark mode, with the rail visible, at device pixel ratio 2.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="formats" title="Formats & weight">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Content</th><th>Format</th><th>Budget</th><th>Delivery</th></tr></thead>
+        <tbody>
+          <tr><td>Logos, icons, marks</td><td>SVG (optimised with SVGO; the 2.5 MB traced logo is the known exception until the client supplies a clean vector)</td><td>≤ 20 KB each</td><td>Inline for icons; <code>img</code> for the lockup</td></tr>
+          <tr><td>Vendor badges</td><td>PNG 128×128 RGBA</td><td>≤ 15 KB</td><td>Self-hosted in <code>public/vendor-icons/</code></td></tr>
+          <tr><td>Photos</td><td>AVIF → WebP → JPEG via <code>picture</code></td><td>≤ 200 KB hero, ≤ 120 KB inline</td><td><code>loading="lazy"</code> below the fold; <code>fetchpriority="high"</code> on the LCP image</td></tr>
+          <tr><td>Renders (swag, mockups)</td><td>JPEG q80–85</td><td>≤ 250 KB</td><td>Served from <code>public/design-system/</code></td></tr>
+          <tr><td>Charts</td><td>Live canvas (Chart.js) or inline SVG</td><td>—</td><td>Never a raster of a chart in the app; export PNG only for a document</td></tr>
+          <tr><td>Documents</td><td>PDF/A-2 with embedded Inter</td><td>≤ 2 MB</td><td>Generated server-side (pdf-lib)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="alt-text" title="Alt text rules">
+    <p>Alt text is content, not a caption and not a filename. The test: with images turned off, does the page still make the same decisions possible?</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Image kind</th><th>Rule</th><th>Good</th><th>Bad</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Logo as a link</strong></td><td>The destination or the company name, nothing else</td><td><code>alt="Pro Exteriors"</code></td><td><code>alt="logo"</code>, <code>alt="pro-exteriors-logo.svg"</code></td></tr>
+          <tr><td><strong>Decorative</strong> (icon beside a label, background texture, divider art)</td><td>Empty alt so it is skipped</td><td><code>alt=""</code> + <code>aria-hidden</code> on inline SVG</td><td>Repeating the label: "Accounting icon Accounting"</td></tr>
+          <tr><td><strong>Informational</strong> (a photo of the damage, a rendered swag item)</td><td>What a sighted reader takes from it, in one sentence, no "image of"</td><td><code>alt="Hail-damaged asphalt shingles with exposed mat on the south slope"</code></td><td><code>alt="roof"</code>, <code>alt="Image of a roof photo"</code></td></tr>
+          <tr><td><strong>Status-bearing</strong> (vendor badge with a ring, a light)</td><td>Identity plus the state the colour encodes</td><td><code>alt="SRS Distribution, no price agreement"</code></td><td><code>alt="SRS badge red"</code></td></tr>
+          <tr><td><strong>Chart</strong></td><td>The finding, then a pointer to the data table; the canvas gets <code>role="img"</code> and <code>aria-label</code></td><td><code>aria-label="Collected vs AR outstanding by office; Denver has the largest outstanding at $412K. Figures in the table below."</code></td><td><code>aria-label="Bar chart"</code></td></tr>
+          <tr><td><strong>Screenshot in documentation</strong></td><td>What the reader is meant to notice</td><td><code>alt="Friday WIP/AR board with the Denver office expanded to ten rows and the Show all control beneath"</code></td><td><code>alt="screenshot"</code></td></tr>
+          <tr><td><strong>Text rendered as an image</strong></td><td>Do not do this. If unavoidable (a scanned invoice), alt is the document's identity and the text is provided beside it</td><td><code>alt="ABC Supply invoice 4821, page 1 of 2"</code></td><td>The full OCR text in alt</td></tr>
+          <tr><td><strong>Map</strong></td><td>The container gets <code>aria-label</code> describing scope; markers carry accessible names; the list beside the map is the accessible alternative</td><td><code>aria-label="Vendor branch map, Colorado and Texas offices"</code></td><td>No name at all</td></tr>
+          <tr><td><strong>Print / swag</strong></td><td>Alt applies to the digital proof; the physical item needs no alt but its text must not depend on colour</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Length: under 125 characters for a screen reader's comfort; a longer description goes in visible text or <code>aria-describedby</code>.</li>
+      <li>No "image of", "picture of", "icon", "graphic". The element already announces its role.</li>
+      <li>End with a period only when the alt is a sentence; identifiers ("Pro Exteriors") take none.</li>
+      <li>Alt is written by whoever places the image, at placement time. An image without alt does not pass review.</li>
+      <li>Generated images (fal.ai renders) get alt written by a person from the render, not from the prompt.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="image-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="I-01" title="Icons are 24-grid stroke drawings in currentColor; never emoji, never filled, never coloured for status." source="AppShell.astro icons; Design.md">
+        <p>Four sizes: 16, 18, 20, 24. Add to the shell's record; do not inline a new icon per page.</p>
+      </DsRule>
+      <DsRule id="I-02" title="Every img declares width and height and sits in a slot with a fixed aspect ratio." source="this chapter">
+        <p>Layout never shifts when an image loads. The slot crops; the file is not pre-cropped for one slot.</p>
+      </DsRule>
+      <DsRule id="I-03" title="Every image has alt text written for its kind: identity for links, empty for decoration, the finding for information, identity plus state for badges." source="this chapter; WCAG 1.1.1">
+        <p>An image without alt does not pass review; "logo" or a filename is a failure.</p>
+      </DsRule>
+      <DsRule id="I-04" title="Vendor marks are self-hosted PNGs on an opaque white disc; identity by logo, status by ring." source="VendorTerritoryMap.astro:454-470">
+        <p>Transparent favicons washed out against the basemap. Never hotlink a vendor's favicon.</p>
+      </DsRule>
+      <DsRule id="I-05" title="Photography is our own work, level horizon, roof line prominent; the logo never sits directly on a photo." source="this chapter; config/brand/assets/README.md">
+        <p>No stock imagery of people.</p>
+      </DsRule>
+      <DsRule id="I-06" title="File budgets: SVG ≤ 20 KB, badge ≤ 15 KB, hero ≤ 200 KB, inline photo ≤ 120 KB, render ≤ 250 KB." source="this chapter">
+        <p>Downsample with sips/SVGO before committing; the 2.5 MB logo SVG is the recorded exception awaiting a client vector.</p>
+      </DsRule>
+      <DsRule id="I-07" title="Charts are live canvases or inline SVG with a role and label; a raster chart is for documents only." source="executive-pipeline.ts; dashboards chapter">
+        <p>Every chart has a data table as its accessible alternative.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

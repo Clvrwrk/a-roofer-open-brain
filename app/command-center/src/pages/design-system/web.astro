@@ -1,0 +1,127 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+---
+
+<DesignSystemShell slug="web" source="deployment/remote/dashboard/Design.md (container, section head) · standards/marketing/v1.md">
+  <DsSection id="anatomy" title="Page anatomy">
+    <p>
+      A public page exists to turn a homeowner's doubt into one phone call. It is built on the content rail
+      (<code>.container</code>, 72rem, fluid gutter), bands with their background on the band and content in the rail,
+      and it must pass both this system and the marketing standard (consent, PII, EEAT, schema.org).
+    </p>
+    <DsSpec label="Landing page, top to bottom" layout="block">
+      <div style="display:grid;gap:6px;width:100%;max-width:560px;font-size:12px">
+        {[
+          ["Nav band", "Logo (full colour on white) · 3–5 links · phone number as the one flag-red CTA", "var(--surface)", "var(--text)"],
+          ["Hero", "One-sentence promise (display) · one line of who it is for · the same CTA · one real photo", "var(--primary)", "#fff"],
+          ["Proof band", "Three numbers from our records · review score with count · licence/insurance line", "var(--surface-inset)", "var(--text)"],
+          ["Benefits", "Three sections answering the reader's doubts: cost, disruption, trust — subhead + two sentences + photo", "var(--surface)", "var(--text)"],
+          ["How it works", "Three numbered steps: inspect → insurance → install", "var(--surface-inset)", "var(--text)"],
+          ["Service area", "Map or list of towns per office; the office phone per town", "var(--surface)", "var(--text)"],
+          ["Testimonials", "Two or three, named, dated, with the town", "var(--surface-inset)", "var(--text)"],
+          ["Final CTA band", "The promise restated · the phone · the form", "var(--primary)", "#fff"],
+          ["Footer", "Address per office · licence · privacy · sitemap · social", "var(--primary-dark)", "rgba(255,255,255,.8)"],
+        ].map(([band, content, bg, fg]) => <div style={`display:grid;grid-template-columns:110px 1fr;gap:10px;padding:8px 12px;border-radius:6px;background:${bg};color:${fg};border:1px solid var(--border)`}><strong>{band}</strong><span>{content}</span></div>)}
+      </div>
+    </DsSpec>
+    <p>Section rhythm is <code>--space-16</code> (64px) between bands on desktop, <code>--space-10</code> on a phone. Bands alternate surface and surface-inset; navy bands are the hero and the final CTA only.</p>
+  </DsSection>
+
+  <DsSection id="hero" title="Hero">
+    <ul>
+      <li><strong>Promise:</strong> one sentence, ≤ 12 words, display size (<code>clamp(30px, 3vw, 44px)</code>, 800, −0.02em), white on navy. It says what we do for whom, in the homeowner's words. Never "Welcome to Pro Exteriors".</li>
+      <li><strong>Eyebrow:</strong> gold on navy, 12px caps, the geography ("Denver · Fort Collins · Dallas · Wichita").</li>
+      <li><strong>Support line:</strong> 16–18px, white at 85%, the one thing that removes the biggest doubt ("We handle the insurance claim with you.").</li>
+      <li><strong>CTA:</strong> the phone number as a flag-red button, ≥ 48px tall, with the number visible as text (tap-to-call on mobile). One. A ghost "Get a free inspection" may sit beside it and opens the form.</li>
+      <li><strong>Image:</strong> one real photo of our crew or a finished roof, 1600×900 art-directed to 4:5 on a phone, on the right half; never a stock photo, never a drone shot we did not take.</li>
+      <li><strong>Logo:</strong> lives in the nav band, not in the hero.</li>
+      <li><strong>Motion:</strong> the roof draw-in once on first paint (Motion #13); nothing else animates in the hero.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="proof" title="Proof">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Proof</th><th>Source</th><th>Shown as</th></tr></thead>
+        <tbody>
+          <tr><td>Roofs completed</td><td>AccuLynx closed jobs count, refreshed monthly</td><td>Stat tile: 28px 800 number, 12px caps label</td></tr>
+          <tr><td>Years in business</td><td>Company record</td><td>Stat tile</td></tr>
+          <tr><td>Review score</td><td>Google Business Profile, with the count</td><td>Score + count + link; never the score alone</td></tr>
+          <tr><td>Licence and insurance</td><td>State licence number, GL policy carrier</td><td>One line in the proof band and the footer</td></tr>
+          <tr><td>Testimonials</td><td>Named customers who consented, with town and month</td><td>Quote ≤ 40 words, name, town, date</td></tr>
+          <tr><td>Manufacturer credentials</td><td>Certification letters on file</td><td>Logos in greyscale at equal height, linked to the certification page</td></tr>
+          <tr><td>Before / after</td><td>Our own job photos</td><td>Side-by-side, same angle, dated</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A proof point without a source on file is a bracketed placeholder ([ROOFS COMPLETED]) until it has one. Fabricated proof fails the marketing standard and this one.</p>
+  </DsSection>
+
+  <DsSection id="cta" title="Calls to action">
+    <ul>
+      <li>One primary action per page, repeated: in the nav, the hero, after the benefits, in the final band. It is the same action each time (call, or request the inspection).</li>
+      <li>Flag red, white text, 800 weight, sentence case, verb first: "Call (303) 555-0142", "Book a free inspection".</li>
+      <li>Secondary: ghost on white bands, white-outline ghost on navy bands. Never gold, never green.</li>
+      <li>On a phone the primary is also a sticky bottom bar (56px + safe area) with the phone number.</li>
+      <li>No competing offers, no pop-ups, no exit intent, no countdowns.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="forms-web" title="Lead forms">
+    <ul>
+      <li>Five fields at most: name, phone, email (optional), address or town, what happened (select: hail · wind · leak · age · other). One column, labels above, 16px inputs, 48px controls.</li>
+      <li>The submit is the page's primary and says what happens next: "Request inspection — we call within one business day".</li>
+      <li>Consent line under the button in 12px, plain: how the number will be used, no pre-ticked boxes (marketing standard).</li>
+      <li>Success replaces the form with what happens next and the office phone; no redirect to a generic thank-you page.</li>
+      <li>Errors inline beside the field; the value is kept.</li>
+      <li>The form posts to the intake endpoint; nothing is emailed to a customer automatically (SOUL boundary applies to marketing too).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="performance" title="Performance & SEO">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Budget</th><th>Target</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td>LCP</td><td>≤ 2.0s on 4G</td><td>Hero image ≤ 200 KB AVIF, <code>fetchpriority="high"</code>, preloaded; fonts self-hosted with <code>font-display: swap</code></td></tr>
+          <tr><td>CLS</td><td>≤ 0.05</td><td>Width/height on every image; no late-loading bands</td></tr>
+          <tr><td>INP</td><td>≤ 200ms</td><td>No framework on public pages; one small script for the form</td></tr>
+          <tr><td>Page weight</td><td>≤ 800 KB</td><td>Six images maximum, SVG logo optimised (the 2.5 MB file is not used publicly)</td></tr>
+          <tr><td>Lighthouse</td><td>≥ 95 all four</td><td>Checked before deploy</td></tr>
+          <tr><td>Title / description</td><td>Town + service + brand, ≤ 60 / ≤ 155 chars</td><td>One h1 = the promise</td></tr>
+          <tr><td>Schema</td><td>RoofingContractor + LocalBusiness per office, Review, FAQ</td><td>Per the marketing standard</td></tr>
+          <tr><td>Images</td><td>Descriptive alt per the alt-text rules</td><td>Icons & images → Alt text</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="web-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="WEB-01" title="One promise, one action, repeated; proof from our own records; benefits that answer doubts." source="this chapter; standards/marketing/v1.md">
+        <p>Never "Welcome to…", never lorem ipsum, never a bracketed placeholder shipped.</p>
+      </DsRule>
+      <DsRule id="WEB-02" title="The content rail governs every band; navy bands are the hero and the final CTA only; section rhythm 64px / 40px." source="Design.md 'The container'; this chapter">
+        <p>Background on the band, content in the container.</p>
+      </DsRule>
+      <DsRule id="WEB-03" title="Flag red is the phone / inspection CTA and nothing else; gold eyebrows on navy only." source="DSN-011, DSN-012">
+        <p>One flag-red control per viewport, including the sticky mobile bar.</p>
+      </DsRule>
+      <DsRule id="WEB-04" title="Photography is ours; the logo sits in the nav on white; the roof draw-in is the only motion." source="Icons I-05; Logo L-08; Motion MO-07">
+        <p>No stock people, no drone footage we did not take.</p>
+      </DsRule>
+      <DsRule id="WEB-05" title="Forms are five fields at most with a consent line, inline errors and a success state that says what happens next." source="this chapter; marketing standard consent rules">
+        <p>Nothing is emailed to a customer automatically.</p>
+      </DsRule>
+      <DsRule id="WEB-06" title="Budgets: LCP ≤ 2.0s, CLS ≤ 0.05, ≤ 800 KB, Lighthouse ≥ 95; checked before deploy." source="this chapter">
+        <p>Six images maximum.</p>
+      </DsRule>
+      <DsRule id="WEB-07" title="Check the page at 390px before presenting: wrapping headline, stacked grids, readable body, one sticky CTA." source="Mobile M-09">
+        <p>The phone is where the homeowner reads it.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>
