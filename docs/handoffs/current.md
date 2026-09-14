@@ -2,125 +2,131 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-08-25 12:40 (CT)
-**Agent:** Lead Orchestrator (Claude Code)
-**Reason:** User-requested (/project-handoff + /wrapup with full Linear documentation)
+**Date:** 2026-09-14 11:30 (CT)
+**Agent:** Lead Orchestrator (Claude Code, Fable 5.1)
+**Reason:** User-requested (/project-handoff after shipping the living design system)
 
 ---
 
 ## Accomplished This Session
 
-Session opened with "verify the invoice audit loop has been running daily since 08/10." It has — 16/16 days, zero failures. But verifying it exposed four defects, all now fixed and deployed.
+Brief: `/design` — "the most detailed design system ever produced", deployed as an interactive site with sidebar navigation at `cc.proexteriorsus.net/design-system`. Shipped, deployed, verified.
 
-### Pricing join — the evergreen rule, applied per item (PEC-253, PEC-254)
+### The site (18 chapters + machine feed)
 
-- `schemas/cleverwork-roofer/277-item-aware-version-cascade.sql`: version supersession is now **item-aware** on all three ABC arms (exact, fuzzy, branch-match). A newer agreement version supersedes an older one **only for the items it actually prices**. 414 lines regained a benchmark; 0 changed, 0 lost.
-- `schemas/cleverwork-roofer/279-vendor-arm-parity.sql`: ported the same rule to the SRS/QXO arm, which had **no supersession at all** (its lateral ordered by price with no `effective_date` term, so a cheaper *older* sheet would have won). Unified the evergreen predicate across all four arms.
+- `app/command-center/src/layouts/DesignSystemShell.astro`: the site's own shell — navy chapter rail (search, grouped chapters with section sub-links, "← Command Center"), sticky top bar with the System/Light/Dark trio wired to `cc.theme`, right-hand "on this page" list, prev/next pager, copy-to-clipboard token chips, phone drawer collapsed by default.
+- `app/command-center/src/lib/design-system/nav.ts`: chapter map (slug, group, sections) driving the rail, TOC, search index and pager.
+- `app/command-center/src/lib/design-system/tokens.ts`: parses `global.css :root` at build time via `?raw`, resolves `var()` chains, defines `darkOverrides`, WCAG contrast + CMYK helpers.
+- `app/command-center/src/pages/design-system/tokens.json.ts`: `GET /design-system/tokens.json` — every token with light/dark values, motion tokens, breakpoints, long-list constants.
+- `app/command-center/src/pages/design-system/*.astro`: `index` (first-principles method, precedence, rule index), `color` (Pantone/CMYK/RGB per ink, five-role discipline, audit-surface palettes, measured contrast matrix both modes, vendor colours), `logo` (files, anatomy, clear space, backgrounds, placement, mark, vendor badges, misuse, alt), `typography` (ramp, weights, tracking/kerning, numerals, measure, mobile/print ramps), `spacing` (scale, app frame, rail, breakpoints, full-bleed contract, density, z-index), `iconography` (icon grammar, the set, image sizing, formats, alt-text rules), `components` (20 components as production markup incl. board specimens via `cash-surface.css`), `modes` (mechanism, token mapping, per-component behaviour, elevation), `motion` (13 motions live with replay; duration/easing tokens; reduced motion), `dashboards` (Tufte applied, page shapes, KPI rules, charts, numbers, lights), `decisions` (~90 recorded UX decisions with repo paths + never-do list), `mobile`, `accessibility` (WCAG 2.2 table, ARIA in use), `content`, `print`, `swag`, `web`, `agents` (recipe, ship checklist, file map, feed, escalation, changelog).
+- `app/command-center/src/components/design-system/{DsSection,DsSpec,DsRule,DsToken}.astro`: documentation primitives.
+- `app/command-center/src/styles/design-system.css`: site chrome + the canonical dark mapping (re-points the `:root` aliases).
+- `app/command-center/src/lib/nav.ts`: "Design System" leaf under AI Agents.
 
-### Weekly QB export — built the producer that was never built (PEC-255, PEC-256)
+### Swag renders
 
-- `schemas/cleverwork-roofer/278-inv-processed-weekly-view.sql`: `v_inv_processed_weekly`, the export membership set (load-once contract).
-- `schemas/cleverwork-roofer/280-negatives-are-credit-memos.sql`: positive-total gate on the export set + new `v_credit_memo_tbd`, a cross-vendor CM reconciliation queue.
-- `scripts/build-inv-processed-weekly.mjs`: renders `INV-PROCESSED-[vendor]-[date].csv` **one file per vendor**, plus `SUMMARY.md`. Prep-only by default; `--stamp` is opt-in. Hard-refuses a mixed-vendor file or a non-positive row.
-- `.gitignore`: `exports/` ignored — generated batches carry client invoice data (hard rule 2).
+- `scripts/design-system-swag.mjs`: 12 items via fal.ai `openai/gpt-image-2.5/flare/edit` with the official logo as reference image; provenance manifest.
+- `app/command-center/public/design-system/swag/*.jpg` + `manifest.json`: 960px JPEG q82, ≤ 250 KB each.
 
-### Docs and rules
+### Fix found while documenting
 
-- `CONVENTIONS.md` §10b, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/agent-conventions.mdc`: item-aware supersession, the **Vendor parity of the audit** block, negative-total = credit memo, per-vendor export. `check-harness-alignment.sh` passes.
-- `docs/81-invoice-audit-v2-process-and-build-plan.md`: decisions 2 and 14 marked **SUPERSEDED** in place.
-- `context/memory/2026-08-25.md`: daily log.
+- `app/command-center/src/styles/global.css`: `--error-surface` / `--error-text` were consumed by `.button-danger`, `.priority-critical` and the CM panel but never declared; added as aliases. Destructive buttons had no fill in production.
+
+### Docs and pointers
+
+- `docs/112-design-system-site.md`: what it is, decisions, recorded gaps, keeping it true.
+- `CLAUDE.md` (Working style), `CONVENTIONS.md` §11, `config/brand/DESIGN.md`, `standards/design/v1.md`: pointers to the site and the same-PR update rule.
+- `context/memory/2026-09-14.md`: session block.
+- Version `0.6.551A → 0.7.1A` (minor bump for a new major surface, docs/62).
 
 ## Git State
-- **Branch:** `main`
-- **Last commit:** `55b99f1` — "fix(pec-248): a negative total is a credit memo; the QB export is per vendor (mig 280)"
-- **Uncommitted changes:** handoff + daily log only (committed as the final wrap-up commit)
+- **Branch:** `main` (feature branch `claude/cc-proexteriors-design-system-c99a08` merged fast-forward and also pushed)
+- **Last commit:** `7296c22` — "feat(design-system): living design system at /design-system — 18 chapters, tokens.json feed, fal.ai swag renders"
+- **Deployed:** `/healthz` `buildCommit` = `7296c22…` at 11:11 CT
+- **Uncommitted changes:** this handoff only (committed as the wrap-up commit)
 
 ## Task Cut Off
-None — session ended at a clean boundary. All four migrations applied to prod, verified, and pushed.
+None — session ended at a clean boundary. Build green, 352/352 tests green, deploy confirmed.
 
 ## Next Task — Start Here
 
-**Task:** PEC-257 — disposition the 7 reopened August lines
+**Task:** Close the recorded design-system gaps (docs/112 → "Recorded gaps"), starting with the `:focus-visible` ring (rule A-02).
 
 **What to check / do:**
-1. Open the Invoice Audit surface, Wichita office, August window.
-2. Seven lines sit `pending` with restored benchmarks totalling **$142.25** over agreement (4.8%–18.7%; five of seven are ≥6%, hold-notice grade under docs/57 §1). Full table in PEC-257.
-3. Approve or reject each. Approved lines become credit-memo claims.
-4. Once dispositioned, the 6 blocked invoices clear for the weekly QB export.
+1. Read `/design-system/agents` (recipe + ship checklist) and `/design-system/accessibility#focus`.
+2. Add `:focus-visible` rules to `app/command-center/src/styles/global.css` for buttons, links, inputs, summaries, segments (2px ring in `--primary`, 2px offset; inputs move the border), and gold in each board's `[data-theme="dark"]` block.
+3. Remove the resting shadow from `.metric-panel` and `.gap-metric-card` (CMP-12).
+4. Move `price-agreement/review.astro` and `price-list/branch.astro` from raw `prefers-color-scheme` onto `cc.theme` via `initThemePref` (MD-01).
+5. Open each touched page in both modes and at 390px; cite the rule ids in the commit.
 
-**If the lines do not appear:** confirm `mv_invoice_audit_line` refreshed — `select * from matview_refresh_request;` — or force it with `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_invoice_audit_line;`.
+**If the dev server will not start in the worktree:** `npm ci --no-audit --no-fund` in `app/command-center` (the worktree has no `node_modules` until installed); preview via `.claude/launch.json` `command-center` on port 4399.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Then show me the 7 pending August lines from PEC-257 with their agreement evidence so I can disposition them."
+**Prompt to use:** "Read docs/handoffs/current.md. Then close the design-system gaps listed in docs/112 starting with the :focus-visible ring (rule A-02), verifying each surface in both modes before committing."
 
 ## Decisions Made This Session
 
-- **Evergreen applies per ITEM, not per agreement.** Expiry was never the cause of the No-Price flood — all 13 agreements were already `renewal_mode = 'evergreen'`. The bug was item-blind supersession: a shorter new price list silently repealed the prices it omitted. Do not re-litigate; the old wording in all four rule files described the bug as if it were the rule and has been corrected.
-- **Vendor evals may differ only where the vendor process differs.** Legitimate differences are enumerated in CONVENTIONS §10b: QXO has no agreements ever; SRS prices off the Level 4 sheet → Richardson TX; PDF/OCR verification is ABC-only for want of a source. Everything else is vendor-agnostic. Never special-case a vendor to make a number look right.
-- **A negative total is a credit memo,** whatever the vendor flag says. 5 negative documents were unflagged (4 ABC, 1 QXO) and leaked into the QB payables export. Derive from the amount; never write the flag onto the mirror — the nightly sync overwrites it.
-- **The QB bank export is one file per vendor.** ABC, SRS and QXO keep separate QB bank registers. Supersedes docs/81 decisions 2 and 14.
-- **The $1.67M export backlog was a records gap, not a money gap.** Everything had been hand-keyed into QuickBooks as **Purchases** (not Bills — `qbo_bills` for ABC stops at 2023-10-13). 620 invoices verified against the QBO mirror and reconciliation-stamped; **the CSV was never loaded**, because loading it would have double-entered $1.67M.
-- **`2009557754-001` stays cancelled.** Lucinda withdrew it 2026-08-20; Chris upheld that call even though mig 277 made two *different* lines claimable. `do_not_auto_revive` stamped into the request's `packet`. A human cancellation is a decision, not a stale record.
-- **No-Price threshold stays at `purchases_ytd >= 2`.**
+- **The design system is a site, not a document.** Chapters are the navigation, so it has its own rail (`DesignSystemShell`), not the department rail. Do not fold it into `AppShell`.
+- **Tokens are parsed from `global.css` at build time, never copied.** Contrast ratios are computed, not asserted. A table that could drift from production is not allowed on the site.
+- **The site's dark mode is the canonical dark mapping** (`design-system.css` + `tokens.ts darkOverrides`). Production dark mode stays per-surface (Chris, 2026-06-17); a future shell-level dark mode copies this mapping — and must re-point the `:root` aliases (`--surface`, `--text`, …) because `var()` resolves where declared.
+- **Board specimens use `cash-surface.css` (`.cfx`)**, the shareable copy of the canonical `.fw` vocabulary, with a `MutationObserver` mirroring the page theme.
+- **Swag renders are references, not artwork.** The purchase order carries the artwork file, Pantone numbers, method and size from the per-item table; renders are regenerated only when the logo file changes.
+- **Pantone numbers are nearest solid-coated matches by sRGB** and are labelled as such; rule C-07 requires a physical fan proof before any run over 100 units.
+- **Rule ids are permanent** (C-, L-, T-, S-, I-, CMP-, MD-, MO-, D-, UX-, M-, A-, W-, P-, SW-, WEB-, G-). Retire with a note; never renumber. A change to a token, component, mode, motion or decision updates the matching chapter in the same PR (G-04).
+- **`/design` canvas artifact not used** — the deliverable was the route itself.
 
 ## Blockers Requiring Human Action
 
-1. **PEC-257** — disposition the 7 August lines ($142.25). Blocks 6 invoices from the QB export.
-2. **PEC-258** — 9 credit memos have no original invoice ($26,601.90: ABC 7/$21,421.33, QXO 1/$3,723.59, SRS 1/$1,456.98). Request the original invoice reference from each vendor.
-3. **Weekly batch is unstamped** — 3 files, 13 invoices, $14,610.49 in `exports/inv-processed-2026-08-25/`. Run `--stamp` **only after** accounting loads them.
-4. **Ruling needed:** 309 pre-August lines were also re-benchmarked; 38 show **$575.92** of overcharge. Not reopened (outside the authorised window). Sweep them or leave them?
-5. **`morning_abc_sync` is still paused** — the agent pass that posts ≥6% hold notices to Slack has never run. docs/57 §0 still lists it as `paused` with no cron entry.
-
-## ⚠️ Commit-message ID collision — do not chase these
-
-Commits `9bafd1e`, `7e0eace`, `2a76a6b`, `ec71346`, `55b99f1` cite **PEC-244/245/246/247/248**. Those IDs were used before the board was checked and collide with unrelated live Pax issues. History was **not** rewritten (the commits are on `main` and deployed). Real mapping:
-
-| Commit | Cited (void) | Real issue |
-|---|---|---|
-| `9bafd1e` | pec-244 | **PEC-253** |
-| `7e0eace` | pec-245 | **PEC-255** |
-| `2a76a6b` | pec-246 | docs alignment (PEC-253/254) |
-| `ec71346` | pec-247 | **PEC-254** |
-| `55b99f1` | pec-248 | **PEC-255 / PEC-256** |
-
-Session report: **PEC-259**.
+1. **Client artwork** — an official reversed (white) logo and a roof-only mark are still needed; the current white SVG and favicon are Cleverwork stand-ins (Logo chapter, L-05).
+2. **Carried forward, unchanged:** PEC-257 (7 August lines), PEC-258 (9 CMs without originals), the unstamped 2026-08-25 weekly batch, the pre-August $575.92 ruling, `morning_abc_sync` paused, CPA rulings, Coolify API token → `BETTERSTACK_API_TOKEN` on prod, stop `cc-production-e4344d8`, Q5 JT grant key, Q7 BS→Slack (see `context/MEMORY.md` ▶ Pick up here).
 
 ## Verification Commands
-1. `git status --short` — should return empty
-2. `git rev-parse --short HEAD origin/main` — both should match
-3. `bash scripts/check-harness-alignment.sh` — should exit 0, no output
-4. `node scripts/build-inv-processed-weekly.mjs` — should write 3 per-vendor files, 13 invoices, $14,610.49, and print "PREP ONLY"
-5. `select count(*) filter (where negotiated_price is not null) from mv_invoice_audit_line;` — should return **2526** of 7003
-6. `select vendor_slug, is_tbd, count(*) from v_credit_memo_tbd group by 1,2;` — 9 rows with `is_tbd = true`
+1. `git status --short` — empty
+2. `git rev-parse --short HEAD origin/main` — both `7296c22` (or the wrap-up commit that follows)
+3. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts with the deployed SHA
+4. `curl -s -o /dev/null -w "%{http_code}" https://cc.proexteriorsus.net/design-system` — `302` to `/auth/login` when signed out; `200` with a session
+5. `cd app/command-center && npm run build && npm test` — build complete, 29 files / 352 tests pass
+6. Signed in: `/design-system/tokens.json` returns `"version": "0.7.1A"` and 77+ tokens
 
 ## Full Context
 
 ### What was built across ALL sessions (complete feature list)
-Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus this session:
+Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 - Invoice Audit v2 (docs/81), office-inherited pricing, vendor/office/time/UOM silos (migs 119–122, 201, 208, 217)
-- Friday WIP/AR board (mig 215), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
-- Materialised audit line + on-demand refresh (migs 272–276)
-- **This session:** item-aware supersession (277), weekly QB export set (278), vendor arm parity (279), negative-total/CM routing + per-vendor export (280), the Tuesday INV-PROCESSED producer
+- Friday WIP/AR board (mig 215) with the long-list disclosure rule (2026-08-21), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
+- Materialised audit line + on-demand refresh (migs 272–276); item-aware supersession (277); weekly QB export set (278); vendor arm parity (279); negative-total/CM routing + per-vendor export (280)
+- Cash family: 13-week cash flow, cash runway, fixed costs (mig 281)
+- Runtime uptime board at `/agents` with direct third-party pings (docs/109, D16, 2026-09-12); Thursday WIP/AR pack on openpyxl (Aspose retired)
+- CC ⇄ CRM parity fixes 2026-09-11 (body 14px, Inter loaded, purple accent → navy/info); CRM PWA companion repo (docs/111)
+- **This session:** the living design system at `/design-system` (docs/112), `tokens.json`, swag renders, `--error-surface` fix, version 0.7.x
 
 ### Architecture decisions
-- `v_invoice_audit_line` is the **definition of record**; every reader goes through `mv_invoice_audit_line` (the view costs ~8.8s against an 8s `statement_timeout`, so a direct PostgREST read fails and surfaces render empty). Matview refreshes every 15 min via pg_cron job 13.
-- The audit is **continuous, not batch** — variance is recomputed every 15 minutes, not by a nightly job. "Has the audit run?" is the wrong question; "is anything undispositioned?" is the right one.
-- Credit status is **derived from the amount**, never written onto the vendor mirror — the nightly sync would overwrite it.
+- `v_invoice_audit_line` is the definition of record; every reader goes through `mv_invoice_audit_line` (the view exceeds the 8s `statement_timeout`; a direct PostgREST read renders empty). Matview refreshes every 15 min via pg_cron job 13.
+- The audit is continuous, not batch. "Is anything undispositioned?" is the question.
+- Credit status is derived from the amount, never written onto the vendor mirror.
+- Dark mode is per surface via `theme-pref.ts` (`cc.theme`); the design-system site demonstrates the shell-level form and owns the dark mapping.
+- Design tokens exist in exactly one place (`global.css :root`); the site parses them.
+
+### Design system
+- **Site:** https://cc.proexteriorsus.net/design-system — start at `/design-system/agents`.
+- Inter 400/600/700/800 (self-hosted). Body 14px/1.5 shell, 12.5–13px boards. Navy `#11133f` (Pantone 2766 C) authority, flag red `#c22326` (186 C) the one CTA, gold `#eaa221` (1235 C) attention never a button, hunter green `#3b6b4c` (7733 C) status only, smart blue `#0066cc` (2935 C) links/data. Radius 8 default, 4px spacing scale, borders over shadows, one flag-red primary per viewport, status always a word + colour, ten-row long-list panes, PE Office → Vendor Branch → Document → Line nesting.
 
 ### Key invariants (never violate)
-- **Four gates**, all independent: vendor · office · time (incl. item-aware supersession) · UOM. Failing any one means no comparison happens.
-- **The audit refuses rather than converts** on UOM mismatch.
-- **The final tie-break picks the LOWEST price** — simulate and diff before adding or backdating a book into an office that already has one.
-- **Supersession is item-aware.** A shorter new price list does not repeal the prices it omits.
-- **A negative total is a credit memo.** Never a payable line.
-- **One QB export file per vendor.** Separate bank registers.
-- `register_exported_at` is **one-way**. A stamped invoice never appears in a future QB file — only stamp what has actually reached QuickBooks.
-- **A human cancellation is a decision.** Never bulk-revive a withdrawn CM request.
+- Four pricing gates: vendor · office · time (item-aware supersession) · UOM; the audit refuses rather than converts; lowest-price tie-break — simulate before adding a book.
+- A negative total is a credit memo. One QB export file per vendor. `register_exported_at` is one-way. A human cancellation is a decision.
+- No literal hex / spacing / font outside the token system (DSN-010/014); no role swaps (DSN-011); one flag-red CTA (DSN-012); mono only on Property Cards + SKU cells (DSN-013).
+- Nothing external without a human. QBO is read-only.
+- Every change to a token, component, mode, motion or decision updates the design-system chapter in the same PR.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live) |
-| Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main` |
-| Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host — catalog sync → invoice ingest → PDF backfill → Alex No-Price triage |
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through 287 |
+| Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main`; verify `/healthz buildCommit`; Coolify host `178.105.220.14`; helper `scripts/coolify-redeploy.sh`; skill `/coolify` |
+| Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` |
+| Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host (`178.156.203.23`) |
 | pg_cron job 13 | `mv_invoice_audit_line` + office pricing matviews, every 15 min |
 | Weekly QB batch | `node scripts/build-inv-processed-weekly.mjs` (Tuesdays), prep-only unless `--stamp` |
+| Runtime board | `/agents` (docs/109); Better Stack watches the site only; third parties by direct ping |
+| Swag renders | `node scripts/design-system-swag.mjs` — needs `FAL_KEY`, which loads only in an interactive zsh: `zsh -lic 'node /abs/path/scripts/design-system-swag.mjs'` |
+| Agent auth to live site | Bearer service tokens on `/api/*`; skill `/workos-agent-auth` |
+| Slack | per-agent bots per `/slack-agents`; all dev traffic → `#pe-cc-dev-team` |
