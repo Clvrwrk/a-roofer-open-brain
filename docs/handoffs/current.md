@@ -83,8 +83,10 @@ None — session ended at a clean boundary. Build green, 352/352 tests green, de
 
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
 **293-297** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
-behind main and merged with it daily. All reviewers green on the current head; **not merged,
-not deployed.**
+behind main and merged with it daily. **Not merged, not deployed.** For review status read the
+PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
+written here is describing a commit that is no longer the head. (A review caught this line
+claiming all reviewers were green while two were mid-run.)
 
 Migration numbers have moved **fourteen** times as parallel sessions claimed numbers on main —
 twice on 2026-09-15 within one hour (main took 289-291, then 292), ending at 293-297. Prod
