@@ -109,7 +109,14 @@ export interface PriceAgreementCoverage {
     pricedItems: number;
     gaps: number;
     lapsedVendors: number;
-    /** Gaps carrying real spend, including ones whose no-price state is accepted. */
+    /**
+     * Gaps carrying real spend, including ones whose no-price state is accepted.
+     *
+     * NOT a superset of `gapsToChase`, and no surface may imply it is. An unreachable
+     * agreement is work before its pair has invoiced, so it counts in `gapsToChase` while
+     * sitting outside this number. The builder copy said "N carry spend; of those, M are
+     * actually work" and became false the moment that stopped being true.
+     */
     gapsWithSpend: number;
     /**
      * Gaps with spend that are actually work — the chase queue. Membership is decided by
