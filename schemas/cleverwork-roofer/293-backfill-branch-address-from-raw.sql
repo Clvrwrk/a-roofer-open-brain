@@ -1,22 +1,24 @@
--- 290 — recover branch addresses that were already sitting in the invoice payload.
+-- 293 — recover branch addresses that were already sitting in the invoice payload.
 --
 -- NUMBERING NOTE — two identities, both authoritative in their own place:
 --   * IN PROD: applied as `246_backfill_branch_address_from_raw`, 2026-08-20 10:59 UTC.
 --     That label is fixed and will not change; Supabase keys on timestamp, not on the
 --     number, so the applied order is unaffected by anything below.
---   * IN THIS REPO: the file is `290-...`. It was renumbered twelve times (245 -> 251 ->
---     ... -> 290) as parallel sessions claimed numbers on main while this work was in
+--   * IN THIS REPO: the file is `293-...`. It was renumbered thirteen times (245 -> 251 ->
+--     ... -> 293) as parallel sessions claimed numbers on main while this work was in
 --     flight. Main is canonical, so this branch yields each time. Earlier revisions of
 --     this header stopped at intermediate steps and were stale; do not use any
 --     intermediate number to find a file.
--- The sibling migrations of this set are 289, 291, 292 and 293, all applied to prod.
+-- The sibling migrations of this set are 292, 294, 295 and 296, all applied to prod.
 -- 8th renumber 2026-08-22: main took 263 for `263-wip-attention-flags.sql`.
 -- 9th renumber 2026-08-22: main took 267 for `267-srs-colorado-price-list-backdate.sql`.
 -- 11th renumber 2026-08-26: main took 281 for `281-ceo-fixed-cost-13wcf.sql`.
 -- 12th renumber 2026-09-12: main took 285-288 (credit-memo guard, runtime status plumbing
 --     + feed freshness, materialised order/AccuLynx match).
+-- 13th renumber 2026-09-15: main took 289-291 (triage office race + reconcile scope, reopen
+--     June triage race lines, rekey ABC branch 326 Topeka).
 --
--- Found while putting dollars on the coverage gaps (migration 289). The largest single
+-- Found while putting dollars on the coverage gaps (migration 292). The largest single
 -- un-audited bucket in the system is ABC branch 176: 11 invoices, $19,356.94 — on a branch
 -- row with NO city and NO state, so it can never geocode, never land in a territory ring,
 -- and never get priced. Same shape for branches 183 and 305.

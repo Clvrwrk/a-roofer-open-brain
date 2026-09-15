@@ -1,6 +1,6 @@
 # 107 — Rank coverage gaps by dollars, not by branch count
 
-**Initial date:** 2026-08-20 · **Last updated:** 2026-09-15 · **Migrations:** 289, 290, 291, 292, 293 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-09-15 · **Migrations:** 292, 293, 294, 295, 296 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -45,7 +45,7 @@ Richardson's territory (−$718.23 there, +$718.23 here), so nothing was lost �
 from a covered office into the honest "no office" bucket, which is the fail-closed behaviour
 working as intended.
 
-## Migration 289 — the two views
+## Migration 292 — the two views
 
 - `v_office_vendor_spend` — invoice count + spend per (office × vendor), resolved **only**
   through `vendor_branch_id` (migration 244's contract). Join it to
@@ -62,7 +62,7 @@ unresolved money was `branch_has_no_office` — a territory question, not an ide
 > resolver. See the 2026-09-15 addendum — and treat this as the general lesson: a rate
 > measured over today's rows is an observation, not an invariant.
 
-## Migration 290 — the address was never missing
+## Migration 293 — the address was never missing
 
 The single largest un-audited bucket was ABC branch **176**: 11 invoices, **$19,356.94**, on
 a branch row with no city and no state. It could never geocode, so it could never land in a
@@ -90,7 +90,7 @@ payload and stay `no_address` — honestly unknown rather than guessed.
 
 ### Why this stops at geocoding
 
-Migration 290 fills facts (`city`, `state`, `address`) and flips those rows to
+Migration 293 fills facts (`city`, `state`, `address`) and flips those rows to
 `geocode_status = 'pending'`. It deliberately does **not** set
 `pricing_territory_office_id`: territory is a human decision
 (`vendor_branches.territory_decided_by`), and geocoding has to run first regardless.
@@ -128,22 +128,22 @@ read `245_…`/`246_…`/`248_…`/`249_…`, which is cosmetic — Supabase key
 existed. Applied order is unchanged.
 
 - **245 says WHY** a pair has no agreement — `no_book | pending | not_pursued | unrecorded`
-- **289 says HOW MUCH** it costs — `invoice_count`, `spend`
+- **292 says HOW MUCH** it costs — `invoice_count`, `spend`
 
 Neither alone supports a decision. Chris ruled **QXO `no_book` at all five offices** on
 2026-08-20: QXO lines price as no-price *by design*. Ranked on dollars alone, Wichita × QXO
-($5,697.47) reads as work to chase — it is not. **Migration 291** joins the two so the
+($5,697.47) reads as work to chase — it is not. **Migration 294** joins the two so the
 surface can never make that mistake.
 
-### Migration 292 — the gate was asking the wrong question
+### Migration 295 — the gate was asking the wrong question
 
-291's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
+294's `needs_ruling` keyed off `live_agreements = 0` — *does the paperwork exist*. That is
 wrong, and it hid the largest un-triaged pair in the system:
 
 > **Denver × SRS has a live, in-territory, 22-item agreement that the office ring cannot
 > reach, so the coverage surface reports `priced_items = 0` for the pair.**
 
-292 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
+295 re-gates on `priced_items` — *can this pair actually be audited* — which is the question
 that matters. The queue is two rows: Denver × SRS (`unrecorded`) and Atlanta × ABC (`pending`).
 As measured on 2026-08-20 that was $17,437.63 and $5,226.90; the Denver figure has since moved
 with a credit memo — see the 2026-09-02 addendum for the current pair of numbers.
@@ -204,7 +204,7 @@ Different numbers, so the join never meets.
 > duplicate rows described further down have since been tidied away. Do not size the Denver
 > repair from this table — see *Addendum, 2026-08-24* at the end of this document.
 
-`v_agreement_unreachable` (migration 292) showed, on 2026-08-20, **all three live numbered SRS
+`v_agreement_unreachable` (migration 295) showed, on 2026-08-20, **all three live numbered SRS
 agreements — 136 items — unreachable**, each held by an ungeocoded row with an obvious twin:
 
 | Agreement | Items | Held by | Likely canonical |
@@ -230,7 +230,7 @@ Repointing the agreement join to `vendor_branch_id` is pricing-affecting and ear
 equivalence proof migration 244 ran before switching (FK == text on every row, 0
 disagreements, fingerprint unchanged). Merging the duplicate branch rows is a branch-identity
 decision for a human — `vendor_branch_alias` (migration 240) already encodes that boundary:
-a guess cannot become a fact. 292 only makes the failure visible.
+a guess cannot become a fact. 295 only makes the failure visible.
 
 ---
 
@@ -344,9 +344,9 @@ different result: exact-token on description-only sheets is close to a no-op, an
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
 
-## Addendum — 2026-08-21: a defect migration 290 introduced, and 4 rows a human should look at
+## Addendum — 2026-08-21: a defect migration 293 introduced, and 4 rows a human should look at
 
-Migration 290's `geocode_status` assignment was keyed on the wrong condition. It read:
+Migration 293's `geocode_status` assignment was keyed on the wrong condition. It read:
 
 ```sql
 WHEN vb.city IS NULL AND rb.b->>'addressLine1' IS NOT NULL THEN 'pending'
@@ -358,7 +358,7 @@ data and does it still lack a geom":
 1. **It demoted already-geocoded rows.** A branch that had a `geom` but a NULL `city` was
    flipped from `ok` to `pending` — re-queueing a perfectly good geocode. The applied run
    did this to **branches 21 (Raleigh NC) and 684 (Norman OK)**, both stamped
-   `2026-08-20 10:59:17+00`, which is migration 290's run.
+   `2026-08-20 10:59:17+00`, which is migration 293's run.
 2. **It missed address-only recovery.** A branch whose `city` was already set but whose
    `address` was NULL would gain an address and keep its old status — so a row that had
    become geocodable stayed marked `no_address` and was never picked up. This matches
@@ -382,8 +382,8 @@ Four rows violate it:
 
 | Branch | City | `updated_at` | Attributable to |
 |---|---|---|---|
-| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 290 |
-| 684 | Norman OK | 2026-08-20 10:59:17 | migration 290 |
+| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 293 |
+| 684 | Norman OK | 2026-08-20 10:59:17 | migration 293 |
 | 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
 | 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
 
@@ -428,7 +428,7 @@ That is a **third** independent blocker, on top of the two this document already
 
 ## Addendum, 2026-08-22 (2) — access posture and two standing assumptions
 
-### Migration 293: the coverage views were world-readable
+### Migration 296: the coverage views were world-readable
 
 > **Ledger note (2026-08-26).** This migration was originally executed *directly* against
 > prod on 2026-08-22, with no `schema_migrations` row. The lockdown was live, but a freshly
@@ -438,7 +438,7 @@ That is a **third** independent blocker, on top of the two this document already
 > idempotent statement through the migration path — grants verified unchanged before and
 > after. **A security fix applied out-of-band protects today's database and no other.**
 
-The Cursor security review flagged that the four views added by 289–292 carry no
+The Cursor security review flagged that the four views added by 292–295 carry no
 `GRANT`/`REVOKE`, and prod confirmed it. As role `anon`:
 
 ```sql
@@ -461,7 +461,7 @@ invoice tables never applied. Aggregated office × vendor spend and agreement-ru
 metadata were readable through PostgREST with the publishable key — outside the
 WorkOS gate.
 
-**Migration 293** revokes `anon`/`authenticated` and grants `service_role` on all four,
+**Migration 296** revokes `anon`/`authenticated` and grants `service_role` on all four,
 copying the `v_price_list_global` shape. Verified in both directions; `service_role` still
 returns all 10 rows. The Command Center is unaffected because every reader goes through
 `createServerSupabaseClient` (`SUPABASE_SERVICE_ROLE_KEY`); no browser code touches these
@@ -478,7 +478,7 @@ than changed. **Needs a human decision.**
 
 ### Standing assumption: ABC branch payloads are bimodal
 
-Migration 290 picks the branch payload with the longest `addressLine1`. A review asked what
+Migration 293 picks the branch payload with the longest `addressLine1`. A review asked what
 happens if that payload lacks a `city`/`state` some other payload carries. Measured across
 all 1,093 branch-linked invoices:
 
@@ -491,7 +491,7 @@ all 1,093 branch-linked invoices:
 There is no partial payload, so the longest-address ordering always selects a full block and
 city/state travel with it. The migration is correct **for this vendor's data shape**, not in
 general. **If a vendor ever emits partial branch payloads, the correct shape becomes a
-per-field `max()`** rather than one winning payload. 290 is already applied to prod, so it
+per-field `max()`** rather than one winning payload. 293 is already applied to prod, so it
 was left alone rather than superseded by a migration that provably changes no row.
 
 ---
@@ -650,7 +650,8 @@ unaltered afterwards.
 **Three stale cross-references surfaced while doing it**, all pointing at this set's own
 migrations by numbers that stopped existing several renumbers ago: migration 291's header
 called the spend view **268**, and this document called it **268** in one place and called
-the ruling join **270** in another. They now read 289, 289 and 291.
+the ruling join **270** in another. They then read 289, 289 and 291 — 292, 292 and 294 after
+the thirteenth renumber below.
 
 That is the real lesson of this renumber. The mechanical check — each file's number equals
 the number on its own first line — passed on every one of these, because it only looks at
@@ -727,3 +728,56 @@ SELECT reason, invoice_count, spend FROM v_unresolved_branch_spend ORDER BY spen
 A second row appearing there means another slug-only branch has invoiced. That is the signal
 worth acting on — the dollar total alone will not distinguish it from ordinary territory
 spend.
+
+**Resolved the same day, on main, by a human decision — 2026-09-15.** Chris ruled on branch
+326 ("ship it") and main landed `291-rekey-abc-branch-326-topeka.sql`: the Topeka row was
+re-keyed from `topeka-KS-66618-1445` to `326`, invoice `2014501859-001`'s FK backfilled,
+aliases `326`/`0326` added, and the chain refreshed. Re-measured after merging main —
+`no_branch_resolved` is back to **0 rows**, and unresolved branch spend is back to
+**$27,566.56**, its pre-2026-09-15 value. The finding above stands as written: it was
+correct, it was escalated rather than guessed at, and the human call that resolved it is
+exactly the one migration 240 reserves for a human. Note what did **not** change — 685 of
+761 ABC branch rows still carry slug keys, so the *rate* is still not an invariant and the
+watch query above is still the thing to watch.
+
+---
+
+## Addendum — 2026-09-15: thirteenth renumber, 289–293 → 292–296
+
+Main landed its own **289–291** — `triage-office-race-and-reconcile-scope`,
+`reopen-june-triage-race-lines`, `rekey-abc-branch-326-topeka` — while this work was still
+open, colliding with three of this set's five numbers three days after the last collision.
+Main is canonical, so this branch yielded again.
+
+| Was | Now | File |
+|---|---|---|
+| 289 | **292** | `office-vendor-spend-exposure` |
+| 290 | **293** | `backfill-branch-address-from-raw` |
+| 291 | **294** | `gap-exposure-with-ruling` |
+| 292 | **295** | `agreement-unreachable-detector` |
+| 293 | **296** | `coverage-views-service-role-only` |
+
+**The prod labels are unchanged** — `245`, `246`, `248`, `249`/`249b` and
+`290_coverage_views_service_role_only` (`20260826193359`). Supabase keys on TIMESTAMP, so
+nothing needs re-applying. As before, the **whole set moved**, not only the three colliding
+files, so the spend view still precedes the two migrations that read it.
+
+Same method as the twelfth: **23 edits by file, line number and expected exact string**, any
+mismatch aborting before a byte was written. The traps that a blind `sed` would have hit this
+time are the same ones plus new ones from main's own three files — `docs/109` F39/F42 and the
+daily log name main's **289, 290 and 291** a dozen times, and those references are correct
+and must not move.
+
+**Two of this set's numbers live inside prod, not just in files.** Two `COMMENT ON VIEW`
+bodies name a migration: `v_office_vendor_gap_exposure` cites "the dollars (mig 289)" and
+`v_agreement_unreachable` points at "mig 292 header" for the branch-number TEXT join. Editing
+the `.sql` file alone would leave the repo and the database disagreeing, so both comments were
+re-issued against prod and read back in full. (In the twelfth renumber one of these was
+truncated on re-issue and had to be redone — read the comment back, do not assume the
+statement that ran is the statement you meant.)
+
+**The lesson this renumber adds** to the twelfth's: a set that has collided thirteen times is
+not unlucky, it is **mis-scoped**. Five migration numbers have been reserved for three weeks
+against a main branch that ships several a day. The durable fix is not a better renumbering
+procedure — it is to stop holding a contiguous block open across weeks. Land the schema in its
+own short-lived PR the day it is written, and let the surface work that reads it follow.

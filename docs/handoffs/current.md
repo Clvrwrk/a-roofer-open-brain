@@ -97,16 +97,16 @@ files — the spend view must keep preceding the two migrations that read it.
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
 path prices some of the same lines. Two pricing paths disagreeing is the finding.
 
-Five items need a human — full detail in `docs/107` and `docs/108`:
+Four items need a human — full detail in `docs/107` and `docs/108`:
 1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
 2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 290 demoted two; 39 and
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 293 demoted two; 39 and
    465 were touched by another process where `pending` may be a deliberate re-geocode
    request, so they were left alone rather than guessed at.
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
-   default grants mig 293 closed for the four coverage views. They predate this branch and
+   default grants mig 296 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
 4. **Repo-wide customer PII** (`docs/108`) — named individuals beside outstanding balances
    across at least 18 tracked files, including test fixtures that assert on the names. On
@@ -114,14 +114,12 @@ Five items need a human — full detail in `docs/107` and `docs/108`:
    decision on git history, and a CI check. A piecemeal sweep was tried and reverted for
    leaving tables half-anonymised; it needs its own workstream.
 
-5. **ABC branch 326 (Topeka KS) does not resolve** — found 2026-09-15 when a figure that
-   had held for 22 days moved. ABC invoice `2014501859-001` ($1,294.69) carries branch number
-   `326`, but ABC's Topeka row in `vendor_branches` is keyed on the synthetic slug
-   `topeka-KS-66618-1445`, so the ingest-time resolver never matches and the invoice leaves
-   the audit. **685 of ABC's 761 branch rows (90%) carry slug-style numbers**, so any of them
-   repeats this the first time it invoices. Same class of decision as item 1 — repointing the
-   number, or adding a postal/address fallback, is an identity call a human makes. Detail in
-   the `docs/107` 2026-09-15 addendum.
+**Closed 2026-09-15 — ABC branch 326 (Topeka KS).** This branch raised it as a fifth item;
+Chris ruled on it the same day and main shipped `291-rekey-abc-branch-326-topeka.sql`. The
+Topeka row is re-keyed `topeka-KS-66618-1445` → `326`, the invoice FK is backfilled, and
+`no_branch_resolved` is back to 0 rows / unresolved spend back to $27,566.56. The general
+exposure is NOT closed: 685 of ABC's 761 branch rows still carry slug keys, so the next
+slug-only branch to invoice repeats it. Watch `v_unresolved_branch_spend`.
 
 **Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
 pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took
