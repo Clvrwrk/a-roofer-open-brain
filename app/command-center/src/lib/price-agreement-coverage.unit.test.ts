@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { gapExposure, coverageLabelKind } from "./price-agreement-coverage";
 
-/** Shorthand for the four fields gapExposure reads. */
-const v = (hasGap: boolean, invoiceCount: number, spend: number, isAccepted = false) =>
-  ({ hasGap, invoiceCount, spend, isAccepted });
+/** Shorthand for the fields gapExposure reads. */
+const v = (
+  hasGap: boolean,
+  invoiceCount: number,
+  spend: number,
+  isAccepted = false,
+  agreementNotReaching = false,
+) => ({ hasGap, invoiceCount, spend, isAccepted, agreementNotReaching });
 
 describe("gapExposure", () => {
   it("counts only the gaps that carry spend", () => {
@@ -33,6 +38,19 @@ describe("gapExposure", () => {
     expect(out.gapsToChase).toBe(1);
     expect(out.chaseSpend).toBeCloseTo(5226.9, 2);
     expect(out.gapSpend).toBeCloseTo(7200.78, 2);
+  });
+
+  it("REGRESSION: the chase totals agree with the pill on an accepted-but-unreachable pair", () => {
+    // The bug: gapExposure re-derived "is this work?" as !isAccepted, while coverageLabelKind
+    // had been changed so `unreachable` outranks `accepted`. The page then rendered the red
+    // "repair the branch link" pill for a pair it simultaneously left out of gapsToChase and
+    // chaseSpend — a surface contradicting its own summary. Both now ask the same function,
+    // so the only way they can disagree again is if someone re-derives the rule locally.
+    const pair = v(true, 3, 4000, /* isAccepted */ true, /* agreementNotReaching */ true);
+    expect(coverageLabelKind(pair)).toBe("unreachable");
+    const out = gapExposure([pair]);
+    expect(out.gapsToChase).toBe(1);
+    expect(out.chaseSpend).toBeCloseTo(4000, 2);
   });
 
   it("nets credits rather than counting them as exposure", () => {

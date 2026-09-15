@@ -111,11 +111,15 @@ export interface PriceAgreementCoverage {
     lapsedVendors: number;
     /** Gaps carrying real spend, including ones whose no-price state is accepted. */
     gapsWithSpend: number;
-    /** Gaps with spend that nobody has accepted — the actual chase queue. */
+    /**
+     * Gaps with spend that are actually work — the chase queue. Membership is decided by
+     * `coverageLabelKind()`, not by `isAccepted`: an accepted ruling sitting on a live but
+     * unreachable agreement is stale, and that pair IS work (repair the branch link).
+     */
     gapsToChase: number;
     /** Invoice total at gap pairs. NOT the un-audited figure; see CoverageVendor.spend. */
     gapSpend: number;
-    /** Invoice total at gap pairs excluding accepted (no_book) rulings. */
+    /** Invoice total across `gapsToChase`, on the same definition of work. */
     chaseSpend: number;
     /** Spend that resolves to no office at all (v_unresolved_branch_spend). */
     unresolvedSpend: number;
@@ -176,19 +180,36 @@ const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
  * Three distinctions matter, and conflating any two of them produces a misleading number:
  *
  *  1. A gap with no invoices is theoretical — branches sit in the ring, nothing was bought.
- *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work.
+ *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work
+ *     — UNLESS a live agreement exists that the ring cannot reach, which makes the ruling
+ *     stale and the pair real repair work. See `coverageLabelKind()`.
  *  3. `spend` is the invoice TOTAL, which includes tax, freight, and lines the separate
  *     line-level path does price, and is net of credit memos. It is NOT the un-audited
  *     figure and must not be labelled as one: on 2026-08-20 Denver x SRS carried $17,437.63
  *     of spend against $13,464.80 of unpriced line value. Treat any such number as a
  *     snapshot — a single credit memo moved that pair on 2026-09-02.
+ *
+ * WHAT COUNTS AS WORK IS DECIDED IN EXACTLY ONE PLACE — `coverageLabelKind()`. This filter
+ * used to re-derive it as `!isAccepted`, which was equivalent until `unreachable` was made
+ * to outrank `accepted`; after that the pill said "repair the branch link" while the totals
+ * left the same pair out of `gapsToChase`/`chaseSpend`, understating the queue. The bug was
+ * not the predicate but the duplication — two copies of one rule, and only one got updated.
+ * Anything that needs to know "is this work?" must ask the label, never re-test the fields.
  */
+const ACTIONABLE_KINDS: ReadonlySet<CoverageLabelKind> = new Set(["unreachable", "no-agreement"]);
+
 export function gapExposure(
-  vendors: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "spend" | "isAccepted">[],
+  vendors: Pick<
+    CoverageVendor,
+    "hasGap" | "invoiceCount" | "spend" | "isAccepted" | "agreementNotReaching"
+  >[],
 ): { gapsWithSpend: number; gapsToChase: number; gapSpend: number; chaseSpend: number } {
   const gaps = vendors.filter((v) => v.hasGap);
   const withSpend = gaps.filter((v) => v.invoiceCount > 0);
-  const toChase = withSpend.filter((v) => !v.isAccepted);
+  const toChase = withSpend.filter((v) => {
+    const kind = coverageLabelKind(v);
+    return kind !== null && ACTIONABLE_KINDS.has(kind);
+  });
   return {
     gapsWithSpend: withSpend.length,
     gapsToChase: toChase.length,
