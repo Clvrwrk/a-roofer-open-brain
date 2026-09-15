@@ -109,6 +109,7 @@ describe("unreachable vs absent agreements", () => {
   //   Denver x SRS   live_agreements = 2, agreement_not_reaching = true  -> repair the link
   //   Atlanta x ABC  live_agreements = 0, agreement_not_reaching = false -> chase paperwork
   // Both still count as work; the distinction is what the operator should DO.
+  /** A gap pair carrying spend, varying only reachability and the live-agreement count. */
   const pair = (notReaching: boolean, live: number) => ({
     hasGap: true, invoiceCount: 4, spend: 17437.63, isAccepted: false,
     agreementNotReaching: notReaching, liveAgreements: live,
@@ -132,6 +133,7 @@ describe("unreachable vs absent agreements", () => {
 describe("coverageLabelKind", () => {
   // The pill tells an operator WHAT TO DO. Getting the order wrong has twice sent someone
   // to chase paperwork that was already signed, so the order is pinned here on purpose.
+  /** An invoiced gap pair with no agreement and no ruling; override one field per case. */
   const pair = (over: Partial<Parameters<typeof coverageLabelKind>[0]> = {}) => ({
     hasGap: true, invoiceCount: 4, isAccepted: false, agreementNotReaching: false, ...over,
   });

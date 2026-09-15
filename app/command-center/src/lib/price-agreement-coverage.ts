@@ -174,12 +174,39 @@ const ROLE_ORDER: Record<CoverageRole, number> = { Primary: 0, "Region-covered":
  */
 const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
 
+/** The `coverageLabelKind()` results that mean a human should act. See `isChaseWork()`. */
+const ACTIONABLE_KINDS: ReadonlySet<CoverageLabelKind> = new Set(["unreachable", "no-agreement"]);
+
+/**
+ * Is this pair work someone should act on?
+ *
+ * WHAT COUNTS AS WORK IS DECIDED IN EXACTLY ONE PLACE — `coverageLabelKind()`. This asks it
+ * and keeps the kinds that mean work, so the chase totals and the operator pill cannot
+ * disagree. Named rather than inlined so both callers demonstrably share one rule.
+ *
+ * Every defect here has been a SECOND COPY of this decision, never the decision itself:
+ *   - `gapExposure` re-derived it as `!isAccepted`, which stayed equivalent only until
+ *     `unreachable` was made to outrank `accepted`; then the pill said "repair the branch
+ *     link" while the totals left that pair out of `gapsToChase`/`chaseSpend`.
+ *   - `gapExposure` then pre-filtered on `invoiceCount > 0` before calling this. That
+ *     duplicated the no-spend rule this already applies — and disagreed with it, because
+ *     `unreachable` is decided BEFORE invoiceCount, so a book signed before the first order
+ *     showed the pill and was missing from the count.
+ * Anything needing "is this work?" calls this. Never re-test the fields.
+ */
+function isChaseWork(vendor: Parameters<typeof coverageLabelKind>[0]): boolean {
+  const kind = coverageLabelKind(vendor);
+  return kind !== null && ACTIONABLE_KINDS.has(kind);
+}
+
 /**
  * Split coverage gaps into what is actually actionable.
  *
  * Three distinctions matter, and conflating any two of them produces a misleading number:
  *
  *  1. A gap with no invoices is theoretical — branches sit in the ring, nothing was bought.
+ *     `gapsWithSpend` gates on that; `gapsToChase` does NOT, because `isChaseWork()` already
+ *     distinguishes it and an unreachable agreement is work whether or not it has invoiced.
  *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work
  *     — UNLESS a live agreement exists that the ring cannot reach, which makes the ruling
  *     stale and the pair real repair work. See `coverageLabelKind()`.
@@ -188,31 +215,7 @@ const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
  *     figure and must not be labelled as one: on 2026-08-20 Denver x SRS carried $17,437.63
  *     of spend against $13,464.80 of unpriced line value. Treat any such number as a
  *     snapshot — a single credit memo moved that pair on 2026-09-02.
- *
- * WHAT COUNTS AS WORK IS DECIDED IN EXACTLY ONE PLACE — `coverageLabelKind()`. This filter
- * used to re-derive it as `!isAccepted`, which was equivalent until `unreachable` was made
- * to outrank `accepted`; after that the pill said "repair the branch link" while the totals
- * left the same pair out of `gapsToChase`/`chaseSpend`, understating the queue. The bug was
- * not the predicate but the duplication — two copies of one rule, and only one got updated.
- * Anything that needs to know "is this work?" must ask the label, never re-test the fields.
  */
-const ACTIONABLE_KINDS: ReadonlySet<CoverageLabelKind> = new Set(["unreachable", "no-agreement"]);
-
-/**
- * Is this pair work someone should act on?
- *
- * The single predicate behind both the chase totals and the operator pill: it asks
- * `coverageLabelKind()` and keeps the kinds that mean work. Named rather than inlined so the
- * two callers demonstrably share one rule — re-deriving it locally is what produced the
- * mismatch this function exists to prevent.
- */
-function isChaseWork(
-  vendor: Parameters<typeof coverageLabelKind>[0],
-): boolean {
-  const kind = coverageLabelKind(vendor);
-  return kind !== null && ACTIONABLE_KINDS.has(kind);
-}
-
 export function gapExposure(
   vendors: Pick<
     CoverageVendor,
