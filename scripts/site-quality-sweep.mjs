@@ -96,8 +96,13 @@ for (const [l, srcs] of links) {
 // ---------- 2. fabricated data ----------
 const moneyRx = />\s*\$[0-9][0-9,.]*/;
 const pctRx = />[0-9]+(\.[0-9]+)?%</;
+// The design-system site (docs/112) renders component SPECIMENS — a KPI tile showing
+// "$12,340" is documentation of the tile, not a number a human could mistake for money.
+// Its chapters are the one place literal amounts are correct by design.
+const isDesignSystemSpecimen = (f) => /[\/\\]pages[\/\\]design-system[\/\\]/.test(f);
 for (const d of [join(SRC, "pages"), join(SRC, "components")].filter(existsSync))
   for (const f of walk(d).filter(isCode)) {
+    if (isDesignSystemSpecimen(f)) continue;
     const txt = readFileSync(f, "utf8");
     for (const [rx, what] of [[moneyRx, "literal $ amount"], [pctRx, "literal percentage"]]) {
       const line = txt.split("\n").findIndex((L) => rx.test(L) && !L.includes("${"));
@@ -124,6 +129,12 @@ for (const f of walk(join(SRC, "lib")).filter(isCode)) {
 // ---------- 3. orphan pages ----------
 const linkedTargets = new Set([...links.keys()].map((l) => l.split("?")[0].replace(/\/$/, "") || "/"));
 const navTxt = existsSync(join(SRC, "lib/nav.ts")) ? readFileSync(join(SRC, "lib/nav.ts"), "utf8") : "";
+// The design-system chapters are reached from their own rail (DesignSystemShell builds the
+// hrefs from lib/design-system/nav.ts at render time), never from lib/nav.ts or a literal href.
+const dsNavPath = join(SRC, "lib/design-system/nav.ts");
+const dsSlugs = new Set(existsSync(dsNavPath)
+  ? [...readFileSync(dsNavPath, "utf8").matchAll(/slug:\s*["']([^"']*)["']/g)].map((m) => "/design-system" + (m[1] ? "/" + m[1] : ""))
+  : []);
 // Machine endpoints (auth, oauth, agent, discovery, health, service worker) are
 // never linked from the UI by design — only real .astro pages can be "orphaned".
 const MACHINE = [/^\/api/, /^\/auth/, /^\/oauth2/, /^\/agent/, /^\/\.well-known/, /^\/healthz/, /^\/sw\.js/, /^\/submit-agreement/];
@@ -135,6 +146,7 @@ for (const r of routes) {
   if (/Astro\.redirect/.test(body)) continue;                       // redirect stubs are intentional
   if (linkedTargets.has(r)) continue;                               // linked from somewhere
   if (new RegExp(`href:\\s*["']${r}["']`).test(navTxt)) continue;   // in nav
+  if (dsSlugs.has(r)) continue;                                     // a design-system chapter (own rail)
   add("warn", "orphan-page", `${r} is built but has no inbound link and is not in nav (${relative(REPO, file)})`);
 }
 
@@ -219,30 +231,36 @@ if (!STATIC_ONLY) {
       add("error", "db", `${uncited.count} discrepancy line(s) carry no office/agreement citation — money without provenance (e.g. ${uncited.rows.map((r) => `${r.invoice_number}/${r.item_number}`).join(", ")})`);
 
     // 2 · a credit came back but the claim lines never settled, so at_risk still counts it (mig 246)
+    //     v_invoice_audit_invoice is computed per row (playbook 9): one unfiltered at_risk>0 read
+    //     (~2 s, shared with check 3) and intersect here — the previous `invoice_number=in.(…500)`
+    //     filter on the computed column blew the 8 s statement_timeout every night (docs/109 F16).
     const received = await q("credit_memo_requests?status=eq.received&select=invoice_number", 500);
+    const atRisk = await q("v_invoice_audit_invoice?at_risk=gt.0&select=invoice_number,at_risk", 2000);
     if (received.error) add("error", "db", `received-credit check failed: ${received.error}`);
+    else if (atRisk.error) add("error", "db", `received-credit check failed: ${atRisk.error}`);
     else if (received.rows.length) {
-      const nums = received.rows.map((r) => r.invoice_number).filter(Boolean);
-      const stranded = await q(`v_invoice_audit_invoice?at_risk=gt.0&invoice_number=in.(${nums.map((n) => `"${n}"`).join(",")})&select=invoice_number,at_risk`, 5);
-      if (stranded.error) add("error", "db", `received-credit check failed: ${stranded.error}`);
-      else if (stranded.count > 0)
-        add("error", "db", `${stranded.count} received credit memo(s) still counted as money owed — mark-received did not settle the lines (e.g. ${stranded.rows.map((r) => `${r.invoice_number} $${r.at_risk}`).join(", ")})`);
+      const nums = new Set(received.rows.map((r) => r.invoice_number).filter(Boolean));
+      const strandedRows = atRisk.rows.filter((r) => nums.has(r.invoice_number));
+      if (strandedRows.length > 0)
+        add("error", "db", `${strandedRows.length} received credit memo(s) still counted as money owed — mark-received did not settle the lines (e.g. ${strandedRows.slice(0, 5).map((r) => `${r.invoice_number} $${r.at_risk}`).join(", ")})`);
     }
 
     // 3 · a money column reading $0 everywhere while the work that feeds it exists.
     //     This is the at_risk/credit_memo_amount failure mode: $0 looks like success.
     const disputed = await q("v_invoice_line_audit_current?audit_status=eq.disputed&select=invoice_line_id");
     const recovered = await q("v_invoice_audit_invoice?credit_memo_amount=gt.0&select=invoice_number");
-    const atRisk = await q("v_invoice_audit_invoice?at_risk=gt.0&select=invoice_number");
     if (!disputed.error && !atRisk.error && disputed.count > 0 && atRisk.count === 0)
       add("error", "db", `at_risk is $0 on every invoice while ${disputed.count} disputed line(s) exist — the column has gone structurally dead`);
     if (!recovered.error && !received.error && received.rows?.length > 0 && recovered.count === 0)
       add("error", "db", `credit_memo_amount is $0 on every invoice while ${received.rows.length} credit memo(s) are marked received — recovered money is invisible`);
 
-    // 4 · an expired agreement still flagged active is still pricing invoices today
-    const expired = await q(`price_agreements?is_active=is.true&expiry_date=lt.${today}&select=agreement_number,expiry_date&order=expiry_date.asc`, 5);
+    // 4 · an expired agreement still flagged active is still pricing invoices today.
+    //     Only agreements whose renewal_mode is `expires` can lapse; `evergreen` (the default,
+    //     mig 270 / 277) stays in force until a newer list supersedes it, so expiry_date is
+    //     documentary there and must not warn (CONVENTIONS §10b).
+    const expired = await q(`price_agreements?is_active=is.true&renewal_mode=eq.expires&expiry_date=lt.${today}&select=agreement_number,expiry_date&order=expiry_date.asc`, 5);
     if (!expired.error && expired.count > 0)
-      add("warn", "db", `${expired.count} active price agreement(s) are past expiry and may still be pricing invoices (oldest: ${expired.rows.map((r) => `${r.agreement_number || "unnumbered"} exp ${r.expiry_date}`).join(", ")})`);
+      add("warn", "db", `${expired.count} active price agreement(s) with renewal_mode=expires are past expiry and may still be pricing invoices (oldest: ${expired.rows.map((r) => `${r.agreement_number || "unnumbered"} exp ${r.expiry_date}`).join(", ")})`);
 
     // 5 · an agreement with no source document cannot be shown to a vendor in a dispute
     const noPdf = await q("price_agreements?is_active=is.true&source_pdf_url=is.null&select=agreement_number", 5);
