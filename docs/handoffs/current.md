@@ -82,7 +82,9 @@ None — session ended at a clean boundary. Build green, 352/352 tests green **a
 ## Open branch not on main — PR #9 (green, waiting on a human)
 
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**293-297** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
+**293-297** (already applied to prod; additive and idempotent per hard rule 1 — no data touched —
+**but 297 is an access-control change**: it revokes `SELECT` on the four coverage views from
+`anon`/`authenticated` and grants it to `service_role`) plus `docs/107` and `docs/108`. Kept 0
 behind main and merged with it daily. **Not merged, not deployed.** For review status read the
 PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
 written here is describing a commit that is no longer the head. (A review caught this line
@@ -97,7 +99,7 @@ again, not just the colliding files — the spend view must keep preceding the t
 that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
 those and read them back; the file alone is not the whole change.
 
-Thirteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
+Fourteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
 open for three weeks against a main that ships several a day. If this work is picked up
 again, land the schema in its own short-lived PR the day it is written and let the surface
 work follow. Full history in `docs/107`.
@@ -111,7 +113,7 @@ Four items need a human — full detail in `docs/107` and `docs/108`:
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
 2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 293 demoted two; 39 and
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 294 demoted two; 39 and
    465 were touched by another process where `pending` may be a deliberate re-geocode
    request, so they were left alone rather than guessed at.
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
