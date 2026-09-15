@@ -53,6 +53,27 @@ describe("gapExposure", () => {
     expect(out.chaseSpend).toBeCloseTo(4000, 2);
   });
 
+  it("REGRESSION: an unreachable pair with no invoices still counts as work", () => {
+    // The bug: toChase filtered `withSpend` (invoiceCount > 0) before asking isChaseWork.
+    // But coverageLabelKind decides `unreachable` BEFORE it looks at invoiceCount, so a book
+    // signed before the first order showed the red "repair the branch link" pill while the
+    // headline counted zero actionable work. The spend gate was a third copy of the no-spend
+    // rule that isChaseWork already applies — and it disagreed with it.
+    const pair = v(true, /* invoiceCount */ 0, /* spend */ 0, false, /* notReaching */ true);
+    expect(coverageLabelKind(pair)).toBe("unreachable");
+    const out = gapExposure([pair]);
+    expect(out.gapsToChase).toBe(1);
+    expect(out.gapsWithSpend).toBe(0); // it genuinely has no spend — that count is unchanged
+    expect(out.chaseSpend).toBeCloseTo(0, 2);
+  });
+
+  it("still leaves a plain no-agreement gap with no invoices out of the queue", () => {
+    // The distinction the spend gate was there for, now enforced by the label instead:
+    // no agreement + no invoices is theoretical, and must not inflate the chase queue.
+    const out = gapExposure([v(true, 0, 0), v(true, 0, 0)]);
+    expect(out.gapsToChase).toBe(0);
+  });
+
   it("nets credits rather than counting them as exposure", () => {
     const out = gapExposure([v(true, 1, -3723.59), v(true, 2, 5697.47)]);
     expect(out.gapsToChase).toBe(2);

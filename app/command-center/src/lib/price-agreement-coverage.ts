@@ -221,7 +221,13 @@ export function gapExposure(
 ): { gapsWithSpend: number; gapsToChase: number; gapSpend: number; chaseSpend: number } {
   const gaps = vendors.filter((v) => v.hasGap);
   const withSpend = gaps.filter((v) => v.invoiceCount > 0);
-  const toChase = withSpend.filter(isChaseWork);
+  // `gaps`, not `withSpend`: isChaseWork already encodes the no-spend distinction (a pair
+  // with no invoices and no agreement labels `no-spend`, which is not actionable), so
+  // pre-filtering on spend would be a third copy of that rule — and a wrong one, because
+  // `unreachable` is decided BEFORE invoiceCount. A book signed before the first order is
+  // real repair work with zero spend, and the spend gate silently dropped it from the totals
+  // while the pill still showed it.
+  const toChase = gaps.filter(isChaseWork);
   return {
     gapsWithSpend: withSpend.length,
     gapsToChase: toChase.length,
