@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**9/15 (docs/109 F32–F41). mig 289** fixed two leaks: Alex triage stamped new invoices No-Price before the office matview knew them (5 lines reopened; 6 June lines await Chris, F39); reconcile hid pre-8/1 memos naming open requests (7 ABC receipts in Sent CM review). **LIVE = main.** Lapsed HUMAN routines: ABC AR import (last 8/10); Pay-It verify 57; weekly QB prep in `exports/` → load, `--stamp`. Open: branch 326 office; Atlanta no agreement; Q4 Coolify token; Q5 JT key; Q7 BS→Slack.
+**9/15 (docs/109 F32–F41). mig 289** fixed two leaks: Alex triage stamped new invoices No-Price before the office matview knew them (5 lines reopened; 6 June lines await Chris, F39); reconcile hid pre-8/1 memos naming open requests (7 ABC receipts to review). **LIVE = main.** Lapsed HUMAN routines: ABC AR import (last 8/10); Pay-It verify 57; weekly QB prep in `exports/` → load, `--stamp`. Open: branch 326 office; Atlanta no agreement; Q4 Coolify token; Q5 JT key; Q7 BS→Slack.
 **Blocked on Chris:** CPA rulings; PEC-257/258/244/240/242/111/221/214/216.
 
 ## Standing instructions (Chris)
