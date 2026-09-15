@@ -141,11 +141,13 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
       <p class="iv-note">
         <b>{coverage.totals.gaps}</b> office × vendor pairs have no <b>reachable</b> agreement coverage.
         <b>{coverage.totals.gapsWithSpend}</b> carry spend. <b>{coverage.totals.gapsToChase}</b> are actually work,
-        carrying <b>{money(coverage.totals.chaseSpend)}</b> of invoiced spend on pairs that cannot be audited and have no
-        ruling accepting that. <b>These two counts are not nested</b> — a pair is work whether or not it has invoiced
-        yet, because an agreement the ring cannot reach is a broken link to repair today, before the first order rather
-        than after it. <b>Not all of it is missing paperwork</b> — where a pair shows &ldquo;ring can't reach it&rdquo;,
-        a live agreement already exists and the fix is to repair the agreement-to-branch link, not to chase a new one.
+        carrying <b>{money(coverage.totals.chaseSpend)}</b> of invoiced spend on pairs that cannot be audited and that
+        nobody has signed off on — either no ruling accepts the gap, or one does but a live agreement the ring cannot
+        reach has since made that acceptance stale. <b>These two counts are not nested</b> — a pair is work whether or
+        not it has invoiced yet, because an agreement the ring cannot reach is a broken link to repair today, before
+        the first order rather than after it. <b>Not all of it is missing paperwork</b> — where a pair shows
+        &ldquo;ring can't reach it&rdquo;, a live agreement already exists and the fix is to repair the
+        agreement-to-branch link, not to chase a new one.
         The remaining gaps are either territory-only (branches in the ring, nothing purchased yet) or carry an accepted
         <code>no_book</code> ruling, which prices as no-price by design and is not something to chase.
         <br />
