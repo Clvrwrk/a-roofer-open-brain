@@ -2,7 +2,7 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-09-14 11:30 (CT)
+**Date:** 2026-09-14 11:30 (CT) — the wrap-up this document was written for. Sections below carry later updates and date themselves inline; this header is not the document's last-touched time.
 **Agent:** Lead Orchestrator (Claude Code, Fable 5.1)
 **Reason:** User-requested (/project-handoff after shipping the living design system)
 
@@ -46,7 +46,7 @@ Brief: `/design` — "the most detailed design system ever produced", deployed a
 - **Uncommitted changes:** this handoff only (committed as the wrap-up commit)
 
 ## Task Cut Off
-None — session ended at a clean boundary. Build green, 352/352 tests green, deploy confirmed.
+None — session ended at a clean boundary. Build green, 352/352 tests green **at `7296c22`**, deploy confirmed. (That count is this session's record, not a current expectation — the suite has grown since.)
 
 ## Next Task — Start Here
 
@@ -79,12 +79,74 @@ None — session ended at a clean boundary. Build green, 352/352 tests green, de
 1. **Client artwork** — an official reversed (white) logo and a roof-only mark are still needed; the current white SVG and favicon are Cleverwork stand-ins (Logo chapter, L-05).
 2. **Carried forward, unchanged:** PEC-257 (7 August lines), PEC-258 (9 CMs without originals), the unstamped 2026-08-25 weekly batch, the pre-August $575.92 ruling, `morning_abc_sync` paused, CPA rulings, Coolify API token → `BETTERSTACK_API_TOKEN` on prod, stop `cc-production-e4344d8`, Q5 JT grant key, Q7 BS→Slack (see `context/MEMORY.md` ▶ Pick up here).
 
+## Open branch not on main — PR #9 (green, waiting on a human)
+
+`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
+**293-297** (already applied to prod; additive and idempotent per hard rule 1 — no data touched —
+**but 297 is an access-control change**: it revokes `SELECT` on the four coverage views from
+`anon`/`authenticated` and grants it to `service_role`) plus `docs/107` and `docs/108`. Kept 0
+behind main and merged with it daily. **Not merged, not deployed.** For review status read the
+PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
+written here is describing a commit that is no longer the head. (A review caught this line
+claiming all reviewers were green while two were mid-run.)
+
+Migration numbers have moved **fourteen** times as parallel sessions claimed numbers on main —
+twice on 2026-09-15 within one hour (main took 289-291, then 292), ending at 293-297. Prod
+labels are unaffected throughout: Supabase keys on timestamp, so
+`245_`/`246_`/`248_`/`249_` and `290_coverage_views_service_role_only` still name the applied
+migrations and nothing is re-applied. If you take 293-297 on main, move the **whole** set
+again, not just the colliding files — the spend view must keep preceding the two migrations
+that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
+those and read them back; the file alone is not the whole change.
+
+Fourteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
+open for three weeks against a main that ships several a day. If this work is picked up
+again, land the schema in its own short-lived PR the day it is written and let the surface
+work follow. Full history in `docs/107`.
+
+**The defect it documents:** Denver × SRS has live, in-territory agreements the office ring
+cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
+path prices some of the same lines. Two pricing paths disagreeing is the finding.
+
+Four items need a human — full detail in `docs/107` and `docs/108`:
+1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
+   `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
+   unblocks the defect.
+2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 294 demoted two; 39 and
+   465 were touched by another process where `pending` may be a deliberate re-geocode
+   request, so they were left alone rather than guessed at.
+3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
+   default grants mig 297 closed for the four coverage views. They predate this branch and
+   are read by other surfaces, so locking them down needs a caller audit first.
+4. **Repo-wide customer PII** (`docs/108`) — named individuals beside outstanding balances
+   across at least 18 tracked files, including test fixtures that assert on the names. On
+   `main`, not introduced by this branch. Needs a policy boundary, a replacement token, a
+   decision on git history, and a CI check. A piecemeal sweep was tried and reverted for
+   leaving tables half-anonymised; it needs its own workstream.
+
+**Closed 2026-09-15 — ABC branch 326 (Topeka KS).** This branch raised it as a fifth item;
+Chris ruled on it the same day and main shipped `291-rekey-abc-branch-326-topeka.sql`. The
+Topeka row is re-keyed `topeka-KS-66618-1445` → `326`, the invoice FK is backfilled, and
+`no_branch_resolved` is back to 0 rows / unresolved spend back to $27,566.56. The general
+exposure was then largely closed by a second parallel session at 15:44 UTC (prod migration
+`292_alias_slug_keyed_abc_branches`), which seeded numeric aliases for the slug-keyed rows.
+Measured straight after: of ABC's 684 slug-keyed branches, **589 now resolve from a bare
+invoice number and 95 still do not**. Reduced, not eliminated — each of those 95 repeats
+branch 326 the first time it invoices. Watch `v_unresolved_branch_spend`; the query for the
+95 is in the `docs/107` 2026-09-15 addendum.
+
+**Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
+pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took
+it down 2026-09-02; an invoice took it up 2026-09-05). Run the query instead:
+`SELECT office_name, vendor_slug, invoice_count, spend, agreement_status FROM v_office_vendor_gap_exposure WHERE needs_ruling ORDER BY spend DESC;`
+
 ## Verification Commands
 1. `git status --short` — empty
 2. `git rev-parse --short HEAD origin/main` — both `7296c22` (or the wrap-up commit that follows)
 3. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts with the deployed SHA
 4. `curl -s -o /dev/null -w "%{http_code}" https://cc.proexteriorsus.net/design-system` — `302` to `/auth/login` when signed out; `200` with a session
-5. `cd app/command-center && npm run build && npm test` — build complete, 29 files / 352 tests pass
+5. `cd app/command-center && npm run build && npm test` — build completes and the whole suite passes. Don't match a count written here: tests are added continuously, so a hardcoded number turns a green run into a false alarm. Read the runner's own summary.
 6. Signed in: `/design-system/tokens.json` returns `"version": "0.7.1A"` and 77+ tokens
 
 ## Full Context
@@ -120,7 +182,7 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through 287 |
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live). For the applied watermark, query it — `SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;` — do not read a number from this table. Main ships several a day, so any number written here is stale within hours; it read "through 287" while prod was past 292. |
 | Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main`; verify `/healthz buildCommit`; Coolify host `178.105.220.14`; helper `scripts/coolify-redeploy.sh`; skill `/coolify` |
 | Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` |
 | Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host (`178.156.203.23`) |
