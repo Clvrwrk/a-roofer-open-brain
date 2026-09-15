@@ -178,7 +178,7 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through 287 |
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live). For the applied watermark, query it — `SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;` — do not read a number from this table. Main ships several a day, so any number written here is stale within hours; it read "through 287" while prod was past 292. |
 | Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main`; verify `/healthz buildCommit`; Coolify host `178.105.220.14`; helper `scripts/coolify-redeploy.sh`; skill `/coolify` |
 | Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` |
 | Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host (`178.156.203.23`) |
