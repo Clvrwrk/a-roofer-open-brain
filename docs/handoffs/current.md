@@ -2,7 +2,7 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-09-14 11:30 (CT)
+**Date:** 2026-09-14 11:30 (CT) — the wrap-up this document was written for. Sections below carry later updates and date themselves inline; this header is not the document's last-touched time.
 **Agent:** Lead Orchestrator (Claude Code, Fable 5.1)
 **Reason:** User-requested (/project-handoff after shipping the living design system)
 
@@ -46,7 +46,7 @@ Brief: `/design` — "the most detailed design system ever produced", deployed a
 - **Uncommitted changes:** this handoff only (committed as the wrap-up commit)
 
 ## Task Cut Off
-None — session ended at a clean boundary. Build green, 352/352 tests green, deploy confirmed.
+None — session ended at a clean boundary. Build green, 352/352 tests green **at `7296c22`**, deploy confirmed. (That count is this session's record, not a current expectation — the suite has grown since.)
 
 ## Next Task — Start Here
 
@@ -144,7 +144,7 @@ it down 2026-09-02; an invoice took it up 2026-09-05). Run the query instead:
 2. `git rev-parse --short HEAD origin/main` — both `7296c22` (or the wrap-up commit that follows)
 3. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts with the deployed SHA
 4. `curl -s -o /dev/null -w "%{http_code}" https://cc.proexteriorsus.net/design-system` — `302` to `/auth/login` when signed out; `200` with a session
-5. `cd app/command-center && npm run build && npm test` — build complete, 29 files / 352 tests pass
+5. `cd app/command-center && npm run build && npm test` — build completes and the whole suite passes. Don't match a count written here: tests are added continuously, so a hardcoded number turns a green run into a false alarm. Read the runner's own summary.
 6. Signed in: `/design-system/tokens.json` returns `"version": "0.7.1A"` and 77+ tokens
 
 ## Full Context
