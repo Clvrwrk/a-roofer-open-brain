@@ -40,7 +40,12 @@ supabase/functions/acculynx-write-sweep/sweep.test.ts
 
 - a client column in a table (`| CO-356 | <name> |`) — `docs/101`, `docs/103`
 - prose mentions (`job 10, <name> (TX)`) — `docs/103`, `schemas/…/263`
-- **a table of five named private individuals against what each of them owes** — `docs/103`
+- **a table of five named private individuals against what each of them owes** —
+  `docs/103-ytd-accrual-gm-budget-colour-variants-categorization.md`, the *Cause B* table
+  (≈ lines 289–295). Re-flagged independently by a review on 2026-09-15, which is the useful
+  signal here: this record is discoverable by anyone reading the repo, and it will keep being
+  reported until the sweep happens. Anchored by line because that is what makes the eventual
+  sweep cheap; the anchor drifts if the document is edited, so confirm by the table heading.
 - bare prospect rows with no job code — `integrations/bridges/jobtread/mirror/pilot-selection`
 
 ## Why it was not fixed in PR #9
