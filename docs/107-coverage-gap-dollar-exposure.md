@@ -736,9 +736,41 @@ aliases `326`/`0326` added, and the chain refreshed. Re-measured after merging m
 `no_branch_resolved` is back to **0 rows**, and unresolved branch spend is back to
 **$27,566.56**, its pre-2026-09-15 value. The finding above stands as written: it was
 correct, it was escalated rather than guessed at, and the human call that resolved it is
-exactly the one migration 240 reserves for a human. Note what did **not** change — 685 of
-761 ABC branch rows still carry slug keys, so the *rate* is still not an invariant and the
-watch query above is still the thing to watch.
+exactly the one migration 240 reserves for a human.
+
+**And the general exposure was closed too, about thirty minutes later — 2026-09-15 15:44
+UTC.** Prod migration `292_alias_slug_keyed_abc_branches` (a parallel session, prod label —
+not this set's repo file 292) seeded numeric aliases for the slug-keyed rows. Re-measured
+immediately after:
+
+| ABC branch rows | 761 |
+|---|---:|
+| numeric-keyed | 77 |
+| slug-keyed | 684 |
+| …of which resolve from a bare invoice number | **589** |
+| …**of which still do not** | **95** |
+
+So the right statement is *reduced by 589, not eliminated*. Ninety-five slug-keyed ABC
+branches still cannot be reached by the bare number an invoice carries, and each is a
+repeat of branch 326 the first time it invoices.
+
+> **This paragraph replaces one written half an hour earlier that said "685 of 761 ABC branch
+> rows still carry slug keys."** It was wrong twice over: the count was pre-mig-291 (326 had
+> already moved to the numeric side, making it 684/77), and the condition it asserted was
+> being fixed by another session while the sentence was being written. That is the **fourth**
+> instance in this document of the same mistake — a figure measured once and then written
+> down as a standing condition — and this time it happened inside a sentence whose own subject
+> was that very mistake. Measuring something does not make it stay measured. Write the query,
+> not the number:
+
+```sql
+SELECT count(*) FILTER (WHERE NOT has_num) AS still_unreachable_by_number
+  FROM (SELECT EXISTS (SELECT 1 FROM vendor_branch_alias a
+                        WHERE a.vendor_branch_id = vb.id
+                          AND a.alias_key ~ '^[0-9]+$' AND a.status = 'resolved') AS has_num
+          FROM vendor_branches vb JOIN vendors v ON v.id = vb.vendor_id
+         WHERE v.slug = 'abc-supply' AND vb.branch_number !~ '^[0-9]+$') t;
+```
 
 ---
 

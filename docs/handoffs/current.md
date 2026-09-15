@@ -82,16 +82,23 @@ None — session ended at a clean boundary. Build green, 352/352 tests green, de
 ## Open branch not on main — PR #9 (green, waiting on a human)
 
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**289-293** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
+**292-296** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
 behind main and merged with it daily. All reviewers green on the current head; **not merged,
 not deployed.**
 
-Migration numbers have moved **twelve** times as parallel sessions claimed numbers on main —
-most recently 2026-09-12 (main took 285-288, so the set moved 286-290 → 289-293). Prod labels
-are unaffected throughout: Supabase keys on timestamp, so `245_`/`246_`/`248_`/`249_` and
-`290_coverage_views_service_role_only` still name the applied migrations and nothing is
-re-applied. If you take 289-293 on main, move the **whole** set again, not just the colliding
-files — the spend view must keep preceding the two migrations that read it.
+Migration numbers have moved **thirteen** times as parallel sessions claimed numbers on main —
+most recently 2026-09-15 (main took 289-291, so the set moved 289-293 → 292-296), three days
+after the twelfth. Prod labels are unaffected throughout: Supabase keys on timestamp, so
+`245_`/`246_`/`248_`/`249_` and `290_coverage_views_service_role_only` still name the applied
+migrations and nothing is re-applied. If you take 292-296 on main, move the **whole** set
+again, not just the colliding files — the spend view must keep preceding the two migrations
+that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
+those and read them back; the file alone is not the whole change.
+
+Thirteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
+open for three weeks against a main that ships several a day. If this work is picked up
+again, land the schema in its own short-lived PR the day it is written and let the surface
+work follow. Full history in `docs/107`.
 
 **The defect it documents:** Denver × SRS has live, in-territory agreements the office ring
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
@@ -118,8 +125,12 @@ Four items need a human — full detail in `docs/107` and `docs/108`:
 Chris ruled on it the same day and main shipped `291-rekey-abc-branch-326-topeka.sql`. The
 Topeka row is re-keyed `topeka-KS-66618-1445` → `326`, the invoice FK is backfilled, and
 `no_branch_resolved` is back to 0 rows / unresolved spend back to $27,566.56. The general
-exposure is NOT closed: 685 of ABC's 761 branch rows still carry slug keys, so the next
-slug-only branch to invoice repeats it. Watch `v_unresolved_branch_spend`.
+exposure was then largely closed by a second parallel session at 15:44 UTC (prod migration
+`292_alias_slug_keyed_abc_branches`), which seeded numeric aliases for the slug-keyed rows.
+Measured straight after: of ABC's 684 slug-keyed branches, **589 now resolve from a bare
+invoice number and 95 still do not**. Reduced, not eliminated — each of those 95 repeats
+branch 326 the first time it invoices. Watch `v_unresolved_branch_spend`; the query for the
+95 is in the `docs/107` 2026-09-15 addendum.
 
 **Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
 pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took
