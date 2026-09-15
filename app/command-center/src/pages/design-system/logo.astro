@@ -1,0 +1,253 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+
+const files = [
+  { file: "config/brand/assets/pro-exteriors-logo.svg", served: "/pro-exteriors-logo.svg", kind: "Primary horizontal lockup, full colour", status: "Official (client-supplied 350×180 'lgt')", use: "Light surfaces only: white, surface, surface-inset, light grey. The rail places it on a white chip.", note: "2.5 MB traced SVG wrapping a raster — fine for the app (cached), run through SVGO before any public site." },
+  { file: "config/brand/assets/pro-exteriors-mark-square.svg", served: "—", kind: "Square lockup (500×500)", status: "Official", use: "App icons, social avatars, print where a square slot exists.", note: "Tight at favicon sizes; use the roof mark below 48px." },
+  { file: "config/brand/assets/logo_color.png", served: "—", kind: "Full-colour raster, 620×210", status: "Derived from official", use: "Email signatures, documents, the fal.ai swag reference.", note: "sRGB; do not upscale beyond 100%." },
+  { file: "config/brand/assets/pro-exteriors-logo-navy-transparent.png", served: "—", kind: "One-colour navy, transparent, 772×320", status: "Derived (WorkOS AuthKit light)", use: "One-colour reproduction on light surfaces; login screen.", note: "" },
+  { file: "config/brand/assets/pro-exteriors-logo-white-transparent.png", served: "—", kind: "One-colour white, transparent, 772×320", status: "Derived (WorkOS AuthKit dark)", use: "One-colour reproduction on navy or dark surfaces; embroidery and screen print on dark garments.", note: "" },
+  { file: "config/brand/assets/pro-exteriors-logo-white.svg", served: "—", kind: "Reversed vector, 620×210", status: "Cleverwork stand-in", use: "Dark surfaces where a vector is required.", note: "Placeholder geometry until the client supplies an official reversed export. Replace, do not extend." },
+  { file: "app/command-center/public/favicon.svg", served: "/favicon.svg", kind: "Roof mark, 32×32", status: "Cleverwork stand-in", use: "Browser tab, PWA icon, the PE office badge on the map.", note: "Navy tile, gold roof, white base line. Swap for an official roof-only export when supplied." },
+  { file: "app/command-center/public/brand-mark.svg", served: "/brand-mark.svg", kind: "Open Brain mark, 48×48", status: "Cleverwork", use: "OAuth resource_logo_uri for agent auth only.", note: "Navy tile, gold roof, white base, flag-red door. Never used as the company logo." },
+  { file: "app/command-center/public/vendor-icons/pe-office-badge.png", served: "/vendor-icons/pe-office-badge.png", kind: "PE office map badge, 128×128", status: "Derived", use: "Territory Map office markers (46px).", note: "Roof mark on a white disc with a navy ring so our offices read differently from vendor branches." },
+];
+---
+
+<DesignSystemShell slug="logo" source="config/brand/assets/README.md">
+  <DsSection id="files" title="Approved files">
+    <p>
+      The canonical master is <code>config/brand/assets/</code>. Every other surface (the app's <code>public/</code>, the
+      dashboard deployment, WorkOS) keeps a copy provisioned from there. Two artworks are official; the rest are derived or
+      stand-ins awaiting official exports. <strong>Still needed from the client:</strong> an official reversed (white) logo
+      and a tight roof-only mark.
+    </p>
+    <div class="ds-grid-2">
+      <figure class="ds-figure">
+        <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors LLC logo: a navy roof-line silhouette with the word PRO in navy on a white panel above the word EXTERIORS in flag-red italic capitals and a small LLC" width="620" height="210" style="padding:24px;background:#fff" />
+        <figcaption>Primary lockup on white. Roof line and PRO in deep navy (#11133F); EXTERIORS and LLC in flag red (#C22326); two navy and two red rules frame the word.</figcaption>
+      </figure>
+      <figure class="ds-figure">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="display:grid;place-items:center;background:#11133f;border-radius:8px;padding:24px"><img src="/favicon.svg" alt="Roof mark on navy" width="64" height="64" /></div>
+          <div style="display:grid;place-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:24px"><img src="/pro-exteriors-logo.svg" alt="Primary lockup on a white chip as it appears in the rail" width="160" height="58" /></div>
+          <div style="display:grid;place-items:center;background:#f4f6f9;border-radius:8px;padding:24px"><img src="/vendor-icons/pe-office-badge.png" alt="PE office badge: roof mark on a white disc with a navy ring" width="46" height="46" /></div>
+          <div style="display:grid;place-items:center;background:#0a0c27;border-radius:8px;padding:24px"><img src="/brand-mark.svg" alt="Open Brain agent mark" width="48" height="48" /></div>
+        </div>
+        <figcaption>Roof mark (favicon), the rail chip, the PE office badge, and the Open Brain agent mark. Only the first three represent the company.</figcaption>
+      </figure>
+    </div>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>File</th><th>Served at</th><th>What it is</th><th>Status</th><th>Use</th><th>Note</th></tr></thead>
+        <tbody>
+          {files.map((f) => (
+            <tr>
+              <td><code>{f.file}</code></td>
+              <td class="nowrap">{f.served === "—" ? "—" : <code>{f.served}</code>}</td>
+              <td>{f.kind}</td>
+              <td class="nowrap">{f.status}</td>
+              <td>{f.use}</td>
+              <td>{f.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="anatomy" title="Anatomy">
+    <p>The lockup is five pieces with fixed relationships. Proportions are read from the official 620×210 artwork; the unit <strong>x</strong> is the cap height of EXTERIORS (≈ 52px at 620 wide).</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Piece</th><th>Ink</th><th>Relationship</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Roof line</strong></td><td>Navy</td><td>Spans ≈ 4.6x from the left eave to the chimney; the ridge sits ≈ 0.75x above the PRO panel's top edge. Never redrawn, never tilted.</td></tr>
+          <tr><td><strong>PRO panel</strong></td><td>Navy text on white, red underline</td><td>Panel is ≈ 2.4x wide × 0.95x tall, right-anchored under the roof's right slope. The red underline is ≈ 0.12x thick.</td></tr>
+          <tr><td><strong>EXTERIORS</strong></td><td>Flag red, 800 italic</td><td>Full width of the lockup (≈ 9.5x). Letterspacing +1 unit at 74px; tracking scales with size, it is never re-tracked by hand.</td></tr>
+          <tr><td><strong>LLC</strong></td><td>Navy, 800 italic</td><td>≈ 0.45x cap height, baseline-aligned to EXTERIORS, right-aligned to the S.</td></tr>
+          <tr><td><strong>Rules</strong></td><td>Two red (top), one navy + one red (bottom)</td><td>Top rules flank the roof at eave height; bottom rules sit ≈ 0.3x below the wordmark baseline. They are part of the mark; never removed to "clean it up".</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="clear-space" title="Clear space & minimum size">
+    <div class="ds-grid-2">
+      <figure class="ds-figure">
+        <div style="position:relative;background:#fff;padding:60px;border:1px dashed var(--error);border-radius:8px">
+          <div style="position:absolute;inset:0;border:1px dashed var(--error);margin:0"></div>
+          <img src="/pro-exteriors-logo.svg" alt="Logo with the required clear-space zone drawn around it" width="400" height="135" style="display:block;border:0;background:#fff" />
+          <span style="position:absolute;top:22px;left:50%;transform:translateX(-50%);color:var(--error);font-size:11px;font-weight:700">roof height (r)</span>
+          <span style="position:absolute;left:12px;top:50%;transform:rotate(-90deg) translateX(-50%);transform-origin:left;color:var(--error);font-size:11px;font-weight:700">r</span>
+        </div>
+        <figcaption>Clear space on every side equals the height of the roof mark (r). Nothing — text, another mark, a photo edge, a fold — enters the zone.</figcaption>
+      </figure>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead><tr><th>Context</th><th>Minimum</th><th>Below that</th></tr></thead>
+          <tbody>
+            <tr><td>Screen, horizontal lockup</td><td class="nowrap">120 px wide</td><td>Use the roof mark alone</td></tr>
+            <tr><td>Screen, roof mark</td><td class="nowrap">16 px</td><td>—</td></tr>
+            <tr><td>Print, horizontal lockup</td><td class="nowrap">32 mm (1.25 in) wide</td><td>Use the roof mark alone</td></tr>
+            <tr><td>Print, roof mark</td><td class="nowrap">6 mm</td><td>—</td></tr>
+            <tr><td>Embroidery</td><td class="nowrap">75 mm (3 in) wide; letter height ≥ 6 mm</td><td>One-colour version; drop the rules</td></tr>
+            <tr><td>Pad print (pens)</td><td class="nowrap">25 mm wide</td><td>Wordmark EXTERIORS + PRO only, one colour</td></tr>
+            <tr><td>Vinyl / signage</td><td class="nowrap">No minimum; maximum governed by the 2.5 MB SVG's raster — request vector from the client above 1 m</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </DsSection>
+
+  <DsSection id="backgrounds" title="Backgrounds & variants">
+    <p>Three approved colour treatments. Which one to use is decided by the surface, not by taste.</p>
+    <div class="ds-grid-3">
+      <figure class="ds-figure">
+        <div style="display:grid;place-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:28px"><img src="/pro-exteriors-logo.svg" alt="Full-colour logo on white" width="220" height="75" style="border:0" /></div>
+        <figcaption><strong>Full colour on white / light.</strong> The default. Also correct on <code>surface-inset</code> (#f9fafb) and on light photography behind a solid white panel.</figcaption>
+      </figure>
+      <figure class="ds-figure">
+        <div style="display:grid;place-items:center;background:#11133f;border-radius:8px;padding:28px"><div style="background:#fff;border-radius:6px;padding:8px 14px"><img src="/pro-exteriors-logo.svg" alt="Full-colour logo on a white chip over navy, as in the rail" width="200" height="68" style="border:0" /></div></div>
+        <figcaption><strong>White chip on navy.</strong> How the rail and any navy band carry the full-colour logo today. Chip radius 6px, chip padding 8px 14px, chip spans the rail width (Chris, TM-1, 2026-06-19).</figcaption>
+      </figure>
+      <figure class="ds-figure">
+        <div style="display:grid;place-items:center;background:#11133f;border-radius:8px;padding:28px"><img src="/pro-exteriors-logo.svg" alt="Placeholder for the one-colour white logo on navy" width="200" height="68" style="border:0;filter:brightness(0) invert(1)" /></div>
+        <figcaption><strong>One-colour white on navy / dark.</strong> For garments, dark print and dark-mode marketing. Use the transparent white PNG or the white SVG stand-in; the preview above is a filter for illustration only — never ship a CSS-filtered logo.</figcaption>
+      </figure>
+    </div>
+    <div class="ds-callout">
+      <b>Dark mode in the app</b>
+      <p>The app keeps the full-colour logo on its white chip in dark mode. The chip is part of the mark's presentation on any dark surface, so nothing changes when the theme flips (see <a href="/design-system/modes#media-dark">Modes</a>).</p>
+    </div>
+  </DsSection>
+
+  <DsSection id="placement" title="Placement in the app">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Slot</th><th>Asset</th><th>Rendered size</th><th>Rule</th></tr></thead>
+        <tbody>
+          <tr><td>Side rail lockup</td><td><code>/pro-exteriors-logo.svg</code></td><td>Rail width (244px at 280 rail; 204px at 240), height auto, white chip radius 6px</td><td>Declared <code>width="160" height="58"</code> for aspect; CSS <code>width:100%</code>. Links to <code>/</code>. Alt: "Pro Exteriors".</td></tr>
+          <tr><td>Auth denied page</td><td><code>/pro-exteriors-logo.svg</code></td><td>140×50</td><td>Standalone page without the shell; logo centred above the message.</td></tr>
+          <tr><td>WorkOS AuthKit</td><td>navy / white transparent PNGs</td><td>772×320 source; AuthKit scales</td><td>Light theme = navy, dark theme = white. Uploaded in the WorkOS dashboard, not served by the app.</td></tr>
+          <tr><td>Browser tab / PWA</td><td><code>/favicon.svg</code></td><td>16–32px</td><td>Roof mark only; the wordmark is illegible here.</td></tr>
+          <tr><td>Territory Map office marker</td><td><code>pe-office-badge.png</code></td><td>46px disc</td><td>Our offices must read differently from vendor branches at a glance.</td></tr>
+          <tr><td>Agent OAuth metadata</td><td><code>/brand-mark.svg</code></td><td>48px</td><td>Identifies the Open Brain resource server, not the company.</td></tr>
+          <tr><td>Email (Maya, Casey)</td><td><code>logo_color.png</code></td><td>180px wide max</td><td>Inline, on white, with the r clear space. Never as the only content of an image-only email.</td></tr>
+          <tr><td>Generated PDFs (agreement package, invoice)</td><td><code>logo_color.png</code></td><td>38 mm wide at top-left</td><td>Header only; body carries no second logo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="mark" title="Roof mark & favicon">
+    <p>The roof mark is a Cleverwork stand-in that distils the official roof line into a tile: navy ground, gold roof, white base. It exists for the sizes where the wordmark cannot survive. It is not a second logo and never appears next to the lockup.</p>
+    <DsSpec label="Roof mark at every size it ships" code="/favicon.svg">
+      {[16, 24, 32, 48, 64, 96].map((s) => (
+        <div style="display:grid;gap:4px;justify-items:center"><img src="/favicon.svg" alt={`Roof mark at ${s} pixels`} width={s} height={s} /><small style="color:var(--text-muted);font-size:11px">{s}px</small></div>
+      ))}
+    </DsSpec>
+    <ul>
+      <li>Tile radius is 6/32 of the tile size (18.75%) so it matches the app's 8px radius at 40px.</li>
+      <li>The gold roof is the only place gold and navy meet without text; it is why the tab icon is recognisable in a row of navy tabs.</li>
+      <li>Never recolour the tile to red or green to signal state — state is carried by the ring around a badge, never by the mark.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="vendor-badges" title="Vendor & office badges">
+    <p>Map markers, legends and branch rows carry a vendor's own logo on an opaque white disc (transparent favicons washed out against the basemap). The <strong>ring</strong> carries status. Files: <code>public/vendor-icons/&lt;vendor&gt;-badge-&lt;state&gt;.png</code>, 128×128, rendered at 18px (legend), 36px (rows) and <code>round(scale × 4.2)</code> on the map.</p>
+    <DsSpec label="Ring states, one vendor" code="abc-supply-badge-*.png">
+      {["brand", "green", "yellow", "red", "grey"].map((s) => (
+        <div style="display:grid;gap:4px;justify-items:center"><img src={`/vendor-icons/abc-supply-badge-${s}.png`} alt={`ABC Supply badge, ${s} ring`} width="48" height="48" /><small style="color:var(--text-muted);font-size:11px">{s}</small></div>
+      ))}
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Ring</th><th>Coverage lens meaning (docs/82, v2)</th></tr></thead>
+        <tbody>
+          <tr><td><strong>brand</strong></td><td>Neutral — identity only, no status asserted (legend, rows, lists).</td></tr>
+          <tr><td><strong>green</strong></td><td>In-force, in-date price agreement for this branch and office.</td></tr>
+          <tr><td><strong>yellow</strong></td><td>Expired-evergreen agreement (still in effect) or the branch needs office routing.</td></tr>
+          <tr><td><strong>red</strong></td><td>No agreement at all. QXO is red everywhere by design.</td></tr>
+          <tr><td><strong>grey</strong></td><td>Out of scope (outside drive time, inactive).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Only <code>abc-supply</code>, <code>srs</code> and <code>qxo</code> have badges; any other vendor falls back to a coloured circle symbol. Adding a vendor means adding the five ring files at 128×128 and the slug to <code>VENDOR_ICON_SLUGS</code>.</p>
+  </DsSection>
+
+  <DsSection id="misuse" title="Misuse">
+    <p>Each of these has been seen or requested at least once. None ships.</p>
+    <div class="ds-grid-3">
+      {[
+        ["Stretched", "transform:scaleX(1.35)", "Aspect ratio is fixed. Set one dimension and let the other follow."],
+        ["Recoloured", "filter:hue-rotate(120deg)", "The inks are the brand. No green, no black-and-gold, no vendor colours."],
+        ["Shadowed", "filter:drop-shadow(0 6px 8px rgba(0,0,0,.5))", "No drop shadows, glows, outlines or bevels."],
+        ["Rotated", "transform:rotate(-8deg)", "Always level. The roof is the horizon."],
+        ["Low contrast", "opacity:.35", "Never as a watermark or a ghosted background."],
+        ["Full colour on navy without a chip", "", "Navy roof vanishes into navy. Use the white chip or the one-colour white version."],
+      ].map(([title, style, why]) => (
+        <figure class="ds-figure">
+          <div style={`display:grid;place-items:center;overflow:hidden;border-radius:8px;padding:20px;background:${title.includes("navy") ? "#11133f" : "#fff"};border:1px solid var(--border)`}>
+            <img src="/pro-exteriors-logo.svg" alt={`Misuse example: ${title}`} width="180" height="61" style={`border:0;${style}`} />
+          </div>
+          <figcaption><strong style="color:var(--error)">✕ {title}.</strong> {why}</figcaption>
+        </figure>
+      ))}
+    </div>
+  </DsSection>
+
+  <DsSection id="logo-motion" title="Logo motion">
+    <p>
+      The logo moves in exactly one way: a <strong>roof draw-in</strong> used for a first paint or a loading state on a
+      public page — the navy roof line strokes on from the left eave to the right in 350ms, then the wordmark fades up over
+      200ms. It never bounces, spins, pulses or parallaxes. In the Command Center the logo does not animate at all; the
+      app is a tool, not a splash screen. See the live example in <a href="/design-system/motion#logo-graphic">Motion</a>.
+    </p>
+  </DsSection>
+
+  <DsSection id="logo-alt" title="Alt text for the logo">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Situation</th><th>alt</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Logo is a link to home (rail)</td><td><code>alt="Pro Exteriors"</code></td><td>The link's purpose is the company; "logo" adds nothing a screen reader needs.</td></tr>
+          <tr><td>Logo is decoration beside a text heading that already says the name</td><td><code>alt=""</code></td><td>Redundant announcement is noise. Keep the <code>img</code> so print styles work.</td></tr>
+          <tr><td>Logo is the only identification on a page or document</td><td><code>alt="Pro Exteriors LLC"</code></td><td>The legal name is the content.</td></tr>
+          <tr><td>Logo shown in this design system as a specimen</td><td>Describe what is seen</td><td>The reader is studying the artwork, so the description is the content.</td></tr>
+          <tr><td>Vendor badge on the map</td><td><code>alt="ABC Supply, in-force agreement"</code> (vendor + ring meaning)</td><td>The ring is information; the alt carries it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <div class="ds-rules">
+    <DsRule id="L-01" title="Full-colour logo on light surfaces only; white chip or one-colour white on navy and dark." source="config/brand/assets/README.md">
+      <p>The rail's white chip is the reference treatment on navy. Never place the full-colour artwork directly on navy, red, gold or a photograph.</p>
+    </DsRule>
+    <DsRule id="L-02" title="Clear space equals the roof height on all sides; minimum width 120px on screen, 32mm in print." source="config/brand/assets/README.md">
+      <p>Below the minimum, use the roof mark alone.</p>
+    </DsRule>
+    <DsRule id="L-03" title="The logo's flag red is part of the mark and does not count against the one-CTA rule, but no extra flag red is added around it." source="config/brand/assets/README.md; DSN-012">
+      <p>A red button next to the logo is still the one CTA in that viewport.</p>
+    </DsRule>
+    <DsRule id="L-04" title="Never stretch, recolour, rotate, shadow, outline, ghost or filter the logo." source="this chapter">
+      <p>CSS filters on the artwork are for this documentation's illustrations only.</p>
+    </DsRule>
+    <DsRule id="L-05" title="Stand-in assets (favicon, white SVG) are replaced by official exports when supplied, never extended into new stand-ins." source="config/brand/assets/README.md">
+      <p>Ask the client for the reversed and roof-only exports; do not draw a third variant.</p>
+    </DsRule>
+    <DsRule id="L-06" title="State around a mark is carried by the ring and its label, never by recolouring the mark." source="VendorTerritoryMap.astro:454-470; docs/82">
+      <p>Vendor marks keep their identity colours; PE offices keep the roof mark.</p>
+    </DsRule>
+    <DsRule id="L-07" title="One logo per surface. The wordmark and the roof mark never appear together." source="this chapter">
+      <p>The tab icon and the rail lockup are different slots on different surfaces, not a pair.</p>
+    </DsRule>
+    <DsRule id="L-08" title="The Command Center logo never animates; the roof draw-in is a public-page first-paint only." source="Design.md 'Motion is minimal and purposeful'">
+      <p>Loading states in the app use text ("Loading invoice detail"), never a spinning logo.</p>
+    </DsRule>
+  </div>
+</DesignSystemShell>

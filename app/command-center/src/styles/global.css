@@ -75,6 +75,11 @@
   --success: var(--color-success);
   --warning: var(--color-warning);
   --error: var(--color-error);
+  /* Consumed by .button-danger, .priority-critical and the credit-memo panel since the first
+     build but never declared, so the destructive button rendered with no fill. Caught while
+     documenting the button hierarchy on /design-system (2026-09-14). */
+  --error-surface: var(--color-error-surface);
+  --error-text: var(--color-error-text);
   --radius: var(--radius-md);
   --shadow: 0 12px 32px rgba(17, 19, 63, 0.08);
   font-family: var(--font-sans);

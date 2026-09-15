@@ -1,0 +1,179 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+
+// Small-multiples demo data: four offices, 13 weeks of expected receipts (sample values).
+const offices = [
+  { name: "Denver", weeks: [42, 38, 51, 47, 60, 55, 49, 62, 58, 44, 40, 52, 57] },
+  { name: "Fort Collins", weeks: [18, 22, 20, 25, 19, 27, 30, 24, 21, 26, 28, 23, 25] },
+  { name: "Dallas", weeks: [30, 28, 35, 41, 39, 33, 45, 48, 42, 37, 36, 44, 46] },
+  { name: "Wichita", weeks: [8, 11, 9, 14, 12, 10, 15, 13, 9, 11, 16, 12, 14] },
+];
+const max = Math.max(...offices.flatMap((o) => o.weeks));
+const spark = (w: number[]) => w.map((v, i) => `${(i / (w.length - 1)) * 120},${28 - (v / max) * 26}`).join(" ");
+---
+
+<DesignSystemShell slug="dashboards" source="docs/40-dashboard-design-system.md · app/command-center/src/scripts/executive-pipeline.ts">
+  <DsSection id="tufte" title="Tufte's principles, applied">
+    <p>
+      Edward Tufte's rules for statistical graphics are the operating rules for every board and dashboard in the Command
+      Center. Each principle below is paired with the concrete decision that enforces it here, so "Tufte" is a checklist,
+      not a mood.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Principle</th><th>What it means</th><th>How this app does it</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Maximise the data-ink ratio</strong></td><td>Every drop of ink should carry data; erase non-data ink and redundant data ink.</td><td>Borders, not shadows. No gridlines behind a table. Zebra rows only on boards where the eye must track across nine columns. No chart frames, no 3D, no gradients except the meter's blue→navy.</td></tr>
+          <tr><td><strong>Avoid chartjunk</strong></td><td>Decoration that competes with the data.</td><td>Colour is never decorative (docs/40): every colour on a board encodes status. Icons never carry status. No illustrations on work surfaces.</td></tr>
+          <tr><td><strong>Show the data</strong></td><td>The reader should be able to see the actual numbers.</td><td>The table is the primary chart. Every chart has a data table beside or beneath it; every KPI shows its number, not a gauge.</td></tr>
+          <tr><td><strong>Small multiples</strong></td><td>Many small, same-scale panels beat one large chart with many series.</td><td>The Territory Map's per-office KPI cards; the 13-week cash map as a strip of same-height cells; per-office groups on WIP with identical columns and shared column-group state.</td></tr>
+          <tr><td><strong>Layering and separation</strong></td><td>Use the least visual weight that still separates.</td><td>Ink hierarchy: 800 values, 400 body, muted 11px labels. One accent (gold) for attention. The one flag red for the one action.</td></tr>
+          <tr><td><strong>Micro/macro readings</strong></td><td>Detail on inspection, pattern at a glance.</td><td>Expand-tree: office → branch → invoice → line, rolled-up progress at every level; ten rows per pane so the macro reading survives.</td></tr>
+          <tr><td><strong>Integrity: label the units, show the denominator</strong></td><td>No lie factor; the graphic's proportions match the numbers.</td><td>Count lines state the denominator ("5 of 12"); compact axis ticks; zero coverage is "—" not "0%"; Review (UOM) instead of a fabricated variance; negative is a credit memo, never a payable.</td></tr>
+          <tr><td><strong>Sparklines</strong></td><td>Word-sized graphics beside the number they describe.</td><td>Sanctioned for trend-beside-number on executive cards (below). Never as the only representation.</td></tr>
+          <tr><td><strong>Don't dequantify</strong></td><td>Words like "high" and colours alone are not data.</td><td>Pills carry a word and a number where one exists ("Overdue 60d+ · $18,420"); lights carry a word and a time.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="shapes" title="Page shapes">
+    <p>Four shapes cover every surface. Pick one; do not blend two on a page.</p>
+    <div class="ds-grid-2">
+      <div class="ds-card"><p class="eyebrow">Shape A · Work board</p><h3>Toolbar → KPI row → grouped ten-row panes</h3><p>Friday WIP/AR, the cash family, credit memos. Full-bleed, working density, both modes, one board-local primary. KPIs are filters. Groups are offices (or vendor → branch), each a ten-row pane with show-more.</p></div>
+      <div class="ds-card"><p class="eyebrow">Shape B · Audit tree</p><h3>Toolbar → 4 question cards → expand-tree</h3><p>Invoice Audit, Order Audit, Estimate Audit, Agreement Builder. Office → Branch → Invoice → Line with category sections; progress at every level; the four cards are claim it / chase it / pay it / fix it, each with one button.</p></div>
+      <div class="ds-card"><p class="eyebrow">Shape C · Executive dashboard</p><h3>Window selector → KPI row → two charts → per-account bars → drill table</h3><p>Pipeline Review, Cash Runway, Fixed Costs. Reading density, one step larger type, compact currency, charts in fixed-height cards, zero-value rows hidden with a caption.</p></div>
+      <div class="ds-card"><p class="eyebrow">Shape D · Map + rail</p><h3>Toolbar over map → marker popups → sticky detail rail</h3><p>Territory Map (home). Filter bar above the map, never hidden; the rail card and the popup are the same HTML; every popup KPI links to a pre-filtered board.</p></div>
+    </div>
+    <p>Everything else (department overviews, the agent monitor, this site) is a <strong>reading page</strong>: hero → metric grid → panels, on the content rail.</p>
+  </DsSection>
+
+  <DsSection id="kpi-rules" title="KPI rows">
+    <ul>
+      <li><strong>Four to six cards, never more.</strong> Invoice Audit went from seven pills to four by grouping by the question the human is answering. A seventh card is a sign two of them are context.</li>
+      <li><strong>Each card is a queue:</strong> a count or a sum, a one-line scope, and the one button that works it. A number that changes nothing the human does next is subtext, not a card.</li>
+      <li><strong>Pipelines read as a direction</strong> ("51 → 32 → 3"), not three backlogs.</li>
+      <li><strong>Coloured left edge per question</strong> (brand / yellow / green / grey) so the groups read apart at a glance; the edge never encodes severity.</li>
+      <li><strong>A filtering card carries <code>aria-pressed</code></strong> and the toolbar shows the active filter with a clear control.</li>
+      <li><strong>History-only trailing pills.</strong> A "Signed (7d)" pill obeys the filter bar but not the window selector; dropping a milestone fallback removed a fake $1.5M spike (2026-07-07).</li>
+      <li><strong>Off-scope cards dim</strong> (<code>.iv-kpi-off</code>, opacity .62) rather than disappear when the scope excludes them.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="charts" title="Charts">
+    <p>Charts are for shape and comparison; tables are for values. Chart.js is registered tree-shaken (bar, line, category and linear scales, tooltip, legend — about 60 KB). Every chart lives in a fixed-height card so <code>responsive + maintainAspectRatio:false</code> cannot grow it unboundedly.</p>
+    <DsSpec label="Stacked bar, brand palette, white on-bar labels" code="executive-pipeline.ts CHART_PALETTE · afterDatasetsDraw labels" layout="block">
+      <div style="display:grid;gap:6px;width:100%;max-width:560px;font-size:11px">
+        {[["Denver", 62, 22], ["Dallas", 48, 30], ["Fort Collins", 35, 9], ["Wichita", 18, 14]].map(([n, a, b]) => (
+          <div style="display:grid;grid-template-columns:90px 1fr;gap:8px;align-items:center"><span style="color:var(--text-muted)">{n}</span><div style="display:flex;height:22px;border-radius:3px;overflow:hidden;background:var(--surface-alt)"><span style={`width:${Number(a)}%;background:#11133f;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700`}>{`$${a}K`}</span><span style={`width:${Number(b)}%;background:#c22326;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700`}>{Number(b) >= 12 ? `$${b}K` : ""}</span></div></div>
+        ))}
+        <div style="display:flex;gap:14px;color:var(--text-muted);margin-top:4px"><span><i style="display:inline-block;width:10px;height:10px;background:#11133f;border-radius:2px;vertical-align:-1px"></i> Collected</span><span><i style="display:inline-block;width:10px;height:10px;background:#c22326;border-radius:2px;vertical-align:-1px"></i> AR outstanding</span><span style="margin-left:auto">labels skipped below 24px · 14px thickness · on $0</span></div>
+      </div>
+    </DsSpec>
+    <DsSpec label="Small multiples with sparklines (sanctioned shape for trend-beside-number)" code="inline SVG, same scale, one hue" layout="block">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%">
+        {offices.map((o) => (
+          <div style="display:grid;gap:4px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface)"><span style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:600">{o.name} · 13 wk</span><div style="display:flex;align-items:baseline;gap:10px"><strong style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums">${o.weeks.reduce((a, b) => a + b, 0)}K</strong><svg viewBox="0 0 120 30" width="120" height="30" role="img" aria-label={`${o.name} weekly expected receipts, 13 weeks`}><polyline points={spark(o.weeks)} fill="none" stroke="var(--info)" stroke-width="1.5" stroke-linejoin="round" /><circle cx="120" cy={28 - (o.weeks[12] / max) * 26} r="2" fill="var(--primary)" /></svg></div><small style="color:var(--text-muted);font-size:11px">last week ${o.weeks[12]}K</small></div>
+        ))}
+      </div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Rule</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Palette</td><td><code>["#11133f", "#3b6b4c", "#0066cc", "#eaa221", "#c22326"]</code> — navy, hunter green, smart blue, gold, flag red. Series colours are semantic, not rotational: Collected = navy, AR outstanding = flag red (the at-risk segment).</td></tr>
+          <tr><td>Chart types</td><td>Stacked bar (horizontal for funnels, vertical for leaderboards, top 8 only), line for time series, sparkline for trend-beside-number. No pie, no donut, no gauge, no 3D, no area fills under lines.</td></tr>
+          <tr><td>Size</td><td>Card 280px, plot 220px, fixed. Legend at the bottom, 10px note above the plot naming the series.</td></tr>
+          <tr><td>Axes</td><td>Compact currency ticks ($5K · $50K · $500K · $1M); no decimal precision on an axis; gridlines <code>--border</code> only on the value axis.</td></tr>
+          <tr><td>Labels</td><td>White 700 11px Inter drawn on segments by a custom plugin (no datalabels dependency); skipped under 24px along the bar, 14px across it, and on $0. Text reads the raw value so it always matches the bar.</td></tr>
+          <tr><td>Tooltips</td><td>Compact currency, series name, category; never the only place a value lives.</td></tr>
+          <tr><td>Dark mode</td><td>Re-read tokens and redraw on theme change; navy series lifts to smart blue on dark.</td></tr>
+          <tr><td>Accessibility</td><td><code>role="img"</code> + <code>aria-label</code> stating the finding; the table beneath is the accessible alternative.</td></tr>
+          <tr><td>Doctrine</td><td>A change to what a chart measures (e.g. cash map basis billed AR → balance due) is flagged as a doctrine change, never shipped silently.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="table-rules" title="Tables as the primary chart">
+    <ul>
+      <li>Columns ordered by what the meeting talks about first: identity (job, client) → owner (office, rep) → money (contract, billed, balance) → time (expected) → action. Money columns adjacent so the eye subtracts.</li>
+      <li>Identity columns freeze; money scrolls. Job # + client pinned left at 72px + name.</li>
+      <li>Totals as an end row with a 2px rule; section rows in caps; a breach cell white-on-red.</li>
+      <li>Column groups (billed / cost / margin) collapse by default and expand globally so every office table stays the same width.</li>
+      <li>Never a 15-wide table: headline columns as pills in the summary row, the rest in a labelled detail grid.</li>
+      <li>Derived figures are computed live (balance to pay), never stored, so they cannot drift from their inputs.</li>
+      <li>Rows that leave a population are flagged (<code>stale_closeout</code>), never deleted, and reachable through their own pill.</li>
+      <li>A row that needs a system fix is never mixed with one that needs a phone call — the board would look like 346 problems when it has 120.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="numbers" title="Number formatting">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Context</th><th>Format</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Table money</td><td>2 decimals, thousands, tabular, right</td><td class="num" style="font-variant-numeric:tabular-nums">$12,480.00</td></tr>
+          <tr><td>KPI money</td><td>Compact to 3 significant figures</td><td class="num">$1.48M · $66.9K · $942</td></tr>
+          <tr><td>Axis</td><td>Compact, no decimals under $1M</td><td class="num">$500K</td></tr>
+          <tr><td>Percent</td><td>0–1 decimal; "—" when the denominator is zero</td><td class="num">34% · 36.4% · —</td></tr>
+          <tr><td>Counts</td><td>Integer; denominator stated</td><td>5 of 12 · (53 more)</td></tr>
+          <tr><td>Negative</td><td>Minus sign, error colour; never parentheses on screen</td><td class="num" style="color:var(--error)">−$1,240.00</td></tr>
+          <tr><td>Variance</td><td>Signed %, tolerance pill beside it (Minor &lt; 3%, Moderate 3–6%, Major &gt; 6%); sub-nickel = In Tolerance</td><td class="num">+4.2% · Moderate</td></tr>
+          <tr><td>Age</td><td>Days integer + d, chip tone by age</td><td>142d</td></tr>
+          <tr><td>Time</td><td>Local, short, in the count slot</td><td>10:41 AM</td></tr>
+          <tr><td>Dates</td><td>Mon D in cells, Mon D, YYYY in prose, ISO in data</td><td>Sep 19 · Sep 19, 2026 · 2026-09-19</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="lights-rules" title="Status lights">
+    <p>The runtime board (docs/109) is a dashboard of dashboards: one light per API, agent, scheduled job and feed, grouped by kind, worst light first, with the summary counts at the top. Its rules apply to any future health surface.</p>
+    <ul>
+      <li>Colour thresholds derive from each item's cadence; the legend is rendered once from code, never hand-written.</li>
+      <li>Every light has a word and a "last run / as of" time. Unknown is a state, not an absence.</li>
+      <li>Paused = red; fresh-but-empty = yellow; not configured = yellow; a credential the app should hold but lacks caps at yellow.</li>
+      <li>Third parties are judged by this app's own pings (200 = green), not by an external monitor.</li>
+      <li>Board re-renders every 30s from the JSON endpoint; reveal state persists.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="dash-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="D-01" title="The table is the primary chart; every chart has a table; every KPI shows its number." source="Tufte 'show the data'; docs/40 §4">
+        <p>No gauges, no dials, no donuts.</p>
+      </DsRule>
+      <DsRule id="D-02" title="Colour on a board encodes status only; ink that carries no data is removed." source="docs/40 §1 semantic colour law">
+        <p>Borders over shadows, zebra only where nine columns must be tracked, no chart decoration.</p>
+      </DsRule>
+      <DsRule id="D-03" title="KPI rows are four to six work queues; a number that changes nothing the user does next is subtext." source="Chris 2026-06-17, 2026-08-09">
+        <p>Pipelines read as a direction.</p>
+      </DsRule>
+      <DsRule id="D-04" title="Same scale, same columns, same order across every group on a page (small multiples)." source="friday-wip.astro:184-189 global column-group state">
+        <p>The eye must be able to track a column down the page.</p>
+      </DsRule>
+      <DsRule id="D-05" title="State the denominator and the unit; show '—' for a zero denominator; never a fabricated number." source="docs/40 §7; executive-pipeline.ts:766; CONVENTIONS §10c">
+        <p>"5 of 12", "Review (UOM)", "—".</p>
+      </DsRule>
+      <DsRule id="D-06" title="Charts use the five-colour brand palette semantically, live in fixed-height cards, use compact ticks and on-bar labels with minimum-size guards." source="executive-pipeline.ts:278-334; global.css .epl-chart-*">
+        <p>Bar, line, sparkline only.</p>
+      </DsRule>
+      <DsRule id="D-07" title="Money-first ordering: at-risk descending for groups, then date, then absolute variance for lines; categories by sort_order." source="invoice-audit.ts:552-634">
+        <p>Never alphabetical for anything with a dollar on it.</p>
+      </DsRule>
+      <DsRule id="D-08" title="Charts and meters redraw on theme change and animate only on first render." source="Modes MD-07; Motion MO-05">
+        <p>Comparison must not wait.</p>
+      </DsRule>
+      <DsRule id="D-09" title="A change to what a figure measures is a doctrine change: flag it to the human before shipping." source="context/memory/2026-08-21 cash-map basis">
+        <p>Billed AR → Balance due was flagged, not slipped in.</p>
+      </DsRule>
+      <DsRule id="D-10" title="Every list loader paginates; a PostgREST page of exactly 1000 is a truncation, not a count." source="docs/40 §8; kpi-pills.ts:16-19">
+        <p>A silent undercount on money is the worst dashboard bug there is.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

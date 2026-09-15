@@ -2,7 +2,7 @@
 # Working Memory
 
 ## ▶ Pick up here
-**9/11: `/agents` = runtime uptime board (docs/109)** — R/Y/G per component; Better Stack 9 monitors/19 heartbeats. job 13 fix = mig 285. **LIVE = main (9/11)** — the CRM release had hijacked the host via a Traefik override (docs/110); `/sales*` stays mounted from the CRM. Next: mint Coolify API token → BETTERSTACK_API_TOKEN on prod; stop `cc-production-e4344d8` 9/12; Q5 JT grant key in host master.env; Q6 Aspose licence; Q7 BS→Slack.
+**9/15 review (docs/109 §1b):** ABC 0 gaps (API 47 = DB 47); audit 0 pending; jobs green; **LIVE = main.** Lapsed HUMAN routines: ABC AR report import (last 8/10); Pay-It verify 57 pending; weekly QB batch unstamped since 8/25 → 9/15 prep in `exports/` (37 inv $54,760.66) — load, then `--stamp`; 2 SRS CM receipts to review. Open: Q4 Coolify token → BETTERSTACK/GITHUB_TOKEN; Q5 JT grant key; Q7 BS→Slack; acculynx-sync edge v49.
 **Blocked on Chris:** CPA rulings; PEC-257/258/244/240/242/111/221/214; PEC-216 confirm/revert mig 276.
 
 ## Standing instructions (Chris)

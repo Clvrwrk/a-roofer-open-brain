@@ -1,0 +1,156 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import { DS_BASE, chapterHref, dsChapters } from "@lib/design-system/nav";
+import { tokens } from "@lib/design-system/tokens";
+
+const chapterCount = dsChapters.length;
+const sectionCount = dsChapters.reduce((n, c) => n + c.sections.length, 0);
+---
+
+<DesignSystemShell slug="">
+  <DsSection id="purpose" title="Purpose">
+    <p>
+      This site is the one design source of truth for everything Pro Exteriors puts in front of a person: the Command Center
+      and every work surface in it, the agent and Slack surfaces, public web pages, printed collateral, and promotional
+      items. It exists so that a designer, an engineer, or an AI agent can build a new surface — desktop or 100% mobile —
+      without asking a single question that this site could have answered.
+    </p>
+    <p>
+      It is written for the builder, but every rule in it is justified by the <strong>user</strong>: Lucinda working an
+      invoice queue on a Friday, Roberto reading an order audit on a phone in a truck, Chandler scanning cash runway before
+      a call, a homeowner reading a yard sign from the kerb. When a rule and a user's need disagree, the rule is wrong and
+      the change is recorded in the <a href={`${DS_BASE}/decisions`}>decisions log</a>.
+    </p>
+    <div class="ds-grid-3">
+      <div class="ds-card">
+        <p class="eyebrow">Scope</p>
+        <h3>{chapterCount} chapters · {sectionCount} sections</h3>
+        <p>Tokens, logo, type, spacing, icons, every component, modes, motion, dashboards, decisions, mobile, accessibility, content, print, swag, marketing web, and the agent handbook.</p>
+      </div>
+      <div class="ds-card">
+        <p class="eyebrow">Live, not copied</p>
+        <h3>{tokens.length} tokens read from production CSS</h3>
+        <p>Every colour, radius, spacing and font value on this site is parsed from <code>global.css</code> at build time. Contrast ratios are measured, not asserted.</p>
+      </div>
+      <div class="ds-card">
+        <p class="eyebrow">Machine readable</p>
+        <h3><a href={`${DS_BASE}/tokens.json`}>tokens.json</a></h3>
+        <p>Agents read the token feed and the numbered rules (<code>C-04</code>, <code>T-02</code>…) and cite them in PRs. Rule ids never change once published.</p>
+      </div>
+    </div>
+  </DsSection>
+
+  <DsSection id="first-principles" title="First-principles method">
+    <p>
+      Every surface is designed by decomposing the company's work down to the facts that cannot be argued with, then
+      rebuilding the screen from those facts up. The method is the same five questions each time, in order. A surface
+      that skips a question is a guess dressed up as a design.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead>
+          <tr><th>#</th><th>Question</th><th>What it forces</th><th>Example from the Command Center</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td><strong>What decision does the user have to make here, and what happens in the business if it is wrong?</strong></td><td>Names the one primary action and the cost of error. Sets how much evidence must be on screen.</td><td>Invoice Audit: "claim it, chase it, pay it, fix it" — four decisions, four KPI cards, one primary button per card. A wrong "pay it" moves real money, so the claim bar shows the negotiated price, the billed price and the variance side by side.</td></tr>
+          <tr><td>2</td><td><strong>What is the irreducible unit of work?</strong></td><td>Fixes row granularity, what a "record" is, and the key the user thinks in.</td><td>Friday WIP/AR: the job, keyed by the AccuLynx job name with the QBO Customer:Job suffix. Ten jobs is what a person can hold in a meeting, so a pane shows ten.</td></tr>
+          <tr><td>3</td><td><strong>Which facts are load-bearing and which are context?</strong></td><td>Load-bearing facts are always visible, tabular, and never colour-only. Context lives behind a disclosure.</td><td>Price audit lines: price per pricing UOM is load-bearing (compared in one unit, docs/46); vendor line description is context and truncates.</td></tr>
+          <tr><td>4</td><td><strong>What does the person already know, and what must the screen tell them?</strong></td><td>Removes chrome, labels the unfamiliar, states the cost of every control ("Show all 63 jobs ▾ (53 more)").</td><td>The scope control on Invoice Audit replaced three checkboxes: one question, "which slice am I looking at", answered once.</td></tr>
+          <tr><td>5</td><td><strong>What would make this wrong on a phone, in the dark, or for a screen reader?</strong></td><td>Mobile, dark mode and accessibility are constraints at the start, not a pass at the end.</td><td>Every audit surface ships light and dark from the same <code>cc.theme</code> preference; tables freeze the key column and scroll the rest.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-callout">
+      <b>Breaking the company down</b>
+      <p>
+        The Command Center is organised the way the business is organised — by department, then by the work each department
+        does, then by the unit that work is done in (property → job → invoice → line). A new surface must be placeable in
+        that tree before it is drawn. If it cannot be, the tree is missing a branch and that is a product decision first.
+      </p>
+    </div>
+  </DsSection>
+
+  <DsSection id="user-first" title="User over designer, user over client">
+    <p>The order of precedence when tastes collide, from strongest to weakest claim on a design decision:</p>
+    <ol>
+      <li><strong>The user's evidence.</strong> A recorded observation of a person failing, hesitating, or working around the screen. This outranks everything, including the client's stated preference, and is logged in the <a href={`${DS_BASE}/decisions#feedback`}>feedback log</a>.</li>
+      <li><strong>The task's physics.</strong> What the data is, how much of it there is, how fast it changes, and what a wrong action costs.</li>
+      <li><strong>This system's rules.</strong> Tokens, components and patterns that already exist. Reuse beats invention every time.</li>
+      <li><strong>The client's brand.</strong> The inks, the logo, the tone — applied through the rules above, never in place of them.</li>
+      <li><strong>The designer's preference.</strong> Last. A preference with no evidence behind it does not change a shipped surface.</li>
+    </ol>
+    <p>
+      In practice this means: the brand's flag red is never used to decorate because the user needs it to mean "the one thing
+      to do"; a beautiful chart is replaced by a table when the numbers are what the reader compares; a client request for a
+      denser board is honoured only after the ten-row rule has been explained and the request repeated.
+    </p>
+  </DsSection>
+
+  <DsSection id="sources" title="Sources of truth">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Artifact</th><th>Path</th><th>Owns</th></tr></thead>
+        <tbody>
+          <tr><td>Production tokens & component CSS</td><td><code>app/command-center/src/styles/global.css</code></td><td>Every value this site shows. The only place a token is defined.</td></tr>
+          <tr><td>Written specification</td><td><code>deployment/remote/dashboard/Design.md</code></td><td>Principles, five-color discipline, elevation, defensive styling. This site supersedes its rendered twin <code>design-system.html</code>.</td></tr>
+          <tr><td>Standard (pass/fail checks)</td><td><code>standards/design/v1.md</code></td><td>DSN-001 … DSN-020 and the long-list disclosure contract. QC owns it.</td></tr>
+          <tr><td>Conventions</td><td><code>CONVENTIONS.md</code> §11, §11a</td><td>Where the design system sits among the repo's other contracts.</td></tr>
+          <tr><td>Brand assets</td><td><code>config/brand/assets/</code></td><td>Official logo artwork and the stand-ins still awaiting official files.</td></tr>
+          <tr><td>Shared theme preference</td><td><code>app/command-center/src/scripts/theme-pref.ts</code></td><td>The one <code>cc.theme</code> key every surface reads.</td></tr>
+          <tr><td>This site</td><td><code>app/command-center/src/pages/design-system/</code></td><td>The reading order, the rules with ids, the specimens, the decisions log.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Precedence when two disagree: the user's evidence, then <code>global.css</code> (what ships), then this site, then
+      <code>Design.md</code>. Fix the source and regenerate; never patch a screenshot or a copy.
+    </p>
+  </DsSection>
+
+  <DsSection id="reading" title="How to read this site">
+    <ul>
+      <li><strong>Chapters</strong> are in the rail, grouped Foundations → Surfaces → Behaviour → Collateral → Governance. Read Foundations once; the rest is reference.</li>
+      <li><strong>Rules</strong> are numbered cards (<code>C-01</code> is Color rule 1, <code>CMP-12</code> is Component rule 12). Cite the id in a PR or an issue. A rule's card names where it was recorded.</li>
+      <li><strong>Specimens</strong> are real production markup in a labelled frame. Switch the theme in the top bar and every specimen re-renders in that mode.</li>
+      <li><strong>Token chips</strong> copy the token name on click. Use the name, never the hex.</li>
+      <li><strong>Search</strong> in the rail finds any chapter or section by name. <span class="ds-kbd">Enter</span> opens the first hit.</li>
+      <li><strong>Agents</strong> start at the <a href={`${DS_BASE}/agents`}>handbook</a>: the build recipe, the ship checklist and the token feed.</li>
+    </ul>
+    <div class="ds-grid-3">
+      {dsChapters.filter((c) => c.slug).map((c) => (
+        <a class="ds-card" href={chapterHref(c)} style="color:inherit;text-decoration:none">
+          <p class="eyebrow">{c.group}</p>
+          <h3>{c.title}</h3>
+          <p style="color:var(--text-muted);font-size:13px">{c.summary}</p>
+        </a>
+      ))}
+    </div>
+  </DsSection>
+
+  <DsSection id="rule-index" title="Rule index">
+    <p>Rule prefixes, one per chapter. Every rule id on this site is unique and permanent.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Prefix</th><th>Chapter</th><th>Prefix</th><th>Chapter</th></tr></thead>
+        <tbody>
+          <tr><td><code>C-</code></td><td>Color</td><td><code>MO-</code></td><td>Motion</td></tr>
+          <tr><td><code>L-</code></td><td>Logo</td><td><code>D-</code></td><td>Dashboards & data</td></tr>
+          <tr><td><code>T-</code></td><td>Typography</td><td><code>UX-</code></td><td>UX decisions</td></tr>
+          <tr><td><code>S-</code></td><td>Spacing & layout</td><td><code>M-</code></td><td>Mobile</td></tr>
+          <tr><td><code>I-</code></td><td>Icons, imagery & alt text</td><td><code>A-</code></td><td>Accessibility</td></tr>
+          <tr><td><code>CMP-</code></td><td>Components</td><td><code>W-</code></td><td>Content & words</td></tr>
+          <tr><td><code>MD-</code></td><td>Light & dark modes</td><td><code>P-</code></td><td>Print</td></tr>
+          <tr><td><code>SW-</code></td><td>Swag</td><td><code>WEB-</code></td><td>Marketing web</td></tr>
+          <tr><td><code>G-</code></td><td>Governance (agent handbook)</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-rules">
+      <DsRule id="G-00" title="A surface that cannot cite the rules it follows is not done." source="this site, 2026-09-14">
+        <p>Every PR that adds or changes a surface lists the rule ids it applied and any it deliberately broke, with the user evidence for the break. The ship checklist is in the <a href={`${DS_BASE}/agents#checklist`}>agent handbook</a>.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

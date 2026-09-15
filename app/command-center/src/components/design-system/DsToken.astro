@@ -1,0 +1,18 @@
+---
+// Click-to-copy token chip. Shows a colour dot when the resolved value is a colour.
+import { token } from "@lib/design-system/tokens";
+interface Props {
+  name: string; // "--color-primary"
+  value?: string; // override when the token is not in :root (e.g. a surface-local value)
+}
+const { name, value } = Astro.props;
+const t = token(name);
+const resolved = value ?? t?.resolved ?? "";
+const isColor = /^#|^rgb|^hsl/i.test(resolved);
+---
+
+<button type="button" class="ds-token" data-copy={name} title={`${name}: ${resolved} — click to copy the token name`}>
+  {isColor && <i style={`background:${resolved}`} aria-hidden="true"></i>}
+  <code>{name}</code>
+  {!isColor && resolved && <span style="color:var(--text-muted)">{resolved}</span>}
+</button>

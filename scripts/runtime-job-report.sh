@@ -39,8 +39,23 @@ SUMMARY="service_result=${RESULT} exit_code=${EXIT_CODE:-?} exit_status=${EXIT:-
 HOST="$(hostname -s 2>/dev/null || echo unknown)"
 EXIT_JSON="null"; case "$EXIT" in ''|*[!0-9]*) ;; *) EXIT_JSON="$EXIT" ;; esac
 
-payload=$(printf '{"p_component_key":"%s","p_status":"%s","p_exit_code":%s,"p_summary":"%s","p_host":"%s"}' \
-  "$COMPONENT" "$STATUS" "$EXIT_JSON" "$SUMMARY" "$HOST")
+# started_at: systemd knows when the main process started (ExecMainStartTimestamp); the
+# component key is systemd.<unit> so the unit name is derivable. Falls back to null so a
+# manual run (or a non-systemd host) still reports. The board reads created_at when null.
+STARTED_JSON="null"
+case "$COMPONENT" in
+  systemd.*)
+    UNIT="${COMPONENT#systemd.}"
+    TS="$(systemctl show -p ExecMainStartTimestamp --value "${UNIT}.service" 2>/dev/null || true)"
+    if [ -n "$TS" ] && [ "$TS" != "n/a" ]; then
+      ISO="$(date -u -d "$TS" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)"
+      [ -n "$ISO" ] && STARTED_JSON="\"$ISO\""
+    fi
+    ;;
+esac
+
+payload=$(printf '{"p_component_key":"%s","p_status":"%s","p_exit_code":%s,"p_summary":"%s","p_host":"%s","p_started_at":%s}' \
+  "$COMPONENT" "$STATUS" "$EXIT_JSON" "$SUMMARY" "$HOST" "$STARTED_JSON")
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
   -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" -d "$payload" \

@@ -1,0 +1,152 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+---
+
+<DesignSystemShell slug="content" source="app/command-center/src (labels, confirms, empty states) · CONVENTIONS.md §8">
+  <DsSection id="voice" title="Voice">
+    <p>
+      The Command Center speaks like a competent colleague who has already done the arithmetic: plain, specific, brief,
+      and honest about what it does not know. It never sells, never cheers, never apologises for being software. The
+      public site speaks to a homeowner the same way — one clear promise, the proof, the next step.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Trait</th><th>Sounds like</th><th>Not like</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Specific</strong></td><td>"Show all 63 jobs ▾ (53 more)"</td><td>"Load more"</td></tr>
+          <tr><td><strong>Honest</strong></td><td>"Nothing left to audit — every open invoice has had its lines audited."</td><td>"All done! 🎉"</td></tr>
+          <tr><td><strong>Consequence-first</strong></td><td>"This does not email anything. It records that you sent the email and starts the 14-day clock."</td><td>"Are you sure?"</td></tr>
+          <tr><td><strong>Plain</strong></td><td>"Expected cash date"</td><td>"Projected liquidity event"</td></tr>
+          <tr><td><strong>Calm</strong></td><td>"Territory data failed to load. The map keeps its last snapshot."</td><td>"Error! Something went wrong."</td></tr>
+          <tr><td><strong>Attributed</strong></td><td>"set by Lucinda · 2026-09-12"</td><td>"Last modified"</td></tr>
+          <tr><td><strong>Clean</strong></td><td colspan="2">No profanity anywhere, including comments and seed data (CONVENTIONS §8). No emoji in the interface; the brand does not use them.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="labels" title="Labels & headings">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Element</th><th>Rule</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Eyebrow</td><td>Department, or department · surface. Caps by CSS, sentence case in source.</td><td>Accounting · Invoice Audit</td></tr>
+          <tr><td>Page title (h1)</td><td>The surface's name, 1–3 words, sentence case, noun phrase.</td><td>Invoice Audit · Friday WIP/AR · Cash Runway</td></tr>
+          <tr><td>Board title (h2)</td><td>What the board is for, said as the meeting says it.</td><td>Friday AR Meeting board</td></tr>
+          <tr><td>Sub line</td><td>What you do here, two clauses joined by ·</td><td>Set expected cash dates · 3-week cash map</td></tr>
+          <tr><td>KPI label</td><td>The question or the queue, 1–3 words, caps by CSS.</td><td>To collect · Claim it · Overdue 60d+</td></tr>
+          <tr><td>KPI subtext</td><td>Count · scope</td><td>12 jobs · expected this week</td></tr>
+          <tr><td>Column header</td><td>Short noun; abbreviate only when the numbers are narrower than the name, and put the full name in <code>title</code>.</td><td>Balance due · Est Exp Outstanding</td></tr>
+          <tr><td>Group name</td><td>The entity as the user calls it.</td><td>Denver · ABC Supply #412 · Uncategorized</td></tr>
+          <tr><td>Pill</td><td>One or two words, the state as a word.</td><td>Paid · Renewal due · Review (UOM) · TBD</td></tr>
+          <tr><td>Section h3</td><td>Noun phrase; never a question, never a verb command.</td><td>Work ready for review</td></tr>
+          <tr><td>Nav leaf</td><td>The surface name; a "soon" note explains what will be there.</td><td>Price Agreements — "Coverage · Gap Worksheet · Renewal Worksheet (docs/83)"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Sentence case everywhere. Product names keep their capitals (AccuLynx, QuickBooks Online, ABC Supply). Internal names keep their form (WIP/AR, 13WCF, PA).</li>
+      <li>"PE" is the company; "office" is a PE location; "branch" is a vendor location; "vendor" is ABC, SRS or QXO. Never "supplier", "store", "location" for these.</li>
+      <li>"Agreement" or "price agreement", never "contract" (a contract is a job's contract value). "Price list" is a vendor's sheet. "Credit memo" (CM) is the document; "claim" is what we ask for.</li>
+          <li>Job names are shown as AccuLynx names with the QBO suffix; numeric or GUID-like names are treated as no name and never shown bare.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="numbers-dates" title="Numbers, dates & money">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Thing</th><th>Write</th><th>Not</th></tr></thead>
+        <tbody>
+          <tr><td>Money, table</td><td>$12,480.00</td><td>12480 · $12.5k · (1,240.00)</td></tr>
+          <tr><td>Money, KPI / axis</td><td>$1.48M · $66.9K</td><td>$1,482,300.00</td></tr>
+          <tr><td>Negative</td><td>−$1,240.00 (true minus U+2212, red)</td><td>-1240 · ($1,240)</td></tr>
+          <tr><td>Percent</td><td>34% · 36.4%</td><td>34 % · 0.34</td></tr>
+          <tr><td>Quantity + unit</td><td>12 SQ · 40 LF · 3 EA</td><td>12SQ · 12 squares (in a table)</td></tr>
+          <tr><td>Count with denominator</td><td>5 of 12 · (53 more)</td><td>5/12</td></tr>
+          <tr><td>Date, cell</td><td>Sep 19</td><td>09/19 · 19 Sep</td></tr>
+          <tr><td>Date, prose / attribution</td><td>Sep 19, 2026 · 2026-09-12 (attribution stamps use ISO)</td><td>9/19/26</td></tr>
+          <tr><td>Time</td><td>10:41 AM (local)</td><td>10:41:07</td></tr>
+          <tr><td>Age</td><td>142d</td><td>142 days old</td></tr>
+          <tr><td>Range</td><td>2026-06-01 → 2026-09-14</td><td>from … to …</td></tr>
+          <tr><td>Phone (public)</td><td>(303) 555-0142</td><td>303.555.0142</td></tr>
+          <tr><td>Missing</td><td>— or a grey TBD pill</td><td>0 · N/A · blank</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Figures always come from a formatter; a literal <code>$</code> or <code>%</code> in markup fails the daily sweep (T-07).</p>
+  </DsSection>
+
+  <DsSection id="controls" title="Control labels">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Control</th><th>Pattern</th><th>Examples</th></tr></thead>
+        <tbody>
+          <tr><td>Primary button</td><td>Verb + object, present tense, ≤ 3 words</td><td>Approve claim · Mark sent · Email via Maya</td></tr>
+          <tr><td>Secondary / ghost</td><td>Verb, or noun for a destination</td><td>Download pack · Filter · Reset · Invoice audit</td></tr>
+          <tr><td>Destructive</td><td>Verb that names the loss</td><td>Reject · Un-approve · Withdraw request</td></tr>
+          <tr><td>Show-more</td><td>States the cost both ways</td><td>Show all 63 jobs ▾ (53 more) · Show first 10 only ▴</td></tr>
+          <tr><td>Clear filter</td><td>Names it and offers ✕</td><td>Clear filter ✕</td></tr>
+          <tr><td>Scope segments</td><td>2–3 words; each has a title defining the slice</td><td>To audit · Due now · All</td></tr>
+          <tr><td>Select first option</td><td>"All &lt;plural noun&gt;"</td><td>All PE offices · All reps · All tolerance</td></tr>
+          <tr><td>Disclosure</td><td>Noun phrase; "More filters" is the one verb-less exception</td><td>More filters · Denver · Shingles</td></tr>
+          <tr><td>Theme</td><td>System · Light · Dark, in that order</td><td>—</td></tr>
+          <tr><td>Disabled</td><td>Same label; the reason in title</td><td>Process — "No data for this vendor yet"</td></tr>
+          <tr><td>Link that downloads</td><td>Noun + format</td><td>Accrual snapshot CSV · Latest pack (xlsx)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="messages" title="Messages & empty states">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Kind</th><th>Shape</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Empty (filtered)</td><td>What is true + the way out</td><td>Nothing left to audit — every open invoice has had its lines audited. Switch to Due now or All to see them.</td></tr>
+          <tr><td>Empty (never had data)</td><td>What would fill it</td><td>No export batches yet. The first appears after the Friday close.</td></tr>
+          <tr><td>Loading</td><td>"Loading &lt;thing&gt;…"</td><td>Loading invoice detail…</td></tr>
+          <tr><td>Unavailable</td><td>Cause + what remains + one action</td><td>Cash flow is unavailable: the WIP/AR master has not refreshed since Sep 12. Open the runtime board.</td></tr>
+          <tr><td>Error (system)</td><td>The actual error, then the fix, never "something went wrong"</td><td>invoice audit query failed: statement timeout — read through the materialised view.</td></tr>
+          <tr><td>Confirm</td><td>Effect. Non-effects. Parties. Question.</td><td>This records completion only — no files are exported and payment is unaffected. Mark the 3 ABC invoices processed?</td></tr>
+          <tr><td>Toast (saved)</td><td>What happened + persistence</td><td>Expected date saved · survives the nightly rebuild</td></tr>
+          <tr><td>Toast (local)</td><td>Same, honest</td><td>recalculated locally — not saved</td></tr>
+          <tr><td>Provisional</td><td>What is provisional and until when</td><td>Provisional basis (version 0) until the CPA rulings land.</td></tr>
+          <tr><td>Planned feature</td><td>"soon" badge + one-line note</td><td>Fleet Audit — soon</td></tr>
+          <tr><td>Boundary</td><td>What this surface will never do</td><td>QuickBooks Online is mirror-only here. Nothing on this board writes to QBO.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Words we do not use: <em>oops, whoops, uh-oh, awesome, great job, please wait, sorry, error occurred, invalid, unfortunately, simply, just, easy, powerful, seamless, leverage, utilize</em>. Words we use carefully: <em>live</em> (only when the loader says so), <em>approved</em> (only after a human), <em>sent</em> (only when a human marked it).</p>
+  </DsSection>
+
+  <DsSection id="content-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="W-01" title="Every control states what it does and what it costs; every confirm states effect, non-effects and parties." source="standards/design/v1.md:115-116; docs/100:249-257">
+        <p>"Show all 63 jobs ▾ (53 more)". "This does not email anything."</p>
+      </DsRule>
+      <DsRule id="W-02" title="Sentence case, plain words, the user's vocabulary (office, branch, vendor, agreement, claim, job)." source="this chapter">
+        <p>Product names keep their capitals.</p>
+      </DsRule>
+      <DsRule id="W-03" title="Every message names the thing and the way out; never 'something went wrong', never a bare 'Error'." source="invoice-audit-tree.ts:864-870; docs/90">
+        <p>The actual error text is better than a friendly lie.</p>
+      </DsRule>
+      <DsRule id="W-04" title="Missing is '—' or a grey TBD; a number that would be a lie is not shown." source="docs/40 §3; executive-pipeline.ts:766">
+        <p>Never 0, never blank, never 0%.</p>
+      </DsRule>
+      <DsRule id="W-05" title="Figures come from the formatter with the formats in this chapter; no literal $ or %." source="T-07; docs/92">
+        <p>True minus, tabular, compact on KPIs.</p>
+      </DsRule>
+      <DsRule id="W-06" title="'Live', 'approved' and 'sent' are earned words: the loader, a human, and a human respectively." source="docs/84; docs/100">
+        <p>Sample data cannot call itself live because the status no longer exists.</p>
+      </DsRule>
+      <DsRule id="W-07" title="No emoji, no exclamation marks, no apologies, no filler; clean language everywhere including comments and seed data." source="CONVENTIONS §8; this chapter">
+        <p>The brand does not use emoji; neither does the app.</p>
+      </DsRule>
+      <DsRule id="W-08" title="Attribute every human-set value: 'set by <name> · <ISO date>'." source="friday-wip.astro .fw-who">
+        <p>An agent-set value says the agent's name.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

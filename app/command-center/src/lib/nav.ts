@@ -106,6 +106,7 @@ export const navDepartments: NavDepartment[] = [
     items: [
       { label: "Work Queue", status: "soon", note: "Returns here — recaptured from the old home" },
       { label: "Agent Monitor", href: "/agents", status: "built" },
+      { label: "Design System", href: "/design-system", status: "built", note: "Living design system — tokens, components, modes, motion, decisions log; the reference every new surface is built from" },
       { label: "Project Management", status: "soon" },
       { label: "Builds", status: "soon", note: "When/why/how we deploy & manage new agents" },
       { label: "Agent SOPs", status: "soon", note: "Tasking, thinking, planning, conductor, research, audit" },
