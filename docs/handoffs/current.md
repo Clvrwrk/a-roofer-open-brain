@@ -82,15 +82,15 @@ None — session ended at a clean boundary. Build green, 352/352 tests green, de
 ## Open branch not on main — PR #9 (green, waiting on a human)
 
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**292-296** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
+**293-297** (already applied to prod, all additive) plus `docs/107` and `docs/108`. Kept 0
 behind main and merged with it daily. All reviewers green on the current head; **not merged,
 not deployed.**
 
-Migration numbers have moved **thirteen** times as parallel sessions claimed numbers on main —
-most recently 2026-09-15 (main took 289-291, so the set moved 289-293 → 292-296), three days
-after the twelfth. Prod labels are unaffected throughout: Supabase keys on timestamp, so
+Migration numbers have moved **fourteen** times as parallel sessions claimed numbers on main —
+twice on 2026-09-15 within one hour (main took 289-291, then 292), ending at 293-297. Prod
+labels are unaffected throughout: Supabase keys on timestamp, so
 `245_`/`246_`/`248_`/`249_` and `290_coverage_views_service_role_only` still name the applied
-migrations and nothing is re-applied. If you take 292-296 on main, move the **whole** set
+migrations and nothing is re-applied. If you take 293-297 on main, move the **whole** set
 again, not just the colliding files — the spend view must keep preceding the two migrations
 that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
 those and read them back; the file alone is not the whole change.
@@ -113,7 +113,7 @@ Four items need a human — full detail in `docs/107` and `docs/108`:
    465 were touched by another process where `pending` may be a deliberate re-geocode
    request, so they were left alone rather than guessed at.
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
-   default grants mig 296 closed for the four coverage views. They predate this branch and
+   default grants mig 297 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
 4. **Repo-wide customer PII** (`docs/108`) — named individuals beside outstanding balances
    across at least 18 tracked files, including test fixtures that assert on the names. On
