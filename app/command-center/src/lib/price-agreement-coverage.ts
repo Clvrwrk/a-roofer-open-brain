@@ -198,6 +198,21 @@ const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
  */
 const ACTIONABLE_KINDS: ReadonlySet<CoverageLabelKind> = new Set(["unreachable", "no-agreement"]);
 
+/**
+ * Is this pair work someone should act on?
+ *
+ * The single predicate behind both the chase totals and the operator pill: it asks
+ * `coverageLabelKind()` and keeps the kinds that mean work. Named rather than inlined so the
+ * two callers demonstrably share one rule — re-deriving it locally is what produced the
+ * mismatch this function exists to prevent.
+ */
+function isChaseWork(
+  vendor: Parameters<typeof coverageLabelKind>[0],
+): boolean {
+  const kind = coverageLabelKind(vendor);
+  return kind !== null && ACTIONABLE_KINDS.has(kind);
+}
+
 export function gapExposure(
   vendors: Pick<
     CoverageVendor,
@@ -206,10 +221,7 @@ export function gapExposure(
 ): { gapsWithSpend: number; gapsToChase: number; gapSpend: number; chaseSpend: number } {
   const gaps = vendors.filter((v) => v.hasGap);
   const withSpend = gaps.filter((v) => v.invoiceCount > 0);
-  const toChase = withSpend.filter((v) => {
-    const kind = coverageLabelKind(v);
-    return kind !== null && ACTIONABLE_KINDS.has(kind);
-  });
+  const toChase = withSpend.filter(isChaseWork);
   return {
     gapsWithSpend: withSpend.length,
     gapsToChase: toChase.length,
