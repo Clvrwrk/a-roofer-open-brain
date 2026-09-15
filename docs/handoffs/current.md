@@ -97,7 +97,7 @@ files — the spend view must keep preceding the two migrations that read it.
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
 path prices some of the same lines. Two pricing paths disagreeing is the finding.
 
-Four items need a human — full detail in `docs/107` and `docs/108`:
+Five items need a human — full detail in `docs/107` and `docs/108`:
 1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
@@ -113,6 +113,15 @@ Four items need a human — full detail in `docs/107` and `docs/108`:
    `main`, not introduced by this branch. Needs a policy boundary, a replacement token, a
    decision on git history, and a CI check. A piecemeal sweep was tried and reverted for
    leaving tables half-anonymised; it needs its own workstream.
+
+5. **ABC branch 326 (Topeka KS) does not resolve** — found 2026-09-15 when a figure that
+   had held for 22 days moved. ABC invoice `2014501859-001` ($1,294.69) carries branch number
+   `326`, but ABC's Topeka row in `vendor_branches` is keyed on the synthetic slug
+   `topeka-KS-66618-1445`, so the ingest-time resolver never matches and the invoice leaves
+   the audit. **685 of ABC's 761 branch rows (90%) carry slug-style numbers**, so any of them
+   repeats this the first time it invoices. Same class of decision as item 1 — repointing the
+   number, or adding a postal/address fallback, is an identity call a human makes. Detail in
+   the `docs/107` 2026-09-15 addendum.
 
 **Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
 pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took

@@ -1,6 +1,6 @@
 # 107 — Rank coverage gaps by dollars, not by branch count
 
-**Initial date:** 2026-08-20 · **Last updated:** 2026-09-12 · **Migrations:** 289, 290, 291, 292, 293 · **Ticket:** PEC-221
+**Initial date:** 2026-08-20 · **Last updated:** 2026-09-15 · **Migrations:** 289, 290, 291, 292, 293 · **Ticket:** PEC-221
 
 ## The problem
 
@@ -53,10 +53,14 @@ working as intended.
 - `v_unresolved_branch_spend` — spend that reaches no pricing office, split by cause.
   Fail-closed is correct, but it must stay *visible*, or money silently leaves the audit.
 
-A useful result from the second view: `no_branch_resolved` returns **zero rows**. Every
-invoice in the system resolves a branch — migration 243's ingest-time resolution is holding
-at 100%. All the unresolved money is `branch_has_no_office`, a territory question, not an
-identity one.
+A useful result from the second view, **as measured 2026-08-20**: `no_branch_resolved`
+returned **zero rows**. Every invoice then in the system resolved a branch, and all the
+unresolved money was `branch_has_no_office` — a territory question, not an identity one.
+
+> **This no longer holds.** On 2026-09-15 the first `no_branch_resolved` row appeared. The
+> 100% was true of the invoices that existed when it was measured, not a property of the
+> resolver. See the 2026-09-15 addendum — and treat this as the general lesson: a rate
+> measured over today's rows is an observation, not an invariant.
 
 ## Migration 290 — the address was never missing
 
@@ -655,3 +659,65 @@ one can survive renumber after renumber. The searchable form of the check: after
 set, grep for **every intermediate number the set has ever used** (here 245–253, 263–271,
 281–290), and confirm each surviving hit is either deliberate renumber history or another
 team's file. Filename-vs-header agreement is necessary and nowhere near sufficient.
+
+---
+
+## Addendum — 2026-09-15: the first unresolved branch, and why "100%" was never an invariant
+
+A figure that had not moved in 22 days of daily checks moved: **unresolved branch spend
+$27,566.56 → $28,861.25**. Unlike the chase total, this one is not supposed to drift with
+ordinary purchasing, so it was traced before anything else was done.
+
+**The record.** ABC invoice `2014501859-001`, dated 2026-09-14, **$1,294.69**, ingested
+2026-09-15 07:30 UTC by the nightly ABC sync. Branch **326, Topeka KS**, ship-to
+*Storm/wichita*. Its `vendor_branch_id` is NULL, so it lands in `no_branch_resolved` — the
+bucket that had held **zero rows since this work began**.
+
+The `branch_has_no_office` bucket is unchanged at exactly $27,566.56 across 26 invoices, so
+the entire movement is this one new row.
+
+**The cause is an identity mismatch, not a missing branch.** ABC *does* have a Topeka KS
+branch in `vendor_branches`, geocoded `ok` and carrying a pricing office. But its
+`branch_number` is the synthetic slug **`topeka-KS-66618-1445`**, derived from city-state-
+postal. The invoice carries ABC's real branch number, `326`. The ingest-time resolver matches
+on branch number, so the two never meet — and an invoice that *would* have been auditable
+falls out of the audit instead.
+
+**This is not a one-off.** Of ABC's 761 branch rows, **685 (90%) carry slug-style numbers**
+and only 76 carry real numeric ones:
+
+| Vendor | Numeric branch numbers | Slug-style |
+|---|---:|---:|
+| ABC Supply Co. | 76 | **685** |
+| QXO | 566 | 0 |
+| SRS Distribution | 0 | 453 (its own alphanumeric codes) |
+
+The resolver held at 100% only because every ABC invoice so far had come from one of the 76.
+Measured precisely: **58** distinct branch numbers appear across all ABC invoices, **57**
+match an ABC branch by number, and exactly **one** — branch 326 — does not. The 58th arrived
+on 2026-09-15.
+
+**Why the earlier claim was wrong in kind, not just out of date.** This document said the
+resolver was "holding at 100%", which reads as a property of the system. It was a property of
+the rows that happened to exist on 2026-08-20. Any of the remaining 685 slug-only branches
+produces the same failure the first time it invoices. The same mistake shape has now appeared
+three times in this work: a figure measured once and then quoted as though it were stable
+(the chase total), a guard that existed in SQL but never reached the surface, and now a rate
+mistaken for an invariant.
+
+**Deliberately not fixed here.** Repointing the Topeka row's `branch_number` from the slug to
+`326` — or teaching the resolver to fall back to postal/address when the number misses — is
+the *same class of decision* as `AMSDE` vs `SBP-SOUTHDENVER`, and migration 240 already
+draws that line: **a guess cannot become a fact**. It is also pricing-affecting, since
+resolving the branch would pull this invoice into an office's audited spend. It belongs with
+the branch-identity decision already awaiting a human, not in this PR.
+
+**What to watch.** `no_branch_resolved` is now a live counter rather than a constant zero:
+
+```sql
+SELECT reason, invoice_count, spend FROM v_unresolved_branch_spend ORDER BY spend DESC;
+```
+
+A second row appearing there means another slug-only branch has invoiced. That is the signal
+worth acting on — the dollar total alone will not distinguish it from ordinary territory
+spend.
