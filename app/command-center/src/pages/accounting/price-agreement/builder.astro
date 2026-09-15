@@ -142,17 +142,27 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
       HETEROGENEOUS set — a pair can be in `gapsToChase` for missing paperwork OR for a live
       agreement the ring cannot reach, and (since `unreachable` outranks `accepted`) with or
       without a recorded ruling on it. Any single reason asserted here is false for some member.
-      Three consecutive review findings landed on this one sentence, each on a different reason
+      FOUR consecutive review findings landed on this one sentence, each on a different trailing
       clause: "have no ruling accepting that", then "of those", then "nobody has signed off on
-      — either ... or one does", which contradicted itself inside one sentence. The reason is
-      per-pair, so it belongs on the per-pair pill, which derives it from coverageLabelKind()
-      and is correct by construction. This paragraph states COUNTS and MONEY only.
+      — either ... or one does" (self-contradictory), then "on pairs that cannot be audited".
+      The reason is per-pair, so it belongs on the per-pair pill, which derives it from
+      coverageLabelKind() and is correct by construction.
+
+      THE MONEY GETS NO CHARACTERISATION EITHER. `chaseSpend` sums WHOLE INVOICE TOTALS — tax,
+      freight, and lines the line-level path does price. Calling it un-audited spend overstates
+      it, and the <small> note below is the ONLY place that says what the figure contains. The
+      4th finding was this clause contradicting that note two lines further down; the note had
+      been added in 2026-08-21 to answer the same complaint, which means a false headline sat
+      under a correct caveat for three weeks. A caveat does not repair a claim above it.
+
+      So: COUNTS and MONEY, bare. No reason, no adjective, no "of X" tail. If a fifth finding
+      lands here, delete the sentence.
     */}
     {coverage.totals.gaps > 0 && (
       <p class="iv-note">
         <b>{coverage.totals.gaps}</b> office × vendor pairs have no <b>reachable</b> agreement coverage.
         <b>{coverage.totals.gapsWithSpend}</b> carry spend. <b>{coverage.totals.gapsToChase}</b> are actually work,
-        carrying <b>{money(coverage.totals.chaseSpend)}</b> of invoiced spend on pairs that cannot be audited.
+        carrying <b>{money(coverage.totals.chaseSpend)}</b> of total invoiced spend.
         <b>These two counts are not nested</b> — a pair is work whether or not it has invoiced yet, because an
         agreement the ring cannot reach is a broken link to repair today, before the first order rather than
         after it. <b>Why a pair is work differs, so read its pill rather than this line</b> — where one shows
