@@ -669,9 +669,15 @@ $27,566.56 → $28,861.25**. Unlike the chase total, this one is not supposed to
 ordinary purchasing, so it was traced before anything else was done.
 
 **The record.** ABC invoice `2014501859-001`, dated 2026-09-14, **$1,294.69**, ingested
-2026-09-15 07:30 UTC by the nightly ABC sync. Branch **326, Topeka KS**, ship-to
-*Storm/wichita*. Its `vendor_branch_id` is NULL, so it lands in `no_branch_resolved` — the
-bucket that had held **zero rows since this work began**.
+2026-09-15 07:30 UTC by the nightly ABC sync. Branch **326, Topeka KS**. Its
+`vendor_branch_id` is NULL, so it lands in `no_branch_resolved` — the bucket that had held
+**zero rows since this work began**.
+
+> The first draft of this paragraph also quoted the invoice's `shipTo.name`. That field is
+> the exact class of value `docs/108` exists to remediate, and it was incidental here — the
+> finding is about branch 326's identity, not where the material went. Removed. Quote the
+> vendor-side record when documenting a vendor-side defect; reach for a customer-side field
+> only when the finding is actually about the customer.
 
 The `branch_has_no_office` bucket is unchanged at exactly $27,566.56 across 26 invoices, so
 the entire movement is this one new row.
