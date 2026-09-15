@@ -204,19 +204,33 @@ export function gapExposure(
  * time as the ones under it, so whichever is tested first wins, and testing a broad case
  * early silently masks a narrow one:
  *
- *  1. `accepted`      — a human recorded a ruling (no_book / not_pursued). A human decision
- *                       outranks every derived signal, so nothing below can override it.
- *  2. `unreachable`   — live agreements exist but the office ring cannot reach them. The
+ *  1. `unreachable`   — live agreements exist but the office ring cannot reach them. The
  *                       operator must REPAIR THE BRANCH LINK, not chase paperwork.
+ *  2. `accepted`      — a human recorded a ruling (no_book / not_pursued): not work.
  *  3. `no-spend`      — no agreement and no invoices: theoretical, nothing to chase yet.
  *  4. `no-agreement`  — no agreement and real spend: the plain chase case.
  *
- * This function exists because the ordering has been wrong TWICE, both times sending
- * operators after paperwork that was already signed. First `unreachable` was missing
- * entirely; then it sat below `no-spend`, so an unreachable pair that had not yet been
- * invoiced fell through to "No agreement — no spend yet". Zero pairs are in that state
- * today, but a book signed before the first order puts one there, which is exactly the
- * case this surface exists to catch. The unit tests lock this order deliberately.
+ * This function exists because the ordering has been wrong THREE times, every time sending
+ * operators after paperwork that was already signed, or telling them a signed book was not
+ * work. First `unreachable` was missing entirely; then it sat below `no-spend`, so an
+ * unreachable pair not yet invoiced fell through to "No agreement — no spend yet"; then it
+ * sat below `accepted`, so a stale ruling masked a live unreachable book.
+ *
+ * WHY `unreachable` NOW OUTRANKS A HUMAN RULING — this reverses the rule stated here before,
+ * which was that a recorded decision outranks every derived signal. That conflated two
+ * different questions. The ruling answers "should we have an agreement here?"; reachability
+ * answers "one exists and the ring cannot use it". A `no_book` ruling recorded in August
+ * cannot have contemplated a book loaded in September, so when both are true the ruling's
+ * premise is simply false and the fact should win.
+ *
+ * This cannot resurface an accepted vendor as false work: `unreachable` requires
+ * `agreementNotReaching`, which requires live agreement rows to exist. QXO — the case
+ * `accepted` was built to suppress — is ruled `no_book` at all five offices with
+ * `live_agreements = 0`, so it still lands on `accepted` (verified against prod 2026-09-15).
+ *
+ * The costs are asymmetric, which is what settles it. A spurious repair instruction wastes a
+ * minute. A real signed book labelled "not work" prices nothing, forever, and nobody looks —
+ * the exact failure this surface exists to catch. The unit tests lock this order deliberately.
  */
 export type CoverageLabelKind = "accepted" | "unreachable" | "no-spend" | "no-agreement";
 
@@ -224,8 +238,8 @@ export function coverageLabelKind(
   vendor: Pick<CoverageVendor, "hasGap" | "invoiceCount" | "isAccepted" | "agreementNotReaching">,
 ): CoverageLabelKind | null {
   if (!vendor.hasGap) return null;
-  if (vendor.isAccepted) return "accepted";
   if (vendor.agreementNotReaching) return "unreachable";
+  if (vendor.isAccepted) return "accepted";
   if (vendor.invoiceCount === 0) return "no-spend";
   return "no-agreement";
 }

@@ -110,8 +110,25 @@ describe("coverageLabelKind", () => {
       .toBe("unreachable");
   });
 
-  it("lets a recorded human ruling outrank the derived reachability signal", () => {
+  it("REGRESSION: an accepted ruling does not mask a live unreachable agreement", () => {
+    // The bug: `isAccepted` was tested first, on the rule that a human decision outranks a
+    // derived signal. But a no_book ruling asserts "there is no book here", while
+    // agreementNotReaching asserts "a live book exists and the ring cannot use it". Those
+    // contradict; they are not ranked. A ruling recorded before the book was signed is
+    // simply stale, and labelling the pair "not work" hides a signed agreement that prices
+    // nothing — forever, because nobody looks at an accepted pair again.
     expect(coverageLabelKind(pair({ isAccepted: true, agreementNotReaching: true })))
+      .toBe("unreachable");
+  });
+
+  it("still suppresses an accepted vendor that has no agreements at all", () => {
+    // The case `accepted` exists for, and the one this reorder must not break: QXO is ruled
+    // no_book at all five offices with live_agreements = 0, so agreementNotReaching is false
+    // and the pair still reads as not-work. `unreachable` structurally cannot fire without
+    // live agreement rows, so no accepted vendor can be dragged back into the chase queue.
+    expect(coverageLabelKind(pair({ isAccepted: true, agreementNotReaching: false, invoiceCount: 0 })))
+      .toBe("accepted");
+    expect(coverageLabelKind(pair({ isAccepted: true, agreementNotReaching: false, invoiceCount: 9 })))
       .toBe("accepted");
   });
 
