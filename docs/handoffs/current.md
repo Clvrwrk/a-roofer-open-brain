@@ -81,20 +81,40 @@ None — session ended at a clean boundary. Build green, 352/352 tests green **a
 
 ## Open branch not on main — PR #9 (green, waiting on a human)
 
-`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**294-298** (already applied to prod; additive and idempotent per hard rule 1 — no data touched —
-**but 298 is an access-control change**: it revokes `SELECT` on the four coverage views from
-`anon`/`authenticated` and grants it to `service_role`) plus `docs/107` and `docs/108`. Kept 0
-behind main and merged with it daily. **Not merged, not deployed.** For review status read the
+`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: the five
+migrations below plus `docs/107` and `docs/108`. Kept 0 behind main and merged with it daily.
+
+**`294-298` are FILENAMES ON THIS BRANCH, not production labels.** The work is applied to prod
+under older labels, and the two numbering systems have never matched. Do not search
+`schema_migrations` for 294-298 — you will not find them, and you must not re-apply anything:
+
+| Branch filename | Applied to prod as | At |
+|---|---|---|
+| `294-office-vendor-spend-exposure` | `245_office_vendor_spend_exposure` | 2026-08-20 10:57 UTC |
+| `295-backfill-branch-address-from-raw` | `246_backfill_branch_address_from_raw` | 2026-08-20 10:59 UTC |
+| `296-gap-exposure-with-ruling` | `248_gap_exposure_with_ruling` | 2026-08-20 11:06 UTC |
+| `297-agreement-unreachable-detector` | `249_agreement_unreachable_detector` (+ `249b`) | 2026-08-20 11:10 UTC |
+| `298-coverage-views-service-role-only` | `290_coverage_views_service_role_only` (`20260826193359`) | registered 2026-08-26 |
+
+Supabase keys on TIMESTAMP, not on the filename, so the applied order never depended on these
+numbers — which is why the branch can renumber freely and prod is untouched. All five are
+additive and idempotent per hard rule 1 (no data touched), **but 298 is an access-control
+change**: it revokes `SELECT` on the four coverage views from `anon`/`authenticated` and grants
+it to `service_role`.
+
+For the current applied watermark, query it — never read a number from this document:
+
+```sql
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;
+```
+ **Not merged, not deployed.** For review status read the
 PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
 written here is describing a commit that is no longer the head. (A review caught this line
 claiming all reviewers were green while two were mid-run.)
 
 Migration numbers have moved **fifteen** times as parallel sessions claimed numbers on main —
-three times in 24 h (main took 289-291, then 292, then 293), ending at 294-298. Prod
-labels are unaffected throughout: Supabase keys on timestamp, so
-`245_`/`246_`/`248_`/`249_` and `290_coverage_views_service_role_only` still name the applied
-migrations and nothing is re-applied. If you take 294-298 on main, move the **whole** set
+three times in 24 h (main took 289-291, then 292, then 293), ending at 294-298. The prod labels
+in the table above are unaffected by every one of those moves. If you take 294-298 on main, move the **whole** set
 again, not just the colliding files — the spend view must keep preceding the two migrations
 that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
 those and read them back; the file alone is not the whole change.
