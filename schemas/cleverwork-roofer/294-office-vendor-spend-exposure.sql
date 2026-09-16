@@ -63,8 +63,10 @@
 -- INVARIANT — the two views below are an EXACT complementary partition, and must stay one.
 --   resolved   (v_office_vendor_spend)     = vendor_branch_id IS NOT NULL
 --                                            AND vb.pricing_territory_office_id IS NOT NULL
+--                                            AND vb.pricing_status = 'covered'
 --   unresolved (v_unresolved_branch_spend) = vendor_branch_id IS NULL
 --                                            OR  vb.pricing_territory_office_id IS NULL
+--                                            OR  vb.pricing_status IS DISTINCT FROM 'covered'
 -- Every invoice lands in exactly one. Verified 2026-08-26 against prod:
 --   $2,278,692.71 resolved + $27,566.56 unresolved = $2,306,259.27 total, 1,134 = 1,134 rows.
 --
@@ -75,6 +77,26 @@
 -- to the resolved arm alone would CREATE the leak it was meant to prevent, because the
 -- unresolved arm keys on office nullity and would not pick the excluded rows back up.
 -- If either predicate is ever tightened, tighten BOTH and re-run the reconciliation above.
+--
+-- THE STATUS PREDICATE WAS ADDED 2026-09-16, and both arms moved together per that rule.
+-- Raised by review: `pricing_status` is independent of `pricing_territory_office_id` — no
+-- constraint or trigger ties them, and the CHECK permits 'unclassified' and
+-- 'overlap_pending' as well as 'covered'/'out_of_boundary'. This view keyed on office
+-- nullity alone while EVERY other coverage view in the repo keys on
+-- `pricing_status = 'covered'` (migs 201, 205, 208, 209, 230, 245, 292). It was the odd one
+-- out, so an office-bearing branch that was not yet `covered` would have counted as resolved
+-- spend here and as uncovered everywhere else.
+--
+-- Measured before changing anything (prod, 2026-09-16): the two agree on every row today —
+-- 176 branches `covered`, all with an office; 1,604 `out_of_boundary`, none with an office;
+-- 0 disagreements in either direction. So this changes no current output. It is closed as a
+-- LATENT inconsistency, not an observed one. The state that would have exposed it is real
+-- though: migration 207 resolves `overlap_pending` rows TO `covered`, so a branch can sit
+-- office-bearing and not-yet-covered during that window.
+--
+-- `IS DISTINCT FROM` rather than `<>` on purpose: `pricing_status` carries no NOT NULL, and
+-- `NULL <> 'covered'` is NULL, which would drop such a row from BOTH arms — the exact leak
+-- this invariant exists to prevent.
 --
 -- The underlying mismatch also has no instances: 0 abc_invoices rows point at a non-ABC
 -- branch, 0 vendor_invoices rows disagree with their branch's vendor, 0 carry a NULL
@@ -107,6 +129,7 @@ SELECT vb.pricing_territory_office_id       AS office_id,
   LEFT JOIN public.office  o ON o.id = vb.pricing_territory_office_id
   LEFT JOIN public.vendors v ON v.id = vb.vendor_id
  WHERE vb.pricing_territory_office_id IS NOT NULL
+   AND vb.pricing_status = 'covered'
  GROUP BY vb.pricing_territory_office_id, o.name, vb.vendor_id, v.name;
 
 COMMENT ON VIEW public.v_office_vendor_spend IS
@@ -125,16 +148,19 @@ WITH invoice_union AS (
     SELECT vi.vendor_branch_id, COALESCE(vi.total_due, vi.sub_total) AS amount
       FROM public.vendor_invoices vi
 )
-SELECT CASE WHEN u.vendor_branch_id IS NULL THEN 'no_branch_resolved'
-            ELSE 'branch_has_no_office' END      AS reason,
+SELECT CASE WHEN u.vendor_branch_id IS NULL             THEN 'no_branch_resolved'
+            WHEN vb.pricing_territory_office_id IS NULL THEN 'branch_has_no_office'
+            ELSE 'branch_not_covered' END          AS reason,
        count(*)                                  AS invoice_count,
        COALESCE(sum(u.amount), 0)::numeric(14,2) AS spend
   FROM invoice_union u
   LEFT JOIN public.vendor_branches vb ON vb.id = u.vendor_branch_id
  WHERE u.vendor_branch_id IS NULL
     OR vb.pricing_territory_office_id IS NULL
+    OR vb.pricing_status IS DISTINCT FROM 'covered'
  GROUP BY 1;
 
 COMMENT ON VIEW public.v_unresolved_branch_spend IS
-  'Spend that reaches no pricing office, split by cause. Non-zero here means invoices are '
-  'outside the price audit entirely — triage before trusting any coverage total.';
+  'Spend that reaches no COVERED pricing office, split by cause: no_branch_resolved, '
+  'branch_has_no_office, branch_not_covered. Non-zero here means invoices are outside the '
+  'price audit entirely — triage before trusting any coverage total.';
