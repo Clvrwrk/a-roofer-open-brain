@@ -82,24 +82,24 @@ None — session ended at a clean boundary. Build green, 352/352 tests green **a
 ## Open branch not on main — PR #9 (green, waiting on a human)
 
 `claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: migrations
-**293-297** (already applied to prod; additive and idempotent per hard rule 1 — no data touched —
-**but 297 is an access-control change**: it revokes `SELECT` on the four coverage views from
+**294-298** (already applied to prod; additive and idempotent per hard rule 1 — no data touched —
+**but 298 is an access-control change**: it revokes `SELECT` on the four coverage views from
 `anon`/`authenticated` and grants it to `service_role`) plus `docs/107` and `docs/108`. Kept 0
 behind main and merged with it daily. **Not merged, not deployed.** For review status read the
 PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
 written here is describing a commit that is no longer the head. (A review caught this line
 claiming all reviewers were green while two were mid-run.)
 
-Migration numbers have moved **fourteen** times as parallel sessions claimed numbers on main —
-twice on 2026-09-15 within one hour (main took 289-291, then 292), ending at 293-297. Prod
+Migration numbers have moved **fifteen** times as parallel sessions claimed numbers on main —
+three times in 24 h (main took 289-291, then 292, then 293), ending at 294-298. Prod
 labels are unaffected throughout: Supabase keys on timestamp, so
 `245_`/`246_`/`248_`/`249_` and `290_coverage_views_service_role_only` still name the applied
-migrations and nothing is re-applied. If you take 293-297 on main, move the **whole** set
+migrations and nothing is re-applied. If you take 294-298 on main, move the **whole** set
 again, not just the colliding files — the spend view must keep preceding the two migrations
 that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
 those and read them back; the file alone is not the whole change.
 
-Fourteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
+Fifteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
 open for three weeks against a main that ships several a day. If this work is picked up
 again, land the schema in its own short-lived PR the day it is written and let the surface
 work follow. Full history in `docs/107`.
@@ -113,11 +113,11 @@ Three items need a human — full detail in `docs/107`:
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
 2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 294 demoted two; 39 and
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 295 demoted two; 39 and
    465 were touched by another process where `pending` may be a deliberate re-geocode
    request, so they were left alone rather than guessed at.
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
-   default grants mig 297 closed for the four coverage views. They predate this branch and
+   default grants mig 298 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
 
 **Closed 2026-09-16 — the named-records question (`docs/108`).** Chris ruled: **keep all data**,
