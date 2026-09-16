@@ -157,6 +157,19 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
 
       So: COUNTS and MONEY, bare. No reason, no adjective, no "of X" tail. If a fifth finding
       lands here, delete the sentence.
+
+      THE CAVEAT IS NOT EXEMPT, and the 5th finding proved it (2026-09-16, Greptile P1). The
+      <small> note itself had started making a claim: "the genuinely unpriced line value is
+      always lower". Netting breaks that — the note says "net of any credit memos" two clauses
+      earlier and then asserts a strict inequality that netting can invert. It is not
+      hypothetical: Richardson x QXO sits at -$3,723.59 net with priced_items = 0, so its
+      total is already below any unpriced line value. That pair is `accepted` and so is not in
+      chaseSpend today, which is the ONLY reason the displayed figure is not already wrong —
+      and nothing constrains the sign of an ACTIONABLE pair. One credit memo closes the gap.
+
+      The note now states what the figure CONTAINS and says the unpriced value is a different
+      measure on a different path. It orders nothing. The rule generalises: this paragraph
+      describes its numbers and never relates them to a number it does not show.
     */}
     {coverage.totals.gaps > 0 && (
       <p class="iv-note">
@@ -174,7 +187,7 @@ const payload = JSON.stringify({ offices: data.offices, recipient: data.recipien
         <br />
         <small>Figures are invoice <b>totals</b>, which include tax, freight, and lines the line-level path does price —
         they are not the un-audited amount, and they are net of any credit memos posted against the pair. The genuinely
-        unpriced line value is always lower, and is measured on the line-level path rather than shown here.</small>
+        unpriced line value is a <b>different measure on a different path</b>, and is not shown here.</small>
       </p>
     )}
 
