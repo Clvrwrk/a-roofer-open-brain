@@ -140,6 +140,8 @@ export interface Invoice {
   disposition: string; // summary label for the QuickBooks register row (Transferred to Service / Hold — credit memo / Approved / …)
   workedLines: number; // lines with a decision (passed OR disputed) — drives "fully processed" for the register
   registerExportedAt: string; // when loaded to the QuickBooks register (load-once, mig 164); "" if not yet
+  closedOut: boolean; // a human closed this invoice out (invoice_audit_closeout, mig 293): processed, never re-audited
+  closeoutReason: string; // the human's reason, shown wherever the disposition is
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
   paymentStatus: "" | "exported" | "paid" | "returned" | "void";
@@ -221,8 +223,11 @@ export function normalizeInvoiceRef(value: string | null | undefined): string {
 }
 
 // Summary disposition label for the QuickBooks register row (docs/63 Change 1b).
-export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid">): string {
+export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid"> & Partial<Pick<Invoice, "closedOut">>): string {
   if (inv.isCreditMemo) return "Credit memo";
+  // A human closeout (mig 293) outranks every workflow state: the invoice is complete and
+  // processed and never comes back into the audit, whatever the ledger or AR feed says.
+  if (inv.closedOut) return "Processed — closed";
   if (inv.transferred) return "Transferred to Service";
   if (inv.held) return "Hold — credit memo";
   if (inv.paid) return "Paid";
@@ -389,7 +394,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     }
   };
 
-  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, vendorRows, apiPriceRows, processedRows] = await Promise.all([
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, vendorRows, apiPriceRows, processedRows, closeoutRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
     fetchAll(() => client.from("mv_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
@@ -407,6 +412,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     // Current ABC API price per item per branch (monthly seed, migration 134).
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
     fetchOptional(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
+    // Human closeouts (mig 293): processed, never re-audited. Optional so an older brain without the table still loads.
+    fetchOptional(() => client.from("invoice_audit_closeout").select("invoice_number,reason")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
@@ -443,6 +450,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
   const processedByInvoice = new Map<string, any>();
   for (const p of processedRows) if (!processedByInvoice.has(p.invoice_number)) processedByInvoice.set(p.invoice_number, p);
+  const closeoutByInvoice = new Map<string, string>((closeoutRows ?? []).map((c: any) => [String(c.invoice_number), String(c.reason ?? "")]));
 
   const linesByInvoice = new Map<string, InvLine[]>();
   for (const l of lineRows) {
@@ -539,6 +547,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     disposition: "",
     workedLines: 0,
     registerExportedAt: "",
+    closedOut: closeoutByInvoice.has(i.invoice_number),
+    closeoutReason: closeoutByInvoice.get(i.invoice_number) ?? "",
     transferred: transferredSet.has(i.invoice_number),
     transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -771,7 +781,7 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   return progressByInvoice;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map(), vendorByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map(), vendorByInvoice: Map<string, string> = new Map(), closeoutByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
@@ -828,6 +838,8 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       disposition: "",
       workedLines,
       registerExportedAt: registerExportedByInvoice.get(i.invoice_number) ?? "",
+      closedOut: closeoutByInvoice.has(i.invoice_number),
+      closeoutReason: closeoutByInvoice.get(i.invoice_number) ?? "",
       paid,
       paidAt: arByInvoice.get(i.invoice_number)?.date_paid
         ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
@@ -976,7 +988,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows, vendorRowsSummary] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows, vendorRowsSummary, closeoutRowsSummary] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
@@ -992,6 +1004,8 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     // Register export ledger (mig 164) — load-once stamp so an invoice isn't re-loaded to QuickBooks.
     fetchOptionalForInvoiceAudit(() => client.from("invoice_register_export").select("invoice_number,register_exported_at")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
+    // Human closeouts (mig 293): processed, never re-audited.
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_audit_closeout").select("invoice_number,reason")),
   ]);
   if (invRows.length === 0) return empty;
   const transferredSet = new Set<string>((swqRows ?? []).map((r) => String(r.invoice_number)));
@@ -999,7 +1013,8 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     (registerRows ?? []).map((r) => [String(r.invoice_number), r.register_exported_at ? String(r.register_exported_at) : "1"]),
   );
   const vendorByInvoiceSummary = new Map<string, string>((vendorRowsSummary ?? []).map((r: any) => [String(r.invoice_number), String(r.vendor_slug)]));
-  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice, vendorByInvoiceSummary);
+  const closeoutByInvoiceSummary = new Map<string, string>((closeoutRowsSummary ?? []).map((c: any) => [String(c.invoice_number), String(c.reason ?? "")]));
+  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice, vendorByInvoiceSummary, closeoutByInvoiceSummary);
   // R3 honest gate (docs/82): hasPriceList was hardcoded true, so the 📋 Price List button
   // never greyed. True value = the invoice's PE office holds at least one agreement
   // (office-inherited pricing, migration 201) — offices without agreements grey the button.
@@ -1085,7 +1100,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 
   const lineRows = await fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("*").eq("invoice_number", wanted));
   const lineIds = lineRows.map((line) => line.line_id).filter(Boolean);
-  const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows] = await Promise.all([
+  const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows, closeoutRows] = await Promise.all([
     lineIds.length
       ? fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date").in("invoice_line_id", lineIds))
       : Promise.resolve([]),
@@ -1100,6 +1115,8 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
     // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
     fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,third_price_date,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
+    // Human closeout (mig 293): processed, never re-audited.
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_audit_closeout").select("invoice_number,reason").eq("invoice_number", wanted)),
   ]);
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
@@ -1109,6 +1126,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   const ar = arRows[0] ?? null;
   const ax = acculynxRows[0] ?? null;
   const processed = processedRows[0] ?? null;
+  const closeout = (closeoutRows ?? [])[0] ?? null;
 
   const lines: InvLine[] = lineRows.map((l) => {
     const a = auditByLine.get(l.line_id);
@@ -1197,6 +1215,8 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     disposition: "",
     workedLines: lines.filter((line) => line.auditStatus === "passed" || line.auditStatus === "disputed").length,
     registerExportedAt: "",
+    closedOut: !!closeout,
+    closeoutReason: closeout?.reason ? String(closeout.reason) : "",
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
