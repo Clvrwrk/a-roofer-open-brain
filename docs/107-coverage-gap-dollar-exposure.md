@@ -98,6 +98,22 @@ Migration 294 fills facts (`city`, `state`, `address`) and flips those rows to
 Next action: `node scripts/geocode-vendor-branches.mjs` (needs `GOOGLE_MAPS_SERVER_KEY`),
 then review whether 305 lands in Richardson's ring.
 
+> **Answered 2026-09-16 — it does.** Branch 305 now carries a
+> `pricing_territory_office_id` and reads `pricing_status = covered`. Its **3 invoices /
+> $595.16** left `v_unresolved_branch_spend` (26 → 23 invoices, $27,566.56 → $26,971.40),
+> and that delta matches the branch exactly.
+>
+> Neither half did this alone. Migration 294 recovered Sherman's address from the invoice
+> payload, which is what made the row geocodable at all; a parallel session's prod migration
+> `292b` then carried the isochrone office onto the numeric stubs that owned an alias —
+> Granbury, Enid, Marietta and **Sherman**. The prediction above was made from an address
+> and a distance, with no coordinates; it held.
+>
+> Worth noting how this was caught, because it is the shape the rest of this document keeps
+> arguing for: the figure was **re-measured, not quoted**, the drop was traced to a record
+> before anything was written, and the query was re-checked before the record was. A number
+> moving is not automatically a defect — here it was two pieces of work meeting.
+
 ## A note on branch-number collisions
 
 Both 176 and 305 exist **twice** in `vendor_branches` — 176 is Webster TX *and* Ogden UT;
