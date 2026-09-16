@@ -62,20 +62,26 @@ SELECT pa.id                AS agreement_id,
        CASE WHEN vb.geom IS NULL THEN 'branch_not_geocoded'
             ELSE 'branch_outside_every_active_boundary' END AS reason,
        -- Same vendor, same city/state, geocoded: the row the agreement probably belongs on.
+       -- The two subqueries are INDEPENDENT and must describe the SAME row, so both order
+       -- on (branch_name, id). branch_name alone is not unique, so without the id the two
+       -- LIMIT 1s could legally pick different twins and report one branch's id beside
+       -- another's number. Measured 2026-09-16: no vendor/city/state group currently has
+       -- two geocoded twins, so this has never mis-fired — it is closed as a latent bug,
+       -- not an observed one.
        (SELECT twin.id FROM public.vendor_branches twin
          WHERE twin.vendor_id = vb.vendor_id
            AND twin.id <> vb.id
            AND twin.geom IS NOT NULL
            AND lower(twin.city) = lower(vb.city)
            AND twin.state = vb.state
-         ORDER BY twin.branch_name LIMIT 1) AS likely_canonical_branch_id,
+         ORDER BY twin.branch_name, twin.id LIMIT 1) AS likely_canonical_branch_id,
        (SELECT twin.branch_number FROM public.vendor_branches twin
          WHERE twin.vendor_id = vb.vendor_id
            AND twin.id <> vb.id
            AND twin.geom IS NOT NULL
            AND lower(twin.city) = lower(vb.city)
            AND twin.state = vb.state
-         ORDER BY twin.branch_name LIMIT 1) AS likely_canonical_branch_number
+         ORDER BY twin.branch_name, twin.id LIMIT 1) AS likely_canonical_branch_number
   FROM public.price_agreements pa
   JOIN public.vendor_branches vb ON vb.id = pa.vendor_branch_id
   LEFT JOIN public.vendors v ON v.id = pa.vendor_id

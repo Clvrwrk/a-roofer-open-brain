@@ -123,13 +123,26 @@ invoices attach to the right row, and enriching one row cannot corrupt the other
 
 ## Command Center
 
-`price-agreement-coverage.ts` now carries `invoiceCount` / `spend` per vendor and
-`gapsWithSpend` / `unauditedSpend` / `unresolvedSpend` in totals. The gap pill reads
-*"No agreement — $17,437 un-audited (4 inv)"* where there is spend, and the muted
-*"No agreement — no spend yet"* where there is not.
+`price-agreement-coverage.ts` carries `invoiceCount` / `spend` / `isAccepted` /
+`agreementNotReaching` per vendor, and `gaps` / `gapsWithSpend` / `gapsToChase` / `gapSpend` /
+`chaseSpend` / `unresolvedSpend` in totals.
 
-`gapExposure()` is exported as a pure function and unit-tested (5 cases, including the credit
-memo that nets rather than adds).
+**The pill is reachability-aware, and that ordering is the point of this work.**
+`coverageLabelKind()` decides `unreachable` *before* `no-agreement`, so a pair holding a live
+agreement the ring cannot reach renders **"Agreement exists, ring can't reach it — $X spend
+(N inv). Repair the branch link, don't chase paperwork."** Only a pair with no live agreement
+gets *"No agreement — $X spend (N inv)"*, or the muted *"No agreement — no spend yet"* where
+there is none. An accepted `no_book` ruling that no live agreement contradicts renders a muted
+acceptance pill instead.
+
+> This paragraph originally described the two "No agreement" pills as the whole story, which
+> was true before the reachability label existed. Sending an operator to chase paperwork that
+> is already signed is the exact failure this document exists to prevent, so the description
+> of the surface has to move when the surface does.
+
+`gapExposure()` and `coverageLabelKind()` are exported pure functions, and the label ordering
+is pinned by named regression tests — including the credit memo that nets rather than adds, an
+accepted-but-unreachable pair, and an unreachable pair with no invoices.
 
 ---
 

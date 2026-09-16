@@ -97,10 +97,18 @@ under older labels, and the two numbering systems have never matched. Do not sea
 | `298-coverage-views-service-role-only` | `290_coverage_views_service_role_only` (`20260826193359`) | registered 2026-08-26 |
 
 Supabase keys on TIMESTAMP, not on the filename, so the applied order never depended on these
-numbers — which is why the branch can renumber freely and prod is untouched. All five are
-additive and idempotent per hard rule 1 (no data touched), **but 298 is an access-control
-change**: it revokes `SELECT` on the four coverage views from `anon`/`authenticated` and grants
-it to `service_role`.
+numbers — which is why the branch can renumber freely and prod is untouched.
+
+All five are additive and idempotent per hard rule 1, but they are **not** all the same kind of
+change, and deployment/rollback impact differs:
+
+- **294, 296, 297** — `CREATE OR REPLACE VIEW` only. No rows read or written.
+- **298** — **access control**: revokes `SELECT` on the four coverage views from
+  `anon`/`authenticated` and grants it to `service_role`. No data, but it changes who can read.
+- **295** — **a data backfill.** It `UPDATE`s `vendor_branches`, filling `city`, `state` and
+  `address` from the invoice payload and flipping the affected rows' `geocode_status` to
+  `pending`. Additive because it only fills NULLs and never deletes — but it *does* write rows.
+  Do not plan a rollback for this set as though nothing was touched.
 
 For the current applied watermark, query it — never read a number from this document:
 
