@@ -128,7 +128,7 @@ that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, 
 those and read them back; the file alone is not the whole change.
 
 Fifteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
-open for three weeks against a main that ships several a day. If this work is picked up
+open for four weeks against a main that ships several a day. If this work is picked up
 again, land the schema in its own short-lived PR the day it is written and let the surface
 work follow. Full history in `docs/107`.
 
@@ -165,6 +165,15 @@ Measured straight after: of ABC's 684 slug-keyed branches, **589 now resolve fro
 invoice number and 95 still do not**. Reduced, not eliminated — each of those 95 repeats
 branch 326 the first time it invoices. Watch `v_unresolved_branch_spend`; the query for the
 95 is in the `docs/107` 2026-09-15 addendum.
+
+**Update 2026-09-16.** Unresolved branch spend is now **$26,971.40 / 23 invoices**, down from
+$27,566.56 / 26. That movement is *good news*, not a regression: ABC branch 305 (Sherman TX)
+gained a `pricing_territory_office_id` and reads `covered`, so its 3 invoices / $595.16 left
+the bucket — the question `docs/107` posed in August, answered. Two pieces of work met to do
+it: mig 295 recovered Sherman's address from the invoice payload (making the row geocodable
+at all), and a parallel session's prod `292b` carried the isochrone office onto the numeric
+stubs holding an alias. The 684 / 589 / 95 split above is unchanged and re-measured the same
+day. Re-measure before quoting any of it.
 
 **Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
 pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took
