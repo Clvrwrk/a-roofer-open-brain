@@ -6,7 +6,7 @@ import { initThemePref } from "./theme-pref";
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; vendor?: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; vendor?: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; closedOut?: boolean; closeoutReason?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 const root = document.querySelector(".iv") as HTMLElement | null;
@@ -417,7 +417,9 @@ if (root && dataEl && mount) {
     return [
       inv.pendingLines > 0 ? `<span class="pill pill-brand">${inv.pendingLines}/${inv.lineCount} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
       inv.isCreditMemo ? '<span class="pill pill-grey">Credit Memo</span>' : "",
-      inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
+      // mig 293: a human closeout outranks the AR feed — the invoice is complete and processed.
+      inv.closedOut ? `<span class="pill pill-grey" title="${esc(inv.closeoutReason || "Closed out — complete and processed; never re-audited")}">Processed — closed</span>`
+        : inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
       inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
@@ -453,7 +455,7 @@ if (root && dataEl && mount) {
     // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
     // included. cc.proexteriorsus.net is where a human fixes agent work, so the option must be
     // universal for open+unpaid worked invoices. Hidden only on paid/exported (server refuses those).
-    const resetBtn = (!inv.paid && !inv.awaitingPayment && inv.hasWork === true)
+    const resetBtn = (!inv.paid && !inv.awaitingPayment && !inv.closedOut && inv.hasWork === true)
       ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset: re-pend all lines, clear claim-line review checks, and cancel the un-sent credit memo request (sent requests and communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `
