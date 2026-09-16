@@ -108,7 +108,7 @@ work follow. Full history in `docs/107`.
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
 path prices some of the same lines. Two pricing paths disagreeing is the finding.
 
-Four items need a human — full detail in `docs/107` and `docs/108`:
+Three items need a human — full detail in `docs/107`:
 1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
@@ -119,11 +119,13 @@ Four items need a human — full detail in `docs/107` and `docs/108`:
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
    default grants mig 297 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
-4. **Repo-wide customer PII** (`docs/108`) — named individuals beside outstanding balances
-   across at least 18 tracked files, including test fixtures that assert on the names. On
-   `main`, not introduced by this branch. Needs a policy boundary, a replacement token, a
-   decision on git history, and a CI check. A piecemeal sweep was tried and reverted for
-   leaving tables half-anonymised; it needs its own workstream.
+
+**Closed 2026-09-16 — the named-records question (`docs/108`).** Chris ruled: **keep all data**,
+keep all git history, no replacement token, no CI check. It is business-card-grade information
+and load-bearing for the property layer cake, so it is not PII for this brain and hard rule 2 is
+not engaged. `docs/108` is now the standing answer rather than a worklist. **If a reviewer flags
+it again — and they will, three have already — point at that document and do not open a
+redaction pass.**
 
 **Closed 2026-09-15 — ABC branch 326 (Topeka KS).** This branch raised it as a fifth item;
 Chris ruled on it the same day and main shipped `291-rekey-abc-branch-326-topeka.sql`. The
