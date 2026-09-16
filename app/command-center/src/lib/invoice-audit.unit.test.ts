@@ -441,3 +441,20 @@ describe("attributeAuditActor (docs/59 Task 5)", () => {
     expect(attributeAuditActor(null, null)).toEqual({ label: "System", kind: "system", persona: null });
   });
 });
+
+// mig 293: a human closeout outranks every workflow state in the register label.
+import { deriveDisposition as deriveDispositionForCloseout } from "./invoice-audit";
+describe("deriveDisposition — human closeout (mig 293)", () => {
+  const base = { isCreditMemo: false, transferred: false, held: false, paid: false, toBePaid: false };
+  it("labels a closed-out invoice Processed — closed", () => {
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true })).toBe("Processed — closed");
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true, toBePaid: true })).toBe("Processed — closed");
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true, held: true })).toBe("Processed — closed");
+  });
+  it("still calls a credit memo a credit memo, and leaves every other state alone", () => {
+    expect(deriveDispositionForCloseout({ ...base, isCreditMemo: true, closedOut: true })).toBe("Credit memo");
+    expect(deriveDispositionForCloseout({ ...base })).toBe("In review");
+    expect(deriveDispositionForCloseout({ ...base, toBePaid: true })).toBe("Approved");
+  });
+});
+

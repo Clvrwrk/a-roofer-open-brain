@@ -284,3 +284,37 @@ SELECT 'invoice-audit:' || c.invoice_number, 'accounting', 'invoice-audit', 'inv
 FROM public.invoice_audit_closeout c
 WHERE c.source = 'mig 293'
   AND NOT EXISTS (SELECT 1 FROM public.dashboard_action_log d WHERE d.idempotency_key = 'mig293-closeout-' || c.invoice_number);
+
+-- ---------------------------------------------------------------------------
+-- 293b (Chris 2026-09-16: "cancel the $20 draft CM on 2011009179-001") — the one human
+-- decision mig 293 left alone: the draft request is cancelled with the closeout reason, the
+-- disputed line it held (17LO750GSB) is decided valid under Chris's name, and the action log
+-- carries the trail. The invoice is now fully consistent with its closeout.
+-- ---------------------------------------------------------------------------
+UPDATE public.credit_memo_requests
+SET status = 'cancelled',
+    approved_by = NULL, approved_at = NULL,
+    packet = COALESCE(packet, '{}'::jsonb) || jsonb_build_object(
+      'cancelled_by', 'Chris Hussey', 'cancelled_at', now(),
+      'cancel_reason', 'closeout: invoice complete and processed (Chris 2026-09-16, mig 293) — do not re-audit'),
+    updated_at = now()
+WHERE id = '9859bcd3-db99-4fed-8cda-4ac842f02b7a'
+  AND invoice_number = '2011009179-001' AND status = 'draft';
+
+INSERT INTO public.invoice_line_audit
+  (invoice_line_id, invoice_number, vendor_slug, item_number, audit_status, decision, approved_by,
+   approval_note, source, decided_at, decided_by)
+SELECT a.invoice_line_id, a.invoice_number, 'abc-supply', a.item_number, 'passed', 'valid', 'Chris Hussey',
+       'Closed 2026-09-16 on Chris''s instruction: the $20.00 draft credit-memo request was cancelled — ABC June 2026 invoice is complete and processed; do not bring it back into the invoice audit workflow (invoice_audit_closeout, mig 293).',
+       'manual', now(), 'Chris Hussey'
+FROM public.v_invoice_line_audit_current a
+WHERE a.invoice_number = '2011009179-001' AND a.audit_status = 'disputed';
+
+INSERT INTO public.dashboard_action_log
+  (work_key, department, workflow, action_type, decision, actor_id, actor_type, actor_display_name, note, payload, source_table, source_pk, idempotency_key)
+SELECT 'credit-memo:2011009179-001', 'accounting', 'credit-memo', 'credit_memo_cancelled', 'reject',
+       'chris-hussey', 'human', 'Chris Hussey',
+       'Draft $20.00 credit-memo request cancelled — invoice closed out (complete and processed, mig 293)',
+       jsonb_build_object('request_id', '9859bcd3-db99-4fed-8cda-4ac842f02b7a', 'vendor_slug', 'abc-supply'),
+       'credit_memo_requests', '9859bcd3-db99-4fed-8cda-4ac842f02b7a', 'mig293b-cancel-2011009179-001'
+WHERE NOT EXISTS (SELECT 1 FROM public.dashboard_action_log d WHERE d.idempotency_key = 'mig293b-cancel-2011009179-001');
