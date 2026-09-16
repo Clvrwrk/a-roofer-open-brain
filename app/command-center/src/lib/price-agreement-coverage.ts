@@ -179,6 +179,12 @@ const ROLE_ORDER: Record<CoverageRole, number> = { Primary: 0, "Region-covered":
  * regardless of how much money runs through it — QXO carries a recorded `no_book` ruling at
  * every office (2026-08-20), so surfacing it as a gap to chase is a false alarm every week.
  */
+// THREE PLACES DESCRIBE THIS SET IN ENGLISH and drift from it silently, because English
+// cannot call a function: the gapExposure docstring above, the rulingByOfficeVendor comment
+// below, and the operator-facing paragraph in builder.astro. A review caught all three
+// naming only `no_book` (2026-09-16) — true of the data that day (`not_pursued`: 0 pairs in
+// prod) and false of the rule, so the surface would have excluded a pair for a reason its
+// own explanation did not mention. If you add a member here, update all three.
 const ACCEPTED_STATUSES = new Set(["no_book", "not_pursued"]);
 
 /** The `coverageLabelKind()` results that mean a human should act. See `isChaseWork()`. */
@@ -214,7 +220,8 @@ function isChaseWork(vendor: Parameters<typeof coverageLabelKind>[0]): boolean {
  *  1. A gap with no invoices is theoretical — branches sit in the ring, nothing was bought.
  *     `gapsWithSpend` gates on that; `gapsToChase` does NOT, because `isChaseWork()` already
  *     distinguishes it and an unreachable agreement is work whether or not it has invoiced.
- *  2. A gap whose ruling is `no_book` is accepted by a human; it costs money but is not work
+ *  2. A gap carrying an ACCEPTED ruling (`no_book` or `not_pursued` — the membership test is
+ *     `ACCEPTED_STATUSES`, never a single literal) is accepted by a human; it costs money but is not work
  *     — UNLESS a live agreement exists that the ring cannot reach, which makes the ruling
  *     stale and the pair real repair work. See `coverageLabelKind()`.
  *  3. `spend` is the invoice TOTAL, which includes tax, freight, and lines the separate
@@ -415,8 +422,9 @@ export async function loadPriceAgreementCoverage(
     });
   }
 
-  // office+vendor -> the recorded ruling. A pair ruled no_book prices as no-price BY DESIGN and
-  // must never appear in a "chase this" queue, however many dollars it carries.
+  // office+vendor -> the recorded ruling. A pair carrying an ACCEPTED ruling (`ACCEPTED_STATUSES`:
+  // no_book or not_pursued) prices as no-price BY DESIGN and must never appear in a "chase this"
+  // queue, however many dollars it carries.
   const rulingByOfficeVendor = new Map<string, string>();
   const reachByOfficeVendor = new Map<string, { notReaching: boolean; live: number }>();
   for (const r of rulingRows) {
