@@ -119,6 +119,26 @@ SELECT c.office_id,
         AND c.status IN ('unrecorded', 'pending')
         AND COALESCE(s.invoice_count, 0) > 0) AS needs_ruling,
        -- The nastier subset: a book EXISTS and still prices nothing.
+       --
+       -- READ THE NAME AS A PROXY, NOT A PROOF (raised by review 2026-09-16, measured, left
+       -- as-is deliberately). `live_agreements` counts agreements in the office's TERRITORY
+       -- (mig 245: vendor_branches.pricing_territory_office_id = office.id); `priced_items`
+       -- comes through the office RING. Territory-has-a-book plus ring-prices-nothing has
+       -- TWO possible causes and this expression cannot tell them apart:
+       --   (a) the ring cannot reach the agreement  -> "repair the branch link" is right;
+       --   (b) the ring reaches it and it prices nothing anyway (items absent, ineligible,
+       --       date-gated, or unidentified) -> repairing the branch link is WRONG ADVICE,
+       --       and the pill would send an operator to fix a link that is already fine.
+       -- The authoritative test for (a) is `v_agreement_unreachable` above, which this
+       -- expression does not consult.
+       --
+       -- Measured 2026-09-16: one pair is flagged (Denver x SRS) and **2 of its 2** territory
+       -- agreements are genuinely unreachable, so the label is correct today and case (b) has
+       -- 0 rows. NOT tightened here, because a correct fix needs a THIRD coverage state, not
+       -- a narrower predicate: tightening this alone would drop a case-(b) pair into
+       -- `no-agreement`, telling the operator to chase paperwork that already exists — the
+       -- exact failure this whole PR was built to prevent. That state needs a new appended
+       -- column, a `coverageLabelKind()` branch, a pill and tests. Raised for a human.
        (COALESCE(i.priced_items, 0) = 0 AND c.live_agreements > 0) AS agreement_not_reaching,
        -- Appended last: CREATE OR REPLACE VIEW may only ADD columns, never reorder them.
        COALESCE(i.priced_items, 0) AS priced_items
