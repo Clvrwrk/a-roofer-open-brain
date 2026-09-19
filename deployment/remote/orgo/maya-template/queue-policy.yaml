@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "tracker_home": "CODEX AGENT TEAM",
+  "eligible_states": ["Agent Todo"],
+  "work_in_progress_limit": 1,
+  "lease_seconds": 900,
+  "lease_renewal_requires_progress": true,
+  "foreign_issue_requires_cat_trail": true,
+  "retry": {
+    "identical_failure_limit": 3,
+    "on_limit": "park_and_advance",
+    "fourth_attempt": "prohibited"
+  }
+}
