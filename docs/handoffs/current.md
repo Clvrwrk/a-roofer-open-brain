@@ -117,21 +117,26 @@ None — session ended at a clean boundary. Every migration (289–295b) applied
 | L13 | JobTread grant key on the agent host (Q5) | ops | Chris | docs/109 F18 |
 | L14 | Deploy `acculynx-sync` edge function (v49 → main) | eng | agent (needs `supabase login`) | docs/109 F30 |
 
-## Open branches not on main — PR #9 and PR #12 (green, waiting on a human)
+## PEC-221 coverage work — MERGED to main 2026-09-22 (four PRs)
 
-The PEC-221 price-agreement coverage work sits in two PRs as of 2026-09-22. `claude/project-
-handoff-5ua2fw` (**PR #9**) carries the surface and docs — `price-agreement-coverage.ts`, the
-Agreement Builder, `docs/107`, `docs/108`. `contrib/cleverwork/coverage-migrations` (**PR #12**)
-carries the five migrations below and nothing else. `origin/main` is merged INTO each PR branch
-daily, which is what keeps both at 0 behind; neither has been merged into main, and both are
-still open. They were split because sixteen migration-number collisions had each dragged the
-unrelated surface work through a renumber; the schema now moves on its own.
+All of it is on `main` as of 2026-09-22; nothing from this workstream is waiting on a branch.
 
-**`296-300` are FILENAMES ON PR #12, not production labels.** The work is applied to prod
+| PR | Merge commit | What |
+|---|---|---|
+| **#9** | `2ebe7f2c` | Surface + docs: `price-agreement-coverage.ts`, the Agreement Builder, `docs/107`, `docs/108` |
+| **#12** | `6c1f13b2` | The five migrations as `296-300`, split out of #9 so a number collision stops dragging the surface work |
+| **#11** | `1ade4158` | Better Stack client regression tests; `docs/109` F47/Q4/D13 corrections |
+| **#13** | `dde5b597` | The geocoded-but-not-ok audit corrected from 4 rows to 8 |
+
+The split (#9/#12) happened because sixteen migration-number collisions had each dragged the
+unrelated surface work through a renumber. It worked: a seventeenth would now cost one rename in
+a five-file PR. Keep schema in its own short-lived PR next time, from day one.
+
+**`296-300` are REPO FILENAMES, not production labels.** The work is applied to prod
 under older labels, and the two numbering systems have never matched. Do not search
 `schema_migrations` for 296-300 — you will not find them, and you must not re-apply anything:
 
-| Branch filename | Applied to prod as | At |
+| Repo filename | Applied to prod as | At |
 |---|---|---|
 | `296-office-vendor-spend-exposure` | `245_office_vendor_spend_exposure` | 2026-08-20 10:57 UTC |
 | `297-backfill-branch-address-from-raw` | `246_backfill_branch_address_from_raw` | 2026-08-20 10:59 UTC |
@@ -158,18 +163,22 @@ For the current applied watermark, query it — never read a number from this do
 ```sql
 SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;
 ```
- **Not merged, not deployed.** For review status read the
-PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
-written here is describing a commit that is no longer the head. (A review caught this line
-claiming all reviewers were green while two were mid-run.)
+**Merged 2026-09-22** (table above). For the review history read the PRs themselves — reviewers
+re-run on every push and findings land within minutes of one, so any verdict written here is
+describing a commit that is no longer the head. (A review once caught this line claiming all
+reviewers were green while two were mid-run; a later one caught it still saying "not merged"
+after all four had landed.)
 
 Migration numbers have moved **sixteen** times as parallel sessions claimed numbers on main —
 three times in 24 h (main took 289-291, then 292, then 293), and main took 294-295 on 09-22.
 The set now sits at 296-300. The prod labels in the table above are unaffected by every one of
-those moves. If you take 296-300 on main, move the **whole** set again, not just the colliding
-files — the spend view must keep preceding the two migrations that read it. Two
-`COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue those and read them
-back; the file alone is not the whole change.
+those moves. **That advice was for when the set lived on a branch, and it is now obsolete: main
+owns 296-300.** Moving them would rewrite landed history. The obligation has flipped — incoming
+work that wants those numbers renumbers itself, exactly as this set had to sixteen times. What
+still holds if these files are ever touched: the spend view must keep preceding the two
+migrations that read it, and two `COMMENT ON VIEW` bodies in prod cite migration numbers, so
+re-issue those and read them back — the file alone is not the whole change. (Corrected after
+review 2026-09-22; the branch-era instruction survived the merge.)
 
 Sixteen collisions was a **mis-scoped branch**, not bad luck: five contiguous numbers held
 open for five weeks against a main that ships several a day. The sixteenth is the one that got
