@@ -373,7 +373,8 @@ different result: exact-token on description-only sheets is close to a no-op, an
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
 
-## Addendum — 2026-08-21: a defect migration 297 introduced, and 4 rows a human should look at
+## Addendum — 2026-08-21: a defect migration 297 introduced, and the rows a human should look at
+*(Scope corrected 2026-09-22: this said "4 rows" and the count is 8. See the re-measurement below.)*
 
 Migration 297's `geocode_status` assignment was keyed on the wrong condition. It read:
 
@@ -404,24 +405,59 @@ queue the geocode.
 committing — so it is a proven no-op and was not re-applied. It changes behaviour only for
 future reruns, which is the point: the migration is meant to be rerunnable.
 
-### Not repaired: 4 geocoded rows marked `pending`
+### Not repaired: 8 geocoded rows not marked `ok`
 
-The invariant everywhere else is `geom IS NOT NULL` ⇒ `geocode_status = 'ok'` (1,752 rows).
-Four rows violate it:
+**Re-measured 2026-09-22 after a review raised it — this said "4 rows" and had said so since
+August. It is 8, and the shape is different from what was described.** The count was taken once
+and carried; the same mistake this document records elsewhere. Do not quote the number below —
+run the query:
 
-| Branch | City | `updated_at` | Attributable to |
-|---|---|---|---|
-| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 297 |
-| 684 | Norman OK | 2026-08-20 10:59:17 | migration 297 |
-| 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
-| 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
+```sql
+SELECT id, branch_number, branch_name, geocode_status, updated_at
+  FROM public.vendor_branches
+ WHERE geom IS NOT NULL AND geocode_status IS DISTINCT FROM 'ok'
+ ORDER BY updated_at, branch_number;
+```
+
+The invariant everywhere else is `geom IS NOT NULL` ⇒ `geocode_status = 'ok'`, which held for
+**1,752 of the 1,760** geocoded rows on 2026-09-22. Eight violate it:
+
+| Branch | City | `geocode_status` | `updated_at` | Attributable to |
+|---|---|---|---|---|
+| 21 | Raleigh NC | `pending` | 2026-08-20 10:59:17 | **migration 297** (this set) |
+| 684 | Norman OK | `pending` | 2026-08-20 10:59:17 | **migration 297** (this set) |
+| 39 | Austin TX | `pending` | 2026-08-21 13:04:57 | a different process |
+| 465 | Austin TX | `pending` | 2026-08-21 13:04:57 | a different process |
+| 305 | Sherman TX | `pending` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 1278 | Granbury TX | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 185 | Marietta GA | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 1306 | Enid OK | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+
+**Three of them read `no_address` while holding coordinates**, which no document describes and
+which the original "4 rows marked `pending`" framing could not even express — the old wording
+filtered on `= 'pending'` and so could not see them. `IS DISTINCT FROM 'ok'` is the honest
+predicate.
+
+The `updated_at` stamps split the cause cleanly: 21 and 684 carry migration 297's exact run
+timestamp, so those two are this set's doing and their repair is unambiguous. The other six
+were set by other work and their intent is unknown.
 
 **Deliberately left alone.** `pending` on a geocoded row is ambiguous: it can mean "demoted
 by the bug above", or it can mean "a process deliberately queued this for re-geocoding
 because its address changed". For 39 and 465 — touched at 13:04 by something this session
 does not own — flipping them back to `ok` could silently cancel a queued re-geocode. Per
-migration 240's boundary, *a guess cannot become a fact*. Resolving these is a human call:
-confirm whether the 13:04 run intended a re-geocode, then set all four to `ok` if not.
+migration 240's boundary, *a guess cannot become a fact*. Resolving these is a human call.
+
+**The proposed repair is two rows, not all of them** (corrected 2026-09-22; this previously said
+"set all four to `ok`", which was both the wrong count and the wrong policy). Only **21 Raleigh NC**
+and **684 Norman OK** have confirmed ownership — the 2026-08-21 record above states that migration
+297's applied run demoted them, and their `updated_at` matches that run. The timestamp corroborates
+the written record; it is not by itself proof of which process wrote the row.
+
+The other six stay untouched pending a human: **39 and 465** were touched at 13:04 by a process this
+set does not own, and **305, 1278, 185 and 1306** belong to the 292/292b alias + isochrone work,
+which names exactly those four rows. Confirm whether either run intended a re-geocode before
+changing any of them.
 
 ## Addendum — 2026-08-22: the backdate removed a THIRD gate, and Colorado still does not price
 
