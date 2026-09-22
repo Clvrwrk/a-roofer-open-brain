@@ -163,10 +163,11 @@ For the current applied watermark, query it — never read a number from this do
 ```sql
 SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;
 ```
- **Not merged, not deployed.** For review status read the
-PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
-written here is describing a commit that is no longer the head. (A review caught this line
-claiming all reviewers were green while two were mid-run.)
+**Merged 2026-09-22** (table above). For the review history read the PRs themselves — reviewers
+re-run on every push and findings land within minutes of one, so any verdict written here is
+describing a commit that is no longer the head. (A review once caught this line claiming all
+reviewers were green while two were mid-run; a later one caught it still saying "not merged"
+after all four had landed.)
 
 Migration numbers have moved **sixteen** times as parallel sessions claimed numbers on main —
 three times in 24 h (main took 289-291, then 292, then 293), and main took 294-295 on 09-22.
