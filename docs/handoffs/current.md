@@ -117,6 +117,124 @@ None — session ended at a clean boundary. Every migration (289–295b) applied
 | L13 | JobTread grant key on the agent host (Q5) | ops | Chris | docs/109 F18 |
 | L14 | Deploy `acculynx-sync` edge function (v49 → main) | eng | agent (needs `supabase login`) | docs/109 F30 |
 
+## Open branches not on main — PR #9 and PR #12 (green, waiting on a human)
+
+The PEC-221 price-agreement coverage work sits in two PRs as of 2026-09-22. `claude/project-
+handoff-5ua2fw` (**PR #9**) carries the surface and docs — `price-agreement-coverage.ts`, the
+Agreement Builder, `docs/107`, `docs/108`. `contrib/cleverwork/coverage-migrations` (**PR #12**)
+carries the five migrations below and nothing else. `origin/main` is merged INTO each PR branch
+daily, which is what keeps both at 0 behind; neither has been merged into main, and both are
+still open. They were split because sixteen migration-number collisions had each dragged the
+unrelated surface work through a renumber; the schema now moves on its own.
+
+**`296-300` are FILENAMES ON PR #12, not production labels.** The work is applied to prod
+under older labels, and the two numbering systems have never matched. Do not search
+`schema_migrations` for 296-300 — you will not find them, and you must not re-apply anything:
+
+| Branch filename | Applied to prod as | At |
+|---|---|---|
+| `296-office-vendor-spend-exposure` | `245_office_vendor_spend_exposure` | 2026-08-20 10:57 UTC |
+| `297-backfill-branch-address-from-raw` | `246_backfill_branch_address_from_raw` | 2026-08-20 10:59 UTC |
+| `298-gap-exposure-with-ruling` | `248_gap_exposure_with_ruling` | 2026-08-20 11:06 UTC |
+| `299-agreement-unreachable-detector` | `249_agreement_unreachable_detector` (+ `249b`) | 2026-08-20 11:10 UTC |
+| `300-coverage-views-service-role-only` | `290_coverage_views_service_role_only` (`20260826193359`) | registered 2026-08-26 |
+
+Supabase keys on TIMESTAMP, not on the filename, so the applied order never depended on these
+numbers — which is why the set can renumber freely and prod is untouched.
+
+All five are additive and idempotent per hard rule 1, but they are **not** all the same kind of
+change, and deployment/rollback impact differs:
+
+- **296, 298, 299** — `CREATE OR REPLACE VIEW` only. No rows read or written.
+- **300** — **access control**: revokes `SELECT` on the four coverage views from
+  `anon`/`authenticated` and grants it to `service_role`. No data, but it changes who can read.
+- **297** — **a data backfill.** It `UPDATE`s `vendor_branches`, filling `city`, `state` and
+  `address` from the invoice payload and flipping the affected rows' `geocode_status` to
+  `pending`. Additive because it only fills NULLs and never deletes — but it *does* write rows.
+  Do not plan a rollback for this set as though nothing was touched.
+
+For the current applied watermark, query it — never read a number from this document:
+
+```sql
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;
+```
+ **Not merged, not deployed.** For review status read the
+PR — reviewers re-run on every push and findings land within minutes of one, so any verdict
+written here is describing a commit that is no longer the head. (A review caught this line
+claiming all reviewers were green while two were mid-run.)
+
+Migration numbers have moved **sixteen** times as parallel sessions claimed numbers on main —
+three times in 24 h (main took 289-291, then 292, then 293), and main took 294-295 on 09-22.
+The set now sits at 296-300. The prod labels in the table above are unaffected by every one of
+those moves. If you take 296-300 on main, move the **whole** set again, not just the colliding
+files — the spend view must keep preceding the two migrations that read it. Two
+`COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue those and read them
+back; the file alone is not the whole change.
+
+Sixteen collisions was a **mis-scoped branch**, not bad luck: five contiguous numbers held
+open for five weeks against a main that ships several a day. The sixteenth is the one that got
+acted on — the schema moved into PR #12 on its own, so the seventeenth costs one rename in a
+five-file PR instead of a rebase of the surface work. Do this on day one next time: land the
+schema in its own short-lived PR the day it is written and let the surface work follow. Full
+history in `docs/107`.
+
+**The defect it documents:** Denver × SRS has live, in-territory agreements the office ring
+cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
+path prices some of the same lines. Two pricing paths disagreeing is the finding.
+
+Four items need a human — full detail in `docs/107`. Three are RULINGS only a human can give;
+the fourth (4) is deferred engineering awaiting approval to build. The distinction matters:
+a ruling unblocks work, approval starts it.
+1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
+   `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
+   unblocks the defect.
+2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 297 demoted two; 39 and
+   465 were touched by another process where `pending` may be a deliberate re-geocode
+   request, so they were left alone rather than guessed at.
+3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
+   default grants mig 300 closed for the four coverage views. They predate this branch and
+   are read by other surfaces, so locking them down needs a caller audit first.
+4. **The third coverage state** (approval, not a ruling). `agreement_not_reaching` is a PROXY
+   (`priced_items = 0 AND live_agreements > 0`), not a reachability proof — territory-has-a-book
+   plus ring-prices-nothing has two causes. Measured 2026-09-16: 1 pair flagged, both its
+   agreements genuinely unreachable, the second case 0 rows. NOT tightened, because a narrower
+   predicate alone drops that second case into `no-agreement` and tells an operator to chase
+   paperwork that already exists. The fix is an appended `agreement_prices_nothing` column, a
+   `coverageLabelKind()` branch, a pill and tests. Mig 299's header carries the reasoning.
+
+**Closed 2026-09-16 — the named-records question (`docs/108`).** Chris ruled: **keep all data**,
+keep all git history, no replacement token, no CI check. It is business-card-grade information
+and load-bearing for the property layer cake, so it is not PII for this brain and hard rule 2 is
+not engaged. `docs/108` is now the standing answer rather than a worklist. **If a reviewer flags
+it again — and they will, three have already — point at that document and do not open a
+redaction pass.**
+
+**Closed 2026-09-15 — ABC branch 326 (Topeka KS).** This branch raised it as a fifth item;
+Chris ruled on it the same day and main shipped `291-rekey-abc-branch-326-topeka.sql`. The
+Topeka row is re-keyed `topeka-KS-66618-1445` → `326`, the invoice FK is backfilled, and
+`no_branch_resolved` is back to 0 rows / unresolved spend back to $27,566.56. The general
+exposure was then largely closed by a second parallel session at 15:44 UTC (prod migration
+`292_alias_slug_keyed_abc_branches`), which seeded numeric aliases for the slug-keyed rows.
+Measured straight after: of ABC's 684 slug-keyed branches, **589 now resolve from a bare
+invoice number and 95 still do not**. Reduced, not eliminated — each of those 95 repeats
+branch 326 the first time it invoices. Watch `v_unresolved_branch_spend`; the query for the
+95 is in the `docs/107` 2026-09-15 addendum.
+
+**Update 2026-09-16.** Unresolved branch spend is now **$26,971.40 / 23 invoices**, down from
+$27,566.56 / 26. That movement is *good news*, not a regression: ABC branch 305 (Sherman TX)
+gained a `pricing_territory_office_id` and reads `covered`, so its 3 invoices / $595.16 left
+the bucket — the question `docs/107` posed in August, answered. Two pieces of work met to do
+it: mig 297 recovered Sherman's address from the invoice payload (making the row geocodable
+at all), and a parallel session's prod `292b` carried the isochrone office onto the numeric
+stubs holding an alias. The 684 / 589 / 95 split above is unchanged and re-measured the same
+day. Re-measure before quoting any of it.
+
+**Do not quote a chase-total dollar figure from this work.** It tracks live purchasing on
+pairs that cannot yet be audited, so it moves with ordinary invoice flow (a credit memo took
+it down 2026-09-02; an invoice took it up 2026-09-05). Run the query instead:
+`SELECT office_name, vendor_slug, invoice_count, spend, agreement_status FROM v_office_vendor_gap_exposure WHERE needs_ruling ORDER BY spend DESC;`
+
 ## Verification Commands
 1. `git status --short` — empty
 2. `git rev-parse --short HEAD origin/main` — identical
@@ -125,7 +243,7 @@ None — session ended at a clean boundary. Every migration (289–295b) applied
 5. `curl -s -H "Authorization: Bearer $TOK" "https://cc.proexteriorsus.net/api/invoice-audit/invoice?invoiceNumber=2011009179-001"` — `disposition` "Processed — closed", `closedOut` true
 6. `curl -s -H "Authorization: Bearer $TOK" "https://cc.proexteriorsus.net/api/invoice-audit/invoice?invoiceNumber=2014501859-001"` — `office` "Kansas City, MO"
 7. SQL: `select count(*) from v_inv_processed_weekly` — 89; `select public.invoice_audit_reset('2011010454-001','t','agent','probe')` — `invoice_closed_out`
-8. `cd app/command-center && npm run build && npm test` — build Complete!, 29 files / 354 tests (run `npm ci` first if `@fontsource/inter` is missing)
+8. `cd app/command-center && npm run build && npm test` — build Complete!; 29 files / 354 tests when this was written (run `npm ci` first if `@fontsource/inter` is missing). Don't match that count: tests are added continuously, so a hardcoded number turns a green run into a false alarm. Read the runner's own summary.
 9. Agent host: `ssh -i ~/.ssh/hetzner_office root@178.156.203.23 'cd /opt/openbrain/a-roofers-open-brain && git log -1 --format=%h'` — HEAD SHA
 
 ## Full Context
@@ -163,7 +281,7 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through **295b** |
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live). For the applied watermark, query it — `SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;` — do not read a number from this table. Main ships several a day, so any number written here is stale within hours; it read "through 287" while prod was past 292. |
 | Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main` on push; verify `/healthz buildCommit`; Coolify host `178.105.220.14` (`~/.ssh/a_roofers_open_brain_ed25519`); Coolify has NO API tokens (Q4) |
 | Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` (the main checkout needed it too — `@fontsource/inter`) |
 | Agent host | Hetzner `178.156.203.23` (`~/.ssh/hetzner_office`), checkout `/opt/openbrain/a-roofers-open-brain` kept at `origin/main`; units report to the board via `runtime_job_report` |
