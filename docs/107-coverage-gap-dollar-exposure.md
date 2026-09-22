@@ -404,17 +404,42 @@ queue the geocode.
 committing — so it is a proven no-op and was not re-applied. It changes behaviour only for
 future reruns, which is the point: the migration is meant to be rerunnable.
 
-### Not repaired: 4 geocoded rows marked `pending`
+### Not repaired: 8 geocoded rows not marked `ok`
 
-The invariant everywhere else is `geom IS NOT NULL` ⇒ `geocode_status = 'ok'` (1,752 rows).
-Four rows violate it:
+**Re-measured 2026-09-22 after a review raised it — this said "4 rows" and had said so since
+August. It is 8, and the shape is different from what was described.** The count was taken once
+and carried; the same mistake this document records elsewhere. Do not quote the number below —
+run the query:
 
-| Branch | City | `updated_at` | Attributable to |
-|---|---|---|---|
-| 21 | Raleigh NC | 2026-08-20 10:59:17 | migration 297 |
-| 684 | Norman OK | 2026-08-20 10:59:17 | migration 297 |
-| 39 | Austin TX | 2026-08-21 13:04:57 | a different process |
-| 465 | Austin TX | 2026-08-21 13:04:57 | a different process |
+```sql
+SELECT id, branch_number, branch_name, geocode_status, updated_at
+  FROM public.vendor_branches
+ WHERE geom IS NOT NULL AND geocode_status IS DISTINCT FROM 'ok'
+ ORDER BY updated_at, branch_number;
+```
+
+The invariant everywhere else is `geom IS NOT NULL` ⇒ `geocode_status = 'ok'`, which held for
+**1,752 of the 1,760** geocoded rows on 2026-09-22. Eight violate it:
+
+| Branch | City | `geocode_status` | `updated_at` | Attributable to |
+|---|---|---|---|---|
+| 21 | Raleigh NC | `pending` | 2026-08-20 10:59:17 | **migration 297** (this set) |
+| 684 | Norman OK | `pending` | 2026-08-20 10:59:17 | **migration 297** (this set) |
+| 39 | Austin TX | `pending` | 2026-08-21 13:04:57 | a different process |
+| 465 | Austin TX | `pending` | 2026-08-21 13:04:57 | a different process |
+| 305 | Sherman TX | `pending` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 1278 | Granbury TX | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 185 | Marietta GA | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+| 1306 | Enid OK | `no_address` | 2026-09-15 15:45:58 | the 292/292b alias + isochrone work |
+
+**Three of them read `no_address` while holding coordinates**, which no document describes and
+which the original "4 rows marked `pending`" framing could not even express — the old wording
+filtered on `= 'pending'` and so could not see them. `IS DISTINCT FROM 'ok'` is the honest
+predicate.
+
+The `updated_at` stamps split the cause cleanly: 21 and 684 carry migration 297's exact run
+timestamp, so those two are this set's doing and their repair is unambiguous. The other six
+were set by other work and their intent is unknown.
 
 **Deliberately left alone.** `pending` on a geocoded row is ambiguous: it can mean "demoted
 by the bug above", or it can mean "a process deliberately queued this for re-geocoding

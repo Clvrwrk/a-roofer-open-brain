@@ -188,10 +188,16 @@ a ruling unblocks work, approval starts it.
 1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
-2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 297 demoted two; 39 and
-   465 were touched by another process where `pending` may be a deliberate re-geocode
-   request, so they were left alone rather than guessed at.
+2. **Eight** branches hold coordinates but are not `ok` — re-measured 2026-09-22 after a
+   review raised it; this item said "four" and had since August. The invariant
+   (`geom IS NOT NULL` ⇒ `'ok'`) held for 1,752 of 1,760 geocoded rows. Do not quote that
+   count either — `SELECT … FROM vendor_branches WHERE geom IS NOT NULL AND geocode_status
+   IS DISTINCT FROM 'ok'`. Mig 297 demoted **21 and 684** (their `updated_at` is its exact
+   run stamp), so repairing those two is unambiguous and is the decision wanted here. The
+   other six — 39, 465, 305 `pending` and 1278, 185, 1306 **`no_address` while geocoded** —
+   were set by other work; `pending` may be a deliberate re-geocode request and `no_address`
+   on a row with coordinates is undescribed anywhere, so they are left rather than guessed
+   at (mig 240's boundary: a guess cannot become a fact).
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
    default grants mig 300 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
