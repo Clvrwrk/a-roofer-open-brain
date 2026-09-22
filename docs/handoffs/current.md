@@ -192,10 +192,12 @@ a ruling unblocks work, approval starts it.
    review raised it; this item said "four" and had since August. The invariant
    (`geom IS NOT NULL` ⇒ `'ok'`) held for 1,752 of 1,760 geocoded rows. Do not quote that
    count either — `SELECT … FROM vendor_branches WHERE geom IS NOT NULL AND geocode_status
-   IS DISTINCT FROM 'ok'`. Mig 297 demoted **21 and 684** (their `updated_at` is its exact
-   run stamp), so repairing those two is unambiguous and is the decision wanted here. The
-   other six — 39, 465, 305 `pending` and 1278, 185, 1306 **`no_address` while geocoded** —
-   were set by other work; `pending` may be a deliberate re-geocode request and `no_address`
+   IS DISTINCT FROM 'ok'`. Mig 297 demoted **21 and 684** — the 2026-08-21 record in
+   `docs/107` says its applied run did, and their `updated_at` matches that run (the stamp
+   corroborates the written record rather than proving authorship on its own). Repairing
+   those two is unambiguous and is the decision wanted here. The other six were set by other
+   work: **39 and 465** by an unowned 13:04 process, and **305, 1278, 185, 1306** by the
+   292/292b alias + isochrone work, which names exactly those four; `pending` may be a deliberate re-geocode request and `no_address`
    on a row with coordinates is undescribed anywhere, so they are left rather than guessed
    at (mig 240's boundary: a guess cannot become a fact).
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same

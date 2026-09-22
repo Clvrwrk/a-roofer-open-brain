@@ -373,7 +373,8 @@ different result: exact-token on description-only sheets is close to a no-op, an
 Colorado sheet cannot price from the ring regardless of how many item numbers it gains.
 
 
-## Addendum — 2026-08-21: a defect migration 297 introduced, and 4 rows a human should look at
+## Addendum — 2026-08-21: a defect migration 297 introduced, and the rows a human should look at
+*(Scope corrected 2026-09-22: this said "4 rows" and the count is 8. See the re-measurement below.)*
 
 Migration 297's `geocode_status` assignment was keyed on the wrong condition. It read:
 
@@ -445,8 +446,18 @@ were set by other work and their intent is unknown.
 by the bug above", or it can mean "a process deliberately queued this for re-geocoding
 because its address changed". For 39 and 465 — touched at 13:04 by something this session
 does not own — flipping them back to `ok` could silently cancel a queued re-geocode. Per
-migration 240's boundary, *a guess cannot become a fact*. Resolving these is a human call:
-confirm whether the 13:04 run intended a re-geocode, then set all four to `ok` if not.
+migration 240's boundary, *a guess cannot become a fact*. Resolving these is a human call.
+
+**The proposed repair is two rows, not all of them** (corrected 2026-09-22; this previously said
+"set all four to `ok`", which was both the wrong count and the wrong policy). Only **21 Raleigh NC**
+and **684 Norman OK** have confirmed ownership — the 2026-08-21 record above states that migration
+297's applied run demoted them, and their `updated_at` matches that run. The timestamp corroborates
+the written record; it is not by itself proof of which process wrote the row.
+
+The other six stay untouched pending a human: **39 and 465** were touched at 13:04 by a process this
+set does not own, and **305, 1278, 185 and 1306** belong to the 292/292b alias + isochrone work,
+which names exactly those four rows. Confirm whether either run intended a re-geocode before
+changing any of them.
 
 ## Addendum — 2026-08-22: the backdate removed a THIRD gate, and Colorado still does not price
 
