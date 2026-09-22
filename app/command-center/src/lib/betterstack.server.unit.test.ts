@@ -20,31 +20,27 @@ afterEach(() => {
 });
 
 describe("loadBetterStackSnapshot — unconfigured never reads as healthy", () => {
-  it("reports unconfigured, not ok, when no token is present", async () => {
-    const snapshot = await loadBetterStackSnapshot({}, 1_000);
+  // Every case asserts BOTH the state AND that no request went out. Asserting the state
+  // alone would pass a regression that sends `__set_me__` to Better Stack, gets a 401, and
+  // reports `unconfigured` because the call failed — right answer, wrong reason, and a
+  // placeholder credential on the wire. Raised by review 2026-09-22; previously only the
+  // absent-token case checked the spy.
+  const unconfiguredCases: Array<[string, Record<string, string>]> = [
+    ["no token at all", {}],
+    // config/.env.example ships BETTERSTACK_API_TOKEN=__set_me__, so a deployment that
+    // copies the example verbatim lands here.
+    ["the .env.example placeholder", { BETTERSTACK_API_TOKEN: "__set_me__" }],
+    ["a whitespace-only token", { BETTERSTACK_API_TOKEN: "   " }],
+  ];
+
+  it.each(unconfiguredCases)("reports unconfigured and calls nothing given %s", async (_label, env) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const snapshot = await loadBetterStackSnapshot(env, 1_000);
     expect(snapshot.state).toBe("unconfigured");
     expect(snapshot.state).not.toBe("ok");
     expect(snapshot.monitors).toEqual([]);
     expect(snapshot.heartbeats).toEqual([]);
-  });
-
-  it("treats the .env.example placeholder as unconfigured", async () => {
-    // config/.env.example ships BETTERSTACK_API_TOKEN=__set_me__. A deployment that copies
-    // the example verbatim must not send that string to the API and render the failure as
-    // an outage — it is an unset token, and it reads as one.
-    const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "__set_me__" }, 1_000);
-    expect(snapshot.state).toBe("unconfigured");
-  });
-
-  it("treats a whitespace-only token as unconfigured", async () => {
-    const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "   " }, 1_000);
-    expect(snapshot.state).toBe("unconfigured");
-  });
-
-  it("does not call the API at all when unconfigured", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    await loadBetterStackSnapshot({}, 1_000);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -66,6 +62,35 @@ describe("loadBetterStackSnapshot — failure never reads as healthy", () => {
     const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "t" }, 1_000);
     expect(snapshot.state).toBe("error");
     expect(snapshot.monitors).toEqual([]);
+  });
+
+  // A mock that fails EVERY fetch cannot distinguish "returns nothing on failure" from
+  // "returns whatever succeeded". These two fail exactly one side each, which is the shape
+  // a real Better Stack partial outage takes. docs/109 D13 is the reason this matters: a
+  // half-populated snapshot renders the collection that loaded as green and silently drops
+  // the other, which is a false green by omission. Raised by review 2026-09-22.
+  const okMonitors = { data: [{ id: 1, attributes: { pronounceable_name: "site", status: "up" } }], pagination: { next: null } };
+  const okHeartbeats = { data: [{ id: 2, attributes: { name: "job", status: "up", period: 600, grace: 600 } }], pagination: { next: null } };
+  const failed = { ok: false, status: 500, json: async () => ({}) };
+
+  it("returns NOTHING when monitors succeed but heartbeats fail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("/monitors") ? okResponse(okMonitors) : failed,
+    ));
+    const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "t" }, 1_000);
+    expect(snapshot.state).toBe("error");
+    expect(snapshot.monitors).toEqual([]);
+    expect(snapshot.heartbeats).toEqual([]);
+  });
+
+  it("returns NOTHING when heartbeats succeed but monitors fail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("/monitors") ? failed : okResponse(okHeartbeats),
+    ));
+    const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "t" }, 1_000);
+    expect(snapshot.state).toBe("error");
+    expect(snapshot.monitors).toEqual([]);
+    expect(snapshot.heartbeats).toEqual([]);
   });
 
   it("caches a failure so an outage does not become a request storm", async () => {
@@ -162,19 +187,31 @@ describe("loadBetterStackSnapshot — v2 payload mapping", () => {
   it("follows pagination rather than reporting only the first page", async () => {
     // 19 heartbeats today against a 250 per_page default, so pagination is not exercised in
     // production — which is exactly why it is pinned here.
+    // Exact URL, matched exactly. A substring test for "page=2" is a trap: the first request
+    // carries `per_page=250`, and "per_page=250" CONTAINS "page=2", so a substring mock
+    // serves page 2 to the very first call and the test fails for the wrong reason. Found by
+    // running it, 2026-09-22.
+    const PAGE_2_URL = "https://uptime.betterstack.com/api/v2/heartbeats?page=2";
     const page2 = { data: [{ id: 2, attributes: { name: "second page", status: "up", period: 600, grace: 600, paused: false } }], pagination: { next: null } };
-    const page1 = { data: [{ id: 1, attributes: { name: "first page", status: "up", period: 600, grace: 600, paused: false } }], pagination: { next: "https://uptime.betterstack.com/api/v2/heartbeats?page=2" } };
-    let heartbeatCalls = 0;
+    const page1 = { data: [{ id: 1, attributes: { name: "first page", status: "up", period: 600, grace: 600, paused: false } }], pagination: { next: PAGE_2_URL } };
+    // Drive the response off the REQUESTED URL, never a call counter. A counter-driven mock
+    // hands back page 2 on the second call whatever the client asked for, so it passes even
+    // if `pagination.next` is ignored and page 1 is re-fetched — the one behaviour this test
+    // exists to pin. Raised by review 2026-09-22.
+    const heartbeatUrls: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        if (String(url).includes("/monitors")) return okResponse({ data: [], pagination: { next: null } });
-        heartbeatCalls += 1;
-        return okResponse(heartbeatCalls === 1 ? page1 : page2);
+        const requested = String(url);
+        if (requested.includes("/monitors")) return okResponse({ data: [], pagination: { next: null } });
+        heartbeatUrls.push(requested);
+        return okResponse(requested === PAGE_2_URL ? page2 : page1);
       }),
     );
     const snapshot = await loadBetterStackSnapshot({ BETTERSTACK_API_TOKEN: "t" }, 1_000);
     expect(snapshot.heartbeats.map((h) => h.name)).toEqual(["first page", "second page"]);
+    expect(heartbeatUrls).toHaveLength(2);
+    expect(heartbeatUrls[1]).toBe(PAGE_2_URL);
   });
 
   it("sends the token as a bearer and never in the URL", async () => {
