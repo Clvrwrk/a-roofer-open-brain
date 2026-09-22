@@ -79,33 +79,37 @@ None — session ended at a clean boundary. Build green, 352/352 tests green **a
 1. **Client artwork** — an official reversed (white) logo and a roof-only mark are still needed; the current white SVG and favicon are Cleverwork stand-ins (Logo chapter, L-05).
 2. **Carried forward, unchanged:** PEC-257 (7 August lines), PEC-258 (9 CMs without originals), the unstamped 2026-08-25 weekly batch, the pre-August $575.92 ruling, `morning_abc_sync` paused, CPA rulings, Coolify API token → `BETTERSTACK_API_TOKEN` on prod, stop `cc-production-e4344d8`, Q5 JT grant key, Q7 BS→Slack (see `context/MEMORY.md` ▶ Pick up here).
 
-## Open branch not on main — PR #9 (green, waiting on a human)
+## Open branches not on main — PR #9 and PR #12 (green, waiting on a human)
 
-`claude/project-handoff-5ua2fw` carries the PEC-221 price-agreement coverage work: the five
-migrations below plus `docs/107` and `docs/108`. Kept 0 behind main and merged with it daily.
+The PEC-221 price-agreement coverage work sits in two PRs as of 2026-09-22. `claude/project-
+handoff-5ua2fw` (**PR #9**) carries the surface and docs — `price-agreement-coverage.ts`, the
+Agreement Builder, `docs/107`, `docs/108`. `contrib/cleverwork/coverage-migrations` (**PR #12**)
+carries the five migrations below and nothing else. Both kept 0 behind main and merged with it
+daily. They were split because sixteen migration-number collisions had each dragged the
+unrelated surface work through a renumber; the schema now moves on its own.
 
-**`294-298` are FILENAMES ON THIS BRANCH, not production labels.** The work is applied to prod
+**`296-300` are FILENAMES ON PR #12, not production labels.** The work is applied to prod
 under older labels, and the two numbering systems have never matched. Do not search
-`schema_migrations` for 294-298 — you will not find them, and you must not re-apply anything:
+`schema_migrations` for 296-300 — you will not find them, and you must not re-apply anything:
 
 | Branch filename | Applied to prod as | At |
 |---|---|---|
-| `294-office-vendor-spend-exposure` | `245_office_vendor_spend_exposure` | 2026-08-20 10:57 UTC |
-| `295-backfill-branch-address-from-raw` | `246_backfill_branch_address_from_raw` | 2026-08-20 10:59 UTC |
-| `296-gap-exposure-with-ruling` | `248_gap_exposure_with_ruling` | 2026-08-20 11:06 UTC |
-| `297-agreement-unreachable-detector` | `249_agreement_unreachable_detector` (+ `249b`) | 2026-08-20 11:10 UTC |
-| `298-coverage-views-service-role-only` | `290_coverage_views_service_role_only` (`20260826193359`) | registered 2026-08-26 |
+| `296-office-vendor-spend-exposure` | `245_office_vendor_spend_exposure` | 2026-08-20 10:57 UTC |
+| `297-backfill-branch-address-from-raw` | `246_backfill_branch_address_from_raw` | 2026-08-20 10:59 UTC |
+| `298-gap-exposure-with-ruling` | `248_gap_exposure_with_ruling` | 2026-08-20 11:06 UTC |
+| `299-agreement-unreachable-detector` | `249_agreement_unreachable_detector` (+ `249b`) | 2026-08-20 11:10 UTC |
+| `300-coverage-views-service-role-only` | `290_coverage_views_service_role_only` (`20260826193359`) | registered 2026-08-26 |
 
 Supabase keys on TIMESTAMP, not on the filename, so the applied order never depended on these
-numbers — which is why the branch can renumber freely and prod is untouched.
+numbers — which is why the set can renumber freely and prod is untouched.
 
 All five are additive and idempotent per hard rule 1, but they are **not** all the same kind of
 change, and deployment/rollback impact differs:
 
-- **294, 296, 297** — `CREATE OR REPLACE VIEW` only. No rows read or written.
-- **298** — **access control**: revokes `SELECT` on the four coverage views from
+- **296, 298, 299** — `CREATE OR REPLACE VIEW` only. No rows read or written.
+- **300** — **access control**: revokes `SELECT` on the four coverage views from
   `anon`/`authenticated` and grants it to `service_role`. No data, but it changes who can read.
-- **295** — **a data backfill.** It `UPDATE`s `vendor_branches`, filling `city`, `state` and
+- **297** — **a data backfill.** It `UPDATE`s `vendor_branches`, filling `city`, `state` and
   `address` from the invoice payload and flipping the affected rows' `geocode_status` to
   `pending`. Additive because it only fills NULLs and never deletes — but it *does* write rows.
   Do not plan a rollback for this set as though nothing was touched.
@@ -120,17 +124,20 @@ PR — reviewers re-run on every push and findings land within minutes of one, s
 written here is describing a commit that is no longer the head. (A review caught this line
 claiming all reviewers were green while two were mid-run.)
 
-Migration numbers have moved **fifteen** times as parallel sessions claimed numbers on main —
-three times in 24 h (main took 289-291, then 292, then 293), ending at 294-298. The prod labels
-in the table above are unaffected by every one of those moves. If you take 294-298 on main, move the **whole** set
-again, not just the colliding files — the spend view must keep preceding the two migrations
-that read it. Two `COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue
-those and read them back; the file alone is not the whole change.
+Migration numbers have moved **sixteen** times as parallel sessions claimed numbers on main —
+three times in 24 h (main took 289-291, then 292, then 293), and main took 294-295 on 09-22.
+The set now sits at 296-300. The prod labels in the table above are unaffected by every one of
+those moves. If you take 296-300 on main, move the **whole** set again, not just the colliding
+files — the spend view must keep preceding the two migrations that read it. Two
+`COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue those and read them
+back; the file alone is not the whole change.
 
-Fifteen collisions is a **mis-scoped branch**, not bad luck: five contiguous numbers held
-open for four weeks against a main that ships several a day. If this work is picked up
-again, land the schema in its own short-lived PR the day it is written and let the surface
-work follow. Full history in `docs/107`.
+Sixteen collisions was a **mis-scoped branch**, not bad luck: five contiguous numbers held
+open for five weeks against a main that ships several a day. The sixteenth is the one that got
+acted on — the schema moved into PR #12 on its own, so the seventeenth costs one rename in a
+five-file PR instead of a rebase of the surface work. Do this on day one next time: land the
+schema in its own short-lived PR the day it is written and let the surface work follow. Full
+history in `docs/107`.
 
 **The defect it documents:** Denver × SRS has live, in-territory agreements the office ring
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
@@ -141,11 +148,11 @@ Three items need a human — full detail in `docs/107`:
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
 2. Four branches (21, 39, 465, 684) geocoded but `geocode_status = 'pending'`, against a
-   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 295 demoted two; 39 and
+   `geom IS NOT NULL` ⇒ `'ok'` invariant holding for 1,752 rows. Mig 297 demoted two; 39 and
    465 were touched by another process where `pending` may be a deliberate re-geocode
    request, so they were left alone rather than guessed at.
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
-   default grants mig 298 closed for the four coverage views. They predate this branch and
+   default grants mig 300 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
 
 **Closed 2026-09-16 — the named-records question (`docs/108`).** Chris ruled: **keep all data**,
@@ -170,7 +177,7 @@ branch 326 the first time it invoices. Watch `v_unresolved_branch_spend`; the qu
 $27,566.56 / 26. That movement is *good news*, not a regression: ABC branch 305 (Sherman TX)
 gained a `pricing_territory_office_id` and reads `covered`, so its 3 invoices / $595.16 left
 the bucket — the question `docs/107` posed in August, answered. Two pieces of work met to do
-it: mig 295 recovered Sherman's address from the invoice payload (making the row geocodable
+it: mig 297 recovered Sherman's address from the invoice payload (making the row geocodable
 at all), and a parallel session's prod `292b` carried the isochrone office onto the numeric
 stubs holding an alias. The 684 / 589 / 95 split above is unchanged and re-measured the same
 day. Re-measure before quoting any of it.
