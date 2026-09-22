@@ -2,131 +2,177 @@
 **Project:** a-roofers-open-brain (Pro Exteriors Command Center + agent fleet)
 **Repo:** https://github.com/Clvrwrk/a-roofer-open-brain
 **Production URL:** https://cc.proexteriorsus.net
-**Date:** 2026-09-14 11:30 (CT)
+**Date:** 2026-09-22 06:33 (PT)
 **Agent:** Lead Orchestrator (Claude Code, Fable 5.1)
-**Reason:** User-requested (/project-handoff after shipping the living design system)
+**Reason:** User-requested (/project-handoff after the invoice-audit review that ran 2026-09-15 → 2026-09-22)
 
 ---
 
 ## Accomplished This Session
 
-Brief: `/design` — "the most detailed design system ever produced", deployed as an interactive site with sidebar navigation at `cc.proexteriorsus.net/design-system`. Shipped, deployed, verified.
+This session was one continuous workstream, in the order it happened. Every item below was verified against the prod database, the agent host, or the live `/api/*` routes before it was called done; the evidence rows are in `docs/109-runtime-uptime-dashboard-decision-log.md` §1b (F32–F46).
 
-### The site (18 chapters + machine feed)
+### 1 · Invoice-audit workflow review since 8/26 (2026-09-15, Chris: "verify no gaps, all reviewed, all surfaces 100%")
 
-- `app/command-center/src/layouts/DesignSystemShell.astro`: the site's own shell — navy chapter rail (search, grouped chapters with section sub-links, "← Command Center"), sticky top bar with the System/Light/Dark trio wired to `cc.theme`, right-hand "on this page" list, prev/next pager, copy-to-clipboard token chips, phone drawer collapsed by default.
-- `app/command-center/src/lib/design-system/nav.ts`: chapter map (slug, group, sections) driving the rail, TOC, search index and pager.
-- `app/command-center/src/lib/design-system/tokens.ts`: parses `global.css :root` at build time via `?raw`, resolves `var()` chains, defines `darkOverrides`, WCAG contrast + CMYK helpers.
-- `app/command-center/src/pages/design-system/tokens.json.ts`: `GET /design-system/tokens.json` — every token with light/dark values, motion tokens, breakpoints, long-list constants.
-- `app/command-center/src/pages/design-system/*.astro`: `index` (first-principles method, precedence, rule index), `color` (Pantone/CMYK/RGB per ink, five-role discipline, audit-surface palettes, measured contrast matrix both modes, vendor colours), `logo` (files, anatomy, clear space, backgrounds, placement, mark, vendor badges, misuse, alt), `typography` (ramp, weights, tracking/kerning, numerals, measure, mobile/print ramps), `spacing` (scale, app frame, rail, breakpoints, full-bleed contract, density, z-index), `iconography` (icon grammar, the set, image sizing, formats, alt-text rules), `components` (20 components as production markup incl. board specimens via `cash-surface.css`), `modes` (mechanism, token mapping, per-component behaviour, elevation), `motion` (13 motions live with replay; duration/easing tokens; reduced motion), `dashboards` (Tufte applied, page shapes, KPI rules, charts, numbers, lights), `decisions` (~90 recorded UX decisions with repo paths + never-do list), `mobile`, `accessibility` (WCAG 2.2 table, ARIA in use), `content`, `print`, `swag`, `web`, `agents` (recipe, ship checklist, file map, feed, escalation, changelog).
-- `app/command-center/src/components/design-system/{DsSection,DsSpec,DsRule,DsToken}.astro`: documentation primitives.
-- `app/command-center/src/styles/design-system.css`: site chrome + the canonical dark mapping (re-points the `:root` aliases).
-- `app/command-center/src/lib/nav.ts`: "Design System" leaf under AI Agents.
+- `docs/109` F32–F37: the 8/26 failure was two upstream outages, both already repaired — ABC `invoice.history` returned zero rows 8/26–9/1 (backfilled 9/2), then pg_cron job 13 failed 9/2–9/11 (mig 285 fixed it). ABC gap check: API dry-run 8/1–9/15 = 47 invoices = 47 in the brain, 0 history rows without detail. Audit coverage: every non-CM ABC line 8/20–9/14 decided. Surfaces: all accounting/audit API routes 200; board 66 green / 8 yellow / 2 red.
+- `scripts/site-quality-sweep.mjs`: the received-credit check no longer filters the per-row audit view by a 500-item IN list (it hit the 8 s statement timeout nightly); expired-agreement warning honours `renewal_mode`; design-system chapters exempt from fabricated-data / orphan-page.
+- `scripts/runtime-job-report.sh`: sends `p_started_at` from systemd `ExecMainStartTimestamp`.
+- Lapsed HUMAN routines surfaced: ABC AR report import (last 8/10), Pay-It verification (57 pending), weekly QB batch (never stamped after 8/25), 2 SRS CM receipts, 5 uncited SRS discrepancy lines, `morning_abc_sync` paused.
 
-### Swag renders
+### 2 · "Every invoice passed with zero credit memos" — two silent leaks (mig 289, 2026-09-15)
 
-- `scripts/design-system-swag.mjs`: 12 items via fal.ai `openai/gpt-image-2.5/flare/edit` with the official logo as reference image; provenance manifest.
-- `app/command-center/public/design-system/swag/*.jpg` + `manifest.json`: 960px JPEG q82, ≤ 250 KB each.
+- `schemas/cleverwork-roofer/289-triage-office-race-and-reconcile-scope.sql`: (1) `alex_no_price_triage()` ran ~20 s after the nightly ingest while `mv_invoice_pricing_office` had refreshed at 07:30:00 — every new invoice read No-Price and was stamped passed (162 lines / 37 invoices since June, 11 over agreement). The function now refreshes the two office matviews first (own 240 s `lock_timeout`), never stamps an ABC line whose invoice has no pricing-office row, and derives its counts from ONE scan (a second scan blew the 180 s limit). (2) `credit_memo_reconcile()` only scanned memos dated ≥ 8/1 — seven June/July ABC memos naming invoices with open requests were never matched; the date floor now applies only to memos naming no open request. First run: 7 ABC receipts to the review queue.
+- Reopened 5 over-agreement lines ($131.75); verified through the host's real triage path (46.7 s, stamped 0).
 
-### Fix found while documenting
+### 3 · Six June lines, then their closeout (migs 290, 293, 293b — 2026-09-15/16)
 
-- `app/command-center/src/styles/global.css`: `--error-surface` / `--error-text` were consumed by `.button-danger`, `.priority-critical` and the CM panel but never declared; added as aliases. Destructive buttons had no fill in production.
+- `290-reopen-june-triage-race-lines.sql`: on Chris's instruction the six June lines held back in 289 were reopened for another audit pass.
+- `293-june-recycled-invoices-closeout.sql`: Chris then ruled the seven June invoices complete and processed. New `invoice_audit_closeout` register (RLS, service-role), 8 pending lines decided valid under Chris's name with the reason, `invoice_payment_processed` 'paid' rows (source `closeout`) for the six without a ledger row, pipeline `invoice_processed`, and `invoice_audit_reset()` refuses a closed-out invoice (`invoice_closed_out`, probed live). 293b cancelled the $20 draft CM on 2011009179-001 and closed its disputed line.
+- `app/command-center/src/lib/invoice-audit.ts`: `closedOut` / `closeoutReason` on every invoice loader; `deriveDisposition` → "Processed — closed" above every state except credit memo; `src/scripts/invoice-audit-tree.ts`: grey "Processed — closed" pill, Go back hidden. Unit tests added (354 green). Deployed and verified on the live invoice route.
 
-### Docs and pointers
+### 4 · Branch 326 (Topeka) and the slug-keyed ABC branches (migs 291, 292 — 2026-09-15)
 
-- `docs/112-design-system-site.md`: what it is, decisions, recorded gaps, keeping it true.
-- `CLAUDE.md` (Working style), `CONVENTIONS.md` §11, `config/brand/DESIGN.md`, `standards/design/v1.md`: pointers to the site and the same-PR update rule.
-- `context/memory/2026-09-14.md`: session block.
-- Version `0.6.551A → 0.7.1A` (minor bump for a new major surface, docs/62).
+- `291-rekey-abc-branch-326-topeka.sql`: the Topeka row was keyed `topeka-KS-66618-1445` by the May import; since mig 243 an ABC invoice resolves its branch AT INGEST through `vendor_branch_alias`, and the slug row had no alias → invoice 2014501859-001 ingested with a NULL FK and priced as No-Price while the map showed "Not yet assigned". Re-keyed to `326`, FK backfilled, aliases `326`/`0326` added, 3 lines reopened ($31.65). docs/109 F42.
+- `292-alias-slug-keyed-abc-branches.sql`: 670 alias rows for 589 of 684 slug-keyed rows (ZIP+4 / ZIP5+city / unique-city tiers); 25 twins of numeric resolvers left; 70 unaliased (Canadian branches, multi-branch US cities). 292b carried the isochrone office onto four numeric stubs that owned the alias without an office (Granbury, Enid, Marietta, Sherman). Every branch bought from in 36 months resolves at ingest. docs/109 F43.
+
+### 5 · AccuLynx job link (mig 294 — 2026-09-16/22)
+
+- Not broken: links whenever the job box or PO carries the PE job number. Rate fell 82% → 38% because 42 of 48 unlinked invoices since June carry an account bucket ("Commercial", "DFW Account", "Storm/wichita") and free-text POs; commercial CP-25-xxxx projects are not in AccuLynx at all.
+- `294-acculynx-link-ins-prefix-and-client-name.sql`: INS- prefix added (12 insurance jobs; 2–3 letter token regexes) and a unique-client-name fallback (`link_method = 'client_name'`, names ≥ 5 chars). 892 of 1,133 linked; view runs in 128 ms. docs/109 F45.
+
+### 6 · SRS 9/22 ingest and the weekly export leak (mig 295 — 2026-09-22)
+
+- Detail CSV `SRSICORP_S036198_20260922090412_0.csv`: 70 documents 7/7–9/17; brain held 54 → 16 September documents added (14 invoices, 2 CMs, 151 lines, Wichita). `scripts/invoice-audit-v2/link-vendor-invoice-pdfs.mjs` linked all 71 SRS PDFs from the Dropbox folder. Both new memos reconciled (`amount_mismatch`, review queue → 13). The statement CSV (`…090358`) covers only the 7/1 and 8/1 statements and the statement reader is QXO-only — SRS open/paid status still unknown.
+- `295-weekly-export-pending-matches-app.sql`: `v_inv_processed_weekly` counted every undecided auditable line as pending; the app's rule (Chris 2026-08-05) is that only a VISIBLE discrepancy line needs a decision. 85 "Approved" invoices ($459K; every SRS invoice with a within-agreement line since July) never reached a Tuesday QB file. 295 applies the app's rule; 295b adds the NOT-paid rule and a payment-ledger guard (46 AR-paid ABC bills and 15 ledgered bills would otherwise re-load). Tuesday prep rebuilt: `exports/inv-processed-2026-09-22/` ABC 49 $101,141 · QXO 2 $5,697 · SRS 38 $165,500 — nothing stamped. docs/109 F46.
+
+### 7 · Run-now pass, QB bank batch, routine currency (2026-09-22 13:0x–13:3x UTC)
+
+- Standard daily chain re-run on demand for all vendors: triage (ran at ingest + nightly), `credit_memo_claims_sync_all()` + `credit_memo_reconcile()` (13:07 and 13:21), matview refresh (13:08, 13:21); job 13 succeeded 13:15.
+- `exports/qb-bank-2026-07-31_to_2026-08-12/`: per-vendor QB bank files for the window Chris reported missing from QBO, rebuilt from `qb_bank_export_log` (the producer never re-emits a stamped row) plus the two never-handed rows: ABC 62 rows / $32,072.22 spent, SRS 6 / $22,476.94, QXO 1 / $5,601.71. Nothing stamped. Delivered to Chris.
+- Currency at 13:20 UTC: ABC nightly chain green 07:30–07:32 (newest invoice 9/21); SRS current through 9/17; QXO last ingest 8/05 (human CSV cadence); pending lines ABC 28 (reopened lines awaiting Chris), SRS 0, QXO 0; CM receipts pending review 13; board 66G/8Y/2R.
 
 ## Git State
-- **Branch:** `main` (feature branch `claude/cc-proexteriors-design-system-c99a08` merged fast-forward and also pushed)
-- **Last commit:** `7296c22` — "feat(design-system): living design system at /design-system — 18 chapters, tokens.json feed, fal.ai swag renders"
-- **Deployed:** `/healthz` `buildCommit` = `7296c22…` at 11:11 CT
-- **Uncommitted changes:** this handoff only (committed as the wrap-up commit)
+- **Branch:** `main` (worktree branch `claude/invoice-audit-workflow-review-bc272b` pushed to `origin/main` throughout; main checkout and agent host fast-forwarded after every push)
+- **Last commit:** `156db5f1` — "docs(memory): 9/22 run-now pass, routine currency, QB bank batch 7/31–8/12 rebuilt from the export log [skip version]" (this handoff commits on top)
+- **Deployed:** `/healthz buildCommit` = `156db5f` at 06:33 PT
+- **Uncommitted changes:** none (this handoff + its archive are committed by the wrap-up commit)
 
 ## Task Cut Off
-None — session ended at a clean boundary. Build green, 352/352 tests green, deploy confirmed.
+None — session ended at a clean boundary. Every migration (289–295b) applied to prod and committed; every app change built, tested (354/354) and deployed; every export written and handed over.
 
 ## Next Task — Start Here
 
-**Task:** Close the recorded design-system gaps (docs/112 → "Recorded gaps"), starting with the `:focus-visible` ring (rule A-02).
+**Task:** Materialise the Invoice Audit summary read (`v_invoice_audit_invoice`) — it hit the 8 s `statement_timeout` twice on the dev server during this session and is the same query the live tree runs (playbook 9).
 
 **What to check / do:**
-1. Read `/design-system/agents` (recipe + ship checklist) and `/design-system/accessibility#focus`.
-2. Add `:focus-visible` rules to `app/command-center/src/styles/global.css` for buttons, links, inputs, summaries, segments (2px ring in `--primary`, 2px offset; inputs move the border), and gold in each board's `[data-theme="dark"]` block.
-3. Remove the resting shadow from `.metric-panel` and `.gap-metric-card` (CMP-12).
-4. Move `price-agreement/review.astro` and `price-list/branch.astro` from raw `prefers-color-scheme` onto `cc.theme` via `initThemePref` (MD-01).
-5. Open each touched page in both modes and at 390px; cite the rule ids in the commit.
+1. `EXPLAIN (ANALYZE) SELECT count(*) FROM v_invoice_audit_invoice` on prod — it ran ~2.2 s at 13:00 UTC with 1,133 invoices; confirm current timing and the plan (per-row LATERAL over `mv_invoice_pricing_office`).
+2. Create `mv_invoice_audit_invoice` (same columns), unique index on `invoice_number`, append its refresh to pg_cron job 13's command (inside the same transaction as `mv_invoice_audit_line`) and to `service_pending_matview_refreshes()`'s chain, exactly as mig 272–273 did for the line view.
+3. Point every reader at the matview: `app/command-center/src/lib/invoice-audit.ts` (summary + detail loaders), `scripts/site-quality-sweep.mjs` check 2/3, `alex_no_price_triage()`, `v_inv_processed_weekly`. Keep the view as the definition of record.
+4. Build + tests, deploy, verify `/api/accounting/kpi-pills` and an invoice-detail call on prod, then the sweep on the host.
 
-**If the dev server will not start in the worktree:** `npm ci --no-audit --no-fund` in `app/command-center` (the worktree has no `node_modules` until installed); preview via `.claude/launch.json` `command-center` on port 4399.
+**If job 13 starts failing after the change:** the four REFRESHes and the reconcile are one transaction — a failure rolls back all of them and the audit freezes (docs/109 F1). Check `cron.job_run_details` for job 13 first, run the refresh by hand, then fix.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Then close the design-system gaps listed in docs/112 starting with the :focus-visible ring (rule A-02), verifying each surface in both modes before committing."
+**Prompt to use:** "Read docs/handoffs/current.md. Then materialise v_invoice_audit_invoice as mv_invoice_audit_invoice (job 13 + on-demand refresh chain), repoint the readers listed in the handoff, build, test, deploy and verify on prod."
 
 ## Decisions Made This Session
 
-- **The design system is a site, not a document.** Chapters are the navigation, so it has its own rail (`DesignSystemShell`), not the department rail. Do not fold it into `AppShell`.
-- **Tokens are parsed from `global.css` at build time, never copied.** Contrast ratios are computed, not asserted. A table that could drift from production is not allowed on the site.
-- **The site's dark mode is the canonical dark mapping** (`design-system.css` + `tokens.ts darkOverrides`). Production dark mode stays per-surface (Chris, 2026-06-17); a future shell-level dark mode copies this mapping — and must re-point the `:root` aliases (`--surface`, `--text`, …) because `var()` resolves where declared.
-- **Board specimens use `cash-surface.css` (`.cfx`)**, the shareable copy of the canonical `.fw` vocabulary, with a `MutationObserver` mirroring the page theme.
-- **Swag renders are references, not artwork.** The purchase order carries the artwork file, Pantone numbers, method and size from the per-item table; renders are regenerated only when the logo file changes.
-- **Pantone numbers are nearest solid-coated matches by sRGB** and are labelled as such; rule C-07 requires a physical fan proof before any run over 100 units.
-- **Rule ids are permanent** (C-, L-, T-, S-, I-, CMP-, MD-, MO-, D-, UX-, M-, A-, W-, P-, SW-, WEB-, G-). Retire with a note; never renumber. A change to a token, component, mode, motion or decision updates the matching chapter in the same PR (G-04).
-- **`/design` canvas artifact not used** — the deliverable was the route itself.
+- **An agent stamp made on stale inputs is not a decision — reopen it; a human cancellation is a decision — surface it, never revive it.** (migs 289/290; the closeout register makes the human ruling durable.)
+- **A No-Price reading without the office gate is not a reading.** The triage refreshes the office matviews first and fails closed when the pricing-office row is absent (mig 289). Any future agent pass that writes decisions must do the same (memory: matview-freshness-before-agent-stamps).
+- **A credit memo that names an invoice with an open request is never too old to match.** Date floors apply only to unnamed memos (mig 289).
+- **"Pending" has one definition — the app's:** an auditable line with no passed/disputed decision AND a visible discrepancy (UOM mismatch, No-Price, or billed above agreement). A line priced within agreement is valid as billed and never needs a decision. The weekly export set uses it (mig 295).
+- **The register export never re-loads a paid or ledgered bill** — the vendor AR report's `paid`, or any active `invoice_payment_processed` row, keeps it out (mig 295b).
+- **Branch identity is the alias table, not the branch number string.** Since mig 243 the ingest resolves through `vendor_branch_alias`; a branch row without an alias is invisible to pricing whatever its office says (migs 291/292).
+- **The AccuLynx link recovers nothing from account-bucket job boxes.** Counter discipline (job number in the job box) is the fix; commercial CP-25 projects need their own link outside AccuLynx (A3 candidate).
+- **The QB bank producer never re-emits a stamped row.** Re-deliveries are rebuilt from `qb_bank_export_log`; "stamped" means handed over, not loaded.
+- **Closed-out invoices show "Processed — closed"** in the register label, the tree pill and the detail route; Go back is hidden and the reset RPC refuses them.
 
 ## Blockers Requiring Human Action
 
-1. **Client artwork** — an official reversed (white) logo and a roof-only mark are still needed; the current white SVG and favicon are Cleverwork stand-ins (Logo chapter, L-05).
-2. **Carried forward, unchanged:** PEC-257 (7 August lines), PEC-258 (9 CMs without originals), the unstamped 2026-08-25 weekly batch, the pre-August $575.92 ruling, `morning_abc_sync` paused, CPA rulings, Coolify API token → `BETTERSTACK_API_TOKEN` on prod, stop `cc-production-e4344d8`, Q5 JT grant key, Q7 BS→Slack (see `context/MEMORY.md` ▶ Pick up here).
+1. **Lucinda — load this week's QB files** (`exports/inv-processed-2026-09-22/`, 89 invoices $272,338) and the 7/31–8/12 bank batch (`exports/qb-bank-2026-07-31_to_2026-08-12/`); check QB for the 14 July SRS bills before loading (our load-once guard only knows our own stamps); then `node scripts/build-inv-processed-weekly.mjs --stamp`.
+2. **Lucinda — Pay-It verification** (57 `paid_pending_verification`, incl. 2011284893-001) and the **13 credit-memo receipts** on Sent CM review.
+3. **Chris — 28 reopened ABC lines** awaiting a claim decision (migs 289/291 reopens plus the 8/25 set); **5 SRS discrepancy lines with no agreement citation** (the site sweep's "money without provenance").
+4. **ABC AR report import** (manual CSV per docs/48) last run 8/10 — 142+ invoices carry no paid status; the NOT-paid export guard only protects invoices with AR data.
+5. **SRS open/paid status**: send the 9/1 and 10/1 SRS statement exports (or the closed-items report); the statement reader needs a ~1 h SRS adapter (different column names than QXO).
+6. **QXO**: last ingest 8/05 — if QXO has invoiced since July, export the detail CSV.
+7. **Atlanta (Jonesboro) has no ABC agreement on file** — 8 invoices / 40 lines since August audit against nothing; a coverage decision.
+8. **Counter discipline** (Roberto): job number in the ABC job box at Richardson, Atlanta and Wichita counters; 42 of 48 unlinked invoices since June carry an account bucket.
+9. **Carried forward, unchanged:** Q4 Coolify API token → `BETTERSTACK_API_TOKEN` + `GITHUB_TOKEN` on prod; Q5 `JT_SUPABASE_MIRROR_GRANT_KEY` on the agent host (jt-sentinel red); Q7 Better Stack → Slack; `acculynx-sync` edge function still v49 (`supabase login && supabase functions deploy acculynx-sync --project-ref rnhmvcpsvtqjlffpsayu`); `morning_abc_sync` paused (docs/57); CPA rulings; PEC-257/258/244/240/242/111/221/214/216.
+
+### Linear-ready ticket list (Linear MCP was unauthenticated all session — file these by hand or authorise the connector)
+
+| # | Title | Type | Owner | Evidence |
+|---|---|---|---|---|
+| L1 | Materialise `v_invoice_audit_invoice` (8 s timeout risk) | eng | agent | this handoff, Next Task |
+| L2 | SRS statement reader (AR open/paid) for `ingest-vendor-invoice-csv.mjs` | eng | agent | docs/109 F46 |
+| L3 | Commercial-project link for CP-25 invoices (outside AccuLynx) — A3 | product | Chris | docs/109 F45 |
+| L4 | Port INS- prefix to `v_vendor_invoice_acculynx_match` (mig 250) and `v_pe_job_label_parse` | eng | agent | docs/109 F45 |
+| L5 | Retire the 25 slug-twin branch rows; alias the 70 unmatched or mark out of scope | data | agent | docs/109 F43 |
+| L6 | Load 9/22 QB files + 7/31–8/12 bank batch; stamp | accounting | Lucinda | exports/ |
+| L7 | Pay-It verification backlog (57) + 13 CM receipts | accounting | Lucinda | kpi-pills |
+| L8 | 28 reopened ABC lines + 5 uncited SRS lines | accounting | Chris | site sweep |
+| L9 | ABC AR report import (lapsed since 8/10) — schedule or automate | accounting | Lucinda/Chris | docs/48 |
+| L10 | Atlanta ABC agreement coverage | purchasing | Chris | docs/109 F41 |
+| L11 | Counter discipline: job number in the job box | ops | Roberto | docs/109 F45 |
+| L12 | Coolify API token → Better Stack + GitHub tokens on prod (Q4) | ops | Chris | docs/109 |
+| L13 | JobTread grant key on the agent host (Q5) | ops | Chris | docs/109 F18 |
+| L14 | Deploy `acculynx-sync` edge function (v49 → main) | eng | agent (needs `supabase login`) | docs/109 F30 |
 
 ## Verification Commands
 1. `git status --short` — empty
-2. `git rev-parse --short HEAD origin/main` — both `7296c22` (or the wrap-up commit that follows)
-3. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts with the deployed SHA
-4. `curl -s -o /dev/null -w "%{http_code}" https://cc.proexteriorsus.net/design-system` — `302` to `/auth/login` when signed out; `200` with a session
-5. `cd app/command-center && npm run build && npm test` — build complete, 29 files / 352 tests pass
-6. Signed in: `/design-system/tokens.json` returns `"version": "0.7.1A"` and 77+ tokens
+2. `git rev-parse --short HEAD origin/main` — identical
+3. `curl -s https://cc.proexteriorsus.net/healthz` — `buildCommit` starts with the HEAD SHA
+4. `curl -s -H "Authorization: Bearer $TOK" "https://cc.proexteriorsus.net/api/accounting/kpi-pills"` (ob-accounting token per `/workos-agent-auth`) — `auditPendingCount` 0, `cmReceiptsPendingReview` 13
+5. `curl -s -H "Authorization: Bearer $TOK" "https://cc.proexteriorsus.net/api/invoice-audit/invoice?invoiceNumber=2011009179-001"` — `disposition` "Processed — closed", `closedOut` true
+6. `curl -s -H "Authorization: Bearer $TOK" "https://cc.proexteriorsus.net/api/invoice-audit/invoice?invoiceNumber=2014501859-001"` — `office` "Kansas City, MO"
+7. SQL: `select count(*) from v_inv_processed_weekly` — 89; `select public.invoice_audit_reset('2011010454-001','t','agent','probe')` — `invoice_closed_out`
+8. `cd app/command-center && npm run build && npm test` — build Complete!, 29 files / 354 tests (run `npm ci` first if `@fontsource/inter` is missing)
+9. Agent host: `ssh -i ~/.ssh/hetzner_office root@178.156.203.23 'cd /opt/openbrain/a-roofers-open-brain && git log -1 --format=%h'` — HEAD SHA
 
 ## Full Context
 
 ### What was built across ALL sessions (complete feature list)
 Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 - Invoice Audit v2 (docs/81), office-inherited pricing, vendor/office/time/UOM silos (migs 119–122, 201, 208, 217)
-- Friday WIP/AR board (mig 215) with the long-list disclosure rule (2026-08-21), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
+- Friday WIP/AR board (mig 215), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
 - Materialised audit line + on-demand refresh (migs 272–276); item-aware supersession (277); weekly QB export set (278); vendor arm parity (279); negative-total/CM routing + per-vendor export (280)
 - Cash family: 13-week cash flow, cash runway, fixed costs (mig 281)
-- Runtime uptime board at `/agents` with direct third-party pings (docs/109, D16, 2026-09-12); Thursday WIP/AR pack on openpyxl (Aspose retired)
-- CC ⇄ CRM parity fixes 2026-09-11 (body 14px, Inter loaded, purple accent → navy/info); CRM PWA companion repo (docs/111)
-- **This session:** the living design system at `/design-system` (docs/112), `tokens.json`, swag renders, `--error-surface` fix, version 0.7.x
+- Runtime uptime board `/agents` with direct third-party pings (docs/109, 2026-09-11/12); Thursday WIP/AR pack on openpyxl
+- Living design system at `/design-system` (docs/112, 2026-09-14)
+- **This session (2026-09-15 → 09-22):** triage office-matview race + reconcile scope (289); June line reopen (290); branch 326 re-key + aliases (291); slug-keyed branch aliases + stub office carry (292/292b); June invoice closeout register + reset guard + "Processed — closed" label (293/293b + app); AccuLynx link INS- prefix + client-name fallback (294); weekly export set on the app's pending rule + NOT-paid/ledger guards (295/295b); site-sweep timeout fix + evergreen + design-system exemptions; job-report `started_at`; SRS September ingest + 71 PDFs; QB bank batch 7/31–8/12 rebuilt from the export log
 
 ### Architecture decisions
-- `v_invoice_audit_line` is the definition of record; every reader goes through `mv_invoice_audit_line` (the view exceeds the 8s `statement_timeout`; a direct PostgREST read renders empty). Matview refreshes every 15 min via pg_cron job 13.
-- The audit is continuous, not batch. "Is anything undispositioned?" is the question.
-- Credit status is derived from the amount, never written onto the vendor mirror.
-- Dark mode is per surface via `theme-pref.ts` (`cc.theme`); the design-system site demonstrates the shell-level form and owns the dark mapping.
-- Design tokens exist in exactly one place (`global.css :root`); the site parses them.
+- `v_invoice_audit_line` is the definition of record; every reader goes through `mv_invoice_audit_line` (refreshed by pg_cron job 13 every 15 min and on demand via `request_matview_refresh` → job 15). The invoice-level view `v_invoice_audit_invoice` is still live and is the next materialisation candidate.
+- The pricing arm resolves an invoice's PE office through `mv_invoice_pricing_office`, which itself resolves `abc_invoices.vendor_branch_id` — set AT INGEST through `vendor_branch_alias` (mig 243). Branch identity = alias row, never the branch-number string.
+- Alex's triage refreshes `mv_office_agreement_versions` + `mv_invoice_pricing_office` before evaluating and fails closed without a pricing-office row (mig 289). It carries its own `statement_timeout` (300 s) and `lock_timeout` (240 s) because PostgREST's role-level limits are ~8 s.
+- `invoice_audit_closeout` is a human register: `invoice_audit_reset()` refuses closed-out invoices; reopen scripts must check it first.
+- "Pending" is defined once (app + `v_inv_processed_weekly`): undecided AND visible discrepancy.
+- Credit status is derived from the amount, never written onto the vendor mirror. A memo naming an open request is matched whatever its date.
+- Service tokens (Path A, `/workos-agent-auth`) cannot export QB bank files (`approval.decide`); use the dev server (Local Operator) on 4399 for previews, or rebuild from `qb_bank_export_log`.
 
 ### Design system
-- **Site:** https://cc.proexteriorsus.net/design-system — start at `/design-system/agents`.
-- Inter 400/600/700/800 (self-hosted). Body 14px/1.5 shell, 12.5–13px boards. Navy `#11133f` (Pantone 2766 C) authority, flag red `#c22326` (186 C) the one CTA, gold `#eaa221` (1235 C) attention never a button, hunter green `#3b6b4c` (7733 C) status only, smart blue `#0066cc` (2935 C) links/data. Radius 8 default, 4px spacing scale, borders over shadows, one flag-red primary per viewport, status always a word + colour, ten-row long-list panes, PE Office → Vendor Branch → Document → Line nesting.
+- Site: https://cc.proexteriorsus.net/design-system (docs/112). Inter 400/600/700/800 self-hosted via `@fontsource/inter`; body 14px; navy `#11133f` authority, flag red `#c22326` the one CTA, gold `#eaa221` attention, hunter green `#3b6b4c` status, smart blue `#0066cc` links. Pills: `.iv .pill-grey` is the closed-out pill. Ten-row long-list panes.
 
 ### Key invariants (never violate)
 - Four pricing gates: vendor · office · time (item-aware supersession) · UOM; the audit refuses rather than converts; lowest-price tie-break — simulate before adding a book.
-- A negative total is a credit memo. One QB export file per vendor. `register_exported_at` is one-way. A human cancellation is a decision.
-- No literal hex / spacing / font outside the token system (DSN-010/014); no role swaps (DSN-011); one flag-red CTA (DSN-012); mono only on Property Cards + SKU cells (DSN-013).
-- Nothing external without a human. QBO is read-only.
+- A negative total is a credit memo. One QB export file per vendor. `register_exported_at` is one-way. `qb_bank_export_log` is one-way.
+- A human cancellation or closeout is a decision — surface, never revive.
+- Nothing external without a human. QBO is read-only. No secrets in code or chat.
+- Every agent pass that writes decisions refreshes or verifies the matviews it reads first.
 - Every change to a token, component, mode, motion or decision updates the design-system chapter in the same PR.
 
 ### Service / deployment map
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through 287 |
-| Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main`; verify `/healthz buildCommit`; Coolify host `178.105.220.14`; helper `scripts/coolify-redeploy.sh`; skill `/coolify` |
-| Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` |
-| Nightly loop | `scripts/abc-nightly-sync.sh` 03:30 ET on the agent host (`178.156.203.23`) |
-| pg_cron job 13 | `mv_invoice_audit_line` + office pricing matviews, every 15 min |
-| Weekly QB batch | `node scripts/build-inv-processed-weekly.mjs` (Tuesdays), prep-only unless `--stamp` |
+| Prod Supabase | `rnhmvcpsvtqjlffpsayu` (shared by dev and live); schemas through **295b** |
+| Deploy | Coolify → `cc.proexteriorsus.net`, builds `app/command-center/Dockerfile` from `origin/main` on push; verify `/healthz buildCommit`; Coolify host `178.105.220.14` (`~/.ssh/a_roofers_open_brain_ed25519`); Coolify has NO API tokens (Q4) |
+| Dev | port 4399 via `.claude/launch.json` `command-center`; worktrees need `npm ci` in `app/command-center` (the main checkout needed it too — `@fontsource/inter`) |
+| Agent host | Hetzner `178.156.203.23` (`~/.ssh/hetzner_office`), checkout `/opt/openbrain/a-roofers-open-brain` kept at `origin/main`; units report to the board via `runtime_job_report` |
+| Nightly ABC | `scripts/abc-nightly-sync.sh` 03:30 ET: catalog → invoice ingest (10-day window) → PDF backfill → Alex triage |
+| pg_cron | job 13 (15 min): four matviews + CM claims sync + reconcile; job 15 (1 min): on-demand refresh requests; job 18: order↔AccuLynx matview |
+| Vendor ingest | `integrations/bridges/ingest-vendor-invoice-csv.mjs --vendor=srs\|qxo --file=<detail.csv>` (runs triage after); PDFs: `scripts/invoice-audit-v2/link-vendor-invoice-pdfs.mjs --vendor=srs --dir=<folder>`; SRS PDFs live in Dropbox `PE_Open_Brain/Lucinda - PE Accounting/SRS Invoices/Invoices` |
+| Weekly QB batch | `node scripts/build-inv-processed-weekly.mjs` (Tuesdays, prep-only; `--stamp` after Lucinda loads) → `exports/inv-processed-<date>/` |
+| QB bank file | `/api/accounting/qb-bank-csv?vendor=<slug>&mode=preview\|export&since=YYYY-MM-DD` — needs `approval.decide` (dev server / human); stamped rows live in `qb_bank_export_log` |
 | Runtime board | `/agents` (docs/109); Better Stack watches the site only; third parties by direct ping |
-| Swag renders | `node scripts/design-system-swag.mjs` — needs `FAL_KEY`, which loads only in an interactive zsh: `zsh -lic 'node /abs/path/scripts/design-system-swag.mjs'` |
 | Agent auth to live site | Bearer service tokens on `/api/*`; skill `/workos-agent-auth` |
-| Slack | per-agent bots per `/slack-agents`; all dev traffic → `#pe-cc-dev-team` |
+| Slack | per-agent bots per `/slack-agents`; all dev traffic → `#pe-cc-dev-team`; this session's Slack connector could not see the PE workspace |
+| Linear | PE-CC-DevTeam — MCP unauthenticated all session; tickets listed above |
