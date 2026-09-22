@@ -122,8 +122,9 @@ None — session ended at a clean boundary. Every migration (289–295b) applied
 The PEC-221 price-agreement coverage work sits in two PRs as of 2026-09-22. `claude/project-
 handoff-5ua2fw` (**PR #9**) carries the surface and docs — `price-agreement-coverage.ts`, the
 Agreement Builder, `docs/107`, `docs/108`. `contrib/cleverwork/coverage-migrations` (**PR #12**)
-carries the five migrations below and nothing else. Both kept 0 behind main and merged with it
-daily. They were split because sixteen migration-number collisions had each dragged the
+carries the five migrations below and nothing else. `origin/main` is merged INTO each PR branch
+daily, which is what keeps both at 0 behind; neither has been merged into main, and both are
+still open. They were split because sixteen migration-number collisions had each dragged the
 unrelated surface work through a renumber; the schema now moves on its own.
 
 **`296-300` are FILENAMES ON PR #12, not production labels.** The work is applied to prod
@@ -181,7 +182,9 @@ history in `docs/107`.
 cannot reach, so the coverage surface reads `priced_items = 0` while a separate line-level
 path prices some of the same lines. Two pricing paths disagreeing is the finding.
 
-Three items need a human — full detail in `docs/107`:
+Four items need a human — full detail in `docs/107`. Three are RULINGS only a human can give;
+the fourth (4) is deferred engineering awaiting approval to build. The distinction matters:
+a ruling unblocks work, approval starts it.
 1. **Confirm `AMSDE` == `SBP-SOUTHDENVER`**, or approve repointing the agreement join to
    `vendor_branch_id` with mig 244's equivalence proof. **128 items.** This is the one that
    unblocks the defect.
@@ -192,6 +195,13 @@ Three items need a human — full detail in `docs/107`:
 3. `v_office_vendor_branch` / `v_office_vendor_inheritance` are `anon`-readable on the same
    default grants mig 300 closed for the four coverage views. They predate this branch and
    are read by other surfaces, so locking them down needs a caller audit first.
+4. **The third coverage state** (approval, not a ruling). `agreement_not_reaching` is a PROXY
+   (`priced_items = 0 AND live_agreements > 0`), not a reachability proof — territory-has-a-book
+   plus ring-prices-nothing has two causes. Measured 2026-09-16: 1 pair flagged, both its
+   agreements genuinely unreachable, the second case 0 rows. NOT tightened, because a narrower
+   predicate alone drops that second case into `no-agreement` and tells an operator to chase
+   paperwork that already exists. The fix is an appended `agreement_prices_nothing` column, a
+   `coverageLabelKind()` branch, a pill and tests. Mig 299's header carries the reasoning.
 
 **Closed 2026-09-16 — the named-records question (`docs/108`).** Chris ruled: **keep all data**,
 keep all git history, no replacement token, no CI check. It is business-card-grade information

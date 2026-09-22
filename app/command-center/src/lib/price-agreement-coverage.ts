@@ -67,8 +67,11 @@ export interface CoverageVendor {
   /**
    * A live agreement EXISTS for this pair but the office ring cannot reach it
    * (v_office_vendor_gap_exposure.agreement_not_reaching, mig 299). Critical for the label:
-   * such a pair needs its branch identity REPAIRED, not new paperwork chased. Denver x SRS
-   * carries 2 live agreements and still reports priced_items = 0.
+   * such a pair needs its branch identity REPAIRED, not new paperwork chased.
+   * Deliberately no pair named here with a count: that is the standing mistake this repo keeps
+   * making — a value measured once and then stored as a standing fact. Query the view for the
+   * current state: SELECT office_name, vendor_slug, live_agreements, priced_items FROM
+   * v_office_vendor_gap_exposure WHERE agreement_not_reaching;
    */
   agreementNotReaching: boolean;
   /** Live agreements attached to this pair, reachable or not. */
