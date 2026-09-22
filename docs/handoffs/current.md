@@ -172,10 +172,13 @@ after all four had landed.)
 Migration numbers have moved **sixteen** times as parallel sessions claimed numbers on main —
 three times in 24 h (main took 289-291, then 292, then 293), and main took 294-295 on 09-22.
 The set now sits at 296-300. The prod labels in the table above are unaffected by every one of
-those moves. If you take 296-300 on main, move the **whole** set again, not just the colliding
-files — the spend view must keep preceding the two migrations that read it. Two
-`COMMENT ON VIEW` bodies in prod also cite migration numbers, so re-issue those and read them
-back; the file alone is not the whole change.
+those moves. **That advice was for when the set lived on a branch, and it is now obsolete: main
+owns 296-300.** Moving them would rewrite landed history. The obligation has flipped — incoming
+work that wants those numbers renumbers itself, exactly as this set had to sixteen times. What
+still holds if these files are ever touched: the spend view must keep preceding the two
+migrations that read it, and two `COMMENT ON VIEW` bodies in prod cite migration numbers, so
+re-issue those and read them back — the file alone is not the whole change. (Corrected after
+review 2026-09-22; the branch-era instruction survived the merge.)
 
 Sixteen collisions was a **mis-scoped branch**, not bad luck: five contiguous numbers held
 open for five weeks against a main that ships several a day. The sixteenth is the one that got
