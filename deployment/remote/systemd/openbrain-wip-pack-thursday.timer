@@ -1,8 +1,8 @@
 [Unit]
-Description=Nightly AR/WIP pack at 06:00 America/Chicago (after the 04:45 CT wip_ar_master refresh; Thu run follows the 05:30 week-roll; docs/85 round 3 — unit name kept for continuity)
+Description=Nightly AR/WIP pack at 06:22 America/Chicago (after 04:45 CT wip_ar_master refresh + 06:15 matview cron; staggered off :00/:15 pile-up — PEC-415; unit name kept for continuity)
 
 [Timer]
-OnCalendar=*-*-* 06:00:00 America/Chicago
+OnCalendar=*-*-* 06:22:00 America/Chicago
 AccuracySec=5min
 Persistent=true
 

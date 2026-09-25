@@ -52,7 +52,7 @@ penny; other locations differ only by the week of live movement since the
 
 1. **Wed night/Thu early:** ABC 03:30 ET · AccuLynx hourly · QBO ran Thu 20:00 CT prior week (QBO also refreshes every Thursday evening).
 2. **Thu 05:30 CT:** `roll_wip_ar_week()` (pg_cron) scores last week's HIT/MISS.
-3. **Thu 06:00 CT:** agent host builds the full pack (`build_pack.py --audience ar-wip`) and uploads `AR_WIP_Pack_<date>.xlsx` to the `wip-packs` bucket → **Download Thursday pack** button serves it.
+3. **Thu ~06:22 CT:** agent host builds the full pack (`build_pack.py --audience ar-wip`) and uploads `AR_WIP_Pack_<date>.xlsx` to the `wip-packs` bucket → **Download Thursday pack** button serves it (timer staggered off the 06:00/:15 pg_cron pile-up — PEC-415).
 4. **Fri meeting:** work the board at `/accounting/friday-wip`; every date/note saves live to `wip_ar_master`.
 5. **Any time:** **Email via Maya** sends the summary + 7-day pack link from `ob-accounting@agentmail.proexteriorsus.net` to `FRIDAY_WIP_RECIPIENTS` — internal addresses only, enforced by `outbound-guard.ts`; humans forward externally.
 
