@@ -114,7 +114,7 @@ export const SYSTEMD_JOBS: SystemdSpec[] = [
   { key: "systemd.openbrain-maya-qa", unit: "openbrain-maya-qa.service", label: "Maya nightly QA", purpose: "Wide site walk + chaos forensic pass of the live site", cadenceS: 86_400, scheduleLabel: "04:30 CT daily" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
   { key: "systemd.openbrain-site-sweep", unit: "openbrain-site-sweep.service", label: "Site quality sweep", purpose: "Static + live + DB money-truth checks (PEC-218)", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/92" },
-  { key: "systemd.openbrain-wip-pack-thursday", unit: "openbrain-wip-pack-thursday.service", label: "AR/WIP pack build", purpose: "refresh_wip_ar_master + Excel pack → wip-packs bucket", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/85" },
+  { key: "systemd.openbrain-wip-pack-thursday", unit: "openbrain-wip-pack-thursday.service", label: "AR/WIP pack build", purpose: "refresh_wip_ar_master + Excel pack → wip-packs bucket", cadenceS: 86_400, scheduleLabel: "06:22 CT daily", docs: "docs/85" },
 ];
 
 export const MONITORED_ROUTES: MonitoredRouteSpec[] = [

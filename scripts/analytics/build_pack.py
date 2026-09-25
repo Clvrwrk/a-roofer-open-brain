@@ -32,6 +32,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -136,25 +137,93 @@ def sb_headers(key: str) -> Dict[str, str]:
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Accept": "application/json",
-        "Prefer": "count=exact",
     }
+
+
+# PostgREST reads use Range pagination only; count=exact runs a separate COUNT
+# that often hits the authenticator 8s statement_timeout during pg_cron matview
+# refresh (PEC-415).
+SB_GET_MAX_ATTEMPTS = 5
+SB_GET_BACKOFF_S = (2.0, 4.0, 8.0, 16.0)
+
+
+def _postgrest_error_transient(http_code: int, body: str) -> bool:
+    if http_code in (408, 425, 429, 500, 502, 503, 504):
+        return True
+    lowered = body.lower()
+    if "statement timeout" in lowered or "57014" in body:
+        return True
+    if "canceling statement" in lowered:
+        return True
+    return False
+
+
+def sb_get_page(
+    base: str,
+    key: str,
+    table: str,
+    select: str,
+    *,
+    range_start: int,
+    range_end: int,
+) -> List[Dict[str, Any]]:
+    params = {"select": select}
+    qs = urllib.parse.urlencode(params, safe="(),.*:")
+    url = f"{base.rstrip('/')}/rest/v1/{table}?{qs}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            **sb_headers(key),
+            "Range": f"{range_start}-{range_end}",
+            "Range-Unit": "items",
+        },
+    )
+    last_err: Optional[BaseException] = None
+    for attempt in range(SB_GET_MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                chunk = json.loads(resp.read().decode())
+            if not isinstance(chunk, list):
+                raise SystemExit(f"Unexpected {table} response (not a list)")
+            return chunk
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            last_err = exc
+            if attempt + 1 >= SB_GET_MAX_ATTEMPTS or not _postgrest_error_transient(exc.code, body):
+                raise SystemExit(
+                    f"PostgREST {table} HTTP {exc.code} (range {range_start}-{range_end}): {body[:500]}"
+                ) from exc
+            wait = SB_GET_BACKOFF_S[min(attempt, len(SB_GET_BACKOFF_S) - 1)]
+            print(
+                f"  warn: {table} HTTP {exc.code}, retry {attempt + 2}/{SB_GET_MAX_ATTEMPTS} in {wait:.0f}s…",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+        except (TimeoutError, urllib.error.URLError) as exc:
+            last_err = exc
+            if attempt + 1 >= SB_GET_MAX_ATTEMPTS:
+                raise SystemExit(f"PostgREST {table} network error: {exc}") from exc
+            wait = SB_GET_BACKOFF_S[min(attempt, len(SB_GET_BACKOFF_S) - 1)]
+            print(
+                f"  warn: {table} network error, retry {attempt + 2}/{SB_GET_MAX_ATTEMPTS} in {wait:.0f}s…",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    raise SystemExit(f"PostgREST {table} failed after retries: {last_err}")
 
 
 def sb_get_all(base: str, key: str, table: str, select: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     start = 0
     while True:
-        params = {"select": select}
-        qs = urllib.parse.urlencode(params, safe="(),.*:")
-        url = f"{base.rstrip('/')}/rest/v1/{table}?{qs}"
-        req = urllib.request.Request(
-            url,
-            headers={**sb_headers(key), "Range": f"{start}-{start + PAGE - 1}", "Range-Unit": "items"},
+        chunk = sb_get_page(
+            base,
+            key,
+            table,
+            select,
+            range_start=start,
+            range_end=start + PAGE - 1,
         )
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            chunk = json.loads(resp.read().decode())
-        if not isinstance(chunk, list):
-            raise SystemExit(f"Unexpected {table}")
         rows.extend(chunk)
         if len(chunk) < PAGE:
             break

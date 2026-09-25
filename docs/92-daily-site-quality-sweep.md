@@ -85,7 +85,7 @@ Verified 2026-08-19 by reading each unit's `ExecStart`:
 | `openbrain-maya-gate` | `maya-gate.sh` | every 15 min |
 | `openbrain-jt-sentinel` | `jt-sync-sentinel.sh` | 10:00 America/Los_Angeles |
 | `openbrain-qbo-thursday-sync` | `qbo-thursday-sync.sh` | Thu 20:00 America/Chicago |
-| `openbrain-wip-pack-thursday` | `wip-pack-thursday.sh` | 06:00 America/Chicago |
+| `openbrain-wip-pack-thursday` | `wip-pack-thursday.sh` | 06:22 America/Chicago (PEC-415 — stagger off matview cron) |
 | **`openbrain-site-sweep`** | **`site-quality-sweep.mjs`** | **06:00 America/Chicago (new)** |
 
 `alex-no-price-triage.mjs` is **already covered** — it is invoked from
