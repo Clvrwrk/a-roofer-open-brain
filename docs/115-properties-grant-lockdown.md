@@ -114,3 +114,5 @@ Four views are owned by `postgres`, with no `security_invoker`, and carried `ano
 `v_commercial_prospect` and `v_owner_portfolio` (301/302) are already service-role-only.
 
 Inventory entry added to [docs/111](111-crm-pwa-companion-repo.md) (CRM changes to surfaces we own).
+
+**Next in the series:** the pre-existing materialised views in `public` (invoice audit, pricing, overhead, order match) lost their anon/authenticated grants in migration 311. See [docs/117](117-matviews-service-role-only.md). A matview has no RLS.
