@@ -1,6 +1,6 @@
 # 115 — `public.properties`: anon and authenticated lose every table privilege
 
-**Date:** 2026-09-29 · **Migrations:** [`303-properties-revoke-anon-authenticated.sql`](../schemas/cleverwork-roofer/303-properties-revoke-anon-authenticated.sql) (ledger `20260929122615 303_properties_revoke_anon_authenticated`) + [`304`](../schemas/cleverwork-roofer/304-property-views-service-role-only.sql) for the owner-rights views (§5) · **Status:** applied to prod `rnhmvcpsvtqjlffpsayu`; **CRM team confirmation pending** (docs/110 §3 — shared object, joint review)
+**Date:** 2026-09-29 · **Migrations:** [`303-properties-revoke-anon-authenticated.sql`](../schemas/cleverwork-roofer/303-properties-revoke-anon-authenticated.sql) (ledger `20260929122615 303_properties_revoke_anon_authenticated`) + [`304`](../schemas/cleverwork-roofer/304-property-views-service-role-only.sql) and [`309`](../schemas/cleverwork-roofer/309-tracked-property-dependent-views-service-role-only.sql) for the owner-rights views (§5, §5a) · **Status:** applied to prod `rnhmvcpsvtqjlffpsayu`; **CRM team confirmation pending** (docs/110 §3 — shared object, joint review)
 
 ```mermaid
 flowchart LR
@@ -79,18 +79,38 @@ Four views are owned by `postgres`, with no `security_invoker`, and carried `ano
 
 **Rollback:** `GRANT ALL ON public.<view> TO anon, authenticated;` per view. This restores the exact prior ACL.
 
-### 5a. Still open — the dependent views re-expose the same data
+### 5a. The dependent views — closed by migration 309
 
-304 narrows the leak but does not close it. The views built on `vw_tracked_property` are themselves owner-rights views that `anon` and `authenticated` still hold SELECT on (`has_table_privilege`, 2026-09-29, after 304). The first three were read as `anon` and returned rows inside the 8 s budget:
+**Migration:** [`309-tracked-property-dependent-views-service-role-only.sql`](../schemas/cleverwork-roofer/309-tracked-property-dependent-views-service-role-only.sql) (ledger `20260929160408 309_tracked_property_dependent_views_service_role_only`) · **Status:** applied to prod 2026-09-29. It is numbered 309 because PR #18 (property spine) holds files 305–308.
 
-| View | Built on | anon SELECT |
-|---|---|---|
-| `vw_zip_impact_coverage` | `vw_tracked_property` | yes, returns rows |
-| `vw_hail_heatzone_coverage` | `vw_tracked_property`, `vw_zip_impact_coverage` | yes, returns rows; **read by the CC** (`live-work.ts`, service role) |
-| `vw_call_list` | `vw_tracked_property`, `vw_zip_impact_coverage` | yes, returns rows |
-| `vw_call_priority` | `vw_call_list` | yes (privilege; not row-tested) |
-| `vw_property_enhancement_request` | `vw_zip_impact_coverage` | yes (privilege; not row-tested) |
+304 narrowed the leak but did not close it. Five views sit on `vw_tracked_property`. All are owned by `postgres` with no `security_invoker`, and each carried `anon`/`authenticated` `arwdDxtm`, so they still served its data to the publishable key after 304. A recursive `pg_depend` walk finds nothing further built on them.
 
-Follow-up: a 305 of the same shape once these views' readers are checked. The CC's own reader already goes through the service role, so on the CC side it needs nothing. `v_commercial_prospect` and `v_owner_portfolio` (added by 301/302) are already service-role-only.
+| View | Built on | anon after 304 | After 309 |
+|---|---|---|---|
+| `vw_zip_impact_coverage` | `vw_tracked_property` | returned rows | `401 42501` |
+| `vw_hail_heatzone_coverage` | `vw_tracked_property`, `vw_zip_impact_coverage` | returned rows | `401 42501` |
+| `vw_call_list` | `vw_tracked_property`, `vw_zip_impact_coverage` | returned rows | `401 42501` |
+| `vw_call_priority` | `vw_call_list` | SELECT granted | `401 42501` |
+| `vw_property_enhancement_request` | `vw_zip_impact_coverage` | SELECT granted | `401 42501` |
+
+**Readers (checked before revoking, 2026-09-29):**
+
+| Where | Finding |
+|---|---|
+| Command Center | Only `vw_hail_heatzone_coverage`, in `loadMarketingSurface` (`app/command-center/src/lib/live-work.ts`), using the client from `createServerSupabaseClient` (service role). No other file on any branch names any of the five outside docs and SQL. |
+| CRM | No reader on any branch of `Clvrwrk/CRM_PWA`. |
+| Database | No function body and no `pg_cron` job references them. |
+| PostgREST edge logs, last 24 h | 93 requests, all to `vw_hail_heatzone_coverage`. Every one had apikey role **and** authorization role `service_role`, came from the Hetzner hosts and used `supabase-js` on Node. No `anon` or `authenticated` request. |
+
+**Verification (after apply):**
+- `relacl` on each view = `{postgres=arwdDxtm, service_role=arwdDxtm, ob_readonly=r}`. `anon` and `authenticated` hold none of the seven privileges on any of the five views. `ob_readonly` holds SELECT only.
+- In SQL: `42501` on all 10 role×view pairs. As `service_role`, all five return rows, including the CC's exact query shape on `vw_hail_heatzone_coverage` (50 rows).
+- Live PostgREST, publishable key and legacy anon JWT: `401 {"code":"42501"}` on all five. The control `roof_system_category` still returns `200`.
+
+**Rollback:** `GRANT ALL ON public.<view> TO anon, authenticated;` per view.
+
+**The CC's timeouts — fixed by migration 310.** Most of the CC's `vw_hail_heatzone_coverage` reads were failing before 309 (`HEAD` counts → `500`, some `504`). `loadMarketingSurface` fired three full recomputes at once (3.4 s each, warm), and together they passed PostgREST's 8 s `statement_timeout`. That was a speed problem, not a grant problem. [`310-materialised-hail-heatzone-coverage.sql`](../schemas/cleverwork-roofer/310-materialised-hail-heatzone-coverage.sql) (ledger `20260929173610 310_materialised_hail_heatzone_coverage`) adds `mv_hail_heatzone_coverage`, keyed on `zcta_geoid`. `pg_cron` job `refresh-hail-heatzone-coverage` refreshes it `CONCURRENTLY` at 12, 27, 42 and 57 past the hour (2.3 s). It is service-role and `ob_readonly` only; a matview has no RLS, so granting `anon` would reopen what 309 closed. `live-work.ts` now reads the matview (3–5 ms per read). `sourceTable` stays `vw_hail_heatzone_coverage` because `dashboard_action_log` stores it. The matview matched the view row-for-row at creation (`EXCEPT` both ways = 0).
+
+`v_commercial_prospect` and `v_owner_portfolio` (301/302) are already service-role-only.
 
 Inventory entry added to [docs/111](111-crm-pwa-companion-repo.md) (CRM changes to surfaces we own).
