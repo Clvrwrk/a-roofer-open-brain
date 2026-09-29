@@ -1,6 +1,7 @@
 ---
 import AppShell from "../../layouts/AppShell.astro";
-import { loadPropertyReviewBoard, REASON_LABELS, SCOPE_LABELS, type ReviewScope } from "@lib/property-review";
+import { actorCanAccessDepartment, hasPermission } from "@lib/access-control";
+import { emptyPropertyReviewBoard, loadPropertyReviewBoard, REASON_LABELS, SCOPE_LABELS, type ReviewScope } from "@lib/property-review";
 
 // Property Review (docs/117) — record a person's call on each AccuLynx job the linkers could
 // not tie to a property (docs/116 §4). Work-board shape copied from Friday WIP (the canonical
@@ -8,7 +9,12 @@ import { loadPropertyReviewBoard, REASON_LABELS, SCOPE_LABELS, type ReviewScope 
 // one toast. Decisions write through /api/operations/property-review/decide →
 // record_acculynx_job_property_decision() (migration 312), which also logs to
 // dashboard_action_log. Nothing here changes AccuLynx.
-const board = await loadPropertyReviewBoard();
+// Middleware authenticates pages but does not enforce department access, so check it here:
+// the queue carries job names and addresses (the APIs apply the same rule).
+const actor = Astro.locals.actor;
+const canRead = !!actor && actorCanAccessDepartment(actor, "operations");
+const canDecide = canRead && hasPermission(actor!, "approval.decide");
+const board = canRead ? await loadPropertyReviewBoard() : emptyPropertyReviewBoard("This account does not have access to Operations, so the review queue is not shown.");
 const c = board.counts;
 const needs = c.fix_address + c.confirm_match + c.choose_property;
 const runtimeTone = board.status === "live" ? "ready" : "watch";
@@ -34,7 +40,7 @@ const stateLine = (r: (typeof board.rows)[number]) => {
 ---
 
 <AppShell title="Property Review" eyebrow="Operations" activePage="operations">
-  <section class="pr" id="pr" data-theme="light" data-pref="system">
+  <section class="pr" id="pr" data-theme="light" data-pref="system" data-can-decide={canDecide ? "true" : "false"}>
     <div class="pr-toolbar">
       <h2 class="pr-title">AccuLynx jobs without a property</h2>
       <span class="pr-sub">Link each job to its property, or send it back for a fix</span>
@@ -107,7 +113,7 @@ const stateLine = (r: (typeof board.rows)[number]) => {
                   {r.suggestionScore != null && <span class="pr-flag" title="Street-name similarity, 0–1">{r.suggestionScore.toFixed(2)}</span>}
                 </td>
                 <td class="pr-state" data-state>{stateLine(r)}</td>
-                <td><button type="button" class="pr-btn" data-decide>{r.status === "open" ? "Decide" : "Review"}</button></td>
+                <td><button type="button" class="pr-btn" data-decide>{canDecide ? (r.status === "open" ? "Decide" : "Review") : "View"}</button></td>
               </tr>
             ))}
           </tbody>
@@ -374,6 +380,10 @@ const stateLine = (r: (typeof board.rows)[number]) => {
     const dStatus = document.getElementById("pr-d-status")!;
     const reopenBtn = dialog.querySelector<HTMLButtonElement>('[data-action="reopen"]')!;
     let current: { row: HTMLTableRowElement; data: any } | null = null;
+    // Every async answer is checked against the job it was asked for, so a slow response for
+    // an earlier job can never place its property buttons in a later job's dialog.
+    let searchSeq = 0;
+    const stillCurrent = (jobId: string) => current?.data?.jobId === jobId && dialog.open;
 
     const el = (tag: string, text?: string, cls?: string) => {
       const n = document.createElement(tag);
@@ -397,6 +407,10 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       btn.dataset.action = "link";
       btn.dataset.propertyId = c.propertyId;
       btn.dataset.address = c.address;
+      if (root.dataset.canDecide !== "true") {
+        btn.disabled = true;
+        btn.title = "Your account can view this queue but not record decisions (needs approval rights).";
+      }
       li.append(text, btn);
       return li;
     };
@@ -413,6 +427,7 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       fact("Google standardized", data.geocodedAddress ?? "not located");
       fact("Suggested", data.suggestedAddress ? `${data.suggestedAddress}${data.suggestionScore != null ? ` (similarity ${Number(data.suggestionScore).toFixed(2)})` : ""}` : null);
       fact("Current state", row.querySelector("[data-state]")?.textContent || null);
+      fact("Saved note", data.notes || null);
       corrected.value = data.correctedAddress ?? data.geocodedAddress ?? "";
       note.value = "";
       find.value = "";
@@ -420,16 +435,21 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       dStatus.textContent = "";
       reopenBtn.hidden = row.dataset.status === "open";
       cands.replaceChildren(el("li", "Loading candidates…", "pr-d-help"));
-      dialog.showModal();
+      searchSeq += 1;
+      const canDecide = root.dataset.canDecide === "true";
+      dialog.querySelectorAll<HTMLElement>("[data-section=fix], [data-section=note]").forEach((sec) => { sec.hidden = !canDecide; });
+      if (!dialog.open) dialog.showModal();
+      const askedFor = data.jobId;
       try {
-        const res = await fetch(`/api/operations/property-review/candidates?jobId=${encodeURIComponent(data.jobId)}`, { credentials: "same-origin" });
+        const res = await fetch(`/api/operations/property-review/candidates?jobId=${encodeURIComponent(askedFor)}`, { credentials: "same-origin" });
         const body = await res.json();
+        if (!stillCurrent(askedFor)) return;
         if (!res.ok) throw new Error(body.error_description ?? "Candidates could not be loaded.");
         cands.replaceChildren(...(body.candidates.length
           ? body.candidates.map(candidateItem)
           : [el("li", "No nearby properties. Search below, or send the job back for a fix.", "pr-d-help")]));
       } catch (e) {
-        cands.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
+        if (stillCurrent(askedFor)) cands.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
       }
     };
 
@@ -438,16 +458,19 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       window.clearTimeout(findTimer);
       const q = find.value.trim();
       if (q.length < 3) { found.replaceChildren(); return; }
+      const seq = ++searchSeq;
+      const askedFor = current?.data?.jobId ?? "";
       findTimer = window.setTimeout(async () => {
         try {
           const res = await fetch(`/api/operations/property-review/search?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
           const body = await res.json();
+          if (seq !== searchSeq || !stillCurrent(askedFor)) return;
           if (!res.ok) throw new Error(body.error_description ?? "Search failed.");
           found.replaceChildren(...(body.results.length
             ? body.results.map((r: any) => candidateItem({ ...r, why: "search" }))
             : [el("li", "No property matches that address.", "pr-d-help")]));
         } catch (e) {
-          found.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
+          if (seq === searchSeq && stillCurrent(askedFor)) found.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
         }
       }, 300);
     });

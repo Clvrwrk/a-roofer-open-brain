@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decisionErrorMessage, ilikeTerm, parseDecisionBody, scopeFor } from "./property-review";
+import { decisionErrorMessage, emptyPropertyReviewBoard, ilikeTerm, parseDecisionBody, scopeFor } from "./property-review";
 
 const JOB = "87fa903b-d51b-450e-960d-b1e0c9106ac6";
 const PROP = "8a6b08fc-c705-4fc6-a329-d8bceeae0744";
@@ -60,5 +60,15 @@ describe("ilikeTerm", () => {
   it("escapes wildcards and strips PostgREST list punctuation", () => {
     expect(ilikeTerm("100% Main_St")).toBe("100\\% Main\\_St");
     expect(ilikeTerm("a,b(c)")).toBe("a b c");
+  });
+});
+
+describe("emptyPropertyReviewBoard", () => {
+  it("shows no rows and says why", () => {
+    const b = emptyPropertyReviewBoard("No Operations access.");
+    expect(b.status).toBe("forbidden");
+    expect(b.rows).toEqual([]);
+    expect(Object.values(b.counts).every((n) => n === 0)).toBe(true);
+    expect(b.error).toBe("No Operations access.");
   });
 });

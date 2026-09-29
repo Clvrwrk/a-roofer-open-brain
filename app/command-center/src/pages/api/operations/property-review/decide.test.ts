@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreateServerSupabaseClient = vi.fn();
+const mockCapture = vi.fn();
+vi.mock("@sentry/astro", () => ({ captureException: (...args: unknown[]) => mockCapture(...args) }));
 vi.mock("@lib/supabase.server", () => ({
   createServerSupabaseClient: (...args: unknown[]) => mockCreateServerSupabaseClient(...args),
 }));
@@ -68,6 +70,13 @@ describe("POST /api/operations/property-review/decide", () => {
     const body = await res.json();
     expect(body.error).toBe("not_open");
     expect(body.error_description).toMatch(/already decided/);
+  });
+
+  it("reports a database failure to Sentry and returns 500", async () => {
+    mockCreateServerSupabaseClient.mockReturnValue(makeClient({ error: { message: "statement timeout" } }));
+    const res = await call({ jobId: JOB, decision: "dismiss" });
+    expect(res.status).toBe(500);
+    expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ message: "statement timeout" }), expect.objectContaining({ tags: { route: "property-review.decide" } }));
   });
 
   it("returns 401 with no actor", async () => {

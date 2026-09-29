@@ -40,7 +40,7 @@ export interface PropertyReviewRow {
 export type ReviewScope = "fix_address" | "confirm_match" | "choose_property" | "vendor" | "awaiting_fix" | "decided";
 
 export interface PropertyReviewBoard {
-  status: "live" | "unconfigured" | "error";
+  status: "live" | "unconfigured" | "error" | "forbidden";
   error?: string;
   generatedAt: string;
   rows: PropertyReviewRow[];
@@ -126,9 +126,17 @@ export function toReviewRow(r: any): PropertyReviewRow {
   };
 }
 
+const emptyCounts = (): Record<ReviewScope, number> =>
+  ({ fix_address: 0, confirm_match: 0, choose_property: 0, vendor: 0, awaiting_fix: 0, decided: 0 });
+
+/** The board a viewer without Operations access sees: no rows, one sentence saying why. */
+export function emptyPropertyReviewBoard(message: string): PropertyReviewBoard {
+  return { status: "forbidden", error: message, generatedAt: new Date().toISOString(), rows: [], counts: emptyCounts() };
+}
+
 export async function loadPropertyReviewBoard(): Promise<PropertyReviewBoard> {
   const generatedAt = new Date().toISOString();
-  const counts = { fix_address: 0, confirm_match: 0, choose_property: 0, vendor: 0, awaiting_fix: 0, decided: 0 };
+  const counts = emptyCounts();
   const { client, config } = createServerSupabaseClient();
   if (!client) {
     return { status: "unconfigured", error: `Supabase is not configured (${config.missing.join(", ")}).`, generatedAt, rows: [], counts };
@@ -193,7 +201,7 @@ export function decisionErrorMessage(code: string | null | undefined): string {
     case "resolved_by_automation": return "An automatic link resolved this row, so there is nothing to undo here.";
     case "not_open": return "Someone already decided this row. Reload to see the current state.";
     case "property_not_found": return "That property no longer exists. Pick another one.";
-    case "job_already_linked": return "The job is already linked to a different property. Reload to see it.";
+    case "job_already_linked": return "This job has been linked to a property since the list loaded. Reload to see which one.";
     case "corrected_address_or_note_required": return "Enter the corrected address, or a note saying what is wrong.";
     default: return "The decision was not saved. Try again, and reload if it keeps failing.";
   }

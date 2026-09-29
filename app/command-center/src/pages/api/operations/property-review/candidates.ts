@@ -3,6 +3,7 @@
 // number, and within 150 m of the job's geocoded point (acculynx_job_property_candidates,
 // migration 312). Read-only.
 
+import * as Sentry from "@sentry/astro";
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
@@ -25,7 +26,10 @@ export const GET: APIRoute = async ({ locals, url }) => {
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured", error_description: config.missing.join(", ") }, { status: 503 });
 
   const { data, error } = await client.rpc("acculynx_job_property_candidates", { p_job_id: jobId });
-  if (error) return jsonApiResponse({ error: "read_failed", error_description: "Candidates could not be loaded." }, { status: 500 });
+  if (error) {
+    Sentry.captureException(error, { tags: { route: "property-review.candidates" }, extra: { jobId } });
+    return jsonApiResponse({ error: "read_failed", error_description: "Candidates could not be loaded." }, { status: 500 });
+  }
   return jsonApiResponse({
     candidates: ((data as any[] | null) ?? []).map((c) => ({
       propertyId: c.property_id,

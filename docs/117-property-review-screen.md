@@ -1,6 +1,6 @@
 # 117 — Property Review screen: recording human decisions on the job→property queue
 
-**Date:** 2026-09-29 · **Asked by:** Chris · **Status:** built (migration 312, `/operations/property-review`)
+**Date:** 2026-09-29 · **Asked by:** Chris · **Status:** built (migrations 312 + 314, `/operations/property-review`)
 **Builds on:** [docs/116](116-acculynx-enrichment-round-trip.md) §4 (the review queue)
 
 ```mermaid
@@ -24,9 +24,20 @@ flowchart LR
 
 Nothing on the page writes to AccuLynx (UX-09 non-effect, stated on the page and in the dialog).
 
+**Guards (migration 314, from the PR #22 review).** A job can gain a link while its row is still open (a link run, or the AccuLynx sync bringing a fixed address):
+- **Confirming the property the job is already linked to** leaves that link's method, confidence and trust tier exactly as they were. The row records `linked:confirmed_existing`, so a human confirmation never rewrites an automated link's provenance.
+- **Linking to a different property** is refused (`job_already_linked`).
+- **Dismiss and send-back** are refused for a job that already has a property (`job_already_linked`).
+- **Reopen** only removes a link this screen made. A confirmation of an automated link cannot be reopened from here.
+
+**Access.**
+- **Page:** checks Operations access itself. The middleware authenticates pages but does not enforce department access.
+- **Decisions:** viewers without `approval.decide` see the queue and candidates read-only, with disabled controls that keep their tooltip (CMP-08).
+- **Stale answers:** late candidate and search responses are dropped if the dialog has moved on to another job.
+
 ## Pieces
 
-- **Database (migration 312):** status `awaiting_source_fix`; decision/corrected-address/decided-by columns; `acculynx_jobs.property_link_trust_tier`.
+- **Database (migrations 312, 314):** status `awaiting_source_fix`; decision/corrected-address/decided-by columns; `acculynx_jobs.property_link_trust_tier`.
   - `v_acculynx_job_property_review_queue`: the read model.
   - `acculynx_job_property_candidates(job)`: suggested property, same zip + house number, within 150 m; at most 8.
   - `record_acculynx_job_property_decision(...)`: one transaction for the write and the audit row.

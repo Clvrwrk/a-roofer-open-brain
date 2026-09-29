@@ -2,6 +2,7 @@
 // Find any active property by address when neither the suggestion nor the nearby candidates
 // fit. public.properties is service-role only (docs/115), so this runs server-side. Read-only.
 
+import * as Sentry from "@sentry/astro";
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
@@ -29,7 +30,10 @@ export const GET: APIRoute = async ({ locals, url }) => {
     .ilike("address_full", `%${q}%`)
     .order("address_full")
     .limit(20);
-  if (error) return jsonApiResponse({ error: "read_failed", error_description: "Search failed. Try again." }, { status: 500 });
+  if (error) {
+    Sentry.captureException(error, { tags: { route: "property-review.search" } });
+    return jsonApiResponse({ error: "read_failed", error_description: "Search failed. Try again." }, { status: 500 });
+  }
   return jsonApiResponse({
     results: ((data as any[] | null) ?? []).map((p) => ({
       propertyId: p.id, address: p.address_full, unit: p.unit, propertyType: p.property_type, geoid: p.geoid,

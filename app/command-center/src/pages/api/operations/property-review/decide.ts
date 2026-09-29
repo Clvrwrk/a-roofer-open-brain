@@ -5,6 +5,7 @@
 // (migration 312) so they cannot drift apart. approval.decide keeps service tokens out:
 // these decisions are logged as human, instruction-grade (hard rule 4).
 
+import * as Sentry from "@sentry/astro";
 import type { APIRoute } from "astro";
 import { actorCanAccessDepartment, buildUnauthorizedResponse, hasPermission } from "@lib/access-control";
 import { jsonApiResponse } from "@lib/agent-api";
@@ -36,6 +37,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     p_actor_name: actor.displayName,
   });
   if (error) {
+    Sentry.captureException(error, { tags: { route: "property-review.decide" }, extra: { jobId: d.jobId, decision: d.decision } });
     return jsonApiResponse({ error: "write_failed", error_description: decisionErrorMessage(null) }, { status: 500 });
   }
   const result = (data ?? {}) as { ok?: boolean; error?: string; status?: string };
