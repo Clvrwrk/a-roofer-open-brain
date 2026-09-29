@@ -266,6 +266,12 @@ The file header carries the full reader audit. The ledger copy of 312 carries a 
 - **SQL, `SET LOCAL ROLE`:** `42501` on all 258 anon/authenticated × object pairs. As `service_role`, 118 objects returned (113 with a row; the same 5 empty relations as before), and the 11 views that exceed the anon timeout passed a `LIMIT 0` privilege check.
 - **Live PostgREST:** `401 {"code":"42501"}` on all 129 with the publishable key and with the legacy anon JWT. Anon `POST`, `PATCH` and `DELETE` also return `401 42501`.
 
+### 7a. Live call path and refresh jobs (19:02–19:17 UTC)
+
+- **Command Center, production:** from the Coolify host `178.105.220.14`, authorization role `service_role`, the audit and order views (`v_invoice_audit_line`, `v_invoice_line_audit_current`, `v_order_audit_order`, `v_item_uom_map`, …) returned `200` 84 times after 312. A local dev server running the same `createServerSupabaseClient` code against prod returned `200`/`206` 243 times. The only `401`s in the window are the §7 probes.
+- **One pre-existing slow view:** `v_invoice_audit_invoice` returned `500` twice (8.9 s from production at 19:16:13, during the pricing refresh; 11.5 s from the dev server). That is the 8 s `statement_timeout`, not a privilege error, which fails fast with `401 42501`. The view also returned `500`/`504` to service_role in the 24 h before 312. It is a performance follow-up, not a grant regression.
+- **Refresh jobs (`cron.job_run_details`):** all 23 runs after the apply succeeded. That includes `refresh-office-pricing-matviews` at 19:15 (58 s; its CM sync and reconcile call the invoker-rights `credit_memo_claims_sync` / `credit_memo_reconcile`, which read revoked relations as `postgres`), plus `refresh-order-acculynx-match`, `refresh-hail-heatzone-coverage`, `acculynx-reconcile`, `acculynx-alert-check`, `runtime-heartbeat-pump` and 15 × `service-matview-refresh-requests`.
+
 ## 8. Still open after 312
 
 | Item | Exposure | Next step |
