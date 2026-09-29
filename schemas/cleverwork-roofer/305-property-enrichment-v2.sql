@@ -1,4 +1,6 @@
--- 303 — Property enrichment v2 (docs/115): every list field typed, any-county geoIDs,
+-- Ledger: registered in prod as `303_property_enrichment_v2` (20260929123759); the file was renumbered because open
+-- PRs #16/#17 took 303/304 in the repo first. The ledger name keeps the original number.
+-- 305 — Property enrichment v2 (docs/116): every list field typed, any-county geoIDs,
 -- Collin sub-type refinement, geocode + job-link bookkeeping.
 --
 -- Why: the AccuLynx enrichment round trip (docs/113 §4) came back in the list tool's

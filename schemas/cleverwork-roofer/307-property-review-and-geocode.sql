@@ -1,6 +1,8 @@
--- 305 — AccuLynx job→property review queue + geocode results (docs/115).
+-- Ledger: registered in prod as `305_property_review_and_geocode` (20260929124520); the file was renumbered because open
+-- PRs #16/#17 took 303/304 in the repo first. The ledger name keeps the original number.
+-- 307 — AccuLynx job→property review queue + geocode results (docs/116).
 --
--- After 303/304 linked 5,869 of 7,028 AccuLynx jobs, 1,157 remain. Each needs either a
+-- After 305/306 linked 5,869 of 7,028 AccuLynx jobs, 1,157 remain. Each needs either a
 -- machine path to a property (standardize the address and re-enrich) or a human decision
 -- (the data is bad, or two properties fit). This migration makes that queue durable:
 --

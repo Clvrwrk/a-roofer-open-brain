@@ -1,6 +1,6 @@
-# 115 — AccuLynx enrichment round trip: load, link, geocode, review
+# 116 — AccuLynx enrichment round trip: load, link, geocode, review
 
-**Date:** 2026-09-29 · **Asked by:** Chris · **Status:** LOADED to prod (migrations 303–306, batch `acculynx-enriched-2026-09-29`)
+**Date:** 2026-09-29 · **Asked by:** Chris · **Status:** LOADED to prod (migrations 305–308, batch `acculynx-enriched-2026-09-29`)
 **Builds on:** [docs/113](113-property-spine.md) (property spine) · [docs/114](114-dfw-commercial-property-list.md) (list loader)
 
 ```mermaid
@@ -26,7 +26,7 @@ Sedgwick County rows carry the Kansas parcel number (`214-20-0-43-04-030.00`). I
 
 ## 2. Every field now has a column
 
-The 75 list columns are all typed now. Migration 303 added what docs/114 had left in `raw`:
+The 75 list columns are all typed now. Migration 305 added what docs/114 had left in `raw`:
 
 | Fields | Now in |
 |---|---|
@@ -34,7 +34,7 @@ The 75 list columns are all typed now. Migration 303 added what docs/114 had lef
 | Marketing Lists, Marketing Campaigns, Voicemail Drops, Dialer, Postcards, E-Mails, Skip Traces, Date Added to List, Method of Add | `property_list_import` (typed columns beside `raw`) |
 | Mailing County | `owner.mailing_county` (now filled on update too) |
 
-The residential vocabulary (single-family, townhouse, condominium, duplex/triplex, apartments, mobile home, rural residence, …) now maps into `property_type_from_sources()`. Migration 303 added one type, `multifamily_unspecified`, for "Multi-Family Dwellings (Generic, 2+)", which gives no unit count.
+The residential vocabulary (single-family, townhouse, condominium, duplex/triplex, apartments, mobile home, rural residence, …) now maps into `property_type_from_sources()`. Migration 305 added one type, `multifamily_unspecified`, for "Multi-Family Dwellings (Generic, 2+)", which gives no unit count.
 
 **Next enrichment, start to finish:** `scripts/stage-property-list.py <batch> <file.xlsx>` → `SELECT load_property_list_import('<batch>');` → `SELECT link_acculynx_jobs_to_properties();` → `SELECT link_acculynx_jobs_via_geocode();` → `SELECT refresh_acculynx_job_property_review();`
 

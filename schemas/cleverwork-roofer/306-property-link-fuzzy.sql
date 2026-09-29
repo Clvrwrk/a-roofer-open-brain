@@ -1,4 +1,6 @@
--- 304 — Job→property fuzzy link step + county name "Saint" normalization (docs/115).
+-- Ledger: registered in prod as `304_property_link_fuzzy` (20260929124145); the file was renumbered because open
+-- PRs #16/#17 took 303/304 in the repo first. The ledger name keeps the original number.
+-- 306 — Job→property fuzzy link step + county name "Saint" normalization (docs/116).
 --
 -- Measured 2026-09-29 after loading the AccuLynx enrichment: 1,587 jobs stayed unlinked,
 -- largely because the enrichment vendor standardizes street names ("SCHALIMAR" → "SHALIMAR",

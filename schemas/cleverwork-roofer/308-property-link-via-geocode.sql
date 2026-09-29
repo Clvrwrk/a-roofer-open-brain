@@ -1,4 +1,6 @@
--- 306 — Link AccuLynx jobs to properties through the geocoder's standardized address (docs/115).
+-- Ledger: registered in prod as `306_property_link_via_geocode` (20260929125000); the file was renumbered because open
+-- PRs #16/#17 took 303/304 in the repo first. The ledger name keeps the original number.
+-- 308 — Link AccuLynx jobs to properties through the geocoder's standardized address (docs/116).
 --
 -- Measured 2026-09-29 after geocoding the 1,083 open review jobs that have a street: 202
 -- resolve to exactly one property once Google standardizes the address or pins it. Most are

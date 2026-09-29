@@ -1,4 +1,4 @@
-"""Export the AccuLynx job→property review queue to a workbook (docs/115).
+"""Export the AccuLynx job→property review queue to a workbook (docs/116).
 
 Usage:  python3 scripts/export-property-review.py [--out path.xlsx]
 
@@ -62,7 +62,7 @@ def all_rows(path):
         if len(page) < 1000:
             return out
 
-def county_key(name):  # mirrors public.county_key() (mig 304)
+def county_key(name):  # mirrors public.county_key() (mig 306)
     s = re.sub(r"[^A-Za-z0-9 ]", "", name or "").upper()
     s = re.sub(r"(^|\s)SAINTE?(\s)", r"\1ST\2", s)
     s = re.sub(r"\s+(COUNTY|PARISH|BOROUGH|CENSUS AREA|MUNICIPALITY)$", "", s)

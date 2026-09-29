@@ -1,4 +1,4 @@
-"""Load the Census county FIPS list into public.county_ref (migration 303, docs/115).
+"""Load the Census county FIPS list into public.county_ref (migration 305, docs/116).
 
 Usage:  python3 scripts/load-county-ref.py path/to/national_county2020.txt
 
@@ -35,7 +35,7 @@ def load_env():
     return url, key
 
 def county_key(name):
-    # Mirrors public.county_key() (mig 304): upper, strip punctuation, SAINT->ST, drop the county-equivalent suffix.
+    # Mirrors public.county_key() (mig 306): upper, strip punctuation, SAINT->ST, drop the county-equivalent suffix.
     s = re.sub(r"[^A-Za-z0-9 ]", "", name or "").upper()
     s = re.sub(r"(^|\s)SAINTE?(\s)", r"\1ST\2", s)
     s = re.sub(r"\s+(COUNTY|PARISH|BOROUGH|CENSUS AREA|MUNICIPALITY)$", "", s)

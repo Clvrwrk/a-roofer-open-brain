@@ -4,7 +4,7 @@ Usage:
   python3 scripts/stage-property-list.py <import_batch> <file.xlsx>[=<market>] [<file2.xlsx>[=<market>] ...]
 
 Each row is stored verbatim as `raw` jsonb, keyed (import_batch, source_file, row_number), so
-re-staging the same file is an idempotent upsert. Then load it (docs/114 §6, docs/115):
+re-staging the same file is an idempotent upsert. Then load it (docs/114 §6, docs/116):
   SELECT public.load_property_list_import('<import_batch>');
 
 Reads SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY from env, repo .env, or the main checkout's

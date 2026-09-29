@@ -152,12 +152,12 @@ Every step is additive and idempotent. Take the next free migration numbers at b
 
 1. ✅ **Hub columns + reference tables** — migration 301 (2026-09-29): the new `properties` columns, `property_type_ref` (seeded with §2), `property_identifier`, `owner`, `property_owner`, plus `owner_contact_point`, `property_assessment` and `property_list_import`. The Collin CAD `geoid` index is deliberately **non-unique**: a future tax-year load appends rows with the same geoid, and `(propid, propyear)` is that table's own key. Migration 302 added the list loader and the CRM read views; the first load is docs/114.
 2. **Seed from parcel files.** Create one property per Collin and Sedgwick parcel. Derive type/occupancy per §2, and derive owners from the owner name + mailing address.
-3. ✅ **Resolve the AccuLynx jobs** — built 2026-09-29 (migrations 303, 304, 306; docs/115): 6,073 of 7,028 linked; the rest sit in `acculynx_job_property_review`. Match on address, then on point-in-parcel where parcel geometry exists. Create address-only properties elsewhere and backfill `acculynx_jobs.property_id` with method + confidence. Low-confidence matches go to the review queue.
+3. ✅ **Resolve the AccuLynx jobs** — built 2026-09-29 (migrations 305, 306, 308; docs/116): 6,073 of 7,028 linked; the rest sit in `acculynx_job_property_review`. Match on address, then on point-in-parcel where parcel geometry exists. Create address-only properties elsewhere and backfill `acculynx_jobs.property_id` with method + confidence. Low-confidence matches go to the review queue.
 4. **Money links.** Load `invoice_job_link` from `v_invoice_acculynx_match` / `v_vendor_invoice_acculynx_match`, and `qbo_job_link` from the WIP/AR suffix logic. Backfill `abc_line_items.acculynx_job_id`.
 5. **People.** Build `job_assignment` from `crm_pipeline.primary_salesperson` / `wip_ar_master.salesperson` matched to `acculynx_users` (78 of 81 names match today). Build `property_party` from AccuLynx contacts.
 6. **`property_id` on the market tables**, backfilled via `geoid`.
 7. **Read surfaces.** Build `mv_property_360`, `mv_owner_portfolio` and `v_property_link_gaps`, with a nightly refresh after the syncs. Verify through the live API route (a fix isn't fixed until the live call path proves it).
-8. ✅ **Import the enrichment file** — done 2026-09-29 (docs/115). The vendor's format dropped Ref ID and FIPS, so jobs match back by address and FIPS comes from `county_ref`.
+8. ✅ **Import the enrichment file** — done 2026-09-29 (docs/116). The vendor's format dropped Ref ID and FIPS, so jobs match back by address and FIPS comes from `county_ref`.
 9. **Enforce.** When `v_property_link_gaps` reads near zero, validate the FKs and require `property_id` on new jobs.
 
 ## 6. Baseline measured 2026-09-29 (prod)
