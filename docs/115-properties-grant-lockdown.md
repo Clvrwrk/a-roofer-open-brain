@@ -109,6 +109,8 @@ Four views are owned by `postgres`, with no `security_invoker`, and carried `ano
 
 **Rollback:** `GRANT ALL ON public.<view> TO anon, authenticated;` per view.
 
-**Separate, not a grant problem:** most of the CC's `vw_hail_heatzone_coverage` reads were already failing before 309 (`HEAD` counts → `500`, some `504`). These are the `count: "exact"` heads in `loadMarketingSurface` against a view that runs past the 8 s `statement_timeout`. The playbook fix is to materialise the view (MEMORY playbook 9). `v_commercial_prospect` and `v_owner_portfolio` (301/302) are already service-role-only.
+**The CC's timeouts — fixed by migration 310.** Most of the CC's `vw_hail_heatzone_coverage` reads were failing before 309 (`HEAD` counts → `500`, some `504`). `loadMarketingSurface` fired three full recomputes at once (3.4 s each, warm), and together they passed PostgREST's 8 s `statement_timeout`. That was a speed problem, not a grant problem. [`310-materialised-hail-heatzone-coverage.sql`](../schemas/cleverwork-roofer/310-materialised-hail-heatzone-coverage.sql) (ledger `20260929173610 310_materialised_hail_heatzone_coverage`) adds `mv_hail_heatzone_coverage`, keyed on `zcta_geoid`. `pg_cron` job `refresh-hail-heatzone-coverage` refreshes it `CONCURRENTLY` at 12, 27, 42 and 57 past the hour (2.3 s). It is service-role and `ob_readonly` only; a matview has no RLS, so granting `anon` would reopen what 309 closed. `live-work.ts` now reads the matview (3–5 ms per read). `sourceTable` stays `vw_hail_heatzone_coverage` because `dashboard_action_log` stores it. The matview matched the view row-for-row at creation (`EXCEPT` both ways = 0).
+
+`v_commercial_prospect` and `v_owner_portfolio` (301/302) are already service-role-only.
 
 Inventory entry added to [docs/111](111-crm-pwa-companion-repo.md) (CRM changes to surfaces we own).

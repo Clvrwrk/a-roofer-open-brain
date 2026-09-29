@@ -900,7 +900,7 @@ function buildMarketingItems(heatRows: HeatZoneRow[]) {
       action: "Plan activation",
       approval: "before_external",
       auditTrail: [
-        "Source row is live in vw_hail_heatzone_coverage.",
+        "Source row is from mv_hail_heatzone_coverage (materialised vw_hail_heatzone_coverage, refreshed every 15 minutes).",
         "Campaign activation requires human market approval.",
         "Researcher can enrich external market facts without reading the brain.",
       ],
@@ -930,11 +930,13 @@ function buildMarketingItems(heatRows: HeatZoneRow[]) {
 
 async function loadMarketingSurface(client: SupabaseClient): Promise<LiveDepartmentSurface> {
   const [activateZoneCount, trackedZoneCount, heatRows, actionCount] = await Promise.all([
-    safeCount(client, "vw_hail_heatzone_coverage", (query) => query.neq("action", "MONITOR")),
-    safeCount(client, "vw_hail_heatzone_coverage", (query) => query.eq("is_tracked", true)),
+    // Read the matview, never the view: the view recomputes ~250k regex-normalised
+    // rows per read and exceeds PostgREST's 8s statement_timeout (mig 310).
+    safeCount(client, "mv_hail_heatzone_coverage", (query) => query.neq("action", "MONITOR")),
+    safeCount(client, "mv_hail_heatzone_coverage", (query) => query.eq("is_tracked", true)),
     safeRows<HeatZoneRow>(
       client,
-      "vw_hail_heatzone_coverage",
+      "mv_hail_heatzone_coverage",
       "zcta_geoid,state,priority_tier,action,events_last_12mo,risk_score,tracked_props,last_event_date",
       (query) => query.neq("action", "MONITOR").order("risk_score", { ascending: false, nullsFirst: false }).limit(50),
     ),
