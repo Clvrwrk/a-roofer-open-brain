@@ -1,6 +1,6 @@
 # 115 — `public.properties`: anon and authenticated lose every table privilege
 
-**Date:** 2026-09-29 · **Migration:** [`303-properties-revoke-anon-authenticated.sql`](../schemas/cleverwork-roofer/303-properties-revoke-anon-authenticated.sql) (ledger `20260929122615 303_properties_revoke_anon_authenticated`) · **Status:** applied to prod `rnhmvcpsvtqjlffpsayu`; **CRM team confirmation pending** (docs/110 §3 — shared object, joint review)
+**Date:** 2026-09-29 · **Migrations:** [`303-properties-revoke-anon-authenticated.sql`](../schemas/cleverwork-roofer/303-properties-revoke-anon-authenticated.sql) (ledger `20260929122615 303_properties_revoke_anon_authenticated`) + [`304`](../schemas/cleverwork-roofer/304-property-views-service-role-only.sql) for the owner-rights views (§5) · **Status:** applied to prod `rnhmvcpsvtqjlffpsayu`; **CRM team confirmation pending** (docs/110 §3 — shared object, joint review)
 
 ```mermaid
 flowchart LR
@@ -47,17 +47,50 @@ Measured 2026-09-29: `anon` and `authenticated` held `arwdDxtm` (every table pri
 - Live PostgREST, publishable key **and** legacy anon JWT: GET/POST/DELETE `/rest/v1/properties` → `401 {"code":"42501"}`. Control `roof_system_category` still `200`.
 - `crm.property_card(<real effort>)` called as `authenticated`: raises no permission error on `properties`. It returns `P0002 not_found` both with the post-303 ACL and with the pre-303 ACL temporarily restored inside a rolled-back transaction, so that result predates 303. Most likely cause: `crm.efforts` RLS resolves the actor from WorkOS JWT claims, and a bare SQL session has none. The CRM team should confirm with a real `member` request.
 
-## 5. Open — not fixed here
+## 5. Owner-rights views over `properties` — closed by migration 304
 
-**Owner-rights views over `properties` are still anon-readable.** Four views run as `postgres` (no `security_invoker`) and still carry `anon`/`authenticated` `arwdDxtm`, so they bypass both RLS and this migration. Measured as `anon` the same day:
+**Migration:** [`304-property-views-service-role-only.sql`](../schemas/cleverwork-roofer/304-property-views-service-role-only.sql) (ledger `20260929124034 304_property_views_service_role_only`) · **Status:** applied to prod 2026-09-29.
 
-| View | Rows anon can read |
+Four views are owned by `postgres`, with no `security_invoker`, and carried `anon`/`authenticated` `arwdDxtm`. A view runs as its owner, so they bypassed both RLS and 303. Measured as `anon` before 304:
+
+| View | Rows anon could read | After 304 |
+|---|---|---|
+| `vw_tracked_property` | 155,242 | `401 42501` |
+| `replacement_quote_ready` | 6,862 (property addresses, confirmed over live PostgREST with the publishable key) | `401 42501` |
+| `warranty_claim_ready` | 8 | `401 42501` |
+| `job_property_client_summary` | 3 | `401 42501` |
+
+**Readers (checked before revoking, 2026-09-29):**
+
+| Where | Finding |
 |---|---|
-| `vw_tracked_property` | 155,242 |
-| `replacement_quote_ready` | 6,862 (property addresses — confirmed over live PostgREST with the publishable key) |
-| `warranty_claim_ready` | 8 |
-| `job_property_client_summary` | 3 |
+| Command Center, `scripts/`, `integrations/`, agents | No reader. None of the four names appears in any file on any branch of this repo. The app's only Supabase client is `createServerSupabaseClient` (`app/command-center/src/lib/supabase.server.ts`, service role). |
+| CRM (docs/110, docs/111) | No reader. None of the four names appears on any branch of `Clvrwrk/CRM_PWA`. CRM staff requests run as `member`, which holds nothing on these views. |
+| Database | No function body names them; no `pg_cron` job touches them. |
+| PostgREST edge logs, last 24 h | One request: the 303 session's own `curl` probe. |
+| Dependent views | `vw_tracked_property` feeds `vw_call_list`, `vw_hail_heatzone_coverage` and `vw_zip_impact_coverage`. All three are owned by `postgres`, and a view checks its underlying relations as its owner, so 304 does not affect them. The CC reads `vw_hail_heatzone_coverage` through the service-role client (`live-work.ts`), and it still returns rows after 304. |
 
-These follow the migration 300 pattern (service-role-only) but are left out of 303 to keep this change to the one table the CRM shares. Follow-up: a separate migration revoking them after checking their readers. `v_commercial_prospect` and `v_owner_portfolio` (added by 301/302) are already service-role-only.
+**Decision:** same shape as migration 300. `REVOKE ALL … FROM anon, authenticated`, explicit `GRANT SELECT` to `service_role`, and `ob_readonly` keeps SELECT.
+
+**Verification (after apply):**
+- `relacl` on each view = `{postgres=arwdDxtm, service_role=arwdDxtm, ob_readonly=r}`. `has_table_privilege` is false for all seven privileges for `anon` and `authenticated` on all four views. `ob_readonly` holds SELECT only.
+- In SQL, `SET ROLE anon` / `authenticated` then `SELECT … LIMIT 1` fails with `42501` on all 8 role×view pairs. As `service_role`, all four views return rows (8 and 3 for the two small ones, unchanged), and so does the dependent `vw_hail_heatzone_coverage`.
+- Live PostgREST, publishable key **and** legacy anon JWT: `GET /rest/v1/<view>?limit=1` → `401 {"code":"42501"}` for all four. The control `roof_system_category` still returns `200`.
+
+**Rollback:** `GRANT ALL ON public.<view> TO anon, authenticated;` per view. This restores the exact prior ACL.
+
+### 5a. Still open — the dependent views re-expose the same data
+
+304 narrows the leak but does not close it. The views built on `vw_tracked_property` are themselves owner-rights views that `anon` and `authenticated` still hold SELECT on (`has_table_privilege`, 2026-09-29, after 304). The first three were read as `anon` and returned rows inside the 8 s budget:
+
+| View | Built on | anon SELECT |
+|---|---|---|
+| `vw_zip_impact_coverage` | `vw_tracked_property` | yes, returns rows |
+| `vw_hail_heatzone_coverage` | `vw_tracked_property`, `vw_zip_impact_coverage` | yes, returns rows; **read by the CC** (`live-work.ts`, service role) |
+| `vw_call_list` | `vw_tracked_property`, `vw_zip_impact_coverage` | yes, returns rows |
+| `vw_call_priority` | `vw_call_list` | yes (privilege; not row-tested) |
+| `vw_property_enhancement_request` | `vw_zip_impact_coverage` | yes (privilege; not row-tested) |
+
+Follow-up: a 305 of the same shape once these views' readers are checked. The CC's own reader already goes through the service role, so on the CC side it needs nothing. `v_commercial_prospect` and `v_owner_portfolio` (added by 301/302) are already service-role-only.
 
 Inventory entry added to [docs/111](111-crm-pwa-companion-repo.md) (CRM changes to surfaces we own).
