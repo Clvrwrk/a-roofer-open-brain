@@ -2,7 +2,8 @@
 # Working Memory
 
 ## ▶ Pick up here
-**9/15 (docs/109 §1b). mig 289** fixed two leaks: Alex triage stamped new invoices No-Price before the office matview knew them (June recycled invoices closed out 9/16, mig 293); reconcile hid pre-8/1 memos naming open requests (7 ABC receipts to review). **LIVE = main.** Lapsed HUMAN: ABC AR import (8/10); Pay-It 57; QB prep 9/22 in `exports/` (SRS 38 incl. July — check QB first) → load, `--stamp`. Open: Atlanta no agreement; Q4 Coolify token; Q5 JT key; Q7 BS-Slack.
+**Property spine live 9/29 (docs/113–116, migs 301–308):** property = one APN/geoid; owners link parcels. 6,073/7,028 AccuLynx jobs linked; review queue `acculynx_job_property_review` (docs/116).
+**Invoices (docs/109 §1b):** mig 289 closed the No-Price + pre-8/1 memo leaks (7 ABC receipts to review). Lapsed HUMAN: ABC AR import (8/10); Pay-It 57; QB prep 9/22 in `exports/` → load, `--stamp`. Open: Atlanta agreement; Q4 Coolify token; Q5 JT key; Q7 BS-Slack.
 **Blocked on Chris:** CPA rulings; PEC-257/258/244/240/242/111/221/214/216.
 
 ## Standing instructions (Chris)
@@ -17,4 +18,4 @@
 1. UOM: compare in pricing UOM `price_per_uom` via `v_item_uom_map` (docs/46). 2. PostgREST truncation: "exactly 1000"=cap→paginate; chunk `.in()`; partition upserts. 3. Structured source before OCR; tie vision output to printed totals server-side. 4. ABC mapping drift → COALESCE from `raw`. 5. Worktree agents: stage ONLY your files. 6. AccuLynx watermark PK `(account_key,resource_type)` (171). 7. Rotating OAuth: persist successor; diagnose via fingerprints, never values. 8. After host rebuilds ALL stored ids go stale — re-verify, never trust. 9. **Never read a per-row-LATERAL view via PostgREST** — the 8s `statement_timeout` is inherited by `service_role`; materialise. 10. **EXPLAIN a matcher predicate before shipping**; counts can be right while the plan is wrong.
 
 ## Environment / Deploy
-GitHub `Clvrwrk/a-roofer-open-brain`; LIVE=`origin/main` (Coolify; verify `/healthz`). Supabase `rnhmvcpsvtqjlffpsayu`, schemas thru **295**. Dev port **4399**. Hetzner AGENT `178.156.203.23` (`~/.ssh/hetzner_office`). Linear PE-CC-DevTeam. **Full service map + Orgo/WorkOS ids: `docs/handoffs/current.md`.**
+GitHub `Clvrwrk/a-roofer-open-brain`; LIVE=`origin/main` (Coolify; verify `/healthz`). Supabase `rnhmvcpsvtqjlffpsayu`, schemas thru **310**. Dev port **4399**. Hetzner AGENT `178.156.203.23` (`~/.ssh/hetzner_office`). Linear PE-CC-DevTeam. **Full service map + Orgo/WorkOS ids: `docs/handoffs/current.md`.**
