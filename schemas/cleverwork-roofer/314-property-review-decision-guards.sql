@@ -8,6 +8,9 @@
 --     (resolution 'linked:confirmed_existing').
 --   * dismiss and source_fix accepted a job that already has a property, leaving a
 --     "not a property" row beside a live link. Now both refuse with job_already_linked.
+--   * reopen of an awaiting_source_fix / dismissed row whose job has since been linked is
+--     refused the same way (CodeRabbit, PR #22). Applied to prod as `314b_property_review_reopen_guard`
+--     (the full function below is the final state of both ledger rows).
 --
 -- CREATE OR REPLACE of one function; same signature, same grants. Additive (hard rule 1).
 
@@ -43,6 +46,10 @@ BEGIN
     ELSIF r.status = 'resolved' AND j.property_id IS NOT NULL THEN
       -- a confirmation of an automated link: reopening would contradict a link we did not make
       RETURN jsonb_build_object('ok', false, 'error', 'resolved_by_automation');
+    ELSIF j.property_id IS NOT NULL THEN
+      -- an awaiting_source_fix or dismissed row whose job has since been linked: an open row
+      -- beside a live link is the inconsistency the other guards exist to prevent
+      RETURN jsonb_build_object('ok', false, 'error', 'job_already_linked', 'property_id', j.property_id);
     END IF;
     UPDATE acculynx_job_property_review SET status = 'open', decision = NULL, corrected_address = NULL,
            resolution = NULL, resolved_property_id = NULL, resolved_by = NULL, resolved_at = NULL,
