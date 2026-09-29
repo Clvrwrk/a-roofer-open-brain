@@ -57,6 +57,8 @@ Every row carries an APN and a county, so every row gets a geoID and none are sk
 | Already on the StormWatch commercial call list | 245 |
 | On the residential `lead_list` | 0 |
 
+**Update 2026-09-29 (docs/115):** 2,573 of the unknown sub-types were refined from Collin improvement class codes, the list is geocoded, and all 11 AccuLynx customers are linked.
+
 **Two follow-ups raise the value of this list:**
 - **Sub-type.** 4,264 properties are "commercial, sub-type unknown". Collin CAD carries `propusecode` and `imprvclasscd`, which can refine them into office, retail, warehouse and so on without a vendor.
 - **Vacant land.** The 629 vacant parcels have no roof. They are held out of the prospect view but kept in the spine (a future building is still that parcel).
