@@ -67,6 +67,7 @@ The display label combines them, e.g. *Residential · Single-family · Renter-oc
 | residential | `residential_other` | Residential, other |
 | commercial | `office` | Office |
 | commercial | `medical_office` | Medical office / clinic |
+| commercial | `commercial_condo` | Commercial condominium unit (added 2026-09-29, docs/114) |
 | commercial | `retail` | Retail, standalone |
 | commercial | `shopping_center` | Shopping / strip center |
 | commercial | `restaurant` | Restaurant |
@@ -75,7 +76,8 @@ The display label combines them, e.g. *Residential · Single-family · Renter-oc
 | commercial | `industrial_manufacturing` | Manufacturing |
 | commercial | `flex` | Flex / light industrial |
 | commercial | `self_storage` | Self-storage |
-| commercial | `auto` | Auto dealership / service |
+| commercial | `auto` | Auto dealership / service / car wash |
+| commercial | `parking` | Parking structure (added 2026-09-29, docs/114) |
 | commercial | `healthcare` | Hospital / healthcare facility |
 | commercial | `senior_living` | Senior / assisted living |
 | commercial | `education` | School / university |
@@ -149,7 +151,7 @@ Parcel data exists today only for Collin County TX (≈441K real-property accoun
 
 Every step is additive and idempotent. Take the next free migration numbers at build time (301+ as of this writing), and ship schema in its own same-day PR.
 
-1. **Hub columns + reference tables.** Add the new `properties` columns, `property_type_ref` (seeded with §2), `property_identifier`, `owner`, `property_owner`, and unique indexes on the CAD `geoid` columns.
+1. ✅ **Hub columns + reference tables** — migration 301 (2026-09-29): the new `properties` columns, `property_type_ref` (seeded with §2), `property_identifier`, `owner`, `property_owner`, plus `owner_contact_point`, `property_assessment` and `property_list_import`. The Collin CAD `geoid` index is deliberately **non-unique**: a future tax-year load appends rows with the same geoid, and `(propid, propyear)` is that table's own key. Migration 302 added the list loader and the CRM read views; the first load is docs/114.
 2. **Seed from parcel files.** Create one property per real-property parcel. That is Collin excluding the L/J/G categories (≈441K) plus Sedgwick (≈236K). Derive type/occupancy per §2, and derive owners from the owner name + mailing address.
 3. **Resolve the AccuLynx jobs.** Match on address, then on point-in-parcel where parcel geometry exists. Create address-only properties elsewhere and backfill `acculynx_jobs.property_id` with method + confidence. Low-confidence matches go to the review queue.
 4. **Money links.** Load `invoice_job_link` from `v_invoice_acculynx_match` / `v_vendor_invoice_acculynx_match`, and `qbo_job_link` from the WIP/AR suffix logic. Backfill `abc_line_items.acculynx_job_id`.
