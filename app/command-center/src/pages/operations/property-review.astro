@@ -1,0 +1,547 @@
+---
+import AppShell from "../../layouts/AppShell.astro";
+import { actorCanAccessDepartment, hasPermission } from "@lib/access-control";
+import { emptyPropertyReviewBoard, loadPropertyReviewBoard, REASON_LABELS, SCOPE_LABELS, type ReviewScope } from "@lib/property-review";
+
+// Property Review (docs/117) — record a person's call on each AccuLynx job the linkers could
+// not tie to a property (docs/116 §4). Work-board shape copied from Friday WIP (the canonical
+// surface): KPI pills are scope filters, one ten-row pane with Show all, per-browser view state,
+// one toast. Decisions write through /api/operations/property-review/decide →
+// record_acculynx_job_property_decision() (migration 312), which also logs to
+// dashboard_action_log. Nothing here changes AccuLynx.
+// Middleware authenticates pages but does not enforce department access, so check it here:
+// the queue carries job names and addresses (the APIs apply the same rule).
+const actor = Astro.locals.actor;
+const canRead = !!actor && actorCanAccessDepartment(actor, "operations");
+const canDecide = canRead && hasPermission(actor!, "approval.decide");
+const board = canRead ? await loadPropertyReviewBoard() : emptyPropertyReviewBoard("This account does not have access to Operations, so the review queue is not shown.");
+const c = board.counts;
+const needs = c.fix_address + c.confirm_match + c.choose_property;
+const runtimeTone = board.status === "live" ? "ready" : "watch";
+const runtimeLabel = board.status === "live" ? "Supabase live" : "Supabase pending";
+const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(board.generatedAt));
+const PILLS: Array<{ scope: "needs" | ReviewScope; label: string; sub: string; count: number; warn?: boolean }> = [
+  { scope: "needs", label: "Needs a decision", sub: "every row a person has to call", count: needs, warn: true },
+  { scope: "fix_address", ...SCOPE_LABELS.fix_address, count: c.fix_address },
+  { scope: "confirm_match", ...SCOPE_LABELS.confirm_match, count: c.confirm_match },
+  { scope: "choose_property", ...SCOPE_LABELS.choose_property, count: c.choose_property },
+  { scope: "awaiting_fix", ...SCOPE_LABELS.awaiting_fix, count: c.awaiting_fix },
+  { scope: "vendor", ...SCOPE_LABELS.vendor, count: c.vendor },
+  { scope: "decided", ...SCOPE_LABELS.decided, count: c.decided },
+];
+const scopeLabel = (s: ReviewScope) => SCOPE_LABELS[s].label;
+const isoDay = (t: string | null) => (t ? t.slice(0, 10) : "");
+const stateLine = (r: (typeof board.rows)[number]) => {
+  if (r.decision === "link") return `Linked to ${r.resolvedAddress ?? "a property"} · set by ${r.decidedByName ?? "—"} · ${isoDay(r.decidedAt)}`;
+  if (r.decision === "dismiss") return `Not a property · set by ${r.decidedByName ?? "—"} · ${isoDay(r.decidedAt)}`;
+  if (r.decision === "source_fix") return `Fix in AccuLynx${r.correctedAddress ? ` → ${r.correctedAddress}` : ""} · set by ${r.decidedByName ?? "—"} · ${isoDay(r.decidedAt)}`;
+  return r.milestone ? `AccuLynx: ${r.milestone}` : "";
+};
+---
+
+<AppShell title="Property Review" eyebrow="Operations" activePage="operations">
+  <section class="pr" id="pr" data-theme="light" data-pref="system" data-can-decide={canDecide ? "true" : "false"}>
+    <div class="pr-toolbar">
+      <h2 class="pr-title">AccuLynx jobs without a property</h2>
+      <span class="pr-sub">Link each job to its property, or send it back for a fix</span>
+      <label class="pr-filter" for="pr-search">Search
+        <input id="pr-search" class="pr-input" type="search" placeholder="Address, job # or name" autocomplete="off" />
+      </label>
+      <span class="pr-spacer"></span>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
+      <span class="pr-count" id="pr-count">{generatedAt}</span>
+      <div class="pr-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    {board.error && <p class="pr-error">{board.error}</p>}
+
+    <div class="pr-kpis" role="group" aria-label="Show rows by what they need">
+      {PILLS.map((p) => (
+        <button type="button" class:list={["pr-kpi", p.warn && "pr-kpi-warn"]} data-scope={p.scope} aria-pressed="false">
+          <span class="pr-kpi-lab">{p.label}</span>
+          <span class="pr-kpi-val" data-count={p.scope}>{p.count}</span>
+          <span class="pr-kpi-sub">{p.sub}</span>
+        </button>
+      ))}
+    </div>
+
+    <div class="pr-group">
+      <div class="pr-group-head">
+        <span class="pr-group-name" id="pr-scope-name">Needs a decision</span>
+        <span class="pr-group-count" id="pr-shown"></span>
+        <span class="pr-group-note">Decisions are recorded in the Command Center only. Nothing on this page changes AccuLynx.</span>
+      </div>
+      <div class="pr-tablewrap">
+        <table class="pr-table">
+          <thead>
+            <tr>
+              <th>Needs</th><th>Job</th><th>AccuLynx address</th><th>Google standardized</th>
+              <th>Suggested property</th><th>State</th><th><span class="pr-sr">Decide</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {board.rows.map((r) => (
+              <tr
+                data-job={r.jobId}
+                data-scope={r.scope}
+                data-status={r.status}
+                data-search={[r.submittedAddress, r.geocodedAddress, r.jobNumber, r.jobName, r.suggestedAddress].filter(Boolean).join(" ").toLowerCase()}
+                data-row={JSON.stringify({
+                  jobId: r.jobId, jobNumber: r.jobNumber, jobName: r.jobName, status: r.status, scope: r.scope,
+                  reason: REASON_LABELS[r.reason] ?? r.reason, submittedAddress: r.submittedAddress,
+                  geocodedAddress: r.geocodedAddress, geocodeStatus: r.geocodeStatus,
+                  suggestedAddress: r.suggestedAddress, suggestionScore: r.suggestionScore, notes: r.notes,
+                  correctedAddress: r.correctedAddress,
+                })}
+              >
+                <td><span class="pr-pill" data-tone={r.scope}>{scopeLabel(r.scope)}</span><span class="pr-reason">{REASON_LABELS[r.reason] ?? r.reason}</span></td>
+                <td class="pr-job">
+                  <a href={`https://my.acculynx.com/jobs/${r.jobId}`} target="_blank" rel="noopener noreferrer" title="Open the job in AccuLynx">{r.jobNumber || "No job #"}</a>
+                  <span class="pr-jobname" title={r.jobName ?? ""}>{r.jobName ?? ""}</span>
+                </td>
+                <td class="pr-addr" title={r.submittedAddress ?? ""}>{r.submittedAddress ?? <em class="pr-muted">none</em>}</td>
+                <td class="pr-addr" title={r.geocodedAddress ?? ""}>
+                  {r.geocodedAddress ?? <em class="pr-muted">not located</em>}
+                  {r.geocodeStatus === "low_precision" && <span class="pr-flag" title="Google could only place this approximately">approx.</span>}
+                </td>
+                <td class="pr-addr" title={r.suggestedAddress ?? ""}>
+                  {r.suggestedAddress ?? <span class="pr-muted">—</span>}
+                  {r.suggestionScore != null && <span class="pr-flag" title="Street-name similarity, 0–1">{r.suggestionScore.toFixed(2)}</span>}
+                </td>
+                <td class="pr-state" data-state>{stateLine(r)}</td>
+                <td><button type="button" class="pr-btn" data-decide>{canDecide ? (r.status === "open" ? "Decide" : "Review") : "View"}</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="pr-empty" id="pr-empty" hidden>No rows match. Clear the search or pick another pill.</p>
+      <button type="button" class="pr-showmore" id="pr-showmore" hidden></button>
+    </div>
+
+    <div class="pr-toast" id="pr-toast" role="status" aria-live="polite"></div>
+
+    <dialog class="pr-dialog" id="pr-dialog" aria-labelledby="pr-d-title">
+      <form method="dialog" class="pr-d-head">
+        <div>
+          <h3 id="pr-d-title"></h3>
+          <p class="pr-d-sub" id="pr-d-sub"></p>
+        </div>
+        <button type="submit" class="pr-d-close" aria-label="Close">✕</button>
+      </form>
+
+      <dl class="pr-d-facts" id="pr-d-facts"></dl>
+
+      <section class="pr-d-section" data-section="link">
+        <h4>Link to a property</h4>
+        <p class="pr-d-help">The suggested property, anything at the same zip and house number, and properties within 150 m of where Google places the job.</p>
+        <ul class="pr-cands" id="pr-cands" aria-live="polite"></ul>
+        <label class="pr-d-label" for="pr-find">Not there? Find a property by address</label>
+        <input id="pr-find" class="pr-input pr-input-wide" type="search" placeholder="e.g. 1234 Main St, Wichita" autocomplete="off" />
+        <ul class="pr-cands" id="pr-found" aria-live="polite"></ul>
+      </section>
+
+      <section class="pr-d-section" data-section="fix">
+        <h4>Send back for an AccuLynx fix</h4>
+        <p class="pr-d-help">Use this when the address on the job is wrong or missing. Correct it in AccuLynx too — the next sync links the job automatically and closes this row.</p>
+        <label class="pr-d-label" for="pr-corrected">Corrected address</label>
+        <input id="pr-corrected" class="pr-input pr-input-wide" type="text" placeholder="Street, city, state zip" autocomplete="off" />
+        <button type="button" class="pr-btn" data-action="source_fix">Send back for an AccuLynx fix</button>
+      </section>
+
+      <section class="pr-d-section" data-section="note">
+        <label class="pr-d-label" for="pr-note">Note (saved with the decision)</label>
+        <textarea id="pr-note" class="pr-input pr-input-wide" rows="2" maxlength="500"></textarea>
+        <div class="pr-d-actions">
+          <button type="button" class="pr-btn pr-btn-danger" data-action="dismiss" title="Marks the job as not a real property. Reopen undoes it.">Not a property — dismiss</button>
+          <button type="button" class="pr-btn" data-action="reopen" hidden title="Puts the row back in the queue and removes a link made here">Reopen</button>
+        </div>
+        <p class="pr-d-status" id="pr-d-status" role="alert"></p>
+      </section>
+    </dialog>
+  </section>
+
+  <style is:global>
+    /* Palette copied from Friday WIP (.fw) under the .pr prefix — design-system recipe step 4. */
+    .pr {
+      --bg: #f4f6f9; --panel: #ffffff; --ink: #1c2733; --muted: #6b7886; --line: #e3e8ef;
+      --zebra: #f0f1f8; --navy: #11133f; --gold: #eaa221;
+      --fill-bg: #fbedd2; --fill-cell: #fffbeb; --warn-bg: #fbedd2;
+      --green: #137a4d; --green-bg: #e3f5ec; --red: #a51f1f; --orange: #a4480d; --purple: #5b46d8;
+      --teal: #0f766e; --teal-dark: #115e59;
+      --saved-bg: #ecfdf3; --saved-line: #12b76a; --failed-bg: #fef3f2; --failed-line: #f04438;
+      display: grid; gap: 14px;
+      background: var(--bg); color: var(--ink);
+      margin: calc(-1 * var(--space-4, 16px)) -28px calc(-1 * var(--space-6, 24px));
+      padding: 18px 28px 30px; min-height: 70vh;
+      font-family: var(--font-sans, Inter, system-ui, sans-serif);
+      overflow-x: clip;
+    }
+    .pr[data-theme="dark"] {
+      --bg: #0f141b; --panel: #161d27; --ink: #e6edf5; --muted: #8b98a8; --line: #27313e;
+      --zebra: #1a2230; --gold: #f2cf6b;
+      --fill-bg: #3a3115; --fill-cell: #2a2410; --warn-bg: #4d3800;
+      --green: #7ee2ad; --green-bg: #123626; --red: #ff8585; --orange: #f3a766; --purple: #8a7bff;
+      --saved-bg: #123626; --saved-line: #12b76a; --failed-bg: #3d1a1a; --failed-line: #f04438;
+    }
+    .pr [hidden] { display: none !important; }
+    .pr .pr-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pr .pr-title { margin: 0; font-size: 18px; color: var(--ink); }
+    .pr .pr-sub { color: var(--muted); font-size: 12.5px; }
+    .pr .pr-spacer { flex: 1; }
+    .pr .pr-count { color: var(--muted); font-size: 12px; }
+    .pr .pr-theme { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+    .pr .pr-theme button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
+    .pr .pr-theme button.is-active { background: var(--navy); color: #fff; }
+    .pr .pr-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+    .pr .pr-input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; background: var(--panel); color: var(--ink); font-family: inherit; }
+    .pr .pr-input:focus-visible, .pr .pr-btn:focus-visible, .pr .pr-kpi:focus-visible, .pr .pr-showmore:focus-visible, .pr a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+    .pr .pr-input-wide { width: 100%; box-sizing: border-box; }
+    .pr .pr-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; min-height: 32px; }
+    .pr .pr-btn:hover { border-color: var(--muted); }
+    .pr .pr-btn[disabled] { opacity: 0.55; cursor: wait; }
+    .pr .pr-btn-danger { color: var(--red); border-color: var(--failed-line); }
+    .pr .pr-error { color: var(--red); font-size: 13px; margin: 0; }
+    .pr .pr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr)); gap: 7px; }
+    .pr .pr-kpi { border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; display: grid; gap: 1px; background: var(--panel); text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+    .pr .pr-kpi:hover { border-color: var(--gold); }
+    .pr .pr-kpi[aria-pressed="true"] { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); background: var(--fill-cell); }
+    .pr[data-theme="dark"] .pr-kpi[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+    .pr .pr-kpi-warn { background: var(--warn-bg); }
+    .pr .pr-kpi-lab { font-size: 11px; color: var(--muted); }
+    .pr .pr-kpi-val { font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+    .pr .pr-kpi-sub { font-size: 10.5px; color: var(--muted); }
+    .pr .pr-group { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); min-width: 0; }
+    .pr .pr-group-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; row-gap: 6px; padding: 10px 14px; border-left: 3px solid var(--gold); border-radius: 10px 0 0 0; }
+    .pr .pr-group-name { font-weight: 700; }
+    .pr .pr-group-count { color: var(--muted); font-size: 12.5px; }
+    .pr .pr-group-note { margin-left: auto; color: var(--muted); font-size: 12px; }
+    /* One scroll container, exactly PAGE_SIZE rows tall (JS measures it) — CONVENTIONS §11a.
+       Never overflow-x:auto with overflow-y:visible: that computes to an unbounded scroller. */
+    .pr .pr-tablewrap { overflow: auto; }
+    .pr .pr-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
+    .pr .pr-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; z-index: 3; background: var(--panel); }
+    .pr .pr-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; background: var(--panel); }
+    .pr .pr-table tbody tr:nth-child(even) td { background: var(--zebra); }
+    .pr .pr-table tbody tr[data-flash="saved"] td { background: var(--saved-bg); }
+    .pr .pr-job a { font-weight: 700; color: var(--ink); text-decoration: none; white-space: nowrap; }
+    .pr .pr-job a:hover { text-decoration: underline; }
+    .pr .pr-jobname, .pr .pr-reason { display: block; color: var(--muted); font-size: 11.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pr .pr-addr { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pr .pr-state { color: var(--muted); font-size: 11.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pr .pr-muted { color: var(--muted); font-style: normal; }
+    .pr .pr-flag { margin-left: 6px; font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--fill-bg); color: var(--orange); }
+    .pr .pr-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--fill-bg); color: var(--ink); }
+    .pr .pr-pill[data-tone="fix_address"] { background: var(--failed-bg); color: var(--red); }
+    .pr .pr-pill[data-tone="confirm_match"], .pr .pr-pill[data-tone="choose_property"] { background: var(--warn-bg); color: var(--orange); }
+    .pr .pr-pill[data-tone="awaiting_fix"] { background: var(--zebra); color: var(--purple); }
+    .pr .pr-pill[data-tone="vendor"] { background: var(--zebra); color: var(--muted); }
+    .pr .pr-pill[data-tone="decided"] { background: var(--green-bg); color: var(--green); }
+    .pr .pr-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .pr .pr-empty { margin: 0; padding: 14px; color: var(--muted); font-size: 13px; }
+    .pr .pr-showmore { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; padding: 7px 14px; cursor: pointer; text-align: left; }
+    .pr .pr-showmore:hover { color: var(--ink); background: var(--zebra); }
+    .pr .pr-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; padding: 10px 16px; border-radius: 9px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; z-index: 50; }
+    .pr .pr-toast.is-on { opacity: 1; }
+    .pr .pr-toast[data-tone="failed"] { background: var(--red); }
+    /* Decision dialog — one node reused by every row. */
+    .pr .pr-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 12px; padding: 0; background: var(--panel); color: var(--ink); }
+    .pr .pr-dialog::backdrop { background: rgba(17, 19, 63, 0.45); }
+    .pr .pr-d-head { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; border-bottom: 1px solid var(--line); }
+    .pr .pr-d-head h3 { margin: 0; font-size: 16px; }
+    .pr .pr-d-sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+    .pr .pr-d-close { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; }
+    .pr .pr-d-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; padding: 10px 16px; font-size: 12.5px; }
+    .pr .pr-d-facts dt { color: var(--muted); }
+    .pr .pr-d-facts dd { margin: 0; overflow-wrap: anywhere; }
+    .pr .pr-d-section { padding: 10px 16px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+    .pr .pr-d-section h4 { margin: 0; font-size: 13.5px; }
+    .pr .pr-d-help { margin: 0; color: var(--muted); font-size: 12px; }
+    .pr .pr-d-label { font-size: 12px; color: var(--muted); }
+    .pr .pr-cands { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .pr .pr-cand { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+    .pr .pr-cand-text { flex: 1; min-width: 0; font-size: 12.5px; }
+    .pr .pr-cand-text small { display: block; color: var(--muted); font-size: 11px; }
+    .pr .pr-d-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pr .pr-d-status { margin: 0; font-size: 12.5px; color: var(--red); min-height: 1em; }
+    @media (max-width: 720px) {
+      .pr { margin: calc(-1 * var(--space-4, 16px)) -16px calc(-1 * var(--space-6, 24px)); padding: 14px 16px 24px; }
+      .pr .pr-input { font-size: 16px; } /* M-05: no zoom-on-focus */
+      .pr .pr-group-note { margin-left: 0; }
+    }
+  </style>
+
+  <script>
+    import { initThemePref } from "../../scripts/theme-pref";
+
+    const root = document.getElementById("pr")!;
+    initThemePref(root, ".pr-theme button");
+
+    const PAGE_SIZE = 10;
+    const VIEW_KEY = "pr.view.v1";
+    const readView = () => { try { return JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}"); } catch { return {}; } };
+    const writeView = (patch: Record<string, unknown>) => {
+      try { localStorage.setItem(VIEW_KEY, JSON.stringify({ ...readView(), ...patch })); } catch { /* private mode */ }
+    };
+
+    const rows = () => Array.from(document.querySelectorAll<HTMLTableRowElement>("tr[data-job]"));
+    const pills = Array.from(document.querySelectorAll<HTMLButtonElement>(".pr-kpi"));
+    const search = document.getElementById("pr-search") as HTMLInputElement;
+    const wrap = document.querySelector<HTMLElement>(".pr-tablewrap")!;
+    const more = document.getElementById("pr-showmore") as HTMLButtonElement;
+    const empty = document.getElementById("pr-empty")!;
+    const shownEl = document.getElementById("pr-shown")!;
+    const scopeName = document.getElementById("pr-scope-name")!;
+    const NEEDS = ["fix_address", "confirm_match", "choose_property"];
+
+    const view = readView();
+    let scope: string = typeof view.scope === "string" ? view.scope : "needs";
+    let showAll = view.showAll === true;
+    // Deep link: ?scope=<pill> pre-filters (UX-04).
+    const qsScope = new URLSearchParams(location.search).get("scope");
+    if (qsScope && pills.some((p) => p.dataset.scope === qsScope)) scope = qsScope;
+
+    // Pane is exactly PAGE_SIZE rows tall, measured (two-pass for a horizontal scrollbar).
+    const sizePane = () => {
+      const thead = wrap.querySelector<HTMLElement>("thead");
+      const row = rows().find((r) => !r.hidden);
+      if (!thead || !row) { wrap.style.maxHeight = ""; return; }
+      const base = Math.ceil(thead.getBoundingClientRect().height + (row.getBoundingClientRect().height || 34) * PAGE_SIZE + 2);
+      wrap.style.maxHeight = `${base}px`;
+      const gutter = wrap.offsetHeight - wrap.clientHeight;
+      if (gutter > 0) wrap.style.maxHeight = `${base + gutter}px`;
+    };
+
+    const recount = () => {
+      const counts: Record<string, number> = {};
+      rows().forEach((r) => { const s = r.dataset.scope ?? ""; counts[s] = (counts[s] ?? 0) + 1; });
+      counts.needs = NEEDS.reduce((n, s) => n + (counts[s] ?? 0), 0);
+      document.querySelectorAll<HTMLElement>("[data-count]").forEach((el) => { el.textContent = String(counts[el.dataset.count ?? ""] ?? 0); });
+    };
+
+    const applyFilters = () => {
+      const q = search.value.trim().toLowerCase();
+      const matched = rows().filter((r) => {
+        const s = r.dataset.scope ?? "";
+        const inScope = scope === "needs" ? NEEDS.includes(s) : s === scope;
+        const ok = inScope && (!q || (r.dataset.search ?? "").includes(q));
+        r.hidden = !ok;
+        return ok;
+      });
+      matched.forEach((r, i) => { if (!showAll && i >= PAGE_SIZE) r.hidden = true; });
+      const hiddenCount = Math.max(0, matched.length - PAGE_SIZE);
+      if (hiddenCount === 0 && !showAll) more.hidden = true;
+      else {
+        more.hidden = false;
+        more.textContent = showAll ? `Show first ${PAGE_SIZE} only  ▴` : `Show all ${matched.length} jobs  ▾  (${hiddenCount} more)`;
+      }
+      empty.hidden = matched.length > 0;
+      shownEl.textContent = `${matched.length} job${matched.length === 1 ? "" : "s"}`;
+      const pill = pills.find((p) => p.dataset.scope === scope);
+      scopeName.textContent = pill?.querySelector(".pr-kpi-lab")?.textContent ?? "";
+      pills.forEach((p) => p.setAttribute("aria-pressed", String(p.dataset.scope === scope)));
+      sizePane();
+    };
+
+    pills.forEach((p) => p.addEventListener("click", () => {
+      scope = p.dataset.scope ?? "needs";
+      writeView({ scope });
+      applyFilters();
+    }));
+    search.addEventListener("input", applyFilters);
+    more.addEventListener("click", () => { showAll = !showAll; writeView({ showAll }); applyFilters(); });
+    window.addEventListener("resize", sizePane);
+
+    // ── Toast (CMP-09): one node, 2.2 s, says whether it persisted ──────────
+    const toastEl = document.getElementById("pr-toast")!;
+    let toastTimer: number | undefined;
+    const toast = (msg: string, tone: "saved" | "failed" = "saved") => {
+      toastEl.textContent = msg;
+      toastEl.dataset.tone = tone;
+      toastEl.classList.add("is-on");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toastEl.classList.remove("is-on"), 2200);
+    };
+
+    // ── Decision dialog ─────────────────────────────────────────────────────
+    const dialog = document.getElementById("pr-dialog") as HTMLDialogElement;
+    const dTitle = document.getElementById("pr-d-title")!;
+    const dSub = document.getElementById("pr-d-sub")!;
+    const dFacts = document.getElementById("pr-d-facts")!;
+    const cands = document.getElementById("pr-cands")!;
+    const found = document.getElementById("pr-found")!;
+    const find = document.getElementById("pr-find") as HTMLInputElement;
+    const corrected = document.getElementById("pr-corrected") as HTMLInputElement;
+    const note = document.getElementById("pr-note") as HTMLTextAreaElement;
+    const dStatus = document.getElementById("pr-d-status")!;
+    const reopenBtn = dialog.querySelector<HTMLButtonElement>('[data-action="reopen"]')!;
+    let current: { row: HTMLTableRowElement; data: any } | null = null;
+    // Every async answer is checked against the job it was asked for, so a slow response for
+    // an earlier job can never place its property buttons in a later job's dialog.
+    let searchSeq = 0;
+    const stillCurrent = (jobId: string) => current?.data?.jobId === jobId && dialog.open;
+
+    const el = (tag: string, text?: string, cls?: string) => {
+      const n = document.createElement(tag);
+      if (text != null) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    };
+    const fact = (label: string, value: string | null) => {
+      if (!value) return;
+      dFacts.append(el("dt", label), el("dd", value));
+    };
+
+    const candidateItem = (c: any) => {
+      const li = el("li", undefined, "pr-cand");
+      const text = el("div", undefined, "pr-cand-text");
+      text.append(document.createTextNode(c.address + (c.unit ? ` (unit ${c.unit})` : "")));
+      const bits = [c.why, c.distanceM != null ? `${c.distanceM} m away` : null, c.propertyType?.replace(/_/g, " "), c.geoid].filter(Boolean);
+      text.append(el("small", bits.join(" · ")));
+      const btn = el("button", "Link to this property", "pr-btn") as HTMLButtonElement;
+      btn.type = "button";
+      btn.dataset.action = "link";
+      btn.dataset.propertyId = c.propertyId;
+      btn.dataset.address = c.address;
+      if (root.dataset.canDecide !== "true") {
+        btn.disabled = true;
+        btn.title = "Your account can view this queue but not record decisions (needs approval rights).";
+      }
+      li.append(text, btn);
+      return li;
+    };
+
+    const setBusy = (busy: boolean) => dialog.querySelectorAll<HTMLButtonElement>("button[data-action]").forEach((b) => { b.disabled = busy; });
+
+    const openDialog = async (row: HTMLTableRowElement) => {
+      const data = JSON.parse(row.dataset.row ?? "{}");
+      current = { row, data };
+      dTitle.textContent = `${data.jobNumber || "No job #"} — ${data.jobName || ""}`;
+      dSub.textContent = `${data.reason} · ${row.querySelector(".pr-pill")?.textContent ?? ""}`;
+      dFacts.replaceChildren();
+      fact("AccuLynx address", data.submittedAddress ?? "none");
+      fact("Google standardized", data.geocodedAddress ?? "not located");
+      fact("Suggested", data.suggestedAddress ? `${data.suggestedAddress}${data.suggestionScore != null ? ` (similarity ${Number(data.suggestionScore).toFixed(2)})` : ""}` : null);
+      fact("Current state", row.querySelector("[data-state]")?.textContent || null);
+      fact("Saved note", data.notes || null);
+      corrected.value = data.correctedAddress ?? data.geocodedAddress ?? "";
+      note.value = "";
+      find.value = "";
+      found.replaceChildren();
+      dStatus.textContent = "";
+      reopenBtn.hidden = row.dataset.status === "open";
+      cands.replaceChildren(el("li", "Loading candidates…", "pr-d-help"));
+      searchSeq += 1;
+      const canDecide = root.dataset.canDecide === "true";
+      dialog.querySelectorAll<HTMLElement>("[data-section=fix], [data-section=note]").forEach((sec) => { sec.hidden = !canDecide; });
+      if (!dialog.open) dialog.showModal();
+      const askedFor = data.jobId;
+      try {
+        const res = await fetch(`/api/operations/property-review/candidates?jobId=${encodeURIComponent(askedFor)}`, { credentials: "same-origin" });
+        const body = await res.json();
+        if (!stillCurrent(askedFor)) return;
+        if (!res.ok) throw new Error(body.error_description ?? "Candidates could not be loaded.");
+        cands.replaceChildren(...(body.candidates.length
+          ? body.candidates.map(candidateItem)
+          : [el("li", "No nearby properties. Search below, or send the job back for a fix.", "pr-d-help")]));
+      } catch (e) {
+        if (stillCurrent(askedFor)) cands.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
+      }
+    };
+
+    let findTimer: number | undefined;
+    find.addEventListener("input", () => {
+      window.clearTimeout(findTimer);
+      const q = find.value.trim();
+      if (q.length < 3) { found.replaceChildren(); return; }
+      const seq = ++searchSeq;
+      const askedFor = current?.data?.jobId ?? "";
+      findTimer = window.setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/operations/property-review/search?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
+          const body = await res.json();
+          if (seq !== searchSeq || !stillCurrent(askedFor)) return;
+          if (!res.ok) throw new Error(body.error_description ?? "Search failed.");
+          found.replaceChildren(...(body.results.length
+            ? body.results.map((r: any) => candidateItem({ ...r, why: "search" }))
+            : [el("li", "No property matches that address.", "pr-d-help")]));
+        } catch (e) {
+          if (seq === searchSeq && stillCurrent(askedFor)) found.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
+        }
+      }, 300);
+    });
+
+    const SCOPE_AFTER: Record<string, string> = { resolved: "decided", dismissed: "decided", awaiting_source_fix: "awaiting_fix" };
+
+    const decide = async (action: string, extra: Record<string, unknown> = {}) => {
+      if (!current) return;
+      const { row, data } = current;
+      setBusy(true);
+      dStatus.textContent = "";
+      try {
+        const res = await fetch("/api/operations/property-review/decide", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jobId: data.jobId, decision: action, note: note.value, ...extra }),
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error_description ?? "The decision was not saved.");
+        const day = String(body.decidedAt).slice(0, 10);
+        const stateCell = row.querySelector<HTMLElement>("[data-state]")!;
+        let msg = "";
+        if (action === "link") { stateCell.textContent = `Linked to ${extra.address} · set by ${body.decidedBy} · ${day}`; msg = `Linked ${data.jobNumber || "the job"} to ${extra.address} — saved.`; }
+        else if (action === "source_fix") { stateCell.textContent = `Fix in AccuLynx${extra.correctedAddress ? ` → ${extra.correctedAddress}` : ""} · set by ${body.decidedBy} · ${day}`; msg = `Sent ${data.jobNumber || "the job"} back for an AccuLynx fix — saved.`; }
+        else if (action === "dismiss") { stateCell.textContent = `Not a property · set by ${body.decidedBy} · ${day}`; msg = `Dismissed ${data.jobNumber || "the job"} as not a property — saved.`; }
+        else { stateCell.textContent = "Reopened"; msg = `Reopened ${data.jobNumber || "the job"} — saved.`; }
+        row.dataset.status = body.status;
+        if (body.status === "open") {
+          // Back to the bucket it came from; the server re-derives it on the next load.
+          const pillText = row.querySelector(".pr-pill")?.getAttribute("data-origin");
+          row.dataset.scope = pillText ?? "fix_address";
+        } else {
+          row.querySelector(".pr-pill")?.setAttribute("data-origin", row.querySelector(".pr-pill")?.getAttribute("data-origin") ?? data.scope);
+          row.dataset.scope = SCOPE_AFTER[body.status] ?? "decided";
+        }
+        const pill = row.querySelector<HTMLElement>(".pr-pill")!;
+        pill.dataset.tone = row.dataset.scope ?? "";
+        pill.textContent = pills.find((p) => p.dataset.scope === row.dataset.scope)?.querySelector(".pr-kpi-lab")?.textContent ?? "";
+        row.querySelector<HTMLButtonElement>("[data-decide]")!.textContent = body.status === "open" ? "Decide" : "Review";
+        row.dataset.flash = "saved";
+        window.setTimeout(() => { delete row.dataset.flash; }, 1600);
+        dialog.close();
+        recount();
+        applyFilters();
+        toast(msg);
+      } catch (e) {
+        dStatus.textContent = (e as Error).message;
+        toast("Not saved — see the message in the dialog.", "failed");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    dialog.addEventListener("click", (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+      if (!btn || btn.disabled) return;
+      const action = btn.dataset.action!;
+      if (action === "link") decide("link", { propertyId: btn.dataset.propertyId, address: btn.dataset.address });
+      else if (action === "source_fix") decide("source_fix", { correctedAddress: corrected.value.trim() });
+      else decide(action);
+    });
+
+    document.querySelector("tbody")?.addEventListener("click", (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("[data-decide]");
+      if (btn) openDialog(btn.closest("tr")!);
+    });
+
+    // Remember each row's original bucket so Reopen can put it back.
+    rows().forEach((r) => r.querySelector(".pr-pill")?.setAttribute("data-origin", NEEDS.includes(r.dataset.scope ?? "") || r.dataset.scope === "vendor" ? (r.dataset.scope ?? "") : "fix_address"));
+
+    applyFilters();
+  </script>
+</AppShell>
