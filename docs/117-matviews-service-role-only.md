@@ -1,6 +1,8 @@
 # 117 — Materialised views in `public`: service_role only
 
-**Date:** 2026-09-29 · **Migrations:** [`311-matviews-service-role-only.sql`](../schemas/cleverwork-roofer/311-matviews-service-role-only.sql) (ledger `20260929174626 311_matviews_service_role_only`), [`312-public-owner-rights-views-and-rls-off-tables-service-role-only.sql`](../schemas/cleverwork-roofer/312-public-owner-rights-views-and-rls-off-tables-service-role-only.sql) (ledger `20260929190215 312_public_owner_rights_views_and_rls_off_tables_service_role_only`, §6–§8) · **Status:** both applied to prod `rnhmvcpsvtqjlffpsayu` · **Series:** follows [docs/115](115-properties-grant-lockdown.md) (303, 304, 309, 310)
+**Date:** 2026-09-29 · **Migrations:** [`311-matviews-service-role-only.sql`](../schemas/cleverwork-roofer/311-matviews-service-role-only.sql) (ledger `20260929174626 311_matviews_service_role_only`), [`313-public-owner-rights-views-and-rls-off-tables-service-role-only.sql`](../schemas/cleverwork-roofer/313-public-owner-rights-views-and-rls-off-tables-service-role-only.sql) (ledger `20260929190215 312_public_owner_rights_views_and_rls_off_tables_service_role_only`, §6–§8) · **Status:** both applied to prod `rnhmvcpsvtqjlffpsayu` · **Series:** follows [docs/115](115-properties-grant-lockdown.md) (303, 304, 309, 310)
+
+> Two docs share the number 117: this one (grant lockdown, PR #20 and #23) and [117-property-review-screen.md](117-property-review-screen.md) (PR #22). Both claimed it on 2026-09-29. Cite this one by its full filename.
 
 ```mermaid
 flowchart LR
@@ -68,7 +70,7 @@ Migration 288's explicit anon grant stays in the file (it is history in the ledg
 
 ## 5. Not closed by 311: owner-rights views over these matviews
 
-> **Closed by 312 (2026-09-29, §6).** The text below is the state after 311 and is kept as the record.
+> **Closed by 313 (2026-09-29, §6).** The text below is the state after 311 and is kept as the record.
 
 311 closes direct matview access. It does **not** close the data. Eleven `postgres`-owned views without `security_invoker` read these matviews and still carry the default anon/authenticated grants. A view checks the relations it reads as its owner, so they still serve the same rows to the publishable key:
 
@@ -78,19 +80,19 @@ These views belong to a wider class. On 2026-09-29, `public` has **90** `postgre
 
 **Rollback (311):** the `GRANT ALL … TO anon, authenticated` lines in the 311 header, one per matview.
 
-## 6. Migration 312: owner-rights views and RLS-off tables in `public`
+## 6. Migration 313: owner-rights views and RLS-off tables in `public`
 
 ```mermaid
 flowchart LR
-  PK["publishable key / anon JWT<br/>(anon, authenticated)"] -. "401 42501 after 312" .-> O[("129 objects<br/>90 owner-rights views<br/>39 RLS-off tables")]
+  PK["publishable key / anon JWT<br/>(anon, authenticated)"] -. "401 42501 after 313" .-> O[("129 objects<br/>90 owner-rights views<br/>39 RLS-off tables")]
   CC["CC server client, scripts,<br/>bridges, edge fn (service_role)"] -- "SELECT + existing writes" --> O
   CRON["15 pg_cron jobs<br/>(postgres)"] --> O
   OB[ob_readonly] -- SELECT --> O
-  NEW["new postgres table/view<br/>in public"] -- "default ACL (312)" --> DA["service_role + ob_readonly only;<br/>client grants are explicit"]
+  NEW["new postgres table/view<br/>in public"] -- "default ACL (313)" --> DA["service_role + ob_readonly only;<br/>client grants are explicit"]
   CRM["CRM (member)"] -. "no USAGE on public" .-> O
 ```
 
-### 6.1 Scope and exposure (measured 2026-09-29, before 312)
+### 6.1 Scope and exposure (measured 2026-09-29, before 313)
 
 Enumerated live from `pg_class.relacl` and `has_table_privilege('anon', oid, 'SELECT')` in schema `public`:
 
@@ -113,9 +115,9 @@ Every one of the 129 objects had the same ACL, so the rollback is exact. `GET /r
 | PostgREST edge logs, last 24 h (`query_logs`, `source='edge_logs'`, grouped by `request.sb.jwt.authorization.payload.role`) | **2,324** requests to the 129, all `service_role`, from the Coolify host (`178.105.220.14`) and PE-US-AGENTS (`178.156.203.23`). The only anon or publishable-key requests came from this workstation (`50.20.123.69`): the verification probes of 115/117. The other non-JWT traffic is `sb_secret_*` (the `acculynx-sync` edge function, service level) and CRM RPCs (`rpc/get_session`, `rpc/list_efforts`, …) from the Coolify host with the publishable key. No `authenticated` or `member` request touched the 129. |
 
 <details>
-<summary>Per-object table (129 rows): anon exposure before 312, code readers, invoker-rights DB readers</summary>
+<summary>Per-object table (129 rows): anon exposure before 313, code readers, invoker-rights DB readers</summary>
 
-| Object | Kind | Anon GET before 312 | Code readers (all service role) | Invoker-rights DB readers (postgres / service_role callers) |
+| Object | Kind | Anon GET before 313 | Code readers (all service role) | Invoker-rights DB readers (postgres / service_role callers) |
 |---|---|---|---|---|
 | `_backup_abc_regions_20260605` | table | `200`, row | — | — |
 | `_backup_abc_vendor_branches_20260605` | table | `200`, row | — | — |
@@ -255,11 +257,13 @@ Every one of the 129 objects had the same ACL, so the rollback is exact. `GET /r
 2. **Change the default.** `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated`. A new table, view or matview created by `postgres` in `public` now starts as `{postgres, service_role}=arwdDxtm, ob_readonly=r`, and exposing it to a client role is an explicit grant in its migration. Checked first that nothing depends on the old default: no anon or authenticated request reached any `public` relation in 24 h except our probes; `member` cannot use schema `public`; the CRM's one `public` dependency (`properties`) uses an explicit column grant to `crm_property_reader`; Supabase-managed schemas (`auth`, `storage`, `realtime`) have their own owners and defaults. The `supabase_admin` defaults in `public` (used when an extension creates objects) are Supabase-managed and unchanged.
 3. **Tables only.** The `postgres` defaults for `SEQUENCES` (`anon=rwU`) and `FUNCTIONS` (`anon=X`) are unchanged. They are separate decisions (§8).
 
-The file header carries the full reader audit. The ledger copy of 312 carries a shortened header that points here; the statements are identical.
+The file header carries the full reader audit. The ledger copy carries a shortened header that points here; the statements are identical.
+
+**Numbering.** This migration went to prod as `312` (ledger `20260929190215 312_public_owner_rights_views_and_rls_off_tables_service_role_only`). PR #22 had applied its own `312_property_review_decisions` ten minutes earlier without pushing it, so neither ledger check could see the other. PR #22 left `313` free, and the file is `313-…sql`. The ledger name is history and stays as applied.
 
 **Rule going forward:** a migration that creates a table or view in `public` states its client-role grants explicitly. The default no longer grants `anon`/`authenticated`. A view that must serve a client role is created `WITH (security_invoker = true)` over RLS-protected tables, never as an owner-rights view.
 
-## 7. Verification of 312 (2026-09-29, after apply)
+## 7. Verification of 313 (2026-09-29, after apply)
 
 - **Catalog:** all 129 objects have `relacl = {postgres=arwdDxtm, service_role=arwdDxtm, ob_readonly=r}`. `has_table_privilege` is false for `anon` and `authenticated` on every privilege; `service_role` keeps SELECT and INSERT; `ob_readonly` keeps SELECT. Re-running the §6.1 enumeration returns **0** owner-rights views and **0** RLS-off tables or matviews anon can SELECT in `public`.
 - **Default privileges:** `pg_default_acl` for `postgres` in `public`, object type `r`, is `{postgres=arwdDxtm, service_role=arwdDxtm, ob_readonly=r}`. A throwaway table and view created inside a rolled-back block got exactly that ACL, and `has_table_privilege('anon', …, 'SELECT')` was false.
@@ -268,11 +272,11 @@ The file header carries the full reader audit. The ledger copy of 312 carries a 
 
 ### 7a. Live call path and refresh jobs (19:02–19:17 UTC)
 
-- **Command Center, production:** from the Coolify host `178.105.220.14`, authorization role `service_role`, the audit and order views (`v_invoice_audit_line`, `v_invoice_line_audit_current`, `v_order_audit_order`, `v_item_uom_map`, …) returned `200` 84 times after 312. A local dev server running the same `createServerSupabaseClient` code against prod returned `200`/`206` 243 times. The only `401`s in the window are the §7 probes.
-- **One pre-existing slow view:** `v_invoice_audit_invoice` returned `500` twice (8.9 s from production at 19:16:13, during the pricing refresh; 11.5 s from the dev server). That is the 8 s `statement_timeout`, not a privilege error, which fails fast with `401 42501`. The view also returned `500`/`504` to service_role in the 24 h before 312. It is a performance follow-up, not a grant regression.
+- **Command Center, production:** from the Coolify host `178.105.220.14`, authorization role `service_role`, the audit and order views (`v_invoice_audit_line`, `v_invoice_line_audit_current`, `v_order_audit_order`, `v_item_uom_map`, …) returned `200` 84 times after 313. A local dev server running the same `createServerSupabaseClient` code against prod returned `200`/`206` 243 times. The only `401`s in the window are the §7 probes.
+- **One pre-existing slow view:** `v_invoice_audit_invoice` returned `500` twice (8.9 s from production at 19:16:13, during the pricing refresh; 11.5 s from the dev server). That is the 8 s `statement_timeout`, not a privilege error, which fails fast with `401 42501`. The view also returned `500`/`504` to service_role in the 24 h before 313. It is a performance follow-up, not a grant regression.
 - **Refresh jobs (`cron.job_run_details`):** all 23 runs after the apply succeeded. That includes `refresh-office-pricing-matviews` at 19:15 (58 s; its CM sync and reconcile call the invoker-rights `credit_memo_claims_sync` / `credit_memo_reconcile`, which read revoked relations as `postgres`), plus `refresh-order-acculynx-match`, `refresh-hail-heatzone-coverage`, `acculynx-reconcile`, `acculynx-alert-check`, `runtime-heartbeat-pump` and 15 × `service-matview-refresh-requests`.
 
-## 8. Still open after 312
+## 8. Still open after 313
 
 | Item | Exposure | Next step |
 |---|---|---|
@@ -282,4 +286,4 @@ The file header carries the full reader audit. The ledger copy of 312 carries a 
 | `postgres` defaults for sequences and functions in `public` | New sequences get `anon=rwU`, new functions `anon=X`. The CRM already revokes `EXECUTE … FROM PUBLIC` on SECURITY DEFINER functions ([docs/111](111-crm-pwa-companion-repo.md)). | Separate migration after a function-caller audit (15 invoker-rights functions in §6 are still anon-executable; they now fail on the revoked relations). |
 | Extension objects | `spatial_ref_sys` (PostGIS, owner `supabase_admin`, RLS off), `geography_columns`, `geometry_columns`. | Public reference data owned by the extension; leave. |
 
-**Rollback (312):** `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;` then `GRANT ALL ON TABLE <the 129 objects in the migration> TO anon, authenticated;`. Every object had that exact ACL before 312.
+**Rollback (313):** `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;` then `GRANT ALL ON TABLE <the 129 objects in the migration> TO anon, authenticated;`. Every object had that exact ACL before 313.

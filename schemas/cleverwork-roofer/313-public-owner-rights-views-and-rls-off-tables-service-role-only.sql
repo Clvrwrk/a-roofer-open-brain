@@ -1,4 +1,4 @@
--- 312 — restrict the anon-readable owner-rights views and RLS-off tables in
+-- 313 — restrict the anon-readable owner-rights views and RLS-off tables in
 -- public to service_role, and stop new public tables inheriting anon grants.
 --
 -- The public schema's default privileges for role postgres grant anon and
@@ -62,8 +62,11 @@
 -- GRANT/REVOKE and default ACL only; no data touched. Additive and idempotent
 -- (hard rule 1), safe to re-run.
 --
--- Numbering: 311 is the highest in the prod ledger (20260929174626) and on
--- every origin branch (contrib/cleverwork/matviews-service-role-only).
+-- Numbering: when this was applied (2026-09-29 19:02 UTC) 311 was the highest
+-- on every origin branch, so it went to prod as 312. PR #22 had applied its own
+-- 312 (property_review_decisions, 18:52 UTC) without yet pushing it, and left
+-- 313 free for this file. The file is 313; the ledger row keeps the name it was
+-- applied under: 20260929190215 312_public_owner_rights_views_and_rls_off_tables_service_role_only.
 --
 -- Rollback (restores the exact prior ACLs: each object was
 -- {postgres, anon, authenticated, service_role}=arwdDxtm + ob_readonly=r):
