@@ -184,3 +184,4 @@ Chris: "our invoice audit workflow has been failing since 8/26 — verify no gap
 - 2026-09-16 (later) — 293b draft CM cancelled; app shows "Processed — closed" for closed-out invoices.
 - 2026-09-22 — mig 294: AccuLynx link accepts INS- and falls back to a unique client name (F45).
 - 2026-09-22 (later) — SRS 9/22 ingest (16 docs, 71 PDFs); mig 295/295b weekly export set matches the app (F46).
+- 2026-09-30 — `int.supabase-rest` probe authenticates with `SUPABASE_SERVICE_ROLE_KEY` (was `SUPABASE_ANON_KEY`): mig 313 removed every anon grant on `public` relations, so the anon probe read 401 and showed PostgREST red (docs/117 §7b).

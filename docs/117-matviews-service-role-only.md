@@ -276,6 +276,14 @@ The file header carries the full reader audit. The ledger copy carries a shorten
 - **One pre-existing slow view:** `v_invoice_audit_invoice` returned `500` twice (8.9 s from production at 19:16:13, during the pricing refresh; 11.5 s from the dev server). That is the 8 s `statement_timeout`, not a privilege error, which fails fast with `401 42501`. The view also returned `500`/`504` to service_role in the 24 h before 313. It is a performance follow-up, not a grant regression.
 - **Refresh jobs (`cron.job_run_details`):** all 23 runs after the apply succeeded. That includes `refresh-office-pricing-matviews` at 19:15 (58 s; its CM sync and reconcile call the invoker-rights `credit_memo_claims_sync` / `credit_memo_reconcile`, which read revoked relations as `postgres`), plus `refresh-order-acculynx-match`, `refresh-hail-heatzone-coverage`, `acculynx-reconcile`, `acculynx-alert-check`, `runtime-heartbeat-pump` and 15 × `service-matview-refresh-requests`.
 
+### 7b. A reader the audit missed: the runtime board's Supabase probe (found 2026-09-30)
+
+The runtime board's `int.supabase-rest` integration probe (`app/command-center/src/lib/runtime-registry.ts`, run by `integration-probes.server.ts`, user agent `open-brain-command-center/runtime-board`) pinged `/rest/v1/roof_system_category?select=key&limit=1` with **`SUPABASE_ANON_KEY`** and expected `200`. After 313 it read `401 42501`. The edge logs for 2026-09-30 show 17 such requests from the Coolify host from 12:46 UTC on, one per board view (1-minute probe cache). So `/agents` showed Supabase PostgREST red even though every work surface, which reads as `service_role`, was unaffected.
+
+Why §6.2 missed it: the probe names the table only inside a URL string (`roof_system_category?select=`). The whole-word code search matched the table name, but the reader was classed as "CC app = service role" by client, not by credential. The 24 h log window before 313 contained no board views, so the edge-log check did not surface it either.
+
+**Fix (same PR):** the probe now authenticates with `SUPABASE_SERVICE_ROLE_KEY`, the credential the work surfaces use, so the check measures their real read path. Keyless reachability mode still expects `401`, which is now also the correct anon answer. No grant was reopened. **Lesson for the next pass (§8):** also search for `/rest/v1/<name>` URL strings and for every `SUPABASE_ANON_KEY` / publishable-key consumer, not only for `.from("<name>")` readers.
+
 ## 8. Still open after 313
 
 | Item | Exposure | Next step |
