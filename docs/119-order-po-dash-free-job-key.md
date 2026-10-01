@@ -1,6 +1,6 @@
 # 119 — Dashed ABC order POs get a dash-free AccuLynx job key
 
-**Date:** 2026-10-01 · **Asked by:** Chris · **Status:** built and simulated on prod (rolled back); **not applied, waiting for Chris's review**
+**Date:** 2026-10-01 · **Asked by:** Chris · **Status:** approved by Chris and **applied to prod 2026-10-01** (`20261001112314_317_order_po_dash_free_job_key`); matview refreshed by hand
 **Migration:** [`schemas/cleverwork-roofer/317-order-po-dash-free-job-key.sql`](../schemas/cleverwork-roofer/317-order-po-dash-free-job-key.sql)
 **Depends on:** migration 316 (docs/118, CRM `-PECRM` rule), applied to prod 2026-10-01 11:03 UTC
 **Rollback:** re-run section 3 (`v_order_acculynx_match`) of migration 316, then `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_order_acculynx_match`
@@ -113,7 +113,15 @@ acculynx_jobs 1,008 kept / 6,031 filtered), **no nested loop**. Warm timings, fo
   `v_order_audit_order`, so the default (active-window) "Matched to Job" KPI does not move today. The
   "all" scope moves 284 → 1,987, and every future order with a canonical dashed PO matches on arrival.
 
-## Apply (after Chris approves)
+## Applied (2026-10-01)
+
+Live after apply and a manual `REFRESH … CONCURRENTLY`, identical to the simulation:
+`mv_order_acculynx_match` 3,178 rows, **1,987 matched** (aligned 128 · po_mismatch 1,859 ·
+needs_link 1,191), dashed POs matched 1,667, `aligned` invariant violations 0. The page's read path
+was re-run as `service_role` under the 8 s timeout and returned all 3,178 rows. The order audit's
+5-minute in-process cache picks the change up on its next load.
+
+## Apply steps (as run)
 
 1. Apply `317-order-po-dash-free-job-key.sql` (one `CREATE OR REPLACE VIEW`).
 2. `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_order_acculynx_match;` (or wait ≤15 min for the cron).
