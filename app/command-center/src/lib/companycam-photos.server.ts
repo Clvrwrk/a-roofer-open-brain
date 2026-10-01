@@ -14,7 +14,7 @@ export interface CompanyCamPhotoFilter {
   propertyId?: string;
   jobId?: string;
   projectId?: string;
-  /** ISO timestamp; returns photos captured strictly before it (cursor for "load more"). */
+  /** Opaque cursor from a previous page's `nextBefore` ("load more"). */
   before?: string;
   limit?: number;
 }
@@ -44,15 +44,42 @@ const COLUMNS =
   "captured_at,creator_name,tags,description,source,thumbnail_path,web_path,original_path," +
   "thumbnail_url,web_url,original_url,project_url";
 
+// Keyset cursor over (captured_at DESC NULLS LAST, photo_id DESC): photos sharing a timestamp
+// across a page boundary are not skipped, and undated photos (sorted last) stay reachable.
+interface Cursor { t: string | null; id: string }
+export function encodeCursor(c: Cursor) {
+  return Buffer.from(JSON.stringify(c)).toString("base64url");
+}
+export function decodeCursor(raw: string): Cursor | null {
+  try {
+    const c = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (typeof c?.id !== "string" || !/^\d{1,20}$/.test(c.id)) return null;
+    if (c.t !== null && (typeof c.t !== "string" || Number.isNaN(Date.parse(c.t)))) return null;
+    return { t: c.t === null ? null : new Date(c.t).toISOString(), id: c.id };
+  } catch {
+    return null;
+  }
+}
+function afterCursor(c: Cursor) {
+  return c.t === null
+    ? `and(captured_at.is.null,photo_id.lt.${c.id})`
+    : `captured_at.lt.${c.t},and(captured_at.eq.${c.t},photo_id.lt.${c.id}),captured_at.is.null`;
+}
+
 export async function loadCompanyCamPhotos(client: SupabaseClient, filter: CompanyCamPhotoFilter) {
   const limit = Math.max(1, Math.min(200, filter.limit ?? 60));
   let query = client.from("v_companycam_photo_feed").select(COLUMNS)
     .order("captured_at", { ascending: false, nullsFirst: false })
+    .order("photo_id", { ascending: false })
     .limit(limit + 1);
   if (filter.propertyId) query = query.eq("property_id", filter.propertyId);
   if (filter.jobId) query = query.eq("acculynx_job_id", filter.jobId);
   if (filter.projectId) query = query.eq("project_id", filter.projectId);
-  if (filter.before) query = query.lt("captured_at", filter.before);
+  if (filter.before) {
+    const cursor = decodeCursor(filter.before);
+    if (!cursor) throw new Error("invalid cursor");
+    query = query.or(afterCursor(cursor));
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -93,5 +120,6 @@ export async function loadCompanyCamPhotos(client: SupabaseClient, filter: Compa
     companycamProjectUrl: r.project_url,
   }));
 
-  return { photos, nextBefore: hasMore ? page[page.length - 1]?.captured_at ?? null : null };
+  const last = page[page.length - 1];
+  return { photos, nextBefore: hasMore && last ? encodeCursor({ t: last.captured_at ?? null, id: last.photo_id }) : null };
 }

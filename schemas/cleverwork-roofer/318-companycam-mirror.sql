@@ -548,3 +548,43 @@ GRANT EXECUTE ON FUNCTION public.claim_companycam_video_batch(int), public.relea
 
 -- Videos up to ~250 MB observed; allow 1 GB per object in this bucket.
 UPDATE storage.buckets SET file_size_limit = 1073741824 WHERE id = 'companycam-photos';
+
+-- ── 318d: retry caps from the PR #26 review (applied as 318d_companycam_copy_retry_caps) ──
+-- (a) The originals pass had no attempt limit: a missing/failing original was retried forever.
+ALTER TABLE public.companycam_photos ADD COLUMN IF NOT EXISTS original_attempts smallint NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION public.claim_companycam_original_batch(p_limit int DEFAULT 50, p_max_priority smallint DEFAULT 9)
+RETURNS SETOF public.companycam_photos LANGUAGE sql SET search_path = public AS $$
+  UPDATE companycam_photos ph SET copy_claimed_at = now(), original_attempts = ph.original_attempts + 1
+   WHERE ph.id IN (SELECT id FROM companycam_photos
+                    WHERE storage_status = 'copied' AND NOT (storage_paths ? 'original') AND removed_at IS NULL
+                      AND storage_priority <= p_max_priority AND original_attempts < 5
+                      AND (copy_claimed_at IS NULL OR copy_claimed_at < now() - interval '30 minutes')
+                    ORDER BY storage_priority, captured_at DESC NULLS LAST
+                    LIMIT p_limit FOR UPDATE SKIP LOCKED)
+  RETURNING ph.*;
+$$;
+
+-- (b) Releasing a stale claim on a row that already used its 5 attempts parked it as 'pending'
+--     forever (the claim filter excludes it). Exhausted rows now land in 'failed', visibly.
+CREATE OR REPLACE FUNCTION public.release_stale_companycam_copies(p_older_than interval DEFAULT interval '30 minutes')
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_photos
+                SET storage_status = CASE WHEN copy_attempts >= 5 THEN 'failed' ELSE 'pending' END,
+                    copy_error = CASE WHEN copy_attempts >= 5 THEN coalesce(copy_error, 'attempts exhausted (claim went stale)') ELSE copy_error END
+              WHERE storage_status = 'copying' AND copy_claimed_at < now() - p_older_than RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+CREATE OR REPLACE FUNCTION public.release_stale_companycam_video_copies(p_older_than interval DEFAULT interval '45 minutes')
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_videos
+                SET storage_status = CASE WHEN copy_attempts >= 5 THEN 'failed' ELSE 'pending' END,
+                    copy_error = CASE WHEN copy_attempts >= 5 THEN coalesce(copy_error, 'attempts exhausted (claim went stale)') ELSE copy_error END
+              WHERE storage_status = 'copying' AND copy_claimed_at < now() - p_older_than RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+CREATE INDEX IF NOT EXISTS companycam_photos_original_queue_v2_idx
+  ON public.companycam_photos (storage_priority, captured_at DESC)
+  WHERE storage_status = 'copied' AND NOT (storage_paths ? 'original') AND removed_at IS NULL AND original_attempts < 5;

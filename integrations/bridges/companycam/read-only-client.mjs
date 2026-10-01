@@ -36,11 +36,11 @@ export function createCompanyCamClient({ token, fetchImpl = fetch, log = () => {
       try {
         res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
       } catch (err) {
-        if (attempt === 6) throw err;
+        if (attempt === 6) throw err; // no sleep after the final attempt
         await new Promise((r) => setTimeout(r, 2000 * attempt));
         continue;
       }
-      if (res.status === 429 || res.status >= 500) {
+      if ((res.status === 429 || res.status >= 500) && attempt < 6) {
         const retry = Number(res.headers.get("retry-after")) || 5 * attempt;
         log(`companycam ${res.status} on ${url.pathname}; retrying in ${retry}s`);
         await new Promise((r) => setTimeout(r, retry * 1000));

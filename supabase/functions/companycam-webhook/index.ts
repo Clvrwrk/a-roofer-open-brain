@@ -15,8 +15,8 @@
 //   - New photos get their display sizes (thumbnail + web) copied into the private bucket
 //     straight away; originals and videos are left to the copy worker.
 //
-// Secrets come from Supabase Vault via companycam_secret(): companycam_webhook_token and
-// companycam_access_token. Never logged, never in this file (hard rule 2).
+// Secrets come from Supabase Vault via companycam_secret(): companycam_webhook_token (plus
+// companycam_webhook_token_next during a rotation) and companycam_access_token. Never logged, never in this file (hard rule 2).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -29,15 +29,35 @@ const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
   auth: { persistSession: false },
 });
 
-let secretCache: { webhookToken: string; apiToken: string; at: number } | null = null;
-async function secrets() {
-  if (secretCache && Date.now() - secretCache.at < 300_000) return secretCache;
-  const [w, a] = await Promise.all([
+// Signing tokens accepted: the current one and, during a rotation, the next one
+// (register-webhook.mjs --rotate stores `_next` before CompanyCam switches, then promotes it).
+let secretCache: { signingTokens: string[]; apiToken: string; at: number } | null = null;
+async function secrets(force = false) {
+  // A forced refresh (after a signature miss) is allowed at most every 30 s, so forged
+  // requests cannot turn into one Vault read each.
+  const age = secretCache ? Date.now() - secretCache.at : Infinity;
+  if (secretCache && (force ? age < 30_000 : age < 300_000)) return secretCache;
+  const [w, n, a] = await Promise.all([
     sb.rpc("companycam_secret", { p_name: "companycam_webhook_token" }),
+    sb.rpc("companycam_secret", { p_name: "companycam_webhook_token_next" }),
     sb.rpc("companycam_secret", { p_name: "companycam_access_token" }),
   ]);
-  secretCache = { webhookToken: (w.data as string) ?? "", apiToken: (a.data as string) ?? "", at: Date.now() };
+  const signingTokens = [w.data, n.data].filter((t): t is string => typeof t === "string" && t.length > 0);
+  secretCache = { signingTokens: [...new Set(signingTokens)], apiToken: (a.data as string) ?? "", at: Date.now() };
   return secretCache;
+}
+
+async function signatureMatches(tokens: string[], raw: string, signature: string) {
+  if (!signature) return false;
+  for (const t of tokens) if (constantTimeEqual(await hmacSha1Base64(t, raw), signature)) return true;
+  return false;
+}
+
+// supabase-js returns { error } instead of throwing; make every write fail loudly.
+async function must<T extends { error: { message: string } | null }>(label: string, op: PromiseLike<T>) {
+  const r = await op;
+  if (r.error) throw new Error(`${label}: ${r.error.message}`);
+  return r;
 }
 
 async function hmacSha1Base64(key: string, body: string) {
@@ -98,11 +118,11 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     if (!id) return "no photo id";
     const photo = await ccGet(`/photos/${id}?include=${PHOTO_INCLUDE}`, apiToken);
     if (!photo) {
-      await sb.from("companycam_photos").update({ removed_at: new Date().toISOString() }).eq("id", String(id));
+      await must("photo removed_at", sb.from("companycam_photos").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
       return "photo gone (404) → removed_at";
     }
     await upsert("companycam_photos", mapPhoto(photo));
-    await sb.rpc("refresh_companycam_project_priority", { p_project_id: String(photo.project_id) });
+    await must("photo priority", sb.rpc("refresh_companycam_project_priority", { p_project_id: String(photo.project_id) }));
     const copied = action === "created" || action === "updated" ? await copyDisplaySizes(photo).catch((e) => `copy failed: ${e.message}`) : false;
     return `photo ${action} upserted${copied === true ? " + display copy" : typeof copied === "string" ? `; ${copied}` : ""}`;
   }
@@ -110,18 +130,18 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     const id = payload?.id;
     if (!id) return "no project id";
     if (action === "deleted") {
-      await sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id));
+      await must("project removed_at", sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
       return "project deleted → removed_at";
     }
     const project = await ccGet(`/projects/${id}`, apiToken);
     if (!project) {
-      await sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id));
+      await must("project removed_at", sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
       return "project gone (404) → removed_at";
     }
     await upsert("companycam_projects", mapProject(project));
     if (action === "created" || action === "updated" || action === "merged") {
-      await sb.rpc("link_companycam_projects");
-      await sb.rpc("refresh_companycam_project_priority", { p_project_id: String(id) });
+      await must("link", sb.rpc("link_companycam_projects"));
+      await must("project priority", sb.rpc("refresh_companycam_project_priority", { p_project_id: String(id) }));
     }
     return `project ${action} upserted`;
   }
@@ -129,7 +149,10 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     const id = payload?.id;
     if (!id) return "no video id";
     const video = await ccGet(`/videos/${id}`, apiToken);
-    if (!video) return "video gone (404)";
+    if (!video) {
+      await must("video removed_at", sb.from("companycam_videos").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
+      return "video gone (404) → removed_at";
+    }
     await upsert("companycam_videos", mapVideo(video));
     return `video ${action} upserted (copy worker fetches bytes)`;
   }
@@ -140,8 +163,14 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
   const raw = await req.text();
   const signature = req.headers.get("x-companycam-signature") ?? "";
-  const { webhookToken, apiToken } = await secrets();
-  const ok = Boolean(webhookToken && signature) && constantTimeEqual(await hmacSha1Base64(webhookToken, raw), signature);
+  if (raw.length > 1_000_000) return new Response(JSON.stringify({ error: "too_large" }), { status: 413 });
+  let { signingTokens, apiToken } = await secrets();
+  let ok = await signatureMatches(signingTokens, raw, signature);
+  if (!ok && signature) {
+    // A rotation may have landed after our cache filled: re-read Vault once before refusing.
+    ({ signingTokens, apiToken } = await secrets(true));
+    ok = await signatureMatches(signingTokens, raw, signature);
+  }
 
   let body: any = null;
   try { body = JSON.parse(raw); } catch { /* recorded as unparseable below */ }
@@ -149,13 +178,16 @@ Deno.serve(async (req) => {
   const payload = body?.payload ?? null;
   const resourceId = payload?.id != null ? String(payload.id).slice(0, 40) : null;
 
+  // Unverified deliveries are recorded with bounded fields only (no body, short strings), so an
+  // anonymous caller cannot grow the audit table beyond one small row per request.
+  const clip = (v: unknown, n: number) => (v == null ? null : String(v).slice(0, n));
   const { data: ev } = await sb.from("companycam_webhook_events").insert({
-    webhook_id: body?.webhook_id != null ? String(body.webhook_id) : null,
-    event_type: eventType,
-    resource_type: eventType?.split(".")[0] ?? null,
-    resource_id: resourceId,
+    webhook_id: clip(body?.webhook_id, 20),
+    event_type: clip(eventType, ok ? 80 : 40),
+    resource_type: clip(eventType?.split(".")[0], 20),
+    resource_id: clip(resourceId, 20),
     signature_ok: ok,
-    payload: ok ? body : null, // unverified bodies are not stored
+    payload: ok ? body : null,
   }).select("id").single();
 
   if (!ok) return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 401 });

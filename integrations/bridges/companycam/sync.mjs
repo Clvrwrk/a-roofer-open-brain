@@ -121,7 +121,9 @@ async function syncProjects({ full, runId }) {
   if (full && pageCap === Infinity && !dryRun) {
     removed = (await rpc("mark_companycam_projects_removed", { p_run_id: runId })) ?? 0;
   }
-  await setState("projects", { watermark: maxUpdated ? new Date(maxUpdated).toISOString() : null,
+  // A --pages-capped run never read everything, so it must not move the watermark.
+  const projectWatermark = pageCap === Infinity && maxUpdated ? new Date(maxUpdated).toISOString() : state?.watermark ?? null;
+  await setState("projects", { watermark: projectWatermark,
     last_run_stats: { mode: full ? "full" : "nightly", seen, touched: touched.length, removed, run_id: runId } });
   log(`projects: ${seen} upserted, ${touched.length} changed since watermark, ${removed} marked removed`);
   return touched;
@@ -145,8 +147,9 @@ async function syncPhotos({ full, runId, changedProjects = [] }) {
   }
   // /photos?project_ids[] (not /projects/{id}/photos, which rejects `include`). Skipped on the
   // very first run, when every project counts as changed and the walk above already read all.
+  // No cap: a capped re-read would silently miss tag/description edits in the remainder.
   let reread = 0;
-  const reReadable = !full && state?.watermark ? changedProjects.slice(0, 400) : [];
+  const reReadable = !full && state?.watermark ? changedProjects : [];
   for (let i = 0; i < reReadable.length; i += 20) {
     for await (const page of cc.paginate("/photos", { limit: 100, include: PHOTO_INCLUDE, project_ids: reReadable.slice(i, i + 20) })) {
       const rows = page.map((p) => mapPhoto(p, runId));
@@ -159,7 +162,8 @@ async function syncPhotos({ full, runId, changedProjects = [] }) {
     // Server-side so the 311k-row comparison never crosses the wire.
     removed = (await rpc("mark_companycam_photos_removed", { p_run_id: runId })) ?? 0;
   }
-  await setState("photos", { watermark: maxCreated ? new Date(maxCreated).toISOString() : null,
+  const photoWatermark = pageCap === Infinity && maxCreated ? new Date(maxCreated).toISOString() : state?.watermark ?? null;
+  await setState("photos", { watermark: photoWatermark,
     last_run_stats: { mode: full ? "full" : "nightly", seen, reread, removed, run_id: runId, api_calls: cc.calls } });
   log(`photos: ${seen} upserted, ${reread} re-read from ${reReadable.length} changed projects, ${removed} marked removed`);
 }
@@ -199,11 +203,14 @@ async function copyWorker() {
   const released = await rpc("release_stale_companycam_copies");
   if (released) log(`copy: returned ${released} stale claims to the queue`);
   const stats = { display: 0, originals: 0, failed: 0, bytes: 0 };
+  // Stop claiming new batches once the budget is spent, so the in-flight batch (bounded by
+  // per-fetch timeouts) drains before systemd's TimeoutStartSec instead of being killed.
+  const deadline = Date.now() + Number(args["budget-s"] ?? 1e9) * 1000;
   const passes = args.originals ? ["originals"] : args["then-originals"] ? ["display", "originals"] : ["display"];
   for (const pass of passes) {
     const claimFn = pass === "display" ? "claim_companycam_copy_batch" : "claim_companycam_original_batch";
     const variants = pass === "display" ? String(args.variants || "thumbnail,web").split(",") : ["original"];
-    while (stats.display + stats.originals + stats.failed < limit) {
+    while (stats.display + stats.originals + stats.failed < limit && Date.now() < deadline) {
       const room = limit - stats.display - stats.originals - stats.failed;
       const batch = await sb(`/rest/v1/rpc/${claimFn}`, { method: "POST", body: { p_limit: Math.min(Math.max(50, concurrency * 6), room), p_max_priority: maxPriority } });
       if (!batch?.length) break;
@@ -218,7 +225,10 @@ async function copyWorker() {
             const body = pass === "display"
               ? { storage_status: "failed", copy_error: String(err.message).slice(0, 500) }
               : { copy_error: `original: ${String(err.message).slice(0, 480)}` }; // display copy stays good
-            await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, { method: "PATCH", body, headers: { Prefer: "return=minimal" } });
+            // If recording the failure itself fails, log and move on: the row stays 'copying'
+            // and release_stale_companycam_copies() returns it to the queue later.
+            await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, { method: "PATCH", body, headers: { Prefer: "return=minimal" } })
+              .catch((e) => log(`copy: could not record failure for ${photo.id}: ${e.message}`));
           }
         }
       }));
@@ -239,7 +249,7 @@ async function copyOne(photo, variants, mergeIntoExisting = false) {
     .filter(({ variant, src }) => src && !(variant.endsWith("_annotation") && url(variant.replace(/_annotation$/, "")) === src));
   // Variants of one photo move in parallel; photos are parallel across workers.
   const results = await Promise.all(jobs.map(async ({ variant, src }) => {
-    const res = await fetch(src);
+    const res = await fetch(src, { signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new Error(`fetch ${variant} → ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
     const type = res.headers.get("content-type") || "image/jpeg";
@@ -249,6 +259,7 @@ async function copyOne(photo, variants, mergeIntoExisting = false) {
       method: "POST",
       headers: sbHeaders({ "Content-Type": type, "x-upsert": "true", "Cache-Control": "max-age=31536000" }),
       body: buf,
+      signal: AbortSignal.timeout(120_000),
     });
     if (!up.ok) throw new Error(`upload ${variant} → ${up.status} ${(await up.text()).slice(0, 200)}`);
     return { variant, path, bytes: buf.length };
@@ -282,7 +293,8 @@ async function copyVideos() {
   const released = await rpc("release_stale_companycam_video_copies");
   if (released) log(`videos: returned ${released} stale claims to the queue`);
   let done = 0, failed = 0, bytes = 0;
-  while (done + failed < limit) {
+  const deadline = Date.now() + Number(args["budget-s"] ?? 1e9) * 1000;
+  while (done + failed < limit && Date.now() < deadline) {
     const batch = await sb(`/rest/v1/rpc/claim_companycam_video_batch`, { method: "POST", body: { p_limit: Math.min(4, limit - done - failed) } });
     if (!batch?.length) break;
     await Promise.all(batch.map(async (row) => {
@@ -295,7 +307,7 @@ async function copyVideos() {
         const paths = {};
         let total = 0;
         for (const f of files) {
-          const res = await fetch(f.src);
+          const res = await fetch(f.src, { signal: AbortSignal.timeout(240_000) });
           if (!res.ok) throw new Error(`fetch ${f.key} → ${res.status}`);
           const buf = Buffer.from(await res.arrayBuffer());
           const type = res.headers.get("content-type") || (f.key === "video" ? "video/mp4" : "image/jpeg");
@@ -305,6 +317,7 @@ async function copyVideos() {
             method: "POST",
             headers: sbHeaders({ "Content-Type": type, "x-upsert": "true", "Cache-Control": "max-age=31536000" }),
             body: buf,
+            signal: AbortSignal.timeout(240_000),
           });
           if (!up.ok) throw new Error(`upload ${f.key} → ${up.status} ${(await up.text()).slice(0, 200)}`);
           paths[f.key] = path;
@@ -331,7 +344,7 @@ async function copyVideos() {
                : tooLarge ? { storage_status: "skipped", copy_error: "too_large: exceeds the project storage upload limit" }
                      : { storage_status: "failed", copy_error: String(err.message).slice(0, 500) },
           headers: { Prefer: "return=minimal" },
-        });
+        }).catch((e) => log(`videos: could not record failure for ${row.id}: ${e.message}`)); // stale release requeues it
       }
     }));
     log(`videos: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(0)} MB`);

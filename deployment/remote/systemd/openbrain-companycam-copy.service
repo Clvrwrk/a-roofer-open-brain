@@ -9,9 +9,10 @@ ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/companyc
 User=root
 Environment=HOME=/root
 ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-companycam-copy
-# The timer fires every 30 min; a tick never overlaps the next (oneshot), and claims left by a
-# killed run are returned to the queue after 30 min (release_stale_companycam_copies).
-TimeoutStartSec=1700
+# The timer fires every 30 min; a tick never overlaps the next (oneshot). The runner's claim
+# budgets (photos 15 min, videos 3 min) plus per-request timeouts finish the tick before this
+# deadline; claims left by a killed run return to the queue after 30 min (release_stale_*).
+TimeoutStartSec=1790
 StandardOutput=journal
 StandardError=journal
 

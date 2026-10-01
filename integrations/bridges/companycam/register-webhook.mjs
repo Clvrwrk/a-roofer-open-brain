@@ -8,7 +8,8 @@
 //
 // 1. Refuses if a webhook already points at our receiver (unless --rotate, which updates its token).
 // 2. Generates a 32-byte signing token, stores it and COMPANYCAM_ACCESS_TOKEN in Supabase Vault
-//    (companycam_webhook_token / companycam_access_token) via companycam_put_secret().
+//    via companycam_put_secret(). --rotate stages the new token as _next (the receiver accepts
+//    both) and promotes it only after CompanyCam confirms, so deliveries never fail mid-rotation.
 // 3. Registers the webhook with that token. Prints ids and scopes only — never a secret.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -42,8 +43,13 @@ async function putSecret(name, value) {
 }
 
 console.log(`receiver: ${RECEIVER} (supabase=${new URL(SUPABASE_URL).host.split(".")[0]})`);
-const existing = (await (await fetch(`${CC}/webhooks`, { headers: ccHeaders })).json()).data || [];
-const ours = existing.find((w) => w.url === RECEIVER);
+// A failed listing must stop us before any Vault write, or we could register a duplicate.
+const listRes = await fetch(`${CC}/webhooks`, { headers: ccHeaders });
+const listBody = await listRes.json().catch(() => null);
+if (!listRes.ok || !Array.isArray(listBody?.data)) {
+  throw new Error(`CompanyCam webhook listing failed (${listRes.status}); nothing changed`);
+}
+const ours = listBody.data.find((w) => w.url === RECEIVER);
 if (ours && !rotate) {
   console.log(`already registered: webhook ${ours.id} enabled=${ours.enabled} scopes=${ours.scopes.join(",")} — nothing to do (use --rotate to replace its token)`);
   process.exit(0);
@@ -51,15 +57,29 @@ if (ours && !rotate) {
 
 const token = randomBytes(32).toString("hex");
 await putSecret("companycam_access_token", CC_TOKEN);
-await putSecret("companycam_webhook_token", token);
-console.log("vault: companycam_access_token + companycam_webhook_token stored");
 
-const res = await fetch(ours ? `${CC}/webhooks/${ours.id}` : `${CC}/webhooks`, {
-  method: ours ? "PATCH" : "POST",
-  headers: ccHeaders,
-  body: JSON.stringify({ webhook: { url: RECEIVER, scopes: SCOPES, token } }),
-});
-const body = await res.json().catch(() => null);
-if (!res.ok) throw new Error(`CompanyCam webhook ${ours ? "update" : "create"} → ${res.status} ${JSON.stringify(body?.errors || body).slice(0, 300)}`);
-const w = body.data;
-console.log(`registered: webhook ${w.id} enabled=${w.enabled} scopes=${w.scopes.join(",")}`);
+if (ours) {
+  // Rotation without a gap: the receiver accepts BOTH companycam_webhook_token and
+  // companycam_webhook_token_next. Stage the new token as _next, switch CompanyCam, then
+  // promote it. If CompanyCam refuses the switch, the current token is untouched.
+  await putSecret("companycam_webhook_token_next", token);
+  const res = await fetch(`${CC}/webhooks/${ours.id}`, {
+    method: "PATCH", headers: ccHeaders,
+    body: JSON.stringify({ webhook: { url: RECEIVER, scopes: SCOPES, token } }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`CompanyCam webhook update → ${res.status}; current signing token unchanged (stale _next is harmless)`);
+  await putSecret("companycam_webhook_token", token);
+  console.log(`rotated: webhook ${body.data.id} enabled=${body.data.enabled} scopes=${body.data.scopes.join(",")}`);
+} else {
+  // Fresh registration: nothing points at us yet, so storing first cannot break deliveries.
+  await putSecret("companycam_webhook_token", token);
+  await putSecret("companycam_webhook_token_next", token);
+  const res = await fetch(`${CC}/webhooks`, {
+    method: "POST", headers: ccHeaders,
+    body: JSON.stringify({ webhook: { url: RECEIVER, scopes: SCOPES, token } }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(`CompanyCam webhook create → ${res.status} ${JSON.stringify(body?.errors || body).slice(0, 300)}`);
+  console.log(`registered: webhook ${body.data.id} enabled=${body.data.enabled} scopes=${body.data.scopes.join(",")}`);
+}

@@ -447,9 +447,9 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       photos.replaceChildren(el("li", "Loading photos…", "pr-d-help"));
       try {
         const res = await fetch(`/api/companycam/photos?jobId=${encodeURIComponent(jobId)}&limit=12`, { credentials: "same-origin" });
-        const body = await res.json();
+        const body = await res.json().catch(() => null);
         if (!stillCurrent(jobId)) return;
-        if (!res.ok) throw new Error(body.error_description ?? "Photos could not be loaded.");
+        if (!res.ok || !body) throw new Error(body?.error_description ?? "Photos could not be loaded.");
         const list = (body.photos ?? []).filter((p: any) => p.thumbnailUrl);
         const items: HTMLElement[] = list.map(photoItem);
         if (!list.length) items.push(el("li", "No CompanyCam photos are linked to this job yet.", "pr-d-help"));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadCompanyCamPhotos } from "@lib/companycam-photos.server";
+import { decodeCursor, encodeCursor, loadCompanyCamPhotos } from "@lib/companycam-photos.server";
 
 // Minimal stand-in for the supabase-js query builder + storage signer.
 function fakeClient(rows: any[], calls: { filters: string[]; signed: string[][] }) {
@@ -8,7 +8,7 @@ function fakeClient(rows: any[], calls: { filters: string[]; signed: string[][] 
     order: () => builder,
     limit: () => builder,
     eq: (col: string, v: string) => { calls.filters.push(`${col}=${v}`); return builder; },
-    lt: (col: string, v: string) => { calls.filters.push(`${col}<${v}`); return builder; },
+    or: (expr: string) => { calls.filters.push(`or:${expr}`); return builder; },
     then: (resolve: any) => resolve({ data: rows, error: null }),
   };
   return {
@@ -50,14 +50,26 @@ describe("loadCompanyCamPhotos", () => {
     expect(nextBefore).toBeNull();
   });
 
-  it("returns a cursor when there is another page and never signs when nothing is copied", async () => {
+  it("pages with a keyset cursor over (captured_at, photo_id) and never signs when nothing is copied", async () => {
     const calls = { filters: [] as string[], signed: [] as string[][] };
-    const rows = [row("a", "companycam", "2026-09-30T10:00:00Z"), row("b", "companycam", "2026-09-29T10:00:00Z")];
-    const { photos, nextBefore } = await loadCompanyCamPhotos(fakeClient(rows, calls), { jobId: "job", limit: 1, before: "2026-10-01T00:00:00Z" });
+    const rows = [row("11", "companycam", "2026-09-30T10:00:00Z"), row("10", "companycam", "2026-09-29T10:00:00Z")];
+    const before = encodeCursor({ t: "2026-10-01T00:00:00.000Z", id: "99" });
+    const { photos, nextBefore } = await loadCompanyCamPhotos(fakeClient(rows, calls), { jobId: "job", limit: 1, before });
 
-    expect(calls.filters).toEqual(["acculynx_job_id=job", "captured_at<2026-10-01T00:00:00Z"]);
+    expect(calls.filters).toEqual([
+      "acculynx_job_id=job",
+      "or:captured_at.lt.2026-10-01T00:00:00.000Z,and(captured_at.eq.2026-10-01T00:00:00.000Z,photo_id.lt.99),captured_at.is.null",
+    ]);
     expect(calls.signed).toEqual([]);
     expect(photos).toHaveLength(1);
-    expect(nextBefore).toBe("2026-09-30T10:00:00Z");
+    expect(decodeCursor(nextBefore!)).toEqual({ t: "2026-09-30T10:00:00.000Z", id: "11" });
+  });
+
+  it("keeps undated photos reachable and rejects malformed cursors", async () => {
+    const calls = { filters: [] as string[], signed: [] as string[][] };
+    await loadCompanyCamPhotos(fakeClient([], calls), { projectId: "p1", before: encodeCursor({ t: null, id: "7" }) });
+    expect(calls.filters).toEqual(["project_id=p1", "or:and(captured_at.is.null,photo_id.lt.7)"]);
+    expect(decodeCursor("not-a-cursor")).toBeNull();
+    expect(decodeCursor(encodeCursor({ t: "2026-01-01T00:00:00Z", id: "x);drop" }))).toBeNull();
   });
 });

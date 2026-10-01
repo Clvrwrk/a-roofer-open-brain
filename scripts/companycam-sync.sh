@@ -30,15 +30,17 @@ fi
 
 case "$MODE" in
   nightly|full) ARGS=("$MODE") ;;
-  # ~25 min per 30-min tick: display sizes for the whole queue first (open jobs first), then originals.
-  copy) ARGS=(copy --then-originals --limit "${COMPANYCAM_COPY_LIMIT:-20000}" --concurrency "${COMPANYCAM_COPY_CONCURRENCY:-16}") ;;
+  # Per 30-min tick: photos claim for 15 min (fetch 60 s + upload 120 s caps → drained by ~18 min),
+  # then videos claim for 3 min (fetch + upload capped at 4 min each → done by ~29 min), inside
+  # the unit's TimeoutStartSec=1790. Display sizes for the whole queue first, then originals.
+  copy) ARGS=(copy --then-originals --budget-s "${COMPANYCAM_COPY_BUDGET_S:-900}" --limit "${COMPANYCAM_COPY_LIMIT:-20000}" --concurrency "${COMPANYCAM_COPY_CONCURRENCY:-16}") ;;
   *) echo "unknown mode: $MODE" >&2; exit 2 ;;
 esac
 
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: companycam $MODE start ==="
   if node integrations/bridges/companycam/sync.mjs "${ARGS[@]}" --env-file "$REPO_ROOT/.env" \
-     && { [ "$MODE" != copy ] || node integrations/bridges/companycam/sync.mjs copy-videos --limit "${COMPANYCAM_VIDEO_LIMIT:-12}" --env-file "$REPO_ROOT/.env"; }; then
+     && { [ "$MODE" != copy ] || node integrations/bridges/companycam/sync.mjs copy-videos --budget-s "${COMPANYCAM_VIDEO_BUDGET_S:-180}" --limit "${COMPANYCAM_VIDEO_LIMIT:-12}" --env-file "$REPO_ROOT/.env"; }; then
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: done OK ==="
   else
     rc=$?
