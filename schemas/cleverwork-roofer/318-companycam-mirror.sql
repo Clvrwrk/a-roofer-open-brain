@@ -588,3 +588,34 @@ $$;
 CREATE INDEX IF NOT EXISTS companycam_photos_original_queue_v2_idx
   ON public.companycam_photos (storage_priority, captured_at DESC)
   WHERE storage_status = 'copied' AND NOT (storage_paths ? 'original') AND removed_at IS NULL AND original_attempts < 5;
+
+-- ── 318e: removal guard (applied as 318e_companycam_removal_guard) ─────────────────
+-- A full sweep retires only rows last synced BEFORE the sweep began. Rows the webhook writes
+-- mid-sweep carry no seen_run_id but a newer synced_at; they must not be marked removed.
+-- Run start = earliest synced_at stamped with this run id; a run that saw nothing retires nothing.
+CREATE OR REPLACE FUNCTION public.mark_companycam_projects_removed(p_run_id text)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH s AS (SELECT min(synced_at) AS started FROM companycam_projects WHERE seen_run_id = p_run_id),
+  r AS (UPDATE companycam_projects SET removed_at = clock_timestamp()
+         WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id
+           AND synced_at < (SELECT started FROM s) RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mark_companycam_photos_removed(p_run_id text)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH s AS (SELECT min(synced_at) AS started FROM companycam_photos WHERE seen_run_id = p_run_id),
+  r AS (UPDATE companycam_photos SET removed_at = clock_timestamp()
+         WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id
+           AND synced_at < (SELECT started FROM s) RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mark_companycam_videos_removed(p_run_id text)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH s AS (SELECT min(synced_at) AS started FROM companycam_videos WHERE seen_run_id = p_run_id),
+  r AS (UPDATE companycam_videos SET removed_at = clock_timestamp()
+         WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id
+           AND synced_at < (SELECT started FROM s) RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
