@@ -181,7 +181,9 @@ async function phaseNotices() {
 // ---------------------------------------------------------------------------
 // PHASE A — diagnose
 // ---------------------------------------------------------------------------
-const JOB_NUMBER_RE = /\b([A-Z]{2,3}-\d{1,4})\b/g;
+// A CRM job number keeps its suffix (TX-460-PECRM): truncating it to TX-460 would diagnose the
+// AccuLynx job that happens to share the number (mig 316, docs/118).
+const JOB_NUMBER_RE = /\b([A-Z]{2,3}-\d{1,4}(?:-PECRM)?)\b/g;
 
 async function findNewIntakes() {
   const data = await linear(
