@@ -5,6 +5,7 @@
 //   node integrations/bridges/companycam/sync.mjs full               # full sweep (also detects removals)
 //   node integrations/bridges/companycam/sync.mjs copy [--max-priority 1] [--limit 500] [--concurrency 10]
 //                                                 [--originals | --then-originals]
+//   node integrations/bridges/companycam/sync.mjs copy-videos [--limit 50]   # needs the API token (fresh presigned URLs)
 //   node integrations/bridges/companycam/sync.mjs status
 //
 // Options: --dry-run (fetch + map, write nothing), --pages N (cap pages per stream; for tests),
@@ -19,6 +20,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createCompanyCamClient } from "./read-only-client.mjs";
+import { mapPhoto, mapProject, mapVideo } from "../../../supabase/functions/companycam-webhook/mapping.mjs";
 
 const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
 const args = parseArgs(process.argv.slice(2));
@@ -90,75 +92,7 @@ async function setState(stream, patch) {
   });
 }
 
-// ── Mapping ────────────────────────────────────────────────────────────────────────
-const ts = (v) => (v ? new Date(typeof v === "number" ? v * 1000 : v).toISOString() : null);
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-
-function mapProject(p, runId) {
-  const a = p.address || {};
-  const now = new Date().toISOString();
-  return {
-    id: String(p.id),
-    company_id: p.company_id ?? null,
-    name: p.name ?? null,
-    status: p.status ?? null,
-    archived: Boolean(p.archived),
-    is_public: p.public ?? null,
-    street_address_1: a.street_address_1 || null,
-    street_address_2: a.street_address_2 || null,
-    city: a.city || null,
-    state: a.state || null,
-    postal_code: a.postal_code || null,
-    country: a.country || null,
-    latitude: num(p.coordinates?.lat),
-    longitude: num(p.coordinates?.lon),
-    project_url: p.project_url ?? null,
-    public_url: p.public_url ?? null,
-    embedded_project_url: p.embedded_project_url ?? null,
-    photo_count: p.photo_count ?? null,
-    document_count: p.document_count ?? null,
-    creator_name: p.creator_name ?? null,
-    cc_created_at: ts(p.created_at),
-    cc_updated_at: ts(p.updated_at),
-    raw: p,
-    synced_at: now,
-    last_seen_by_api: now,
-    seen_run_id: runId,
-    removed_at: null,
-  };
-}
-
-function mapPhoto(p, runId) {
-  const uri = (type) => p.uris?.find((u) => u.type === type)?.url ?? null;
-  const ann = p.annotations;
-  const hasAnn = Boolean(ann && ((ann.text?.length || 0) + (ann.stickers?.length || 0) + (ann.shapes?.length || 0)));
-  return {
-    id: String(p.id),
-    project_id: String(p.project_id),
-    company_id: p.company_id ?? null,
-    creator_id: p.creator_id ?? null,
-    creator_name: p.creator_name ?? null,
-    captured_at: ts(p.captured_at),
-    cc_created_at: ts(p.created_at),
-    cc_updated_at: ts(p.updated_at),
-    latitude: num(p.coordinates?.lat),
-    longitude: num(p.coordinates?.lon),
-    status: p.status ?? null,
-    processing_status: p.processing_status ?? null,
-    internal: p.internal ?? null,
-    origin: p.origin ?? null,
-    description: p.description?.plain_text_content ?? null,
-    tags: (p.tags || []).map((t) => t.display_value).filter(Boolean),
-    has_annotations: hasAnn,
-    thumbnail_url: uri("thumbnail"),
-    web_url: uri("web"),
-    original_url: uri("original"),
-    raw: p,
-    synced_at: new Date().toISOString(),
-    seen_run_id: runId,
-    removed_at: null,
-  };
-}
+// ── Mapping: shared with the webhook receiver (supabase/functions/companycam-webhook/mapping.mjs).
 
 // ── Streams ────────────────────────────────────────────────────────────────────────
 // Projects come back newest-updated first. Incremental stops one page after passing the
@@ -228,6 +162,20 @@ async function syncPhotos({ full, runId, changedProjects = [] }) {
   await setState("photos", { watermark: maxCreated ? new Date(maxCreated).toISOString() : null,
     last_run_stats: { mode: full ? "full" : "nightly", seen, reread, removed, run_id: runId, api_calls: cc.calls } });
   log(`photos: ${seen} upserted, ${reread} re-read from ${reReadable.length} changed projects, ${removed} marked removed`);
+}
+
+// Videos: ~560 on the account, so every run walks them all (6 pages). Full runs mark absentees.
+async function syncVideos({ full, runId }) {
+  let seen = 0;
+  for await (const page of cc.paginate("/videos", { limit: 100 })) {
+    const rows = page.map((v) => mapVideo(v, runId));
+    await upsert("companycam_videos", rows);
+    seen += rows.length;
+    if (seen / 100 >= pageCap) break;
+  }
+  let removed = 0;
+  if (full && pageCap === Infinity && !dryRun) removed = (await rpc("mark_companycam_videos_removed", { p_run_id: runId })) ?? 0;
+  log(`videos: ${seen} upserted, ${removed} marked removed`);
 }
 
 async function linkAndPrioritise() {
@@ -325,6 +273,72 @@ async function copyOne(photo, variants, mergeIntoExisting = false) {
   return { bytes: added };
 }
 
+// ── Video copy ────────────────────────────────────────────────────────────────────
+// playback_url is a presigned S3 URL that expires, so each video is re-read from the API
+// immediately before its bytes are fetched. Stored at <project>/videos/<id>/video.<ext>
+// plus the large thumbnail. Open-job videos first (claim_companycam_video_batch).
+async function copyVideos() {
+  const limit = Number(args.limit ?? 50);
+  const released = await rpc("release_stale_companycam_video_copies");
+  if (released) log(`videos: returned ${released} stale claims to the queue`);
+  let done = 0, failed = 0, bytes = 0;
+  while (done + failed < limit) {
+    const batch = await sb(`/rest/v1/rpc/claim_companycam_video_batch`, { method: "POST", body: { p_limit: Math.min(4, limit - done - failed) } });
+    if (!batch?.length) break;
+    await Promise.all(batch.map(async (row) => {
+      try {
+        const fresh = (await cc.get(`/videos/${row.id}`)).data;
+        const files = [
+          { key: "video", src: fresh.playback_url },
+          { key: "thumbnail", src: fresh.thumbnail_urls?.large },
+        ].filter((f) => f.src);
+        const paths = {};
+        let total = 0;
+        for (const f of files) {
+          const res = await fetch(f.src);
+          if (!res.ok) throw new Error(`fetch ${f.key} → ${res.status}`);
+          const buf = Buffer.from(await res.arrayBuffer());
+          const type = res.headers.get("content-type") || (f.key === "video" ? "video/mp4" : "image/jpeg");
+          const ext = f.key === "thumbnail" ? "jpg" : type.includes("quicktime") ? "mov" : "mp4";
+          const path = `${row.project_id}/videos/${row.id}/${f.key}.${ext}`;
+          const up = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`, {
+            method: "POST",
+            headers: sbHeaders({ "Content-Type": type, "x-upsert": "true", "Cache-Control": "max-age=31536000" }),
+            body: buf,
+          });
+          if (!up.ok) throw new Error(`upload ${f.key} → ${up.status} ${(await up.text()).slice(0, 200)}`);
+          paths[f.key] = path;
+          total += buf.length;
+        }
+        if (!paths.video) throw new Error("no playback_url");
+        await sb(`/rest/v1/companycam_videos?id=eq.${row.id}`, {
+          method: "PATCH",
+          body: { storage_status: "copied", storage_paths: paths, storage_bytes: total, copied_at: new Date().toISOString(), copy_error: null,
+                  raw: fresh, transcript: fresh.transcript?.text || null },
+          headers: { Prefer: "return=minimal" },
+        });
+        done++; bytes += total;
+      } catch (err) {
+        failed++;
+        const gone = err.status === 404;
+        // The project-wide Storage upload limit (not the bucket's) refuses big files with 413.
+        // Park them; re-queue with UPDATE ... SET storage_status='pending', copy_attempts=0
+        // WHERE copy_error LIKE 'too_large%' once the limit is raised (docs/120 §7).
+        const tooLarge = /EntityTooLarge|Payload too large|413/.test(String(err.message));
+        await sb(`/rest/v1/companycam_videos?id=eq.${row.id}`, {
+          method: "PATCH",
+          body: gone ? { storage_status: "skipped", removed_at: new Date().toISOString(), copy_error: "404 from CompanyCam" }
+               : tooLarge ? { storage_status: "skipped", copy_error: "too_large: exceeds the project storage upload limit" }
+                     : { storage_status: "failed", copy_error: String(err.message).slice(0, 500) },
+          headers: { Prefer: "return=minimal" },
+        });
+      }
+    }));
+    log(`videos: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(0)} MB`);
+  }
+  log(`video copy finished: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(0)} MB`);
+}
+
 async function status() {
   const progress = await sb(`/rest/v1/v_companycam_clone_progress?select=*&order=storage_priority,storage_status`);
   const state = await sb(`/rest/v1/companycam_sync_state?select=stream,watermark,last_run_at,last_run_stats`);
@@ -339,11 +353,17 @@ try {
     log(`companycam ${mode} start${dryRun ? " (dry run)" : ""} run=${runId} supabase=${new URL(supabaseUrl).host.split(".")[0]}`);
     const changed = await syncProjects({ full, runId });
     await syncPhotos({ full, runId, changedProjects: changed });
+    await syncVideos({ full, runId });
     await linkAndPrioritise();
     log(`companycam ${mode} done — ${cc.calls} API calls`);
   } else if (mode === "copy") {
     log(`companycam copy start supabase=${new URL(supabaseUrl).host.split(".")[0]}`);
     await copyWorker();
+  } else if (mode === "videos") {
+    await syncVideos({ full: false, runId });
+  } else if (mode === "copy-videos") {
+    log(`companycam copy-videos start supabase=${new URL(supabaseUrl).host.split(".")[0]}`);
+    await copyVideos();
   } else if (mode === "status") {
     await status();
   } else {

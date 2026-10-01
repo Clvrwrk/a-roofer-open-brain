@@ -386,3 +386,165 @@ RETURNS SETOF public.companycam_photos LANGUAGE sql SET search_path = public AS 
 $$;
 REVOKE ALL ON FUNCTION public.claim_companycam_original_batch(int, smallint) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_companycam_original_batch(int, smallint) TO service_role;
+
+-- ── 318c: videos, webhook receiver support, per-project priority (applied as 318c_companycam_videos_webhook) ──
+-- Chris 2026-10-01: register the CompanyCam webhook and copy videos too.
+--
+-- Videos: 557 on the account, avg ~79 MB (max seen 241 MB) → ~45 GB. playback_url is a
+-- presigned S3 URL that expires (~5 h), so the copy worker re-reads each video from the API
+-- right before copying it; the stored URL is never trusted later.
+CREATE TABLE IF NOT EXISTS public.companycam_videos (
+  id                text PRIMARY KEY,
+  project_id        text NOT NULL,
+  company_id        text,
+  creator_id        text,
+  creator_name      text,
+  captured_at       timestamptz,
+  cc_created_at     timestamptz,
+  cc_updated_at     timestamptz,
+  latitude          double precision,
+  longitude         double precision,
+  status            text,
+  internal          boolean,
+  format            text,
+  duration_s        integer,
+  transcript        text,
+  thumbnail_url     text,                 -- CompanyCam CDN (large); public
+  raw               jsonb NOT NULL DEFAULT '{}'::jsonb,
+  synced_at         timestamptz NOT NULL DEFAULT now(),
+  seen_run_id       text,
+  removed_at        timestamptz,
+  storage_status    text NOT NULL DEFAULT 'pending',
+  storage_paths     jsonb NOT NULL DEFAULT '{}'::jsonb,   -- {"video": "...", "thumbnail": "..."}
+  storage_bytes     bigint,
+  copy_attempts     smallint NOT NULL DEFAULT 0,
+  copy_claimed_at   timestamptz,
+  copy_error        text,
+  copied_at         timestamptz,
+  CONSTRAINT companycam_videos_storage_status_check
+    CHECK (storage_status IN ('pending', 'copying', 'copied', 'failed', 'skipped'))
+);
+CREATE INDEX IF NOT EXISTS companycam_videos_project_idx ON public.companycam_videos (project_id, captured_at DESC);
+ALTER TABLE public.companycam_videos ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.companycam_videos FROM anon, authenticated;
+GRANT ALL ON public.companycam_videos TO service_role;
+
+-- Next videos to copy: open-job videos first, then newest. Claimed like photos.
+CREATE OR REPLACE FUNCTION public.claim_companycam_video_batch(p_limit int DEFAULT 4)
+RETURNS SETOF public.companycam_videos LANGUAGE sql SET search_path = public AS $$
+  UPDATE companycam_videos v SET storage_status = 'copying', copy_attempts = v.copy_attempts + 1, copy_claimed_at = now()
+   WHERE v.id IN (
+     SELECT x.id FROM companycam_videos x
+       JOIN companycam_projects p ON p.id = x.project_id
+       LEFT JOIN acculynx_jobs j ON j.id = p.acculynx_job_id
+      WHERE x.storage_status IN ('pending', 'failed') AND x.removed_at IS NULL AND x.copy_attempts < 5
+      ORDER BY (j.current_milestone IN ('Lead', 'Prospect', 'Approved', 'Completed', 'Invoiced') AND j.archived_at IS NULL) DESC NULLS LAST,
+               x.captured_at DESC NULLS LAST
+      LIMIT p_limit
+      FOR UPDATE OF x SKIP LOCKED)
+  RETURNING v.*;
+$$;
+
+CREATE OR REPLACE FUNCTION public.release_stale_companycam_video_copies(p_older_than interval DEFAULT interval '45 minutes')
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_videos SET storage_status = 'pending'
+     WHERE storage_status = 'copying' AND copy_claimed_at < now() - p_older_than RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+CREATE OR REPLACE FUNCTION public.mark_companycam_videos_removed(p_run_id text)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_videos SET removed_at = clock_timestamp()
+     WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+
+-- One copy-priority rule, shared by the full refresh and the per-project refresh the webhook uses.
+CREATE OR REPLACE FUNCTION public.companycam_copy_priority(p_milestone text, p_job_archived_at timestamptz,
+  p_job_id text, p_property_id uuid, p_captured_at timestamptz)
+RETURNS smallint LANGUAGE sql STABLE SET search_path = public AS $$
+  SELECT (CASE
+    WHEN p_milestone IN ('Lead', 'Prospect', 'Approved', 'Completed', 'Invoiced') AND p_job_archived_at IS NULL THEN 1
+    WHEN p_captured_at >= now() - interval '90 days' THEN 2
+    WHEN p_job_id IS NOT NULL AND p_captured_at >= now() - interval '2 years' THEN 3
+    WHEN p_property_id IS NOT NULL THEN 5
+    ELSE 9 END)::smallint;
+$$;
+
+CREATE OR REPLACE FUNCTION public.refresh_companycam_copy_priority()
+RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE v_changed int;
+BEGIN
+  WITH pr AS (
+    SELECT ph.id, companycam_copy_priority(j.current_milestone, j.archived_at, j.id, p.property_id, ph.captured_at) AS prio
+    FROM companycam_photos ph JOIN companycam_projects p ON p.id = ph.project_id
+    LEFT JOIN acculynx_jobs j ON j.id = p.acculynx_job_id)
+  UPDATE companycam_photos ph SET storage_priority = pr.prio FROM pr WHERE pr.id = ph.id AND ph.storage_priority IS DISTINCT FROM pr.prio;
+  GET DIAGNOSTICS v_changed = ROW_COUNT;
+  RETURN jsonb_build_object('priority_changed', v_changed);
+END $$;
+
+CREATE OR REPLACE FUNCTION public.refresh_companycam_project_priority(p_project_id text)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH pr AS (
+    SELECT ph.id, companycam_copy_priority(j.current_milestone, j.archived_at, j.id, p.property_id, ph.captured_at) AS prio
+    FROM companycam_photos ph JOIN companycam_projects p ON p.id = ph.project_id
+    LEFT JOIN acculynx_jobs j ON j.id = p.acculynx_job_id
+    WHERE ph.project_id = p_project_id),
+  u AS (UPDATE companycam_photos ph SET storage_priority = pr.prio FROM pr
+         WHERE pr.id = ph.id AND ph.storage_priority IS DISTINCT FROM pr.prio RETURNING 1)
+  SELECT count(*)::int FROM u;
+$$;
+
+-- Webhook receiver audit log: every delivery, verified or not (edge function companycam-webhook).
+CREATE TABLE IF NOT EXISTS public.companycam_webhook_events (
+  id             bigserial PRIMARY KEY,
+  received_at    timestamptz NOT NULL DEFAULT now(),
+  webhook_id     text,
+  event_type     text,
+  resource_type  text,
+  resource_id    text,
+  signature_ok   boolean NOT NULL,
+  payload        jsonb,
+  processed_at   timestamptz,
+  process_result text,
+  process_error  text
+);
+CREATE INDEX IF NOT EXISTS companycam_webhook_events_received_idx ON public.companycam_webhook_events (received_at DESC);
+CREATE INDEX IF NOT EXISTS companycam_webhook_events_unprocessed_idx ON public.companycam_webhook_events (received_at)
+  WHERE processed_at IS NULL AND signature_ok;
+ALTER TABLE public.companycam_webhook_events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.companycam_webhook_events FROM anon, authenticated;
+GRANT ALL ON public.companycam_webhook_events TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.companycam_webhook_events_id_seq TO service_role;
+
+-- Secrets for the receiver live in Supabase Vault (names companycam_*): the webhook signing
+-- token (we generate it and hand it to CompanyCam at registration) and the API token the
+-- receiver uses to re-read the resource an event names. Service-role only; never logged.
+CREATE OR REPLACE FUNCTION public.companycam_secret(p_name text)
+RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, vault AS $$
+  SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = p_name AND p_name LIKE 'companycam\_%' LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.companycam_put_secret(p_name text, p_secret text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, vault AS $$
+DECLARE v_id uuid;
+BEGIN
+  IF p_name NOT LIKE 'companycam\_%' THEN RAISE EXCEPTION 'companycam_put_secret only manages companycam_* names'; END IF;
+  IF coalesce(length(p_secret), 0) < 16 THEN RAISE EXCEPTION 'secret too short'; END IF;
+  SELECT id INTO v_id FROM vault.secrets WHERE name = p_name;
+  IF v_id IS NULL THEN PERFORM vault.create_secret(p_secret, p_name, 'CompanyCam integration (docs/120)');
+  ELSE PERFORM vault.update_secret(v_id, p_secret); END IF;
+END $$;
+
+REVOKE ALL ON FUNCTION public.claim_companycam_video_batch(int), public.release_stale_companycam_video_copies(interval),
+  public.mark_companycam_videos_removed(text), public.companycam_copy_priority(text, timestamptz, text, uuid, timestamptz),
+  public.refresh_companycam_project_priority(text), public.companycam_secret(text), public.companycam_put_secret(text, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_companycam_video_batch(int), public.release_stale_companycam_video_copies(interval),
+  public.mark_companycam_videos_removed(text), public.companycam_copy_priority(text, timestamptz, text, uuid, timestamptz),
+  public.refresh_companycam_project_priority(text), public.companycam_secret(text), public.companycam_put_secret(text, text)
+  TO service_role;
+
+-- Videos up to ~250 MB observed; allow 1 GB per object in this bucket.
+UPDATE storage.buckets SET file_size_limit = 1073741824 WHERE id = 'companycam-photos';
