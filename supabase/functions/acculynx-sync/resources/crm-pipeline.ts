@@ -120,7 +120,8 @@ export function parseLeadSource(name?: string | null): { parent: string | null; 
 
 export function parseJobName(jobName?: string | null): { prefix: string | null; rest: string | null } {
   if (!jobName) return { prefix: null, rest: null };
-  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+):\s*(.*)$/);
+  // CRM job numbers keep their -PECRM suffix in the prefix (mig 315, docs/118).
+  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+(?:-PECRM)?):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };
   m = jobName.match(/^([0-9]+):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };

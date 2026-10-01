@@ -558,7 +558,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
     namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
     acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
-    needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
+    needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched) && acculynxByInvoice.get(i.invoice_number)?.naming_status !== "crm_job",
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;
@@ -859,7 +859,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
       namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
       acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
-      needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
+      needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched) && acculynxByInvoice.get(i.invoice_number)?.naming_status !== "crm_job",
       lines: [],
       hasPriceList: true,
       searchText: [i.invoice_number, i.purchase_order_number, i.branch_number, i.ship_to_number, i.branch_name, cleanOffice(i.office), acculynxByInvoice.get(i.invoice_number)?.pe_job_number, acculynxByInvoice.get(i.invoice_number)?.client_name, acculynxByInvoice.get(i.invoice_number)?.job_category_name, acculynxByInvoice.get(i.invoice_number)?.canonical_po, acculynxByInvoice.get(i.invoice_number)?.naming_status]
@@ -1224,7 +1224,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     canonicalPo: ax?.canonical_po ?? "",
     namingStatus: ax?.naming_status ?? "needs_link",
     acculynxJobId: ax?.acculynx_job_id ?? "",
-    needsAcculynxLink: !ax?.matched,
+    needsAcculynxLink: !ax?.matched && ax?.naming_status !== "crm_job",
     lines,
   };
   invoice.toBePaid = isInvoiceToBePaid(invoice);
