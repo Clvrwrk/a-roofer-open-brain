@@ -117,6 +117,7 @@ flowchart LR
 
 - **Receiver:** `supabase/functions/companycam-webhook` (Deno, v3). Bad signature → 401; non-POST → 405. It re-reads the resource rather than trusting the payload, logs every verified delivery, and always returns 200 after logging so CompanyCam never disables the hook over our processing errors. The nightly sync stays as the backstop.
 - **Secrets:** Supabase Vault (`companycam_webhook_token`, `companycam_access_token`), read through `companycam_secret()` (service role only). Chosen over edge-function env secrets so no Management-API token or Coolify change is needed.
+- **Payload shape (first live delivery):** objects are nested under their resource name (`{label, project}`, `{tag, photo}`). Receiver v4 reads `payload.<resource>` and falls back to a flat payload.
 - **Live (2026-10-01 16:33 UTC):** CompanyCam webhook **287229**, enabled, scopes `photo.*`, `project.*`, `video.*`, `comment.*`. Receiver v3 refuses unsigned requests before any DB write and passes only numeric IDs into API paths. Verified: forged → 401 with no row; a signed `photo.updated` → re-read, upsert, display copy.
 - **Registration:** `integrations/bridges/companycam/register-webhook.mjs` is the bridge's only CompanyCam write. It creates one webhook for scopes `photo.*`, `project.*`, `video.*` and `comment.*`, refuses a duplicate, and `--rotate` replaces the token.
 - **Monitoring:** `select event_type, signature_ok, process_result, process_error from companycam_webhook_events order by id desc limit 20;`
@@ -140,7 +141,7 @@ update companycam_videos set storage_status = 'pending', copy_attempts = 0 where
 1. ~~Register the CompanyCam webhook~~: done, webhook 287229 (§5).
 2. Grant `crm_property_reader` read on the photo feed and choose the CRM signing path (§6).
 3. Install the two systemd units on the agent host and put `COMPANYCAM_ACCESS_TOKEN` in its `master.env` (the agent cannot change host state over SSH in auto mode). Runbook: §8.
-4. ~~Videos~~: approved. Raise the Supabase project upload limit so files over 50 MB can be stored (§5a).
+4. ~~Videos~~: approved; Chris raised the project upload limit to 1 GB on 2026-10-01 and the 10 parked videos were re-queued (§5a).
 5. Documents (624): copy or link only?
 
 ## 8. Agent-host install (Chris, about 5 minutes)
