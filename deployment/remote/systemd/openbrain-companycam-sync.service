@@ -1,0 +1,19 @@
+[Unit]
+Description=Open Brain CompanyCam mirror sync (docs/120)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Sunday = full sweep (also marks removed rows); other days = incremental.
+ExecStart=/usr/bin/env bash -c 'if [ "$(date +%%u)" = 7 ]; then m=full; else m=nightly; fi; exec /usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/companycam-sync.sh "$m"'
+User=root
+Environment=HOME=/root
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-companycam-sync
+# Full sweep ≈ 3.1k photo pages at 200 GET/min ≈ 20–35 min; hard stop at 2h.
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

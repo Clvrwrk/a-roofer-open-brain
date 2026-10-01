@@ -136,6 +136,12 @@ const stateLine = (r: (typeof board.rows)[number]) => {
 
       <dl class="pr-d-facts" id="pr-d-facts"></dl>
 
+      <section class="pr-d-section" data-section="photos">
+        <h4>Job-site photos</h4>
+        <p class="pr-d-help">From CompanyCam, newest first (docs/120). Seeing the house is usually the fastest way to confirm the right property.</p>
+        <ul class="pr-photos" id="pr-photos" aria-live="polite"></ul>
+      </section>
+
       <section class="pr-d-section" data-section="link">
         <h4>Link to a property</h4>
         <p class="pr-d-help">The suggested property, anything at the same zip and house number, and properties within 150 m of where Google places the job.</p>
@@ -266,6 +272,10 @@ const stateLine = (r: (typeof board.rows)[number]) => {
     .pr .pr-cand { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
     .pr .pr-cand-text { flex: 1; min-width: 0; font-size: 12.5px; }
     .pr .pr-cand-text small { display: block; color: var(--muted); font-size: 11px; }
+    .pr .pr-photos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+    .pr .pr-photos a { display: block; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; aspect-ratio: 1; background: var(--line); }
+    .pr .pr-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pr .pr-photos .pr-d-help { grid-column: 1 / -1; }
     .pr .pr-d-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .pr .pr-d-status { margin: 0; font-size: 12.5px; color: var(--red); min-height: 1em; }
     @media (max-width: 720px) {
@@ -378,6 +388,7 @@ const stateLine = (r: (typeof board.rows)[number]) => {
     const corrected = document.getElementById("pr-corrected") as HTMLInputElement;
     const note = document.getElementById("pr-note") as HTMLTextAreaElement;
     const dStatus = document.getElementById("pr-d-status")!;
+    const photos = document.getElementById("pr-photos")!;
     const reopenBtn = dialog.querySelector<HTMLButtonElement>('[data-action="reopen"]')!;
     let current: { row: HTMLTableRowElement; data: any } | null = null;
     // Every async answer is checked against the job it was asked for, so a slow response for
@@ -415,6 +426,48 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       return li;
     };
 
+    const photoItem = (p: any) => {
+      const li = el("li");
+      const a = el("a") as HTMLAnchorElement;
+      a.href = p.webUrl ?? p.thumbnailUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      const when = p.capturedAt ? new Date(p.capturedAt).toLocaleDateString() : "undated";
+      a.title = [when, p.creatorName, p.tags?.join(", ")].filter(Boolean).join(" · ");
+      const img = el("img") as HTMLImageElement;
+      img.src = p.thumbnailUrl;
+      img.loading = "lazy";
+      img.alt = `Job-site photo, ${when}${p.projectName ? `, ${p.projectName}` : ""}`;
+      a.append(img);
+      li.append(a);
+      return li;
+    };
+
+    const loadPhotos = async (jobId: string) => {
+      photos.replaceChildren(el("li", "Loading photos…", "pr-d-help"));
+      try {
+        const res = await fetch(`/api/companycam/photos?jobId=${encodeURIComponent(jobId)}&limit=12`, { credentials: "same-origin" });
+        const body = await res.json();
+        if (!stillCurrent(jobId)) return;
+        if (!res.ok) throw new Error(body.error_description ?? "Photos could not be loaded.");
+        const list = (body.photos ?? []).filter((p: any) => p.thumbnailUrl);
+        const items: HTMLElement[] = list.map(photoItem);
+        if (!list.length) items.push(el("li", "No CompanyCam photos are linked to this job yet.", "pr-d-help"));
+        else if (list[0].companycamProjectUrl) {
+          const more = el("li", undefined, "pr-d-help");
+          const link = el("a", "Open the project in CompanyCam", undefined) as HTMLAnchorElement;
+          link.href = list[0].companycamProjectUrl;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          more.append(link);
+          items.push(more);
+        }
+        photos.replaceChildren(...items);
+      } catch (e) {
+        if (stillCurrent(jobId)) photos.replaceChildren(el("li", (e as Error).message, "pr-d-help"));
+      }
+    };
+
     const setBusy = (busy: boolean) => dialog.querySelectorAll<HTMLButtonElement>("button[data-action]").forEach((b) => { b.disabled = busy; });
 
     const openDialog = async (row: HTMLTableRowElement) => {
@@ -440,6 +493,7 @@ const stateLine = (r: (typeof board.rows)[number]) => {
       dialog.querySelectorAll<HTMLElement>("[data-section=fix], [data-section=note]").forEach((sec) => { sec.hidden = !canDecide; });
       if (!dialog.open) dialog.showModal();
       const askedFor = data.jobId;
+      void loadPhotos(askedFor);
       try {
         const res = await fetch(`/api/operations/property-review/candidates?jobId=${encodeURIComponent(askedFor)}`, { credentials: "same-origin" });
         const body = await res.json();

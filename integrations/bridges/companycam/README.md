@@ -1,5 +1,13 @@
 # CompanyCam Bridge
 
+> **2026-10-01 — superseded in part by [docs/120](../../../docs/120-companycam-integration.md).**
+> The bridge is live as a read-only mirror (migration 318): `sync.mjs` + `read-only-client.mjs`,
+> tables `companycam_projects` / `companycam_photos`, and photo **bytes are now copied** into the
+> private `companycam-photos` bucket (open jobs first). The API is `app.companycam.com/public_api/v1`
+> with a personal access token (`COMPANYCAM_ACCESS_TOKEN`), not the v2 `COMPANYCAM_API_KEY` below.
+> The atom/EEAT design further down is still the plan for the `thoughts` layer; it is not built yet.
+
+
 CompanyCam is the job-site photography platform used by the majority of professional roofing crews.
 Its primary value in the brain is twofold: it is the best source of **EEAT evidence atoms** (before/
 after documentation of real work on real roofs), and it is the primary **insurance claim evidence

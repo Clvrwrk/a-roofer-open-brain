@@ -1,0 +1,19 @@
+[Unit]
+Description=Open Brain CompanyCam photo copy — drains the companycam-photos queue, open jobs first (docs/120)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/companycam-sync.sh copy
+User=root
+Environment=HOME=/root
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-companycam-copy
+# The timer fires every 30 min; a tick never overlaps the next (oneshot), and claims left by a
+# killed run are returned to the queue after 30 min (release_stale_companycam_copies).
+TimeoutStartSec=1700
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -115,6 +115,8 @@ export const SYSTEMD_JOBS: SystemdSpec[] = [
   { key: "systemd.openbrain-maya-qa", unit: "openbrain-maya-qa.service", label: "Maya nightly QA", purpose: "Wide site walk + chaos forensic pass of the live site", cadenceS: 86_400, scheduleLabel: "04:30 CT daily" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
   { key: "systemd.openbrain-site-sweep", unit: "openbrain-site-sweep.service", label: "Site quality sweep", purpose: "Static + live + DB money-truth checks (PEC-218)", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/92" },
+  { key: "systemd.openbrain-companycam-sync", unit: "openbrain-companycam-sync.service", label: "CompanyCam mirror sync", purpose: "Projects + photos metadata → companycam_* mirror, job/property links, copy priority (docs/120)", cadenceS: 86_400, scheduleLabel: "02:15 CT daily (full sweep Sun)", docs: "docs/120" },
+  { key: "systemd.openbrain-companycam-copy", unit: "openbrain-companycam-copy.service", label: "CompanyCam photo copy", purpose: "Copies photo bytes into the private companycam-photos bucket, open jobs first (docs/120)", cadenceS: 1_800, scheduleLabel: "every 30 min", docs: "docs/120" },
   { key: "systemd.openbrain-wip-pack-thursday", unit: "openbrain-wip-pack-thursday.service", label: "AR/WIP pack build", purpose: "refresh_wip_ar_master + Excel pack → wip-packs bucket", cadenceS: 86_400, scheduleLabel: "06:22 CT daily", docs: "docs/85" },
 ];
 
@@ -127,6 +129,7 @@ export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
   { key: "api.executive.cash-runway", path: "/api/executive/cash-runway.json", label: "executive/cash-runway", kind: "api", purpose: "Cash runway (13WCF)", expect: 401 },
   { key: "api.agent.work-queue", path: "/api/agent/work-queue", label: "agent/work-queue", kind: "api", purpose: "Agent work queue", expect: 401 },
   { key: "api.credit-memos.pending", path: "/api/credit-memos/pending", label: "credit-memos/pending", kind: "api", purpose: "Claim-It pending CM lines", expect: 401 },
+  { key: "api.companycam.photos", path: "/api/companycam/photos", label: "companycam/photos", kind: "api", purpose: "Job-site photo feed (docs/120)", expect: 401 },
   { key: "api.accounting.friday-wip", path: "/api/accounting/friday-wip.json", label: "accounting/friday-wip", kind: "api", purpose: "Friday WIP/AR board", expect: 401 },
 ];
 
@@ -136,6 +139,7 @@ export const INTEGRATIONS: IntegrationSpec[] = [
   { key: "int.workos", label: "WorkOS", purpose: "Staff sign-in for cc and crm", url: "https://api.workos.com/user_management/users?limit=1", authEnv: "WORKOS_API_KEY", expectAuthed: 200, expectAnon: 401 },
   { key: "int.jobtread", label: "JobTread (Pave API)", purpose: "Job mirror + sync sentinel", url: "https://api.jobtread.com/pave", method: "POST", body: '{"query":{}}', expectAnon: 200, credentialHome: "grant key on the agent host (master.env)" },
   { key: "int.acculynx", label: "AccuLynx API", purpose: "Hourly sync for 8 accounts (edge function)", url: "https://api.acculynx.com/api/v2/users", expectAnon: 401, credentialHome: "per-account keys in Supabase edge-function secrets" },
+  { key: "int.companycam", label: "CompanyCam Public API", purpose: "Job-site photo mirror (read-only, docs/120)", url: "https://app.companycam.com/public_api/v1/companies/current", expectAnon: 401, credentialHome: "personal access token on the agent host (master.env; 1Password CW_Master)" },
   { key: "int.quickbooks", label: "QuickBooks Online (Intuit platform)", purpose: "Read-only mirror (hard rule 13)", url: "https://oauth.platform.intuit.com/op/v1/jwks", expectAnon: 200, credentialHome: "OAuth tokens on the agent host" },
   { key: "int.slack", label: "Slack API", purpose: "Agent bot identities post here", url: "https://slack.com/api/auth.test", anonUrl: "https://slack.com/api/api.test", authEnv: "MAYA_CHEN_BOT_TOKEN", expectAuthed: 200, expectAnon: 200, expectBody: '"ok":true', credentialHome: "bot tokens per agent (slack-agents skill)" },
   { key: "int.abc-supply", label: "ABC Supply Partners API", purpose: "Nightly invoice / order mirror", url: "https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357/.well-known/openid-configuration", expectAnon: 200, credentialHome: "client credentials on the agent host (partners.abcsupply.com)" },
