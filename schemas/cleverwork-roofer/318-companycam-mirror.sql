@@ -364,3 +364,25 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES ('companycam-photos', 'companycam-photos', false, 52428800,
         ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'video/mp4', 'video/quicktime'])
 ON CONFLICT (id) DO NOTHING;
+
+-- ── 318b: originals backfill queue (applied as 318b_companycam_original_backfill_queue) ──
+-- The copy worker's display pass stores thumbnail + web (~50 KB/photo, what apps show) and marks
+-- the row 'copied'. A second pass adds the ~420 KB original to copied rows, in the same
+-- priority order, so open jobs are fully viewable long before the archive clone finishes.
+CREATE INDEX IF NOT EXISTS companycam_photos_original_queue_idx
+  ON public.companycam_photos (storage_priority, captured_at DESC)
+  WHERE storage_status = 'copied' AND NOT (storage_paths ? 'original') AND removed_at IS NULL;
+
+CREATE OR REPLACE FUNCTION public.claim_companycam_original_batch(p_limit int DEFAULT 50, p_max_priority smallint DEFAULT 9)
+RETURNS SETOF public.companycam_photos LANGUAGE sql SET search_path = public AS $$
+  UPDATE companycam_photos ph SET copy_claimed_at = now()
+   WHERE ph.id IN (SELECT id FROM companycam_photos
+                    WHERE storage_status = 'copied' AND NOT (storage_paths ? 'original') AND removed_at IS NULL
+                      AND storage_priority <= p_max_priority
+                      AND (copy_claimed_at IS NULL OR copy_claimed_at < now() - interval '30 minutes')
+                    ORDER BY storage_priority, captured_at DESC NULLS LAST
+                    LIMIT p_limit FOR UPDATE SKIP LOCKED)
+  RETURNING ph.*;
+$$;
+REVOKE ALL ON FUNCTION public.claim_companycam_original_batch(int, smallint) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_companycam_original_batch(int, smallint) TO service_role;

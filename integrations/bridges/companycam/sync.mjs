@@ -3,7 +3,8 @@
 //
 //   node integrations/bridges/companycam/sync.mjs nightly            # incremental metadata + link + priority
 //   node integrations/bridges/companycam/sync.mjs full               # full sweep (also detects removals)
-//   node integrations/bridges/companycam/sync.mjs copy [--max-priority 1] [--limit 500] [--concurrency 6]
+//   node integrations/bridges/companycam/sync.mjs copy [--max-priority 1] [--limit 500] [--concurrency 10]
+//                                                 [--originals | --then-originals]
 //   node integrations/bridges/companycam/sync.mjs status
 //
 // Options: --dry-run (fetch + map, write nothing), --pages N (cap pages per stream; for tests),
@@ -237,55 +238,59 @@ async function linkAndPrioritise() {
 }
 
 // ── Copy worker ───────────────────────────────────────────────────────────────────
-// Claims batches in priority order (open jobs first) and stores each variant at
-// <project_id>/<photo_id>/<variant>.jpg. Annotated variants are kept only when the photo has
-// annotations (otherwise CompanyCam serves identical bytes).
+// Two passes, both in priority order (open jobs first):
+//   display pass (default)  thumbnail + web (~50 KB/photo) → storage_status 'copied'; what apps show.
+//   originals pass          `--originals`, or automatically once the display queue is empty when
+//                           `--then-originals` is set: adds the ~420 KB original to copied rows.
+// Objects live at <project_id>/<photo_id>/<variant>.jpg. Annotated variants are kept only when
+// the photo has annotations (otherwise CompanyCam serves identical bytes).
 async function copyWorker() {
   const maxPriority = Number(args["max-priority"] ?? 9);
   const limit = Number(args.limit ?? 500);
-  const concurrency = Math.max(1, Math.min(16, Number(args.concurrency ?? 6)));
-  const variants = String(args.variants || "thumbnail,web,original").split(",");
+  const concurrency = Math.max(1, Math.min(24, Number(args.concurrency ?? 10)));
   const released = await rpc("release_stale_companycam_copies");
   if (released) log(`copy: returned ${released} stale claims to the queue`);
-  let done = 0, failed = 0, bytes = 0;
-  while (done + failed < limit) {
-    const batch = await sb(`/rest/v1/rpc/claim_companycam_copy_batch`, {
-      method: "POST", body: { p_limit: Math.min(50, limit - done - failed), p_max_priority: maxPriority },
-    });
-    if (!batch?.length) break;
-    const queue = [...batch];
-    await Promise.all(Array.from({ length: concurrency }, async () => {
-      for (let photo = queue.shift(); photo; photo = queue.shift()) {
-        try {
-          const r = await copyOne(photo, variants);
-          bytes += r.bytes; done++;
-        } catch (err) {
-          failed++;
-          await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, {
-            method: "PATCH", body: { storage_status: "failed", copy_error: String(err.message).slice(0, 500) },
-            headers: { Prefer: "return=minimal" },
-          });
+  const stats = { display: 0, originals: 0, failed: 0, bytes: 0 };
+  const passes = args.originals ? ["originals"] : args["then-originals"] ? ["display", "originals"] : ["display"];
+  for (const pass of passes) {
+    const claimFn = pass === "display" ? "claim_companycam_copy_batch" : "claim_companycam_original_batch";
+    const variants = pass === "display" ? String(args.variants || "thumbnail,web").split(",") : ["original"];
+    while (stats.display + stats.originals + stats.failed < limit) {
+      const room = limit - stats.display - stats.originals - stats.failed;
+      const batch = await sb(`/rest/v1/rpc/${claimFn}`, { method: "POST", body: { p_limit: Math.min(50, room), p_max_priority: maxPriority } });
+      if (!batch?.length) break;
+      const queue = [...batch];
+      await Promise.all(Array.from({ length: concurrency }, async () => {
+        for (let photo = queue.shift(); photo; photo = queue.shift()) {
+          try {
+            const r = await copyOne(photo, variants, pass === "originals");
+            stats.bytes += r.bytes; stats[pass]++;
+          } catch (err) {
+            stats.failed++;
+            const body = pass === "display"
+              ? { storage_status: "failed", copy_error: String(err.message).slice(0, 500) }
+              : { copy_error: `original: ${String(err.message).slice(0, 480)}` }; // display copy stays good
+            await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, { method: "PATCH", body, headers: { Prefer: "return=minimal" } });
+          }
         }
-      }
-    }));
-    log(`copy: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(1)} MB`);
+      }));
+      log(`copy[${pass}]: ${stats.display} display, ${stats.originals} originals, ${stats.failed} failed, ${(stats.bytes / 1048576).toFixed(1)} MB`);
+    }
   }
-  await setState("copy", { last_run_stats: { done, failed, bytes, max_priority: maxPriority } });
-  log(`copy finished: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(1)} MB`);
+  await setState("copy", { last_run_stats: { ...stats, max_priority: maxPriority, passes } });
+  log(`copy finished: ${JSON.stringify(stats)}`);
 }
 
-async function copyOne(photo, variants) {
+async function copyOne(photo, variants, mergeIntoExisting = false) {
   const raw = photo.raw || {};
   const want = [...variants];
   if (photo.has_annotations) want.push(...variants.map((v) => `${v}_annotation`));
-  const paths = {};
-  let total = 0;
-  for (const variant of want) {
-    const src = raw.uris?.find((u) => u.type === variant)?.url;
-    if (!src) continue;
-    // An unannotated photo's *_annotation URL is the base image's URL; don't store it twice.
-    const base = variant.endsWith("_annotation") ? raw.uris?.find((u) => u.type === variant.replace(/_annotation$/, ""))?.url : null;
-    if (base && base === src) continue;
+  const url = (type) => raw.uris?.find((u) => u.type === type)?.url;
+  // An unannotated photo's *_annotation URL is the base image's URL; don't store it twice.
+  const jobs = want.map((variant) => ({ variant, src: url(variant) }))
+    .filter(({ variant, src }) => src && !(variant.endsWith("_annotation") && url(variant.replace(/_annotation$/, "")) === src));
+  // Variants of one photo move in parallel; photos are parallel across workers.
+  const results = await Promise.all(jobs.map(async ({ variant, src }) => {
     const res = await fetch(src);
     if (!res.ok) throw new Error(`fetch ${variant} → ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
@@ -298,16 +303,26 @@ async function copyOne(photo, variants) {
       body: buf,
     });
     if (!up.ok) throw new Error(`upload ${variant} → ${up.status} ${(await up.text()).slice(0, 200)}`);
-    paths[variant] = path;
-    total += buf.length;
+    return { variant, path, bytes: buf.length };
+  }));
+  const fresh = Object.fromEntries(results.map((r) => [r.variant, r.path]));
+  const added = results.reduce((n, r) => n + r.bytes, 0);
+  if (mergeIntoExisting) {
+    if (!fresh.original) throw new Error("no original variant available");
+    await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, {
+      method: "PATCH",
+      body: { storage_paths: { ...(photo.storage_paths || {}), ...fresh }, storage_bytes: (photo.storage_bytes || 0) + added, copy_error: null },
+      headers: { Prefer: "return=minimal" },
+    });
+  } else {
+    if (!fresh.thumbnail && !fresh.web) throw new Error("no thumbnail/web variant available");
+    await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, {
+      method: "PATCH",
+      body: { storage_status: "copied", storage_paths: fresh, storage_bytes: added, copied_at: new Date().toISOString(), copy_error: null },
+      headers: { Prefer: "return=minimal" },
+    });
   }
-  if (!paths.thumbnail && !paths.web) throw new Error("no thumbnail/web variant available");
-  await sb(`/rest/v1/companycam_photos?id=eq.${photo.id}`, {
-    method: "PATCH",
-    body: { storage_status: "copied", storage_paths: paths, storage_bytes: total, copied_at: new Date().toISOString(), copy_error: null },
-    headers: { Prefer: "return=minimal" },
-  });
-  return { bytes: total };
+  return { bytes: added };
 }
 
 async function status() {

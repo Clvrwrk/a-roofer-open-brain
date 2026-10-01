@@ -30,8 +30,8 @@ fi
 
 case "$MODE" in
   nightly|full) ARGS=("$MODE") ;;
-  # ~25 min of copying per 30-min timer tick: 6 workers, open jobs first, whole queue in order.
-  copy) ARGS=(copy --limit "${COMPANYCAM_COPY_LIMIT:-6000}" --concurrency "${COMPANYCAM_COPY_CONCURRENCY:-6}") ;;
+  # ~25 min per 30-min tick: display sizes for the whole queue first (open jobs first), then originals.
+  copy) ARGS=(copy --then-originals --limit "${COMPANYCAM_COPY_LIMIT:-20000}" --concurrency "${COMPANYCAM_COPY_CONCURRENCY:-10}") ;;
   *) echo "unknown mode: $MODE" >&2; exit 2 ;;
 esac
 

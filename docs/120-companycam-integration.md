@@ -73,7 +73,7 @@ Source: the official OpenAPI spec (`developers.companycam.com/openapi/public_api
   3. Closed job, captured in the last 2 years.
   5. Linked to a property.
   9. Back library.
-  The worker claims batches with `FOR UPDATE SKIP LOCKED` and stores `<project>/<photo>/<variant>.jpg` (thumbnail, web, original; annotated variants only when they differ). A killed run's claims return to the queue after 30 minutes.
+  The worker claims batches with `FOR UPDATE SKIP LOCKED` and stores `<project>/<photo>/<variant>.jpg` in **two passes** (318b): a display pass (thumbnail + web, ~50 KB per photo, which is what apps show) for the whole queue, then an originals pass (~420 KB each) in the same order. Annotated variants are stored only when they differ. A killed run's claims return to the queue after 30 minutes. Measured from the laptop's home uplink, the full-size pass managed about 1 photo/s, so the bulk copy belongs on the agent host.
 - **Serving:** `v_companycam_photo_feed.source` is `brain` (sign `thumbnail_path` / `web_path` from the private bucket) or `companycam` (use the CDN URL). CC's `/api/companycam/photos` does this already (`src/lib/companycam-photos.server.ts`).
 - **Runtime:** `scripts/companycam-sync.sh` + `deployment/remote/systemd/openbrain-companycam-{sync,copy}.{service,timer}` on the US agent host. The sync runs at 02:15 CT and the copy every 30 min, about 6k photos per tick, so the whole library takes roughly a day. Both report to the runtime board (`runtime-registry.ts`), and `int.companycam` is pinged anonymously (expect 401).
 
@@ -107,5 +107,35 @@ Creating a CompanyCam webhook is a write to an external system, so it is held fo
 
 1. Register the CompanyCam webhook (§5)?
 2. Grant `crm_property_reader` read on the photo feed and choose the CRM signing path (§6)?
-3. Install the two systemd units on the agent host and put `COMPANYCAM_ACCESS_TOKEN` in its `master.env` (the agent cannot change host state over SSH in auto mode).
+3. Install the two systemd units on the agent host and put `COMPANYCAM_ACCESS_TOKEN` in its `master.env` (the agent cannot change host state over SSH in auto mode). Runbook: §8.
 4. Videos and documents: copy them too (+~30 GB estimated), or link only?
+
+## 8. Agent-host install (Chris, about 5 minutes)
+
+On `178.156.203.23` (`ssh -i ~/.ssh/hetzner_office root@178.156.203.23`), after `main` carries this work:
+
+```bash
+cd /opt/openbrain/a-roofers-open-brain && git pull --ff-only origin main
+```
+
+Add the token to master.env (paste it from 1Password `CW_Master / CompanyCam-PE-PWA-CRM`, field `credential`), then confirm the repo `.env` targets `rnhmvcpsvtqjlffpsayu`:
+
+```bash
+printf 'COMPANYCAM_ACCESS_TOKEN=%s\n' 'PASTE_TOKEN_HERE' >> /root/.config/cleverwork/master.env
+```
+
+```bash
+grep -E '^SUPABASE_URL=' /opt/openbrain/a-roofers-open-brain/.env | sed -E 's#https://([^.]+).*#\1#'
+```
+
+```bash
+cp deployment/remote/systemd/openbrain-companycam-{sync,copy}.{service,timer} /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now openbrain-companycam-sync.timer openbrain-companycam-copy.timer
+```
+
+Smoke test (one copy tick, then the board):
+
+```bash
+systemctl start openbrain-companycam-copy.service && tail -5 /root/.companycam-sync/logs/companycam-copy.log
+```
+
+Rollback: `systemctl disable --now openbrain-companycam-{sync,copy}.timer`. The mirror tables and bucket stay; nothing in CompanyCam is touched.
