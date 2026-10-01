@@ -38,7 +38,16 @@ const supabaseUrl = String(env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || "").re
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
 const log = (...m) => console.log(new Date().toISOString(), ...m);
 
-const cc = ["status", "copy", "prioritise"].includes(mode) ? null : createCompanyCamClient({ token: env.COMPANYCAM_ACCESS_TOKEN, log });
+// The token comes from the environment (agent host master.env) or, failing that, from Supabase
+// Vault (companycam_access_token, stored by register-webhook.mjs for the webhook receiver).
+let cc = null;
+async function companyCam() {
+  if (cc) return cc;
+  let token = env.COMPANYCAM_ACCESS_TOKEN;
+  if (!token) token = await sb(`/rest/v1/rpc/companycam_secret`, { method: "POST", body: { p_name: "companycam_access_token" } }).catch(() => null);
+  cc = createCompanyCamClient({ token, log });
+  return cc;
+}
 
 // ── Supabase (PostgREST + Storage, service role) ──────────────────────────────────
 function sbHeaders(extra = {}) {
@@ -316,7 +325,7 @@ async function copyVideos() {
           const res = await fetch(f.src, { signal: AbortSignal.timeout(240_000) });
           if (!res.ok) throw new Error(`fetch ${f.key} → ${res.status}`);
           const buf = Buffer.from(await res.arrayBuffer());
-          const type = res.headers.get("content-type") || (f.key === "video" ? "video/mp4" : "image/jpeg");
+          const type = mediaType(f.key, res.headers.get("content-type"), f.src, buf);
           const ext = f.key === "thumbnail" ? "jpg" : type.includes("quicktime") ? "mov" : "mp4";
           const path = `${row.project_id}/videos/${row.id}/${f.key}.${ext}`;
           const up = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`, {
@@ -358,6 +367,20 @@ async function copyVideos() {
   log(`video copy finished: ${done} copied, ${failed} failed, ${(bytes / 1048576).toFixed(0)} MB`);
 }
 
+// CompanyCam's S3 labels some videos binary/octet-stream, which the bucket refuses (415). Trust a
+// real video/* or image/* header; otherwise infer from the URL's extension, then the ISO-BMFF
+// "ftyp" brand ('qt  ' = QuickTime), defaulting to MP4.
+function mediaType(kind, header, src, buf) {
+  const h = String(header || "").split(";")[0].trim().toLowerCase();
+  if (kind === "thumbnail") return h.startsWith("image/") ? h : "image/jpeg";
+  if (h.startsWith("video/")) return h;
+  const ext = new URL(src).pathname.split(".").pop().toLowerCase();
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "mp4" || ext === "m4v") return "video/mp4";
+  if (buf.length > 12 && buf.toString("latin1", 4, 8) === "ftyp") return buf.toString("latin1", 8, 12) === "qt  " ? "video/quicktime" : "video/mp4";
+  return "video/mp4";
+}
+
 async function status() {
   const progress = await sb(`/rest/v1/v_companycam_clone_progress?select=*&order=storage_priority,storage_status`);
   const state = await sb(`/rest/v1/companycam_sync_state?select=stream,watermark,last_run_at,last_run_stats`);
@@ -370,6 +393,7 @@ const runId = randomUUID();
 // A full sweep retires only rows last synced before this, so a webhook write mid-sweep survives.
 const sweepStartedAt = new Date(Date.now() - 5 * 60_000).toISOString();
 try {
+  if (["nightly", "full", "videos", "copy-videos"].includes(mode)) await companyCam();
   if (mode === "nightly" || mode === "full") {
     const full = mode === "full";
     log(`companycam ${mode} start${dryRun ? " (dry run)" : ""} run=${runId} supabase=${new URL(supabaseUrl).host.split(".")[0]}`);

@@ -124,7 +124,7 @@ flowchart LR
 
 ## 5a. Videos (approved by Chris 2026-10-01)
 
-557 videos: avg ~79 MB, largest seen 241 MB, ~45 GB in total. `playback_url` is a presigned S3 URL that expires in about 5 hours (anonymous HEAD → 403), so `sync.mjs copy-videos` re-reads each video from the API immediately before copying. It stores `<project>/videos/<id>/video.{mp4,mov}` plus the large thumbnail, open-job videos first. **The Supabase project-wide upload limit is 50 MB**, so larger files return 413 and are parked as `storage_status='skipped'`, `copy_error like 'too_large%'`. After the limit is raised (Dashboard → Storage → Settings → global file size limit, e.g. 1 GB; the bucket already allows 1 GB), re-queue them with:
+557 videos: avg ~79 MB, largest seen 241 MB, ~45 GB in total. `playback_url` is a presigned S3 URL that expires in about 5 hours (anonymous HEAD → 403), so `sync.mjs copy-videos` re-reads each video from the API immediately before copying. It stores `<project>/videos/<id>/video.{mp4,mov}` plus the large thumbnail, open-job videos first. **The Supabase project-wide upload limit is 50 MB**, so larger files return 413 and are parked as `storage_status='skipped'`, `copy_error like 'too_large%'`. After the limit is raised (Dashboard → Storage → Settings → global file size limit, e.g. 1 GB; the bucket already allows 1 GB), re-queue them with (done 2026-10-01; S3 also labels some videos `binary/octet-stream`, which the bucket refuses, so the worker now infers `video/mp4` or `video/quicktime` from the extension or the `ftyp` header):
 
 ```sql
 update companycam_videos set storage_status = 'pending', copy_attempts = 0 where copy_error like 'too_large%';
@@ -160,7 +160,7 @@ On `178.156.203.23` (`ssh -i ~/.ssh/hetzner_office root@178.156.203.23`), after 
 cd /opt/openbrain/a-roofers-open-brain && git pull --ff-only origin main
 ```
 
-Add the token to master.env (paste it from 1Password `CW_Master / CompanyCam-PE-PWA-CRM`, field `credential`), then confirm the repo `.env` targets `rnhmvcpsvtqjlffpsayu`:
+Optionally add the token to master.env (paste it from 1Password `CW_Master / CompanyCam-PE-PWA-CRM`, field `credential`). Without it, `sync.mjs` reads `companycam_access_token` from Supabase Vault, the same copy the webhook receiver uses. Then confirm the repo `.env` targets `rnhmvcpsvtqjlffpsayu`:
 
 ```bash
 printf 'COMPANYCAM_ACCESS_TOKEN=%s\n' 'PASTE_TOKEN_HERE' >> /root/.config/cleverwork/master.env
