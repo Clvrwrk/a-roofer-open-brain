@@ -89,9 +89,19 @@ Source: the official OpenAPI spec (`developers.companycam.com/openapi/public_api
 
 Trap found on the way: login shells on this Mac export a **different** project's `SUPABASE_URL`. `sync.mjs` now makes an explicit `--env-file` win over the shell and logs the target project ref at start.
 
-### 4a. Numbers after the first full run
+### 4a. Numbers after the first full run (2026-10-01 12:24 UTC)
 
-_Filled in by the session that ran it; see the daily log 2026-10-01._
+| Measure | Value |
+|---|---|
+| Projects mirrored | 6,948 (0 archived, 0 removed) |
+| Photos mirrored | 311,204 (0 removed) · videos 557 |
+| Projects → AccuLynx job | 6,288 (90%): 5,279 July matcher + 1,009 same-property |
+| Projects → property | 5,696 (82%): 4,624 via job, 863 address+ZIP, 151 pin ≤ 30 m (1,252 without) |
+| Open/working AccuLynx jobs with photos | 650 of 740 |
+| Copy queue by priority | 1 open jobs 66,943 · 2 last 90 days 12,382 · 3 closed job ≤ 2 yrs 122,643 · 5 property 80,924 · 9 other 28,312 |
+| Display copy, first open-job batch | 32,789 photos, ~2 GB, 0 failed left (laptop, ~950/min at 32 workers) |
+
+Two 8 s PostgREST timeouts surfaced at full scale (playbook 9) and were fixed the same day: the one-shot priority refresh became 300-project batches (318f), and the stale-claim release, progress and removal scans got indexes (318g/h). The full rollout record is in migration 318 §318b–h.
 
 ## 5. Webhook (approved by Chris 2026-10-01)
 
