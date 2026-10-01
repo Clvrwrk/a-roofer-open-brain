@@ -4,9 +4,10 @@
 // Endpoint: GET /estimates?pageSize=50&pageStartIndex={N}
 //
 // The list endpoint returns stubs: {id, isPrimary, job: {id, _link}, _link}.
-// We upsert the stub fields (id, job_id, is_primary) from the list pass.
-// Financial detail (title, profit_margin_rate, etc.) is a Phase 3 enrichment
-// via a per-estimate GET /estimates/{id} detail call.
+// The list pass upserts ONLY the stub columns (id, job_id, is_primary, raw) plus bookkeeping; the detail columns
+// (title, estimate number, dates, financial totals, notes) come from GET /estimates/{id} in enrichEstimateDetails()
+// and are written by UPDATE, so the hourly sweep can never null them again (migration 319, 2026-10-01: title and
+// total_price were NULL on all 445 rows because the detail call was never built and the sweep wrote nulls).
 //
 // Behavioral contracts:
 //   - URL pagination param: pageStartIndex
@@ -61,14 +62,23 @@ async function acculynxGet(
   }
 }
 
-/**
- * Map a camelCase AccuLynx estimate API item to snake_case DB columns.
- * List endpoint returns stubs; financial detail fields are null here (Phase 3 enrichment).
- */
-function mapEstimate(item: any, acct: any, now: string): Record<string, unknown> {
+/** The list pass's row: the stub fields only, never a detail column (an upsert would null it). */
+export function mapEstimateStub(item: any, acct: any, now: string): Record<string, unknown> {
   return {
     id: item.id,
     job_id: item.job?.id ?? null,
+    is_primary: item.isPrimary ?? null,
+    raw: item,
+    synced_at: now,
+    account_key: acct.account_key,
+    market: acct.market,
+    last_seen_by_api: now,
+  };
+}
+
+/** The detail pass's update: every detail column from GET /estimates/{id}, plus the full detail payload. */
+export function mapEstimateDetail(item: any, now: string): Record<string, unknown> {
+  return {
     title: item.title ?? null,
     description: item.description ?? null,
     estimate_number: item.estimateNumber ?? null,
@@ -88,11 +98,8 @@ function mapEstimate(item: any, acct: any, now: string): Record<string, unknown>
     total_cost: item.totalCost ?? item.financials?.totalCost ?? null,
     total_price: item.totalPrice ?? item.financials?.totalPrice ?? null,
     notes: item.notes ?? null,
-    raw: item,
-    synced_at: now,
-    account_key: acct.account_key,
-    market: acct.market,
-    last_seen_by_api: now,
+    raw_detail: item,
+    detail_synced_at: now,
   };
 }
 
@@ -149,7 +156,7 @@ export async function syncEstimates(
 
     if (items.length === 0) break; // empty page — sweep complete
 
-    const rows = items.map((item: any) => mapEstimate(item, acct, now));
+    const rows = items.map((item: any) => mapEstimateStub(item, acct, now));
 
     const { error } = await sb
       .from("acculynx_estimates")
@@ -161,4 +168,53 @@ export async function syncEstimates(
   }
 
   return lastApiCount;
+}
+
+const DETAIL_REFRESH_MS = 24 * 3600 * 1000; // re-read each estimate's detail at most daily
+const DETAIL_BATCH = 200;                   // per account per run; ~25 s at the pace above
+
+/**
+ * Detail pass: GET /estimates/{id} for this account's estimates that were never detailed or whose detail is older
+ * than a day, oldest first, until the batch or the run budget is spent. Writes by UPDATE on id + account_key, so no
+ * stub column and no other account's row is touched. A 404 stamps detail_synced_at so a deleted estimate is not
+ * re-fetched every hour (the list sweep's markNotSeen archives it). Returns how many rows were updated.
+ */
+export async function enrichEstimateDetails(
+  sb: any,
+  acct: any,
+  apiKey: string,
+  deadline: number,
+  fetchFn: typeof fetch = fetch,
+): Promise<number> {
+  const now = new Date().toISOString();
+  const stale = new Date(Date.now() - DETAIL_REFRESH_MS).toISOString();
+  const { data, error } = await sb
+    .from("acculynx_estimates")
+    .select("id")
+    .eq("account_key", acct.account_key)
+    .is("archived_at", null)
+    .or(`detail_synced_at.is.null,detail_synced_at.lt.${stale}`)
+    .order("detail_synced_at", { ascending: true, nullsFirst: true })
+    .limit(DETAIL_BATCH);
+  if (error) {
+    console.warn(`[estimates] detail candidates: ${error.message}`);
+    return 0;
+  }
+  let updated = 0;
+  for (const row of (data ?? []) as { id: string }[]) {
+    if (Date.now() >= deadline) break;
+    await sleep(PACE_MS);
+    const { status, body } = await acculynxGet(`${ACCULYNX_BASE}/estimates/${encodeURIComponent(row.id)}`, apiKey, fetchFn);
+    let patch: Record<string, unknown>;
+    if (status === 200 && body && typeof body === "object") patch = mapEstimateDetail(body, now);
+    else if (status === 404) patch = { detail_synced_at: now };
+    else {
+      console.warn(`[estimates] detail ${status} for ${acct.account_key}`);
+      continue;
+    }
+    const { error: e } = await sb.from("acculynx_estimates").update(patch).eq("id", row.id).eq("account_key", acct.account_key);
+    if (e) console.warn(`[estimates] detail update: ${e.message}`);
+    else if (status === 200) updated++;
+  }
+  return updated;
 }

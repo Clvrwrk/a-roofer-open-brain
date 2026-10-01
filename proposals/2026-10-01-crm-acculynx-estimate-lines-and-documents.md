@@ -69,6 +69,8 @@ A3 file: proposals/2026-10-01-crm-acculynx-estimate-lines-and-documents.md
 - [ ] **Kill** — reason:
 - [ ] **Defer** — revisit at: 2026-11-01, condition: measured look-up time, or an audit that needs line items
 
+**Header defect: fixed 2026-10-01** (migration 319 applied; `acculynx-sync` detail pass — see `schemas/cleverwork-roofer/319-acculynx-estimate-detail.sql`).
+
 **Recommendation:** fix the estimate **header** backfill now as a defect (one detail call per estimate, ~445 calls); **defer** line detail; keep documents "Not connected" with an AccuLynx link until AccuLynx adds a read endpoint.
 
 Approver: Chris

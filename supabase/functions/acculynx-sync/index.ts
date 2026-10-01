@@ -22,7 +22,7 @@ import { markNotSeen } from "./lib/diff.ts";
 import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
-import { syncEstimates } from "./resources/estimates.ts";
+import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
 import { pageAll, syncCrmPipeline } from "./resources/crm-pipeline.ts";
@@ -619,6 +619,9 @@ async function runAccountSync(
     const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
 
     await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
+    // Detail pass (migration 319): title, number, dates and totals come only from GET /estimates/{id}.
+    const estimateDetails = await enrichEstimateDetails(sb, acct, apiKey, deadline);
+    if (estimateDetails) console.log(`[estimates] ${acct.account_key}: ${estimateDetails} detail rows refreshed`);
 
     // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
