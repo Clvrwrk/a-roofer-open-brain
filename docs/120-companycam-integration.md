@@ -93,9 +93,30 @@ Trap found on the way: login shells on this Mac export a **different** project's
 
 _Filled in by the session that ran it; see the daily log 2026-10-01._
 
-## 5. Webhooks (not registered yet: needs Chris)
+## 5. Webhook (approved by Chris 2026-10-01)
 
-Creating a CompanyCam webhook is a write to an external system, so it is held for approval. When approved, register one webhook (`photo.*`, `project.*`) pointing at a CC receiver, verify `X-CompanyCam-Signature`, and have the receiver upsert the one row the event names. That cuts photo latency from nightly to seconds. The nightly sync stays as the backstop either way.
+```mermaid
+flowchart LR
+  CC[(CompanyCam)] -->|POST + X-CompanyCam-Signature| F["edge fn companycam-webhook<br/>(verify_jwt off)"]
+  F -->|every delivery| E["companycam_webhook_events"]
+  F -->|HMAC ok| G["GET the named photo / project / video<br/>(read-only API)"]
+  G --> U["upsert via shared mapping.mjs"]
+  U -->|new photo| C["copy thumbnail + web → bucket"]
+  U -->|project| L["link_companycam_projects() + per-project priority"]
+```
+
+- **Receiver:** `supabase/functions/companycam-webhook` (Deno), deployed v1. Bad signature → 401 (verified live); non-POST → 405. It re-reads the resource rather than trusting the payload, logs every delivery (unverified bodies are not stored), and always returns 200 after logging so CompanyCam never disables the hook over our processing errors. The nightly sync stays as the backstop.
+- **Secrets:** Supabase Vault (`companycam_webhook_token`, `companycam_access_token`), read through `companycam_secret()` (service role only). Chosen over edge-function env secrets so no Management-API token or Coolify change is needed.
+- **Registration:** `integrations/bridges/companycam/register-webhook.mjs` is the bridge's only CompanyCam write. It creates one webhook for scopes `photo.*`, `project.*`, `video.*` and `comment.*`, refuses a duplicate, and `--rotate` replaces the token.
+- **Monitoring:** `select event_type, signature_ok, process_result, process_error from companycam_webhook_events order by id desc limit 20;`
+
+## 5a. Videos (approved by Chris 2026-10-01)
+
+557 videos: avg ~79 MB, largest seen 241 MB, ~45 GB in total. `playback_url` is a presigned S3 URL that expires in about 5 hours (anonymous HEAD → 403), so `sync.mjs copy-videos` re-reads each video from the API immediately before copying. It stores `<project>/videos/<id>/video.{mp4,mov}` plus the large thumbnail, open-job videos first. **The Supabase project-wide upload limit is 50 MB**, so larger files return 413 and are parked as `storage_status='skipped'`, `copy_error like 'too_large%'`. After the limit is raised (Dashboard → Storage → Settings → global file size limit, e.g. 1 GB; the bucket already allows 1 GB), re-queue them with:
+
+```sql
+update companycam_videos set storage_status = 'pending', copy_attempts = 0 where copy_error like 'too_large%';
+```
 
 ## 6. App surfaces
 
@@ -105,10 +126,11 @@ Creating a CompanyCam webhook is a write to an external system, so it is held fo
 
 ## 7. Open decisions
 
-1. Register the CompanyCam webhook (§5)?
-2. Grant `crm_property_reader` read on the photo feed and choose the CRM signing path (§6)?
+1. ~~Register the CompanyCam webhook~~: approved. The receiver is deployed; registration needs one `op run` with 1Password unlocked (§5).
+2. Grant `crm_property_reader` read on the photo feed and choose the CRM signing path (§6).
 3. Install the two systemd units on the agent host and put `COMPANYCAM_ACCESS_TOKEN` in its `master.env` (the agent cannot change host state over SSH in auto mode). Runbook: §8.
-4. Videos and documents: copy them too (+~30 GB estimated), or link only?
+4. ~~Videos~~: approved. Raise the Supabase project upload limit so files over 50 MB can be stored (§5a).
+5. Documents (624): copy or link only?
 
 ## 8. Agent-host install (Chris, about 5 minutes)
 

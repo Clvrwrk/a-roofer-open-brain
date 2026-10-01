@@ -3,7 +3,7 @@
 #
 #   bash scripts/companycam-sync.sh nightly     # incremental metadata + links + copy priority (daily)
 #   bash scripts/companycam-sync.sh full        # full sweep, marks removals (weekly, Sunday)
-#   bash scripts/companycam-sync.sh copy        # drain the photo copy queue for up to ~25 min
+#   bash scripts/companycam-sync.sh copy        # drain the photo copy queue, then up to 12 videos
 #
 # Units: deployment/remote/systemd/openbrain-companycam-{sync,copy}.{service,timer}
 # on the US agent host (178.156.203.23). COMPANYCAM_ACCESS_TOKEN comes from master.env;
@@ -37,7 +37,8 @@ esac
 
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: companycam $MODE start ==="
-  if node integrations/bridges/companycam/sync.mjs "${ARGS[@]}" --env-file "$REPO_ROOT/.env"; then
+  if node integrations/bridges/companycam/sync.mjs "${ARGS[@]}" --env-file "$REPO_ROOT/.env" \
+     && { [ "$MODE" != copy ] || node integrations/bridges/companycam/sync.mjs copy-videos --limit "${COMPANYCAM_VIDEO_LIMIT:-12}" --env-file "$REPO_ROOT/.env"; }; then
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: done OK ==="
   else
     rc=$?
