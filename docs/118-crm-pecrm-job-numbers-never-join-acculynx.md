@@ -104,7 +104,7 @@ match, not a job parser, and is out of scope.
 1. **Dashed order POs never match (separate, earlier bug).** In `v_order_acculynx_match` the
    `derived_job_norm` for `KS-160-1` keeps the dash (`KS-160`), while the AccuLynx key strips it
    (`KS160`). All 1,817 orders whose PO uses the canonical dashed form are unmatched today. Fixing it
-   moves AccuLynx counts by about 1,800, so it needs its own review.
+   moves AccuLynx counts by about 1,800, so it needs its own review. **Built as migration 317, see [docs/119](119-order-po-dash-free-job-key.md)** (applied 2026-10-01).
 2. **INS on the order and vendor paths.** The ABC invoice matcher accepts INS- (mig 294). The order and
    vendor matchers and the vendor trigger still do not, because their token regex is two letters only.
 3. **QB bank Check No cap.** The QB export caps Check No at 12 characters. `TX-460-PECRM` is exactly 12;
