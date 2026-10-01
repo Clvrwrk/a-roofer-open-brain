@@ -141,7 +141,7 @@ update companycam_videos set storage_status = 'pending', copy_attempts = 0 where
   - **CDN links:** returned only for photos not yet copied.
   - **Verified live** as a Pro Exteriors sales rep: 6 brain-stored photos with no CDN URL exposed, page 2 with no overlap. A live key authorizes; a tampered key, another bucket and `../` are refused. anon cannot execute; members cannot call `crm_private`.
   - **Caveat:** Pro Exteriors qualifies as the AccuLynx org only because it is the sole active tenant (it has no `provider_accounts` AccuLynx row). Add that row before a second tenant is onboarded, or photos (and the CRM's AccuLynx data) switch off for it.
-  - **Next:** the property-profile photo UI in the CRM.
+  - **CRM UI live (2026-10-01):** PR #94 (Photos section on the property profile, with server-signed URLs and a viewer) was released as `e6e5419` to crm.proexteriorsus.net. Release record: CRM PR #97 (`docs/delivery/FULL-RELEASE-2026-10-01-companycam-photos.md`, which includes the exact rollback). Contract rows migration `20261006020000` applied before stage.
 - **Scheduler** (`Clvrwrk/scheduler.proexteriorsus.net`, no local checkout): same contract as the CRM; it needs per-job photos (`jobId`) for crew briefs.
 
 ## 7. Open decisions
