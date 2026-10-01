@@ -28,6 +28,7 @@ import {
   buildPipelineRow,
   jobIdFromRepsEndpoint,
   latestRepNameByJobIdFromRawRows,
+  parseJobName,
   syncCrmPipeline,
 } from "./crm-pipeline.ts";
 import type { JobFinancialsRow, JobRow } from "./crm-pipeline.ts";
@@ -334,4 +335,12 @@ Deno.test("syncCrmPipeline — a job with NEITHER a current-run rep NOR a durabl
     false,
     "primary_salesperson must be omitted (never null) when no rep resolves from either source",
   );
+});
+
+// mig 315 / docs/118 — a CRM job number keeps its -PECRM suffix in the prefix.
+Deno.test("parseJobName — CRM -PECRM suffix stays in the prefix; AccuLynx unchanged", () => {
+  assertEquals(parseJobName("TX-460-PECRM: Jane Smith"), { prefix: "TX-460-PECRM", rest: "Jane Smith" });
+  assertEquals(parseJobName("TX-460: Jane Smith"), { prefix: "TX-460", rest: "Jane Smith" });
+  assertEquals(parseJobName("INS-6: Trang Lam"), { prefix: "INS-6", rest: "Trang Lam" });
+  assertEquals(parseJobName("68: Ravinder Jain"), { prefix: "68", rest: "Ravinder Jain" });
 });
