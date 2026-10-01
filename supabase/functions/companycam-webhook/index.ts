@@ -117,10 +117,16 @@ async function copyDisplaySizes(photo: any) {
 const CC_ID = /^\d{1,20}$/;
 const safeId = (v: unknown) => (v != null && CC_ID.test(String(v)) ? String(v) : null);
 
+// Live deliveries nest the object under its resource name ({label, project}, {tag, photo}, …);
+// a flat payload is accepted too.
+const objectOf = (resource: string, payload: any) =>
+  payload && typeof payload[resource] === "object" && payload[resource] !== null ? payload[resource] : payload;
+
 async function processEvent(eventType: string, payload: any, apiToken: string): Promise<string> {
   const [resource, action] = eventType.split(".");
-  if (resource === "photo" || (resource === "comment" && payload?.commentable_type === "Photo")) {
-    const id = safeId(resource === "photo" ? payload?.id : payload?.commentable_id);
+  const obj = objectOf(resource, payload);
+  if (resource === "photo" || (resource === "comment" && obj?.commentable_type === "Photo")) {
+    const id = safeId(resource === "photo" ? obj?.id : obj?.commentable_id);
     if (!id) return "no valid photo id";
     const photo = await ccGet(`/photos/${id}?include=${PHOTO_INCLUDE}`, apiToken);
     if (!photo) {
@@ -133,7 +139,7 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     return `photo ${action} upserted${copied === true ? " + display copy" : typeof copied === "string" ? `; ${copied}` : ""}`;
   }
   if (resource === "project") {
-    const id = safeId(payload?.id);
+    const id = safeId(obj?.id);
     if (!id) return "no valid project id";
     if (action === "deleted") {
       await must("project removed_at", sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
@@ -152,7 +158,7 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     return `project ${action} upserted`;
   }
   if (resource === "video") {
-    const id = safeId(payload?.id);
+    const id = safeId(obj?.id);
     if (!id) return "no valid video id";
     const video = await ccGet(`/videos/${id}`, apiToken);
     if (!video) {
@@ -194,7 +200,7 @@ Deno.serve(async (req) => {
     webhook_id: clip(body?.webhook_id, 20),
     event_type: eventType,
     resource_type: clip(eventType?.split(".")[0], 20),
-    resource_id: clip(payload?.id, 20),
+    resource_id: clip(eventType ? objectOf(eventType.split(".")[0], payload)?.id : payload?.id, 20),
     signature_ok: true,
     payload: body,
   }).select("id").single();
