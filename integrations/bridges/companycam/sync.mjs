@@ -36,7 +36,7 @@ const supabaseUrl = String(env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || "").re
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
 const log = (...m) => console.log(new Date().toISOString(), ...m);
 
-const cc = mode === "status" ? null : createCompanyCamClient({ token: env.COMPANYCAM_ACCESS_TOKEN, log });
+const cc = mode === "status" || mode === "copy" ? null : createCompanyCamClient({ token: env.COMPANYCAM_ACCESS_TOKEN, log });
 
 // ── Supabase (PostgREST + Storage, service role) ──────────────────────────────────
 function sbHeaders(extra = {}) {
