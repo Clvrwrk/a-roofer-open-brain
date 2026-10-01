@@ -423,7 +423,7 @@ if (root && dataEl && mount) {
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
       inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
-      // mig 315: a CRM job number (TX-460-PECRM) never links to AccuLynx, so it is not an AccuLynx-link task.
+      // mig 316: a CRM job number (TX-460-PECRM) never links to AccuLynx, so it is not an AccuLynx-link task.
       inv.namingStatus === "crm_job" ? '<span class="pill pill-grey" title="CRM job number (-PECRM) — never linked to an AccuLynx job">CRM job</span>'
         : inv.namingStatus === "needs_link" || inv.needsAcculynxLink ? '<span class="pill pill-red">Needs AccuLynx link</span>' : "",
       inv.namingStatus === "temp_job" ? '<span class="pill pill-grey">TEMP job</span>' : "",

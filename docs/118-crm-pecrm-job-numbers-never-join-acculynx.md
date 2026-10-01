@@ -1,16 +1,16 @@
 # 118 — CRM job numbers (`-PECRM`) never join an AccuLynx job
 
-**Date:** 2026-10-01 · **Asked by:** Chris · **Status:** built (migration 315 + app/sync/gate parsers)
+**Date:** 2026-10-01 · **Asked by:** Chris · **Status:** built (migration 316 + app/sync/gate parsers)
 **Upstream:** Clvrwrk/CRM_PWA `supabase/migrations/20261004020000_crm_job_numbers.sql` (branch `claude/acculynx-stage-analysis`)
-**Rollback:** [`118-rollback-pre-315.sql`](118-rollback-pre-315.sql)
+**Rollback:** [`118-rollback-pre-316.sql`](118-rollback-pre-316.sql)
 
 ```mermaid
 flowchart LR
-  subgraph before["Before 315"]
+  subgraph before["Before 316"]
     A1["PO TX-460-PECRM-1"] -->|"token TX460"| J1["AccuLynx TX-460 ✗"]
     T1["vendor_invoices trigger"] -->|"rewrites PO to TX-460 ✗"| J1
   end
-  subgraph after["After 315"]
+  subgraph after["After 316"]
     A2["PO TX-460-PECRM-1"] -->|"key TX460PECRM"| N["no AccuLynx job<br/>naming_status = crm_job"]
     A3["PO TX-460-1"] -->|"key TX460"| J2["AccuLynx TX-460 ✓ (unchanged)"]
   end
@@ -27,7 +27,7 @@ that tells the two jobs apart.** Material POs follow the convention with a seque
 Every job-number join token in the brain truncated to `<PREFIX><n>`. Proven on prod (rolled-back
 simulation, 2026-10-01) against a real AccuLynx job, TX-219:
 
-| Input | Before 315 | After 315 |
+| Input | Before 316 | After 316 |
 |---|---|---|
 | ABC invoice, job box `TX-219-PECRM: …`, PO `TX-219-PECRM-1` | linked to AccuLynx TX-219 (`job_token`) | unlinked, `crm_job`, canonical PO `TX-219-PECRM-1` |
 | ABC invoice, PO only `TX-219-PECRM-1` / `tx219pecrm1` | linked to TX-219 (`po_token`) | unlinked, `crm_job` |
@@ -81,7 +81,7 @@ match, not a job parser, and is out of scope.
 
 - **Zero `PECRM` text in prod today** (AccuLynx jobs, ABC invoices and orders, vendor invoices, QBO bills), so
   no existing key can change.
-- **Rolled-back simulation** (migration 315 verbatim inside one batch that aborts; proven to roll back
+- **Rolled-back simulation** (migration 316 verbatim inside one batch that aborts; proven to roll back
   with a reversible `COMMENT` probe first):
 
   | Object | Before → after |

@@ -337,7 +337,7 @@ Deno.test("syncCrmPipeline — a job with NEITHER a current-run rep NOR a durabl
   );
 });
 
-// mig 315 / docs/118 — a CRM job number keeps its -PECRM suffix in the prefix.
+// mig 316 / docs/118 — a CRM job number keeps its -PECRM suffix in the prefix.
 Deno.test("parseJobName — CRM -PECRM suffix stays in the prefix; AccuLynx unchanged", () => {
   assertEquals(parseJobName("TX-460-PECRM: Jane Smith"), { prefix: "TX-460-PECRM", rest: "Jane Smith" });
   assertEquals(parseJobName("TX-460: Jane Smith"), { prefix: "TX-460", rest: "Jane Smith" });

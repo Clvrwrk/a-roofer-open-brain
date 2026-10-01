@@ -153,7 +153,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
     // "ks191", "KS 178", "tx450" fall back to the ship-to ACCOUNT name, e.g.
     // "Storm/wichita"), try to recover the job from the raw PO: normalize to
     // XX-123 shape, then only trust it if that job actually exists in AccuLynx.
-    // A CRM job number (TX-460-PECRM) is job-shaped too; it is never recovered to an AccuLynx job (mig 315).
+    // A CRM job number (TX-460-PECRM) is job-shaped too; it is never recovered to an AccuLynx job (mig 316).
     const JOB_SHAPE = /^[A-Z]{2,3}-\d{1,5}(?:-PECRM)?$/;
     const normalizePo = (po: string): string | null => {
       const m = po.trim().toUpperCase().replace(/\s+/g, "").match(/^([A-Z]{2,3})-?(\d{1,5})$/);

@@ -4,7 +4,7 @@
 // Pre-approval AccuLynx jobs may use "{OFFICE}-TEMP-{shortId}" until a real number is assigned.
 // CRM-created jobs (Clvrwrk/CRM_PWA, 2026-10) are "{OFFICE}-{NUM}-PECRM" with POs "{OFFICE}-{NUM}-PECRM-{seq}".
 // The -PECRM suffix is the only thing separating them from an AccuLynx job with the same number,
-// so it stays in every key and a CRM number never matches an AccuLynx job (mig 315, docs/118).
+// so it stays in every key and a CRM number never matches an AccuLynx job (mig 316, docs/118).
 
 export const PE_OFFICE_PREFIXES = ["ks", "kc", "mc", "tx", "co", "ok", "nc", "ins", "fl", "ga"] as const;
 export type PeOfficePrefix = (typeof PE_OFFICE_PREFIXES)[number];
@@ -113,7 +113,7 @@ export function deriveNamingStatus(input: {
 }): PeNamingStatus {
   const job = parsePeJobLabel(input.orderName);
   if (job?.isTemp) return "temp_job";
-  // A CRM number on either side never matches an AccuLynx job (mig 315).
+  // A CRM number on either side never matches an AccuLynx job (mig 316).
   if (!input.acculynxJobId && (job?.isCrm || isCrmJobNumber(input.purchaseOrder))) return "crm_job";
   if (!job) {
     return input.acculynxJobId ? "job_blank" : "needs_link";
