@@ -4,7 +4,8 @@
 // CompanyCam cannot send a Supabase JWT; authenticity is the HMAC below).
 //
 // Contract:
-//   - POST only. Every delivery is logged to companycam_webhook_events, verified or not.
+//   - POST only. Every verified delivery is logged to companycam_webhook_events; unsigned ones
+//     are refused before any database write (function log only).
 //   - Authenticity: X-CompanyCam-Signature = Base64(HMAC-SHA1(webhook token, raw body)),
 //     compared in constant time over the RAW body. Unverified → 401, nothing else happens.
 //   - The payload is untrusted data. It only tells us WHICH resource changed; the receiver
@@ -111,11 +112,16 @@ async function copyDisplaySizes(photo: any) {
   return true;
 }
 
+// CompanyCam ids are numeric strings. Anything else never reaches a URL path (a signed payload
+// is still data, and `../` in an id would otherwise resolve to another API route).
+const CC_ID = /^\d{1,20}$/;
+const safeId = (v: unknown) => (v != null && CC_ID.test(String(v)) ? String(v) : null);
+
 async function processEvent(eventType: string, payload: any, apiToken: string): Promise<string> {
   const [resource, action] = eventType.split(".");
   if (resource === "photo" || (resource === "comment" && payload?.commentable_type === "Photo")) {
-    const id = resource === "photo" ? payload?.id : payload?.commentable_id;
-    if (!id) return "no photo id";
+    const id = safeId(resource === "photo" ? payload?.id : payload?.commentable_id);
+    if (!id) return "no valid photo id";
     const photo = await ccGet(`/photos/${id}?include=${PHOTO_INCLUDE}`, apiToken);
     if (!photo) {
       await must("photo removed_at", sb.from("companycam_photos").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
@@ -127,8 +133,8 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     return `photo ${action} upserted${copied === true ? " + display copy" : typeof copied === "string" ? `; ${copied}` : ""}`;
   }
   if (resource === "project") {
-    const id = payload?.id;
-    if (!id) return "no project id";
+    const id = safeId(payload?.id);
+    if (!id) return "no valid project id";
     if (action === "deleted") {
       await must("project removed_at", sb.from("companycam_projects").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
       return "project deleted → removed_at";
@@ -146,8 +152,8 @@ async function processEvent(eventType: string, payload: any, apiToken: string): 
     return `project ${action} upserted`;
   }
   if (resource === "video") {
-    const id = payload?.id;
-    if (!id) return "no video id";
+    const id = safeId(payload?.id);
+    if (!id) return "no valid video id";
     const video = await ccGet(`/videos/${id}`, apiToken);
     if (!video) {
       await must("video removed_at", sb.from("companycam_videos").update({ removed_at: new Date().toISOString() }).eq("id", String(id)));
@@ -172,25 +178,27 @@ Deno.serve(async (req) => {
     ok = await signatureMatches(signingTokens, raw, signature);
   }
 
+  // Verify first: an unsigned request writes nothing to the database (function log only), so an
+  // anonymous caller cannot add rows to the audit table.
+  if (!ok) {
+    console.warn(`[companycam-webhook] rejected unsigned/invalid delivery (${raw.length} bytes)`);
+    return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 401 });
+  }
+
   let body: any = null;
-  try { body = JSON.parse(raw); } catch { /* recorded as unparseable below */ }
+  try { body = JSON.parse(raw); } catch { /* signed but unparseable: logged below */ }
   const eventType = typeof body?.event_type === "string" ? body.event_type.slice(0, 80) : null;
   const payload = body?.payload ?? null;
-  const resourceId = payload?.id != null ? String(payload.id).slice(0, 40) : null;
-
-  // Unverified deliveries are recorded with bounded fields only (no body, short strings), so an
-  // anonymous caller cannot grow the audit table beyond one small row per request.
   const clip = (v: unknown, n: number) => (v == null ? null : String(v).slice(0, n));
   const { data: ev } = await sb.from("companycam_webhook_events").insert({
     webhook_id: clip(body?.webhook_id, 20),
-    event_type: clip(eventType, ok ? 80 : 40),
+    event_type: eventType,
     resource_type: clip(eventType?.split(".")[0], 20),
-    resource_id: clip(resourceId, 20),
-    signature_ok: ok,
-    payload: ok ? body : null,
+    resource_id: clip(payload?.id, 20),
+    signature_ok: true,
+    payload: body,
   }).select("id").single();
 
-  if (!ok) return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 401 });
   if (!eventType || !apiToken) return new Response(JSON.stringify({ ok: true, note: "nothing to do" }), { status: 200 });
 
   let result = "", error: string | null = null;
