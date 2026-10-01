@@ -133,13 +133,21 @@ update companycam_videos set storage_status = 'pending', copy_attempts = 0 where
 ## 6. App surfaces
 
 - **Command Center:** `/api/companycam/photos?propertyId|jobId|projectId` for agents (service bearer token) and pages. It is registered in `MONITORED_ROUTES` (expect 401). CC has no property or job detail page yet; the first UI is a photo strip on `/operations/property-review` (reviewers seeing the house is the fastest way to confirm a link).
-- **CRM** (`Clvrwrk/CRM_PWA`): the boundary is docs/111 and docs/114 (the CRM reads CC data only through its own `crm_gateway` objects and the `crm_property_reader` role). Contract: a `crm_gateway` view over `public.v_companycam_photo_feed` (filtered to the property in hand), plus a way to sign storage paths for CRM users. Either a storage SELECT policy on `companycam-photos` for the CRM's member role, or a server-side call to the CC API. Both are CRM-team changes and need a grant decision (`GRANT SELECT ... TO crm_property_reader`) that this doc does not make on its own. The CRM's existing `packages/adapters/providers/companycam.ts` can *create* CompanyCam projects (ADR 0008). That write path is the CRM's, not the mirror's.
+- **CRM** (`Clvrwrk/CRM_PWA`): **read access live (2026-10-01).** Approved by Chris; CRM PR #92 merged as 7ec2e795; migration `20261006010000_crm_companycam_photo_reader.sql` applied to prod from CRM main, byte-identical to the preflighted file.
+  - **Grants:** the CRM's restricted reader `crm_profile_reader` holds SELECT on an allow-list of `companycam_projects` / `companycam_photos` / `companycam_videos` columns.
+  - **Readers:** `crm.read_property_photos(property, before_at, before_id, limit)` and an admin View-as variant, with keyset paging.
+  - **Visibility:** only the organization bound to the AccuLynx account, and only properties the property profile would show.
+  - **Signing:** the read-only storage policy `crm_companycam_photo_read` lets members sign or download only keys of live mirrored photos and videos.
+  - **CDN links:** returned only for photos not yet copied.
+  - **Verified live** as a Pro Exteriors sales rep: 6 brain-stored photos with no CDN URL exposed, page 2 with no overlap. A live key authorizes; a tampered key, another bucket and `../` are refused. anon cannot execute; members cannot call `crm_private`.
+  - **Caveat:** Pro Exteriors qualifies as the AccuLynx org only because it is the sole active tenant (it has no `provider_accounts` AccuLynx row). Add that row before a second tenant is onboarded, or photos (and the CRM's AccuLynx data) switch off for it.
+  - **Next:** the property-profile photo UI in the CRM.
 - **Scheduler** (`Clvrwrk/scheduler.proexteriorsus.net`, no local checkout): same contract as the CRM; it needs per-job photos (`jobId`) for crew briefs.
 
 ## 7. Open decisions
 
 1. ~~Register the CompanyCam webhook~~: done, webhook 287229 (§5).
-2. Grant `crm_property_reader` read on the photo feed and choose the CRM signing path (§6).
+2. ~~CRM read access~~: done via the CRM's own reader contract (§6).
 3. Install the two systemd units on the agent host and put `COMPANYCAM_ACCESS_TOKEN` in its `master.env` (the agent cannot change host state over SSH in auto mode). Runbook: §8.
 4. ~~Videos~~: approved; Chris raised the project upload limit to 1 GB on 2026-10-01 and the 10 parked videos were re-queued (§5a).
 5. Documents (624): copy or link only?
