@@ -38,7 +38,7 @@ const supabaseUrl = String(env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || "").re
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
 const log = (...m) => console.log(new Date().toISOString(), ...m);
 
-const cc = mode === "status" || mode === "copy" ? null : createCompanyCamClient({ token: env.COMPANYCAM_ACCESS_TOKEN, log });
+const cc = ["status", "copy", "prioritise"].includes(mode) ? null : createCompanyCamClient({ token: env.COMPANYCAM_ACCESS_TOKEN, log });
 
 // ── Supabase (PostgREST + Storage, service role) ──────────────────────────────────
 function sbHeaders(extra = {}) {
@@ -185,8 +185,14 @@ async function syncVideos({ full, runId }) {
 async function linkAndPrioritise() {
   const link = await rpc("link_companycam_projects");
   log("link:", JSON.stringify(link));
-  const prio = await rpc("refresh_companycam_copy_priority");
-  log("priority:", JSON.stringify(prio));
+  // Batched by project (318f): one statement over all photos exceeds the 8 s PostgREST timeout.
+  let after = "", changed = 0, batches = 0;
+  for (;;) {
+    const r = await rpc("refresh_companycam_copy_priority_batch", { p_after: after, p_projects: 300 });
+    if (!r || r.done) break;
+    changed += r.changed; after = r.last; batches++;
+  }
+  log(`priority: ${changed} photos changed across ${batches} project batches`);
 }
 
 // ── Copy worker ───────────────────────────────────────────────────────────────────
@@ -372,6 +378,8 @@ try {
   } else if (mode === "copy") {
     log(`companycam copy start supabase=${new URL(supabaseUrl).host.split(".")[0]}`);
     await copyWorker();
+  } else if (mode === "prioritise") {
+    await linkAndPrioritise();
   } else if (mode === "videos") {
     await syncVideos({ full: false, runId });
   } else if (mode === "copy-videos") {

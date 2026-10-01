@@ -619,3 +619,33 @@ RETURNS int LANGUAGE sql SET search_path = public AS $$
            AND synced_at < (SELECT started FROM s) RETURNING 1)
   SELECT count(*)::int FROM r;
 $$;
+
+-- ── 318f: priority refresh in project batches (applied as 318f_companycam_priority_batches) ──
+-- The one-statement refresh over 311k photos exceeds service_role's 8 s statement_timeout via
+-- PostgREST (playbook 9); sync.mjs walks projects in id order, one bounded statement per call.
+CREATE OR REPLACE FUNCTION public.refresh_companycam_copy_priority_batch(p_after text DEFAULT '', p_projects int DEFAULT 300)
+RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE v_last text; v_changed int;
+BEGIN
+  SELECT max(id) INTO v_last FROM (SELECT id FROM companycam_projects WHERE id > coalesce(p_after, '') ORDER BY id LIMIT p_projects) b;
+  IF v_last IS NULL THEN RETURN jsonb_build_object('done', true, 'changed', 0); END IF;
+  WITH pr AS (
+    SELECT ph.id, companycam_copy_priority(j.current_milestone, j.archived_at, j.id, p.property_id, ph.captured_at) AS prio
+    FROM companycam_projects p
+    JOIN companycam_photos ph ON ph.project_id = p.id
+    LEFT JOIN acculynx_jobs j ON j.id = p.acculynx_job_id
+    WHERE p.id > coalesce(p_after, '') AND p.id <= v_last),
+  u AS (UPDATE companycam_photos ph SET storage_priority = pr.prio FROM pr
+         WHERE pr.id = ph.id AND ph.storage_priority IS DISTINCT FROM pr.prio RETURNING 1)
+  SELECT count(*) INTO v_changed FROM u;
+  RETURN jsonb_build_object('done', false, 'last', v_last, 'changed', v_changed);
+END $$;
+REVOKE ALL ON FUNCTION public.refresh_companycam_copy_priority_batch(text, int) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_companycam_copy_priority_batch(text, int) TO service_role;
+
+-- ── 318g + 318h: indexes for the PostgREST-timeout paths (heap ≈ 1.2 GB of raw jsonb) ──
+CREATE INDEX IF NOT EXISTS companycam_photos_copying_idx ON public.companycam_photos (copy_claimed_at) WHERE storage_status = 'copying';
+CREATE INDEX IF NOT EXISTS companycam_photos_seen_run_idx ON public.companycam_photos (seen_run_id);
+CREATE INDEX IF NOT EXISTS companycam_photos_removed_scan_idx ON public.companycam_photos (synced_at) WHERE removed_at IS NULL;
+CREATE INDEX IF NOT EXISTS companycam_photos_progress_idx
+  ON public.companycam_photos (storage_priority, storage_status) INCLUDE (storage_bytes) WHERE removed_at IS NULL;
