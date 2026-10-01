@@ -101,7 +101,7 @@ Trap found on the way: login shells on this Mac export a **different** project's
 | Copy queue by priority | 1 open jobs 66,943 · 2 last 90 days 12,382 · 3 closed job ≤ 2 yrs 122,643 · 5 property 80,924 · 9 other 28,312 |
 | Display copy, first open-job batch | 32,789 photos, ~2 GB, 0 failed left (laptop, ~950/min at 32 workers) |
 
-Two 8 s PostgREST timeouts surfaced at full scale (playbook 9) and were fixed the same day: the one-shot priority refresh became 300-project batches (318f), and the stale-claim release, progress and removal scans got indexes (318g/h). The full rollout record is in migration 318 §318b–h.
+Two 8 s PostgREST timeouts surfaced at full scale (playbook 9) and were fixed the same day: the one-shot priority refresh became 300-project batches (318f), and the stale-claim release, progress and removal scans got indexes (318g/h). Later the same day, the removal guard (318e, then 318i) made sure a full sweep never retires a row synced after the sweep started, i.e. one the webhook wrote mid-sweep. The open-job display copy then finished: 66,900 of 66,943 copied (43 return HTTP 500 from CompanyCam's CDN after 5 tries), plus all 12,382 photos from the last 90 days. The full rollout record is in migration 318 §318b–i.
 
 ## 5. Webhook (approved by Chris 2026-10-01)
 

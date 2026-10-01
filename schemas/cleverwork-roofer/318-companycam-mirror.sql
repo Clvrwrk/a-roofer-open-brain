@@ -649,3 +649,35 @@ CREATE INDEX IF NOT EXISTS companycam_photos_seen_run_idx ON public.companycam_p
 CREATE INDEX IF NOT EXISTS companycam_photos_removed_scan_idx ON public.companycam_photos (synced_at) WHERE removed_at IS NULL;
 CREATE INDEX IF NOT EXISTS companycam_photos_progress_idx
   ON public.companycam_photos (storage_priority, storage_status) INCLUDE (storage_bytes) WHERE removed_at IS NULL;
+
+-- ── 318i: explicit sweep start (applied as 318i_companycam_removal_explicit_start) ──
+-- Supersedes 318e. The sweep passes its start time, taken before its first API call (minus clock
+-- slack), instead of inferring it from its first upsert. A photo the webhook adds between the first
+-- fetch and the first upsert can no longer be retired. The one-argument signatures are dropped so
+-- no stale overload survives.
+DROP FUNCTION IF EXISTS public.mark_companycam_projects_removed(text);
+DROP FUNCTION IF EXISTS public.mark_companycam_photos_removed(text);
+DROP FUNCTION IF EXISTS public.mark_companycam_videos_removed(text);
+
+CREATE OR REPLACE FUNCTION public.mark_companycam_projects_removed(p_run_id text, p_started timestamptz)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_projects SET removed_at = clock_timestamp()
+     WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id AND synced_at < p_started RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+CREATE OR REPLACE FUNCTION public.mark_companycam_photos_removed(p_run_id text, p_started timestamptz)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_photos SET removed_at = clock_timestamp()
+     WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id AND synced_at < p_started RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+CREATE OR REPLACE FUNCTION public.mark_companycam_videos_removed(p_run_id text, p_started timestamptz)
+RETURNS int LANGUAGE sql SET search_path = public AS $$
+  WITH r AS (UPDATE companycam_videos SET removed_at = clock_timestamp()
+     WHERE removed_at IS NULL AND seen_run_id IS DISTINCT FROM p_run_id AND synced_at < p_started RETURNING 1)
+  SELECT count(*)::int FROM r;
+$$;
+REVOKE ALL ON FUNCTION public.mark_companycam_projects_removed(text, timestamptz), public.mark_companycam_photos_removed(text, timestamptz),
+  public.mark_companycam_videos_removed(text, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_companycam_projects_removed(text, timestamptz), public.mark_companycam_photos_removed(text, timestamptz),
+  public.mark_companycam_videos_removed(text, timestamptz) TO service_role;

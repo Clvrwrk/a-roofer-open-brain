@@ -119,7 +119,7 @@ async function syncProjects({ full, runId }) {
   }
   let removed = 0;
   if (full && pageCap === Infinity && !dryRun) {
-    removed = (await rpc("mark_companycam_projects_removed", { p_run_id: runId })) ?? 0;
+    removed = (await rpc("mark_companycam_projects_removed", { p_run_id: runId, p_started: sweepStartedAt })) ?? 0;
   }
   // A --pages-capped run never read everything, so it must not move the watermark.
   const projectWatermark = pageCap === Infinity && maxUpdated ? new Date(maxUpdated).toISOString() : state?.watermark ?? null;
@@ -160,7 +160,7 @@ async function syncPhotos({ full, runId, changedProjects = [] }) {
   let removed = 0;
   if (full && pageCap === Infinity && !dryRun) {
     // Server-side so the 311k-row comparison never crosses the wire.
-    removed = (await rpc("mark_companycam_photos_removed", { p_run_id: runId })) ?? 0;
+    removed = (await rpc("mark_companycam_photos_removed", { p_run_id: runId, p_started: sweepStartedAt })) ?? 0;
   }
   const photoWatermark = pageCap === Infinity && maxCreated ? new Date(maxCreated).toISOString() : state?.watermark ?? null;
   await setState("photos", { watermark: photoWatermark,
@@ -178,7 +178,7 @@ async function syncVideos({ full, runId }) {
     if (seen / 100 >= pageCap) break;
   }
   let removed = 0;
-  if (full && pageCap === Infinity && !dryRun) removed = (await rpc("mark_companycam_videos_removed", { p_run_id: runId })) ?? 0;
+  if (full && pageCap === Infinity && !dryRun) removed = (await rpc("mark_companycam_videos_removed", { p_run_id: runId, p_started: sweepStartedAt })) ?? 0;
   log(`videos: ${seen} upserted, ${removed} marked removed`);
 }
 
@@ -366,6 +366,9 @@ async function status() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────────
 const runId = randomUUID();
+// Taken before the first API call; 5 min of slack covers clock skew between this host and the DB.
+// A full sweep retires only rows last synced before this, so a webhook write mid-sweep survives.
+const sweepStartedAt = new Date(Date.now() - 5 * 60_000).toISOString();
 try {
   if (mode === "nightly" || mode === "full") {
     const full = mode === "full";
