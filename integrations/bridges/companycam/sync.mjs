@@ -247,7 +247,7 @@ async function linkAndPrioritise() {
 async function copyWorker() {
   const maxPriority = Number(args["max-priority"] ?? 9);
   const limit = Number(args.limit ?? 500);
-  const concurrency = Math.max(1, Math.min(24, Number(args.concurrency ?? 10)));
+  const concurrency = Math.max(1, Math.min(48, Number(args.concurrency ?? 16)));
   const released = await rpc("release_stale_companycam_copies");
   if (released) log(`copy: returned ${released} stale claims to the queue`);
   const stats = { display: 0, originals: 0, failed: 0, bytes: 0 };
@@ -257,7 +257,7 @@ async function copyWorker() {
     const variants = pass === "display" ? String(args.variants || "thumbnail,web").split(",") : ["original"];
     while (stats.display + stats.originals + stats.failed < limit) {
       const room = limit - stats.display - stats.originals - stats.failed;
-      const batch = await sb(`/rest/v1/rpc/${claimFn}`, { method: "POST", body: { p_limit: Math.min(50, room), p_max_priority: maxPriority } });
+      const batch = await sb(`/rest/v1/rpc/${claimFn}`, { method: "POST", body: { p_limit: Math.min(Math.max(50, concurrency * 6), room), p_max_priority: maxPriority } });
       if (!batch?.length) break;
       const queue = [...batch];
       await Promise.all(Array.from({ length: concurrency }, async () => {
