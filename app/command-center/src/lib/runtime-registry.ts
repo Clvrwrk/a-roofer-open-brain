@@ -131,7 +131,8 @@ export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
 ];
 
 export const INTEGRATIONS: IntegrationSpec[] = [
-  { key: "int.supabase-rest", label: "Supabase PostgREST (shared prod DB)", purpose: "Every work surface reads through it", url: "{SUPABASE_URL}/rest/v1/roof_system_category?select=key&limit=1", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
+  // Probes with the service-role key the work surfaces use: since mig 313 (docs/117 §6) anon holds no grant on public relations, so an anon probe reads 401.
+  { key: "int.supabase-rest", label: "Supabase PostgREST (shared prod DB)", purpose: "Every work surface reads through it", url: "{SUPABASE_URL}/rest/v1/roof_system_category?select=key&limit=1", authEnv: "SUPABASE_SERVICE_ROLE_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
   { key: "int.supabase-auth", label: "Supabase Auth", purpose: "GoTrue health behind the same project", url: "{SUPABASE_URL}/auth/v1/health", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
   { key: "int.workos", label: "WorkOS", purpose: "Staff sign-in for cc and crm", url: "https://api.workos.com/user_management/users?limit=1", authEnv: "WORKOS_API_KEY", expectAuthed: 200, expectAnon: 401 },
   { key: "int.jobtread", label: "JobTread (Pave API)", purpose: "Job mirror + sync sentinel", url: "https://api.jobtread.com/pave", method: "POST", body: '{"query":{}}', expectAnon: 200, credentialHome: "grant key on the agent host (master.env)" },
