@@ -32,6 +32,7 @@ import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RUNTIME_BUDGET_MS = 110_000; // leave 10s of the 120s edge function limit
+const CRM_RESERVE_MS = 3_000; // walk-only runs keep this much of each slice for the crm_pipeline write
 const BATCH_PACE_MS = 150; // inter-request pacing for legacy resolveLeads loop
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
@@ -582,7 +583,11 @@ async function runAccountSync(
   const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
 
   if (jobWalkOnly) {
-    const { repNameByJobId, walked } = await runJobWalk(acct, apiKey, deadline, batchId, result);
+    // The walk stops CRM_RESERVE_MS early so the scoped crm_pipeline write below always
+    // runs: on 2026-10-02 20:13 UTC the walk used every slice to the millisecond and the
+    // write was skipped in 7 of 8 accounts, leaving walked jobs' milestones off the board
+    // (walked_at is stamped, so they would not have been picked again).
+    const { repNameByJobId, walked } = await runJobWalk(acct, apiKey, deadline - CRM_RESERVE_MS, batchId, result);
     try {
       const crm = await syncCrmPipeline(sb, acct, deadline, repNameByJobId, batchId, walked);
       result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
