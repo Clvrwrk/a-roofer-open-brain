@@ -1,4 +1,6 @@
--- 323-acculynx-job-walk-cron.sql
+-- 324-acculynx-job-walk-cron.sql
+-- (Committed as 323 in dea38c8f; renumbered — 323 is 323-activity-rollup-atomic-bump.sql.
+--  Applied to prod as migration "323_acculynx_job_walk_cron"; the ledger name is unchanged.)
 -- Dedicated hourly money pass for AccuLynx (2026-10-02, docs/85 freshness).
 --
 -- The :00 `acculynx-hourly-sync` run splits ~110 s across eight accounts (~14 s
