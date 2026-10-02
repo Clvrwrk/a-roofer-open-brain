@@ -1,6 +1,6 @@
 # 122 — Prod DB load, 2026-10-02: stale Command Center containers and full-table pollers
 
-**Date:** 2026-10-02 · **Asked by:** Chris · **Status:** cause found; migration 323 applied to prod; app fixes deployed to cc.proexteriorsus.net (`0c6a79cd`, live check: 2 agent calls → rollup count 2, cold 8.9 s / cached 0.8 s); **host cleanup waits on Chris** (§5)
+**Date:** 2026-10-02 · **Asked by:** Chris · **Status:** cause found; migration 323 applied to prod; app fixes deployed to cc.proexteriorsus.net (`0c6a79cd`, live check: 2 agent calls → rollup count 2, cold 8.9 s / cached 0.8 s); host cleanup done by Chris 20:53Z (§5: `slack_mirror_events` 42.7/min → 7.7/min, 11 → 2 Slack runtimes; the /sales mirror's copy goes with the CRM release-script fix)
 
 ```mermaid
 flowchart LR
@@ -81,6 +81,8 @@ ssh -i ~/.ssh/a_roofers_open_brain_ed25519 root@178.105.220.14 'for c in cc-sale
 **Hygiene (optional).** Seven old `cc-production-*` / `cc-crm-*` containers (no Slack, unrouted, but they ran boot prewarms) and 25 unrouted `crm-weekly-*` slots (the live one is `crm-weekly-e8f4e73d0678`) use about 4 GB. Stop them once the CRM owner confirms none is a rollback target.
 
 **Check afterwards.** Over any 10-minute window, edge logs should show `slack_mirror_events` at about 40 requests (4 per minute) from a single client build.
+
+**Result (2026-10-02, Chris ran the stop at 20:53:09–16Z).** All nine exited with restart `no`. 20:38–20:53Z: 648 polls (~42.7/min). 20:53:25–20:59:56Z: 50 polls (~7.7/min), 25 from the live app and 25 from the `/sales` mirror. Slack runtimes on the host: 11 → 2.
 
 ## 6. Checked and left alone
 
