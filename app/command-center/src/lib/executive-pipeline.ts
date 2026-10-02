@@ -549,6 +549,35 @@ async function selectAll<T>(
   }
 }
 
+/** Short-lived source cache (docs/122, 2026-10-02). Every dashboard load, the 5-minute
+ * client poll, every filter change and every drill-down re-paged all nine source tables
+ * (milestone history alone is 19 pages) — ~43 full reads in 40 minutes during a page
+ * sweep. Filters are applied in memory, so the raw rows are identical across callers:
+ * share them for SOURCE_CACHE_TTL_MS and collapse concurrent loads into one fetch.
+ * Rejected fetches are never cached; callers get their own array copy. */
+const SOURCE_CACHE_TTL_MS = 60_000;
+const sourceCache = new Map<string, { at: number; rows: Promise<unknown[]> }>();
+
+function selectAllCached<T>(
+  client: SupabaseClient,
+  table: string,
+  columns: string,
+  filterKey = "",
+  query?: (builder: any) => any,
+): Promise<T[]> {
+  const key = `${table}|${columns}|${filterKey}`;
+  const hit = sourceCache.get(key);
+  if (hit && Date.now() - hit.at < SOURCE_CACHE_TTL_MS) {
+    return hit.rows.then((rows) => [...rows] as T[]);
+  }
+  const rows = selectAll<T>(client, table, columns, query);
+  sourceCache.set(key, { at: Date.now(), rows });
+  rows.catch(() => {
+    if (sourceCache.get(key)?.rows === rows) sourceCache.delete(key);
+  });
+  return rows.then((result) => [...result]);
+}
+
 /** Pure pagination-window math (regression guard for the 1000-row silent-truncation
  * pitfall — RESEARCH.md Pitfall 3 / Pattern 3). Returns the [from,to] windows
  * `selectAll`'s .range() loop would issue for a table with `total` rows. */
@@ -2077,39 +2106,41 @@ export async function loadExecutivePipelineDashboard(
   try {
     const [pipeline, jobs, financialsRaw, invoiceMatches, invoiceLines, watermarks, accounts, milestoneHistory, invoiceAging] =
       await Promise.all([
-        selectAll<PipelineRow>(
+        selectAllCached<PipelineRow>(
           client,
           "crm_pipeline",
           "id,acculynx_job_id,job_name,client_name,client_job_number,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
         ),
-        selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
+        selectAllCached<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
         // acculynx_job_financials has 0% production coverage as of RESEARCH.md (1 archived
         // sandbox row) — try-row-then-fallback per Pitfall 1; re-verified live at
         // implementation time (see SUMMARY.md for the observed numbers).
-        selectAll<{ job_id: string; worksheet_total: number | string | null; archived_at: string | null }>(
+        selectAllCached<{ job_id: string; worksheet_total: number | string | null; archived_at: string | null }>(
           client,
           "acculynx_job_financials",
           "job_id,worksheet_total,archived_at",
+          "archived_at=null",
           (query) => query.is("archived_at", null),
         ),
-        selectAll<InvoiceMatchRow>(
+        selectAllCached<InvoiceMatchRow>(
           client,
           "v_invoice_acculynx_match",
           "invoice_number,acculynx_job_id,matched",
+          "matched=true",
           (query) => query.eq("matched", true),
         ),
-        selectAll<AbcInvoiceLineRow>(client, "abc_invoice_lines", "invoice_number,extended_price"),
-        selectAll<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,resource_type,last_sync_at"),
-        selectAll<AcculynxAccountRow>(client, "acculynx_accounts", "account_key,label,program,market,state"),
+        selectAllCached<AbcInvoiceLineRow>(client, "abc_invoice_lines", "invoice_number,extended_price"),
+        selectAllCached<WatermarkRow>(client, "acculynx_sync_watermark", "account_key,resource_type,last_sync_at"),
+        selectAllCached<AcculynxAccountRow>(client, "acculynx_accounts", "account_key,label,program,market,state"),
         // Fix round item 4 (2026-07-02): milestone-history-backed transition pills.
         // acculynx_job_milestone_history is now being ingested post-fix (item 1's
         // job-walk phase already populates it) — sparse/empty for a while after
         // this ships is expected and handled by the fallback + coverage caption.
-        selectAll<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
+        selectAllCached<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
         // acculynx_invoices — THE AR source for every AR signal on the dashboard
         // (AR-truth fix 2026-07-03; crm_pipeline.balance_due retired as an AR signal).
         // total_price feeds the invoice-ledger "monies collected" derivation.
-        selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
+        selectAllCached<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
       ]);
 
     // Job-financials primary margin source: no true GP field is populated in
@@ -2491,18 +2522,18 @@ export async function loadJobsForLocation(
 
   try {
     const [pipeline, jobs, invoiceAging, milestoneHistory] = await Promise.all([
-      selectAll<PipelineRow>(
+      selectAllCached<PipelineRow>(
         client,
         "crm_pipeline",
         "id,acculynx_job_id,job_name,client_name,client_job_number,location_city,location_state,market,current_milestone,primary_salesperson,contract_amount,primary_estimate_amount,balance_due,lead_date,approved_date,milestone_date,created_at,updated_at,insurance_company,insurance_claim_number,insurance_claim_filed,insurance_claim_filed_date,insurance_date_of_loss,parent_lead_source,sub_lead_source,data_source",
       ),
-      selectAll<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
+      selectAllCached<AcculynxJobRow>(client, "acculynx_jobs", "id,account_key,job_category_name"),
       // AR-truth fix (2026-07-03): the drill-down's Outstanding AR column + the
       // any-open-invoice window exception both read the invoice ledger.
-      selectAll<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
+      selectAllCached<InvoiceAgingRow>(client, "acculynx_invoices", "job_id,invoice_date,balance_due,total_price"),
       // 2026-07-06 rebuild: real per-stage dates so the drill-down windows on the same
       // milestone-history basis as the aggregate dashboard (no updated_at fallback).
-      selectAll<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
+      selectAllCached<MilestoneHistoryRow>(client, "acculynx_job_milestone_history", "job_id,milestone_name,milestone_date"),
     ]);
 
     // Round 3, item E: the drill-down table honors the SAME window rules as the rest
