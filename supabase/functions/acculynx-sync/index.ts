@@ -25,7 +25,7 @@ import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
-import { pageAll, syncCrmPipeline } from "./resources/crm-pipeline.ts";
+import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -587,6 +587,38 @@ async function runAccountSync(
 
   if (Date.now() >= deadline) return result;
 
+  // --- Job Walk (header + sub-resources + invoice two-level + full-representatives) ---
+  // Runs BEFORE the contacts/estimates sweeps (2026-10-02): those page through the whole
+  // account every run and used to spend this account's ~14 s slice before the money
+  // pass ever started, so payments and new invoices took days to reach the WIP board.
+  //
+  // Candidate-driven (mig 321): acculynx_job_walk_candidates() returns only the jobs
+  // that need a re-read — never walked, modified since the last walk, or on the WIP/AR
+  // board and not walked in 3 days — board jobs first. This replaced walking every job
+  // in created order behind a resume cursor with an unindexed acculynx_raw LIKE probe
+  // per job. repNameByJobId feeds syncCrmPipeline below.
+  let repNameByJobId = new Map<string, string>();
+  try {
+    const { data: candidates, error: candErr } = await sb.rpc("acculynx_job_walk_candidates", {
+      p_account_key: acct.account_key,
+      p_limit: 200,
+    });
+    if (candErr) throw new Error(`job walk candidates: ${candErr.message}`);
+    const rows = (candidates ?? []) as { job_id: string; modified_date: string | null }[];
+    const jobIds = rows.map((r) => r.job_id);
+    const modifiedDateByJobId = new Map<string, string>();
+    for (const r of rows) if (r.modified_date) modifiedDateByJobId.set(r.job_id, r.modified_date);
+    repNameByJobId = await syncJobWalk(sb, acct, apiKey, deadline, null, jobIds, fetch, batchId, modifiedDateByJobId, {
+      preselected: true,
+    });
+    result.jobWalk = `ok (${jobIds.length} candidates)`;
+  } catch (e) {
+    result.jobWalk = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
   // --- Contacts (full sweep) ---
   const contactsSweepStart = new Date().toISOString();
   try {
@@ -635,46 +667,6 @@ async function runAccountSync(
   } catch (e) {
     result.estimates = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/estimates: ${(e as Error).message}`);
-  }
-
-  if (Date.now() >= deadline) return result;
-
-  // --- Job Walk (sub-resources + invoice two-level + full-representatives) ---
-  // repNameByJobId (Task 2a's Map<jobId, repName>) feeds syncCrmPipeline below so
-  // crm_pipeline.primary_salesperson picks up the full-representatives company rep
-  // this run resolved — even when this run's job-walk skipped most jobs under D-16,
-  // the map simply carries whichever jobs WERE walked this pass.
-  let repNameByJobId = new Map<string, string>();
-  try {
-    const jobWalkWm = await readWatermark(sb, acct.account_key, "job_walk");
-
-    // Load ordered job IDs + modified_date for this account (sorted by created_date ASC
-    // for deterministic resumption). modified_date feeds the D-16 change-driven skip.
-    // Paginated past the PostgREST 1000-row cap (third instance of the same live incident,
-    // 2026-07-03): unpaginated, the walk only ever saw each account's OLDEST 1000 jobs —
-    // colorado (1844) and texas (2301) had their tails silently never walked at all.
-    const jobIdsPaged = await pageAll<{ id: string; modified_date: string | null }>((from, to) =>
-      sb
-        .from("acculynx_jobs")
-        .select("id, modified_date")
-        .eq("account_key", acct.account_key)
-        .order("created_date", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to)
-    );
-    if (jobIdsPaged.error) throw new Error(`job IDs load: ${jobIdsPaged.error}`);
-    const jobRows = jobIdsPaged.rows;
-
-    const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
-    const modifiedDateByJobId = new Map<string, string>();
-    for (const r of (jobRows ?? []) as { id: string; modified_date: string | null }[]) {
-      if (r.modified_date) modifiedDateByJobId.set(r.id, r.modified_date);
-    }
-    repNameByJobId = await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds, fetch, batchId, modifiedDateByJobId);
-    result.jobWalk = "ok";
-  } catch (e) {
-    result.jobWalk = `error: ${(e as Error).message}`;
-    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
   }
 
   if (Date.now() >= deadline) return result;

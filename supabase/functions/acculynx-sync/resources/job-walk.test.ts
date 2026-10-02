@@ -18,7 +18,7 @@
 //
 // Run: deno test supabase/functions/acculynx-sync/resources/job-walk.test.ts
 import { assertEquals } from "jsr:@std/assert@1";
-import { syncJobWalk } from "./job-walk.ts";
+import { headerFieldsFromDetail, syncJobWalk } from "./job-walk.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -127,6 +127,7 @@ function makeWalkSb(options: WalkSbOptions = {}) {
   const users = options.users ?? DEFAULT_USERS;
   const priorRawArchiveByJobId = options.priorRawArchiveByJobId ?? {};
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
+  const updateCalls: { table: string; values: Record<string, unknown>; id: unknown }[] = [];
   const insertCalls: { table: string; row: unknown }[] = [];
   const watermarkUpserts: unknown[] = [];
   const financialRows = new Map(
@@ -144,6 +145,12 @@ function makeWalkSb(options: WalkSbOptions = {}) {
       if (message) forceErrorMessage = message;
     },
     from: (table: string) => ({
+      update: (values: Record<string, unknown>) => ({
+        eq: (_col: string, id: unknown) => {
+          updateCalls.push({ table, values, id });
+          return Promise.resolve({ error: null });
+        },
+      }),
       upsert: (rows: unknown[]) => {
         events.push({ operation: "upsert", table });
         upsertCalls.push({ table, rows: Array.isArray(rows) ? rows : [rows] });
@@ -208,7 +215,7 @@ function makeWalkSb(options: WalkSbOptions = {}) {
     }),
   };
 
-  return { sb, upsertCalls, insertCalls, watermarkUpserts, financialRows, events };
+  return { sb, upsertCalls, insertCalls, watermarkUpserts, financialRows, events, updateCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -663,4 +670,92 @@ Deno.test("syncJobWalk — cursor at END of list wraps to the top (MC-68 inciden
     true,
     `A completed sweep must wrap and re-evaluate from the top. Fetched: ${JSON.stringify(fetchedUrls)}`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Preselected mode (mig 321): the caller passes acculynx_job_walk_candidates() output.
+// ---------------------------------------------------------------------------
+
+/** Wraps makeJobWalkFetch so GET /jobs/{id} (the job's own record) answers with `detail`. */
+function withJobDetail(
+  base: ReturnType<typeof makeJobWalkFetch>,
+  detail: Record<string, Record<string, unknown>>,
+) {
+  const mockFetch = (url: string | URL | Request): Promise<Response> => {
+    const m = String(url).match(/\/jobs\/([^/?]+)$/);
+    if (m && detail[m[1]]) {
+      base.fetchedUrls.push(String(url));
+      return Promise.resolve(
+        new Response(JSON.stringify(detail[m[1]]), { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    }
+    return base.mockFetch(url);
+  };
+  return { mockFetch, fetchedUrls: base.fetchedUrls };
+}
+
+Deno.test("syncJobWalk preselected — walks a job the D-16 probe would skip, ignoring the resume cursor", async () => {
+  const jobIds = ["job-a", "job-b"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-a": [], "job-b": [] });
+  // Both look "unchanged" to the old probe, and the cursor says job-b was walked last.
+  const { sb } = makeWalkSb({
+    priorRawArchiveByJobId: { "job-a": "2026-09-30T00:00:00Z", "job-b": "2026-09-30T00:00:00Z" },
+  });
+  const modified = new Map([["job-a", "2026-09-01T00:00:00Z"], ["job-b", "2026-09-01T00:00:00Z"]]);
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: "job-b" };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, watermark, jobIds, mockFetch, "batch-1", modified, {
+    preselected: true,
+  });
+
+  for (const id of jobIds) {
+    assertEquals(fetchedUrls.some((u) => u.includes(`/jobs/${id}/financials`)), true, `${id} financials must be re-read`);
+  }
+});
+
+Deno.test("syncJobWalk preselected — re-reads the job record and writes its milestone, then stamps walked_at", async () => {
+  const jobIds = ["job-closed"];
+  const base = makeJobWalkFetch(jobIds, { "job-closed": [] });
+  const { mockFetch, fetchedUrls } = withJobDetail(base, {
+    "job-closed": { id: "job-closed", currentMilestone: "Closed", milestoneDate: "2026-07-04T16:38:13Z", modifiedDate: "2026-07-04T16:38:13Z" },
+  });
+  const { sb, updateCalls, insertCalls } = makeWalkSb();
+  const before = new Date().toISOString();
+
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, jobIds, mockFetch, "batch-1", new Map(), {
+    preselected: true,
+  });
+
+  assertEquals(fetchedUrls.some((u) => /\/jobs\/job-closed$/.test(u)), true, "GET /jobs/{id} must be called");
+  const jobUpdates = updateCalls.filter((c) => c.table === "acculynx_jobs" && c.id === "job-closed");
+  const header = jobUpdates.find((c) => "current_milestone" in c.values);
+  assertEquals(header?.values.current_milestone, "Closed");
+  assertEquals(header?.values.milestone_date, "2026-07-04T16:38:13Z");
+  assertEquals(header?.values.modified_date, "2026-07-04T16:38:13Z");
+  const stamp = jobUpdates.find((c) => "walked_at" in c.values);
+  assertEquals(typeof stamp?.values.walked_at, "string");
+  assertEquals((stamp!.values.walked_at as string) >= before, true, "walked_at is this walk's start time");
+  // The detail body is archived like every other per-job GET (D-14).
+  const archived = insertCalls.some((c) => c.table === "acculynx_raw" && (c.row as Record<string, unknown>).resource_type === "job_detail");
+  assertEquals(archived, true);
+});
+
+Deno.test("syncJobWalk default mode — never re-reads the job record or stamps walked_at", async () => {
+  const jobIds = ["job-x"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-x": [] });
+  const { sb, updateCalls } = makeWalkSb();
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, jobIds, mockFetch, "batch-1");
+  assertEquals(fetchedUrls.some((u) => /\/jobs\/job-x$/.test(u)), false);
+  assertEquals(updateCalls.filter((c) => c.table === "acculynx_jobs").length, 0);
+});
+
+Deno.test("headerFieldsFromDetail — writes only fields the body carries, never nulls", () => {
+  const seen = "2026-10-02T18:00:00.000Z";
+  assertEquals(headerFieldsFromDetail({ currentMilestone: "Closed" }, seen), {
+    current_milestone: "Closed",
+    synced_at: seen,
+    last_seen_by_api: seen,
+  });
+  assertEquals(headerFieldsFromDetail({}, seen), null);
+  assertEquals(headerFieldsFromDetail({ currentMilestone: null, modifiedDate: "" }, seen), null);
 });

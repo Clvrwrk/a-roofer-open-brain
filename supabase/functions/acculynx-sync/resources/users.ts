@@ -9,8 +9,14 @@
 // crm_pipeline.primary_salesperson, which the dashboard renders as unknown.
 //
 // This module syncs /users with EACH account's own key so all locations' reps
-// (e.g. Colorado's Peter Letkeman) land in acculynx_users. Mirrors the pagination /
-// upsert conventions of contacts.ts (pageStartIndex = page number; onConflict "id").
+// (e.g. Colorado's Peter Letkeman) land in acculynx_users. Upserts on "id".
+//
+// Pagination (fixed 2026-10-02): /users treats pageStartIndex as a RECORD OFFSET, like
+// /jobs — NOT a page number like /contacts and /estimates. Live probe on colorado
+// (97 users): pageStartIndex=1 returns records 2–51, =50 returns 51–97, =97 answers
+// 416. Stepping it by 1 re-read 49 of every 50 rows; any tenant over 50 users made
+// ~48 overlapping calls per run (colorado logged "users ok (2350)"), which spent the
+// account's whole budget and skipped jobs, the job walk and crm_pipeline from 09-24.
 // acculynx_users is company-wide (no account_key column) — a user is keyed by its
 // AccuLynx id only, so cross-tenant upserts are idempotent on id.
 
@@ -75,7 +81,8 @@ export function mapUser(u: any, now: string): Record<string, unknown> {
 
 /**
  * Sync users for a single account via a full-sweep pagination loop, using that
- * account's own API key. Endpoint: GET /users?pageSize=50&pageStartIndex={pageNo}.
+ * account's own API key. Endpoint: GET /users?pageSize=50&pageStartIndex={offset},
+ * where offset is a record offset that advances by the number of items returned.
  *
  * @param sb       - Supabase client (service role)
  * @param acct     - account row (for logging only — users are company-wide, not stamped)
@@ -92,15 +99,19 @@ export async function syncUsersForAccount(
   fetchFn: typeof fetch = fetch,
 ): Promise<number> {
   const now = new Date().toISOString();
-  let pageNo = 0;
+  let offset = 0;
   let total = 0;
+  let count: number | null = null; // API-reported total users, present on every page
 
   while (Date.now() < deadline) {
+    if (count !== null && offset >= count) break;
     const url =
-      `${ACCULYNX_BASE}/users?pageSize=${PAGE_SIZE}&pageStartIndex=${pageNo}&status=Active,Inactive,Archived`;
+      `${ACCULYNX_BASE}/users?pageSize=${PAGE_SIZE}&pageStartIndex=${offset}&status=Active,Inactive,Archived`;
     await sleep(PACE_MS);
     const { status, body } = await acculynxGet(url, apiKey, fetchFn);
 
+    // 416 is the API's normal answer for an offset at or past the end.
+    if (status === 416) break;
     if (status !== 200) {
       console.warn(`[users] unexpected status ${status} for ${acct.account_key}`);
       break;
@@ -108,6 +119,7 @@ export async function syncUsersForAccount(
 
     const typed = body as { items?: any[]; count?: number };
     const items: any[] = typed?.items ?? [];
+    if (typeof typed?.count === "number") count = typed.count;
     if (items.length === 0) break;
 
     const rows = items.map((u) => mapUser(u, now));
@@ -115,7 +127,7 @@ export async function syncUsersForAccount(
     if (error) console.warn(`[users] upsert for ${acct.account_key}: ${error.message}`);
 
     total += rows.length;
-    pageNo += 1;
+    offset += items.length;
     if (items.length < PAGE_SIZE) break; // last (partial) page — sweep complete
   }
 
