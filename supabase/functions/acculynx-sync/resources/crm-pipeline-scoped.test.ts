@@ -70,3 +70,10 @@ Deno.test("syncCrmPipeline onlyJobIds — empty list is a no-op", async () => {
   assertEquals(res.upserted, 0);
   assertEquals(upserts.length, 0);
 });
+
+Deno.test("syncCrmPipeline onlyJobIds — still writes when the deadline has already passed", async () => {
+  const { sb, upserts, ids } = makeSb(4);
+  const res = await syncCrmPipeline(sb, ACCT, Date.now() - 1_000, new Map(), "batch-1", ids);
+  assertEquals(res.upserted, 4);
+  assertEquals(upserts.flat().length, 4);
+});

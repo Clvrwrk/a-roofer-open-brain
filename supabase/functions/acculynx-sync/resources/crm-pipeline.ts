@@ -438,7 +438,7 @@ const ID_CHUNK = 100;
 async function syncCrmPipelineForJobs(
   sb: any,
   acct: { account_key: string },
-  deadline: number,
+  _deadline: number,
   repNameByJobId: Map<string, string>,
   batchId: string | undefined,
   jobIds: string[],
@@ -467,9 +467,13 @@ async function syncCrmPipelineForJobs(
   );
   // Same rep partitioning as the full rebuild: a rep-less row must never share a
   // payload with rep rows (PostgREST column-union null-wipe, 2026-07-03 incident #5).
+  // No deadline gate here: the list is only the jobs this run already walked (at most
+  // the walk's candidate cap), and skipping the write strands them — walked_at is
+  // stamped, so they are not picked again (georgia / insurance_program, 20:30 UTC
+  // 2026-10-02: walked 4, wrote 0 after one slow job ran past the 3 s reserve).
   let upserted = 0;
   for (const partition of [rows.filter((r) => "primary_salesperson" in r), rows.filter((r) => !("primary_salesperson" in r))]) {
-    if (partition.length === 0 || Date.now() >= deadline) continue;
+    if (partition.length === 0) continue;
     const { error } = await sb.from("crm_pipeline").upsert(partition, { onConflict: "acculynx_job_id", ignoreDuplicates: false });
     if (error) return { upserted, error: `crm_pipeline upsert: ${error.message}` };
     upserted += partition.length;
