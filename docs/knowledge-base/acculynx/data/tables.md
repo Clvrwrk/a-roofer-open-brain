@@ -19,7 +19,7 @@ All in Supabase project `rnhmvcpsvtqjlffpsayu`, schema `public`. RLS enabled
 | `acculynx_users` | User roster (for crew/rep resolution) | ✅ |
 | `acculynx_lead_sources` | Lead-source dimension | ✅ |
 | `acculynx_contacts` / `acculynx_job_contacts` | Contacts + job links | ⏳ Phase 2 |
-| `acculynx_contact_emails` / `acculynx_contact_phones` | Contact channels | ⏳ |
+| `acculynx_contact_emails` / `acculynx_contact_phones` | Contact channels (PII; phones carry `sms_opt_out`) | ✅ mig 320 — `GET /contacts?includes=emailAddress,phoneNumber` in the contacts sweep + by-id fallback |
 | `acculynx_estimates` | Estimates | ⏳ |
 | `acculynx_invoices` / `acculynx_invoice_lines` | AR invoices (PE→customer) | ⏳ |
 | `acculynx_job_financials` | Job financials | ⏳ |

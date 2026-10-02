@@ -39,3 +39,29 @@ export async function markNotSeen(
     .lt("last_seen_by_api", sweepStartedAt);
   if (error) console.warn(`[diff] markNotSeen on ${table}: ${error.message}`);
 }
+
+/**
+ * Revive rows this sweep saw again (migration 320, 2026-10-01).
+ *
+ * markNotSeen archives a row the sweep did not reach; nothing ever cleared that mark when a later sweep saw the
+ * row again, so one budget-cut sweep archived rows for good (live 2026-10-01: 7,194 of 7,245 contacts and 397 of
+ * 449 estimates archived while the API still returned them). After each sweep, clear the mark on rows whose
+ * last_seen_by_api is at or after sweepStartedAt. Only the 'not_seen_in_api' reason is cleared — an archive a
+ * person or a triage migration made stays put.
+ *
+ * Non-fatal: logs a warning on error.
+ */
+export async function reviveSeen(
+  sb: any,
+  table: string,
+  accountKey: string,
+  sweepStartedAt: string,
+): Promise<void> {
+  const { error } = await sb
+    .from(table)
+    .update({ archived_at: null, archive_reason: null })
+    .eq("account_key", accountKey)
+    .eq("archive_reason", "not_seen_in_api")
+    .gte("last_seen_by_api", sweepStartedAt);
+  if (error) console.warn(`[diff] reviveSeen on ${table}: ${error.message}`);
+}

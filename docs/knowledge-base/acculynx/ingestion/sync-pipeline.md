@@ -19,13 +19,16 @@ pg_cron (hourly, 0 * * * *)
       → acculynx-sync  (Deno Edge Function)
         → per account (D-18 fair-share rotation, serial — see below):
           1. syncJobs        -- AccuLynx API V2 GET, incremental by ModifiedDate -> upsert acculynx_jobs
-          2. syncContacts    -- full sweep -> upsert acculynx_contacts
+          2. syncContacts    -- full sweep (resumable) -> upsert acculynx_contacts + acculynx_contact_phones
+                                + acculynx_contact_emails (includes=emailAddress,phoneNumber; mig 320)
           3. syncEstimates   -- full sweep -> upsert acculynx_estimates
           4. syncJobWalk     -- D-14 capture-first per-job sub-resource walk (see below);
                                 D-15/D-16 pull scheduling decides which jobs are walked this run;
                                 returns Map<jobId, repName> from the full /representatives fetch
           5. syncCrmPipeline -- upserts crm_pipeline for this account, consuming this run's
                                 acculynx_jobs + acculynx_job_financials + the repName Map
+          6. enrichContactChannels -- leftover budget only: GET /contacts/{id}?includes=... for contacts
+                                whose channels the list sweep could not read in full (mig 320)
         → advance acculynx_sync_watermark  (composite PK: account_key, resource_type)
 
 pg_cron (*/10)  → reconcile_acculynx_cron_outcomes()  -- copies pg_net results into the owned table
@@ -78,6 +81,21 @@ job-walk errors in the last 6h.
   `sortBy=ModifiedDate Ascending` for the `jobs` resource. `contacts`/`estimates` are full
   sweeps; `job_walk` uses the D-15/D-16 schedule above instead of a date filter.
 - Small pages: `pageSize=25` (jobs, `pageStartIndex`), `50` (users).
+- **Contacts sweep is resumable and archives only on a full cycle (mig 320, 2026-10-01).** A large
+  account's contacts sweep (texas 48 pages) does not fit one fair-share slice. It used to restart at
+  page 0 every run and then archive every row it had not reached, and nothing un-archived a row seen
+  again — 7,194 of 7,245 contacts (and 397 of 449 estimates) sat archived while the API still returned
+  them. Now a cut-short sweep saves `last_page_index` + `cycle_started_at`, the next run resumes one
+  page early, `reviveSeen()` clears `not_seen_in_api` on every row a sweep sees (contacts and
+  estimates), and `markNotSeen()` runs only when the cycle reaches the last page, against the cycle's
+  start.
+- **Contact channels ride the contacts page call.** Without `includes`, `/contacts` returns each
+  phone/email child as `{id, _link}`; with `includes=emailAddress,phoneNumber` the same call returns
+  number/ext/type/primary/smsOptOut and address/type/primary — zero extra requests. A contact whose
+  children all came back in full is stamped `channels_synced_at`; a child it no longer has is archived
+  `removed_from_contact`. A 400 on `includes` re-reads the page without it; the by-id pass (step 6,
+  ≤50 contacts per account per run, weekly refresh) covers anything left. The sync never writes
+  `trust_tier` (default `evidence`).
 - HTTP 429 → retry with `Retry-After` + exponential backoff (3 retries).
 - ~110s runtime budget per invocation; the `job_walk` watermark advances **per job** (via the
   shared `advanceWatermark()` upsert helper, which works even for a never-seeded

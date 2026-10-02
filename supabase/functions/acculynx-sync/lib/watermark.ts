@@ -19,6 +19,8 @@ export interface WatermarkRow {
   last_api_count?: number | null;
   last_api_total?: number | null;
   last_sync_at?: string | null;
+  /** Start of an in-progress full-sweep cycle a resumed run continues (contacts; migration 320). */
+  cycle_started_at?: string | null;
 }
 
 /**

@@ -18,10 +18,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { loadProductionAccounts, resolveKey } from "./lib/accounts.ts";
 import { readWatermark, advanceWatermark } from "./lib/watermark.ts";
-import { markNotSeen } from "./lib/diff.ts";
+import { markNotSeen, reviveSeen } from "./lib/diff.ts";
 import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
-import { syncContacts } from "./resources/contacts.ts";
+import { enrichContactChannels, syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
@@ -542,8 +542,8 @@ async function runAccountSync(
   apiKey: string,
   deadline: number,
   batchId: string,
-): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
-  const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
+): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string; contactChannels: string }> {
+  const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped", contactChannels: "skipped" };
 
   // --- Users (per-tenant; 2026-07-06 cross-location rep fix) ---
   // Sync this account's own users FIRST so the job-walk's rep resolver (loadUserNameMap
@@ -587,24 +587,36 @@ async function runAccountSync(
 
   if (Date.now() >= deadline) return result;
 
-  // --- Contacts (full sweep) ---
+  // --- Contacts (full sweep, resumable; phones + emails ride along — migration 320) ---
+  // A contacts sweep of a large account (texas 48 pages, colorado 39) does not fit one account's fair-share slice.
+  // Before 2026-10-01 a cut-short sweep restarted at page 0 every hour (the tail was never reached) and then archived
+  // every row it had not reached; nothing revived them, so 7,194 of 7,245 contacts sat archived while the API still
+  // returned them. Now: a cut-short sweep saves its page and the cycle's start, the next run resumes one page early
+  // (page-number pagination can shift when contacts are added), rows seen are revived every run, and rows are
+  // archived only when a cycle completes — against the cycle's start, not this run's.
   const contactsSweepStart = new Date().toISOString();
   try {
     const contactsWm = await readWatermark(sb, acct.account_key, "contacts");
-    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm);
+    const resumeFrom: number = contactsWm?.last_page_index ?? 0;
+    const cycleStart: string = resumeFrom > 0 && contactsWm?.cycle_started_at ? contactsWm.cycle_started_at : contactsSweepStart;
+    const startPage = resumeFrom > 0 ? resumeFrom - 1 : 0;
+    const sweep = await syncContacts(sb, acct, apiKey, deadline, { ...(contactsWm ?? {}), last_page_index: startPage });
 
-    // Mark rows not seen in this sweep
-    await markNotSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
+    await reviveSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
+    // Archive rows the whole cycle never saw — only once the cycle reached the last page.
+    if (sweep.complete) await markNotSeen(sb, "acculynx_contacts", acct.account_key, cycleStart);
+    if (sweep.includesRejected) console.warn(`[sync] ${acct.account_key}/contacts: channels deferred to the by-id pass`);
 
     // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
       account_key: acct.account_key,
       resource_type: "contacts",
-      last_page_index: 0, // reset cursor on completion
+      last_page_index: sweep.complete ? 0 : Math.max(sweep.nextPage, resumeFrom),
+      cycle_started_at: sweep.complete ? null : cycleStart,
       last_sync_at: new Date().toISOString(),
-      ...(contactApiCount !== null ? { last_api_count: contactApiCount } : {}),
+      ...(sweep.apiCount !== null ? { last_api_count: sweep.apiCount } : {}),
     });
-    result.contacts = "ok";
+    result.contacts = `ok (${sweep.complete ? "cycle complete" : `resume p${Math.max(sweep.nextPage, resumeFrom)}`}; phones ${sweep.phones}, emails ${sweep.emails})`;
   } catch (e) {
     result.contacts = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/contacts: ${(e as Error).message}`);
@@ -619,6 +631,9 @@ async function runAccountSync(
     const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
 
     await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
+    // Revive estimates this sweep saw (migration 320): 397 of 449 sat archived, which also hid them from the
+    // detail pass below (it reads archived_at IS NULL only).
+    await reviveSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
     // Detail pass (migration 319): title, number, dates and totals come only from GET /estimates/{id}.
     const estimateDetails = await enrichEstimateDetails(sb, acct, apiKey, deadline);
     if (estimateDetails) console.log(`[estimates] ${acct.account_key}: ${estimateDetails} detail rows refreshed`);
@@ -692,6 +707,18 @@ async function runAccountSync(
   } catch (e) {
     result.crmPipeline = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/crm-pipeline: ${(e as Error).message}`);
+  }
+
+  if (Date.now() >= deadline) return result;
+
+  // --- Contact channels by id (migration 320) — LAST, so it only spends budget the run left over. Fills contacts
+  // the list sweep could not complete (a child returned as a stub, or `includes` refused) and refreshes weekly. ---
+  try {
+    const n = await enrichContactChannels(sb, acct, apiKey, deadline);
+    result.contactChannels = `ok (${n})`;
+  } catch (e) {
+    result.contactChannels = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/contact-channels: ${(e as Error).message}`);
   }
 
   return result;
