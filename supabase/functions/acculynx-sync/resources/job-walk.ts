@@ -352,6 +352,8 @@ async function shouldWalkJob(
 export interface JobWalkOptions {
   /** jobIds were chosen by acculynx_job_walk_candidates(): walk every one, in order. */
   preselected?: boolean;
+  /** When given, receives the id of every job actually walked this run (not skipped). */
+  walked?: string[];
 }
 
 /**
@@ -693,6 +695,7 @@ export async function syncJobWalk(
       if (repName) repNameByJobId.set(jobId, repName);
     }
 
+    options.walked?.push(jobId);
     if (preselected) {
       const { error } = await sb.from("acculynx_jobs").update({ walked_at: walkStartedAt }).eq("id", jobId);
       if (error) console.warn(`[job-walk] walked_at stamp for ${jobId}: ${error.message}`);

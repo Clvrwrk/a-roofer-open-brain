@@ -530,6 +530,41 @@ async function legacySyncJobs(
 // ---------------------------------------------------------------------------
 
 /**
+ * The money pass for one account: walk the jobs acculynx_job_walk_candidates() returns
+ * (mig 321), board jobs first, until the deadline. Writes result.jobWalk as
+ * "ok (walked X of N)" and returns the rep map and the ids actually walked.
+ */
+async function runJobWalk(
+  acct: { account_key: string; market: string | null },
+  apiKey: string,
+  deadline: number,
+  batchId: string,
+  result: { jobWalk: string },
+): Promise<{ repNameByJobId: Map<string, string>; walked: string[] }> {
+  const walked: string[] = [];
+  let repNameByJobId = new Map<string, string>();
+  try {
+    const { data: candidates, error: candErr } = await sb.rpc("acculynx_job_walk_candidates", {
+      p_account_key: acct.account_key,
+      p_limit: 200,
+    });
+    if (candErr) throw new Error(`job walk candidates: ${candErr.message}`);
+    const rows = (candidates ?? []) as { job_id: string; modified_date: string | null }[];
+    const modifiedDateByJobId = new Map<string, string>();
+    for (const r of rows) if (r.modified_date) modifiedDateByJobId.set(r.job_id, r.modified_date);
+    repNameByJobId = await syncJobWalk(
+      sb, acct, apiKey, deadline, null, rows.map((r) => r.job_id), fetch, batchId, modifiedDateByJobId,
+      { preselected: true, walked },
+    );
+    result.jobWalk = `ok (walked ${walked.length} of ${rows.length})`;
+  } catch (e) {
+    result.jobWalk = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
+  }
+  return { repNameByJobId, walked };
+}
+
+/**
  * Run Phase 2 resource syncs for a single account.
  * SERIAL across resources — 30 req/s IP limit enforced (T-02-07).
  * apiKey is explicit — never a module-level shared key (T-02-04).
@@ -542,8 +577,20 @@ async function runAccountSync(
   apiKey: string,
   deadline: number,
   batchId: string,
+  jobWalkOnly = false,
 ): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
   const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
+
+  if (jobWalkOnly) {
+    const { repNameByJobId, walked } = await runJobWalk(acct, apiKey, deadline, batchId, result);
+    try {
+      const crm = await syncCrmPipeline(sb, acct, deadline, repNameByJobId, batchId, walked);
+      result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
+    } catch (e) {
+      result.crmPipeline = `error: ${(e as Error).message}`;
+    }
+    return result;
+  }
 
   // --- Users (per-tenant; 2026-07-06 cross-location rep fix) ---
   // Sync this account's own users FIRST so the job-walk's rep resolver (loadUserNameMap
@@ -597,25 +644,7 @@ async function runAccountSync(
   // board and not walked in 3 days — board jobs first. This replaced walking every job
   // in created order behind a resume cursor with an unindexed acculynx_raw LIKE probe
   // per job. repNameByJobId feeds syncCrmPipeline below.
-  let repNameByJobId = new Map<string, string>();
-  try {
-    const { data: candidates, error: candErr } = await sb.rpc("acculynx_job_walk_candidates", {
-      p_account_key: acct.account_key,
-      p_limit: 200,
-    });
-    if (candErr) throw new Error(`job walk candidates: ${candErr.message}`);
-    const rows = (candidates ?? []) as { job_id: string; modified_date: string | null }[];
-    const jobIds = rows.map((r) => r.job_id);
-    const modifiedDateByJobId = new Map<string, string>();
-    for (const r of rows) if (r.modified_date) modifiedDateByJobId.set(r.job_id, r.modified_date);
-    repNameByJobId = await syncJobWalk(sb, acct, apiKey, deadline, null, jobIds, fetch, batchId, modifiedDateByJobId, {
-      preselected: true,
-    });
-    result.jobWalk = `ok (${jobIds.length} candidates)`;
-  } catch (e) {
-    result.jobWalk = `error: ${(e as Error).message}`;
-    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
-  }
+  const { repNameByJobId } = await runJobWalk(acct, apiKey, deadline, batchId, result);
 
   if (Date.now() >= deadline) return result;
 
@@ -706,6 +735,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const resolveLeads: boolean =
     body.resolveLeads === true || resources.includes("resolveLeads");
   const multiAccount: boolean = body.multiAccount ?? false;
+  // jobWalkOnly (2026-10-02): the :30 pg_cron run does ONLY the money pass — job walk
+  // plus a crm_pipeline rebuild of the jobs it walked — so payments and invoices get a
+  // full budget of their own instead of whatever the users/jobs/contacts/estimates
+  // steps leave. Uses its own rotation cursor so it never shifts the :00 run's order.
+  const jobWalkOnly: boolean = body.jobWalkOnly === true;
   // accountFilter: optional array of account_key strings to restrict the fan-out.
   // When set, only the named production account(s) are synced, giving each the full
   // ~110s budget instead of sharing it across all enabled accounts (fixes wichita budget
@@ -763,7 +797,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // this run starts at the NEXT account in registry order and wraps around.
         // Only applies to the no-arg (accountFilter absent) default fan-out — an
         // explicit accountFilter subset always overrides rotation.
-        const rotationWm = await readWatermark(sb, "__rotation__", "fanout_start");
+        const rotationWm = await readWatermark(sb, jobWalkOnly ? "__rotation_walk__" : "__rotation__", "fanout_start");
         const lastStart = rotationWm?.last_walked_job_id ?? null;
         let rotateIdx = 0;
         if (lastStart) {
@@ -806,7 +840,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const perAccountShareMs = Math.max(0, Math.floor(msRemaining / Math.max(1, remainingAccounts)));
         const perAccountDeadline = Math.min(deadline, Date.now() + perAccountShareMs);
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId);
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly);
         remainingAccounts--;
       }
 
@@ -816,7 +850,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // (no explicit accountFilter) and at least one account was in scope.
       if (!accountFilter && accounts.length > 0) {
         await advanceWatermark(sb, {
-          account_key: "__rotation__",
+          account_key: jobWalkOnly ? "__rotation_walk__" : "__rotation__",
           resource_type: "fanout_start",
           last_walked_job_id: accounts[0].account_key,
           last_sync_at: new Date().toISOString(),

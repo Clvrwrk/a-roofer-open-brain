@@ -704,10 +704,13 @@ Deno.test("syncJobWalk preselected — walks a job the D-16 probe would skip, ig
   const modified = new Map([["job-a", "2026-09-01T00:00:00Z"], ["job-b", "2026-09-01T00:00:00Z"]]);
   const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: "job-b" };
 
+  const walked: string[] = [];
   await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, watermark, jobIds, mockFetch, "batch-1", modified, {
     preselected: true,
+    walked,
   });
 
+  assertEquals(walked, jobIds, "every walked job id is reported, in order");
   for (const id of jobIds) {
     assertEquals(fetchedUrls.some((u) => u.includes(`/jobs/${id}/financials`)), true, `${id} financials must be re-read`);
   }
