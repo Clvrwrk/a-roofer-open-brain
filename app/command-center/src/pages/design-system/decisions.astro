@@ -89,6 +89,7 @@ const feedback: Row[] = [
   ["'Audit every GUI surface and identify all data pills, links, tables, work surfaces that are not live' → the three-ring GUI rot audit; sample data classed as lying to the user; orphan and dead pages removed with reasons recorded.", "Chris.", "docs/84; docs/90; docs/91", "2026-08-05 → 08-19"],
   ["CC ⇄ CRM parity review caught three drifts: 15px body (→ 14), Inter never loaded (→ @fontsource), purple segmented accent (→ navy / info).", "The only full UI/UX review of this app; lives in the sister repo.", "docs/111:12 → CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11; context/memory/2026-09-11.md", "2026-09-11"],
   ["'Do not use Better Stack for third parties — just our active connections; if we ping JT and get a 200 it's green.'", "Chris; rewrote the runtime board's third-party group.", "docs/109 D16; integration-probes.server.ts:2", "2026-09-12"],
+  ["'For all work surfaces that need files, images, docs — a place holder (icon) when none exists, drag and drop, one click to activate phone/computer tools, keep the camera button but add load from photo gallery or drag and drop.' → UX-11 attachment intake.", "Chris; the CRM photo controls set capture on their only input, so phones could not pick an existing photo.", "standards/design/v1.md § Attachment intake", "2026-10-02"],
   ["The SRS Wichita quote is the price agreement — recorded as a fact about the document (ceo_verified), never a per-vendor rule; the panel shows a quote was accepted, it does not hide what the document is.", "Chris ruled.", "docs/95:120-132", "2026-08-19"],
 ];
 
@@ -125,6 +126,7 @@ const nav: Row[] = [
 const never: string[] = [
   "Never use colour decoratively — colour always encodes status (docs/40).",
   "Never leave a blank where data is unwired — grey TBD pill (docs/40 §3).",
+  "Never put capture on the only file input — it locks a phone to the camera; camera and Photo library are separate controls (UX-11).",
   "Never blank a missing field — name it: 'office not resolved' (docs/100).",
   "Never render a blank page — every list has an empty state naming the way out (invoice-audit-tree.ts:856).",
   "Never render a 15-wide table (docs/40 §5).",
@@ -201,6 +203,9 @@ const never: string[] = [
       </DsRule>
       <DsRule id="UX-07" title="Group before you widen: category sections for lines, pills + detail grid instead of wide tables, global column-group state." source="docs/40 §5, §5a; friday-wip.astro:184-189">
         <p>Uncategorized stays visible.</p>
+      </DsRule>
+      <DsRule id="UX-11" title="Attachment intake: a placeholder icon when empty, drag and drop, one click to the device's own chooser, and Photo library beside any camera button." source="standards/design/v1.md § Attachment intake">
+        <p>Never capture on the only file input. One shared component per app; the chooser and a drop share one upload path. Outstanding adopters (CRM): job library and form attachments, weekly document upload, staff headshot, job Files tab.</p>
       </DsRule>
     </div>
   </DsSection>

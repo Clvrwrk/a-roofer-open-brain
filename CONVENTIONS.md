@@ -191,6 +191,13 @@ Migrations **119–122** (2026-06-19). Full contract: [`docs/46-uom-pricing-norm
 - Pane height is **measured** (`header + rowHeight × 10 + scrollbar gutter`), never hardcoded. Reveal state persists per surface in `localStorage`. Filters apply **before** paging.
 - Full contract, including the sticky-header rules a bounded pane forces (`overflow-x: auto` never with `overflow-y: visible`; measured multi-row header offsets; frozen-column selectors scoped to `thead tr:not(.fw-grouprow)` / `tbody`; column-group `colspan` recomputed on expand): [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure.
 
+## 11b. Attachment intake (app-wide) — UX-11
+
+- Every surface that holds files, photos, videos or documents shows a **placeholder** (type icon + what belongs there) when empty, never a blank.
+- The slot is a **drag-and-drop** target on a computer; **one click** on the placeholder or Add opens the device's own chooser (file picker; on a phone the Photo library · Take photo · Choose file sheet).
+- A surface with a **camera** button keeps it and gains **Photo library** beside it. Never put `capture` on the only file input: it locks phones to the camera.
+- One shared component per app, one upload path for chooser and drop. Full contract: [`standards/design/v1.md`](standards/design/v1.md) § Attachment intake.
+
 ## 12. Workspace front desk and GSD loop
 
 - **Maintenance/Hermes owns orientation.** Agents should read `agents/horizontal/maintenance/WORKSPACE-MAP.md` before broad repo search. If the map is stale, flag Maintenance.
