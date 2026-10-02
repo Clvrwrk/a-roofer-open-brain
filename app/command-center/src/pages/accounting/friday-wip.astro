@@ -105,13 +105,17 @@ const gmBasisLabel: Record<string, string> = {
       <button type="button" class="fw-clear" id="fw-clear">Clear filter ✕</button>
     </p>
 
-    {/* Single popout reused by every row — one node, not one per job. */}
+    {/* Single popout reused by every row — one node, not one per job (CMP-09).
+        It carries "Our Best Guess" and the Notes column: hover a cut-off note
+        to read it, click a note to edit it in the larger box. */}
     <div class="fw-guess" id="fw-guess" role="dialog" aria-modal="false" aria-labelledby="fw-guess-title" hidden>
       <div class="fw-guess-head">
         <strong id="fw-guess-title"></strong>
         <button type="button" class="fw-guess-close" id="fw-guess-close" aria-label="Close">✕</button>
       </div>
       <p class="fw-guess-body" id="fw-guess-body"></p>
+      <textarea class="fw-guess-edit" id="fw-guess-edit" maxlength="1000" rows="5" aria-label="Notes" hidden></textarea>
+      <p class="fw-guess-hint" id="fw-guess-hint" hidden>Enter or click away saves · Esc cancels</p>
     </div>
 
     {/* Every pill is a filter. data-kpi matches the keys the loader tagged each
@@ -251,7 +255,7 @@ const gmBasisLabel: Record<string, string> = {
                       team expects to collect. Recomputed live as To Collect is
                       typed — data-balance-due carries the figure it subtracts from. */}
                   <td class="fw-num fw-balance-pay" data-col="cash" data-balance-due={j.outstandingAr}>{money(Math.max(0, j.outstandingAr - (j.expectedCashAmount ?? 0)))}</td>
-                  <td data-col="cash" data-more><input class="fw-edit fw-notes" type="text" maxlength="1000" data-field="notes" value={j.notes ?? ""} placeholder="…" /></td>
+                  <td data-col="cash" data-more><input class="fw-edit fw-notes" type="text" maxlength="1000" data-field="notes" data-note-title={`${j.jobNumber || "—"} · ${j.client}`} value={j.notes ?? ""} placeholder="…" aria-haspopup="dialog" /></td>
                 </tr>
               ))}
             </tbody>
@@ -404,7 +408,11 @@ const gmBasisLabel: Record<string, string> = {
     .fw .fw-guess-head { display: flex; align-items: baseline; gap: 10px; }
     .fw .fw-guess-head strong { font-size: 13px; }
     .fw .fw-guess-close { margin-left: auto; appearance: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
-    .fw .fw-guess-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+    .fw .fw-guess-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .fw .fw-guess-body[hidden], .fw .fw-guess-edit[hidden], .fw .fw-guess-hint[hidden] { display: none; }
+    .fw .fw-guess-edit { width: min(420px, calc(100vw - 48px)); font: inherit; font-size: 12.5px; line-height: 1.5; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--fill-cell); color: var(--ink); resize: vertical; }
+    .fw .fw-guess-hint { margin: 0; font-size: 11px; color: var(--muted); }
+    .fw .fw-notes { cursor: pointer; text-overflow: ellipsis; }
     .fw .fw-kpi-lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); line-height: 1.25; }
     .fw .fw-kpi-val { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .fw .fw-kpi-sub { font-size: 10.5px; color: var(--muted); line-height: 1.3; }
@@ -903,40 +911,144 @@ const gmBasisLabel: Record<string, string> = {
       applyFilters();
     });
 
-    // ── "Our Best Guess" popout ──────────────────────────────────────────
-    // One dialog node reused by every row. Positioned next to whichever
-    // client name was clicked, clamped into the viewport.
+    // ── Shared popout: "Our Best Guess" + Notes ──────────────────────────
+    // One dialog node reused by every row (CMP-09). Positioned next to
+    // whichever cell opened it, clamped into the viewport. Three modes:
+    //   - guess: the client name's "Our Best Guess" note, read-only;
+    //   - note view: hovering a cut-off note shows the whole note;
+    //   - note edit: clicking a note opens it in a larger box. Closing
+    //     writes it back to the row's input and fires that input's change
+    //     event, so the save goes through the one save path above.
     const guess = document.getElementById("fw-guess") as HTMLElement | null;
     const guessTitle = document.getElementById("fw-guess-title") as HTMLElement | null;
     const guessBody = document.getElementById("fw-guess-body") as HTMLElement | null;
-    const closeGuess = () => guess?.setAttribute("hidden", "");
+    const guessEdit = document.getElementById("fw-guess-edit") as HTMLTextAreaElement | null;
+    const guessHint = document.getElementById("fw-guess-hint") as HTMLElement | null;
+
+    // The notes input the popout is showing, and whether it is being edited.
+    let noteSource: HTMLInputElement | null = null;
+    let noteEditing = false;
+    let hoverTimer = 0;
+    let leaveTimer = 0;
+
+    const placeGuess = (anchor: HTMLElement) => {
+      if (!guess) return;
+      const r = anchor.getBoundingClientRect();
+      const w = guess.offsetWidth;
+      const h = guess.offsetHeight;
+      // The dialog is position:fixed, so these are viewport coordinates —
+      // clamp BOTH axes or a row near an edge puts the popout off-screen.
+      guess.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+      const below = r.bottom + 6;
+      const above = r.top - h - 8;
+      const top = r.bottom + h + 12 > window.innerHeight ? above : below;
+      guess.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + "px";
+    };
+
+    const openGuess = (anchor: HTMLElement, title: string, text: string, editing = false) => {
+      if (!guess || !guessTitle || !guessBody || !guessEdit || !guessHint) return;
+      guessTitle.textContent = title;
+      guessBody.textContent = text;
+      guessBody.hidden = editing;
+      guessEdit.hidden = !editing;
+      guessHint.hidden = !editing;
+      if (editing) guessEdit.value = text;
+      guess.removeAttribute("hidden");
+      placeGuess(anchor);
+      if (editing) {
+        guessEdit.focus();
+        guessEdit.setSelectionRange(text.length, text.length);
+      }
+    };
+
+    // commit=false is Escape: the edit is dropped and the note is unchanged.
+    const closeGuess = (commit = true) => {
+      clearTimeout(hoverTimer);
+      clearTimeout(leaveTimer);
+      const source = noteSource;
+      const wasEditing = noteEditing;
+      noteSource = null;
+      noteEditing = false;
+      guess?.setAttribute("hidden", "");
+      if (!wasEditing || !source || !guessEdit) return;
+      if (commit && guessEdit.value !== source.value) {
+        source.value = guessEdit.value;
+        source.dispatchEvent(new Event("change"));
+      }
+      // Keyboard users land back on the cell they opened.
+      if (source.contains(document.activeElement) || guess?.contains(document.activeElement)) source.focus();
+    };
 
     document.querySelectorAll<HTMLButtonElement>(".fw-guess-trigger").forEach((trigger) => {
       trigger.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (!guess || !guessTitle || !guessBody) return;
-        guessTitle.textContent = trigger.dataset.guessTitle ?? "Our Best Guess";
-        guessBody.textContent = trigger.dataset.guess ?? "";
-        guess.removeAttribute("hidden");
-        const r = trigger.getBoundingClientRect();
-        const w = guess.offsetWidth;
-        const h = guess.offsetHeight;
-        // The dialog is position:fixed, so these are viewport coordinates —
-        // clamp BOTH axes or a row near an edge puts the popout off-screen.
-        guess.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
-        const below = r.bottom + 6;
-        const above = r.top - h - 8;
-        const top = r.bottom + h + 12 > window.innerHeight ? above : below;
-        guess.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + "px";
+        closeGuess();
+        openGuess(trigger, trigger.dataset.guessTitle ?? "Our Best Guess", trigger.dataset.guess ?? "");
       });
     });
 
-    document.getElementById("fw-guess-close")?.addEventListener("click", closeGuess);
+    const noteTitle = (input: HTMLInputElement) => `Notes · ${input.dataset.noteTitle ?? ""}`;
+    const editNote = (input: HTMLInputElement) => {
+      if (noteEditing && noteSource === input) return;
+      closeGuess();
+      noteSource = input;
+      noteEditing = true;
+      openGuess(input, noteTitle(input), input.value, true);
+    };
+
+    document.querySelectorAll<HTMLInputElement>(".fw-notes").forEach((input) => {
+      input.addEventListener("mouseenter", () => {
+        clearTimeout(leaveTimer);
+        // Only a note the cell cuts off needs the popout to be read in full.
+        if (noteEditing || !input.value.trim() || input.scrollWidth <= input.clientWidth + 1) return;
+        clearTimeout(hoverTimer);
+        hoverTimer = window.setTimeout(() => {
+          noteSource = input;
+          openGuess(input, noteTitle(input), input.value);
+        }, 250);
+      });
+      input.addEventListener("mouseleave", () => {
+        clearTimeout(hoverTimer);
+        if (noteEditing || noteSource !== input) return;
+        // A short grace period lets the pointer cross into the popout.
+        leaveTimer = window.setTimeout(() => closeGuess(), 150);
+      });
+      input.addEventListener("click", (event) => {
+        event.stopPropagation();
+        editNote(input);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") { event.preventDefault(); editNote(input); }
+      });
+    });
+
+    guess?.addEventListener("mouseenter", () => clearTimeout(leaveTimer));
+    guess?.addEventListener("mouseleave", () => {
+      if (!noteEditing && noteSource) leaveTimer = window.setTimeout(() => closeGuess(), 150);
+    });
+
+    // Notes is a one-line field, so the box never stores a line break:
+    // Enter saves, and a pasted break becomes a space.
+    if (guessEdit) {
+      guessEdit.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") { event.preventDefault(); closeGuess(); }
+      });
+      guessEdit.addEventListener("input", () => {
+        if (/[\r\n]/.test(guessEdit.value)) guessEdit.value = guessEdit.value.replace(/\r?\n/g, " ");
+      });
+    }
+
+    document.getElementById("fw-guess-close")?.addEventListener("click", () => closeGuess());
     document.addEventListener("click", (event) => {
       if (guess && !guess.hidden && !guess.contains(event.target as Node)) closeGuess();
     });
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGuess(); });
-    window.addEventListener("scroll", closeGuess, true);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGuess(false); });
+    // Scrolling would leave a fixed popout behind its row. Scrolling inside
+    // the edit box itself is not a reason to close it.
+    window.addEventListener("scroll", (event) => {
+      if (guess && guess.contains(event.target as Node)) return;
+      closeGuess();
+    }, true);
 
     // Maya send button — confirms, then POSTs; reports the outcome inline.
     const sendBtn = document.getElementById("fw-send") as HTMLButtonElement | null;

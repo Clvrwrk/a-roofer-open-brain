@@ -47,6 +47,10 @@ penny; other locations differ only by the week of live movement since the
   `collected_since`, `notes`) live only in `wip_ar_master`, are audit-logged,
   and survive every refresh. Thursday roll copies expected-paid → prior and
   scores HIT (collected=Y) / MISS (date passed, not collected).
+- Notes cell (2026-10-02): hovering a note the cell cuts off shows the whole
+  note; clicking a note opens it in a larger edit box (Enter or click-away
+  saves, Esc discards). It reuses the board's one shared popout (`#fw-guess`,
+  CMP-09) and saves through the same `/api/accounting/friday-wip/update` call.
 
 ## Weekly cadence
 
