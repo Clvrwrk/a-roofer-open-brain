@@ -33,6 +33,8 @@ Mirror + registers are queryable. Interactive `/executive/cashflow-wip` still ne
 | Ops close checklist (final payroll) | Ops | Gate before Closed |
 | Supplement-open flag | Accounting | WIP-supplement while AccuLynx Invoiced |
 
+> **Amended 2026-10-02 (Chris):** Sales owns the collection dates. That covers the anticipated deposit (deductible on insurance jobs) collection date, the next collection amount and date, and the anticipated ACV / final payment (paid in full) date. They are reported in the CRM Weekly WIP/AR review, and Ops audits them rather than owning them. The two **Ops** rows above are superseded for these dates. Decision record: CRM repo `docs/product/CRM-EXPANSION-DECISIONS.md` EX-129.
+
 ### Working rules
 
 - Ops fully human-gated for status moves
