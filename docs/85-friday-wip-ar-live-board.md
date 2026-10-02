@@ -52,6 +52,27 @@ penny; other locations differ only by the week of live movement since the
   saves, Esc discards). It reuses the board's one shared popout (`#fw-guess`,
   CMP-09) and saves through the same `/api/accounting/friday-wip/update` call.
 
+## Freshness — the board is only as current as the AccuLynx job walk (2026-10-02)
+
+The board is rebuilt from the mirror (`refresh_wip_ar_master`), and a line-by-line
+check found it equal to the mirror on 332/333 rows. A live GET of all 333 jobs then
+found 41 differing from AccuLynx (AR −$125,841, billed AR +$117,600). Causes, all in
+`acculynx-sync`, fixed in mig 321 + `811589b9`:
+
+- **Colorado frozen since 09-24:** `/users` paged by page number, but it is a record
+  offset; 97 users → ~48 overlapping calls spent the account's budget every run.
+- **Money pass starved:** the job walk scanned every job behind a cursor with a
+  121 MB `acculynx_raw LIKE` probe per job, after the contacts/estimates sweeps. It
+  now walks only `acculynx_job_walk_candidates()` — never walked, modified since
+  `acculynx_jobs.walked_at`, or on this board and not walked in 3 days, board first —
+  and runs before those sweeps.
+- **List-invisible changes:** the ModifiedDate-filtered `/jobs` list never returned
+  six jobs closed in July/August. Each walked job now re-reads `GET /jobs/{id}` for
+  its milestone; the 3-day board refresh is the backstop.
+
+To verify freshness, compare the board to **live AccuLynx**, not to the mirror —
+board vs mirror only proves the rebuild ran.
+
 ## Weekly cadence
 
 1. **Wed night/Thu early:** ABC 03:30 ET · AccuLynx hourly · QBO ran Thu 20:00 CT prior week (QBO also refreshes every Thursday evening).
