@@ -349,3 +349,9 @@ INSERT INTO public.job_document_type_map (source_folder_key, doc_type, note) VAL
   ('abc orders', 'material', NULL),
   ('homeowner invoice', 'billing', NULL)
 ON CONFLICT (source_system, source_folder_key) DO NOTHING;
+
+-- ── 320c: lookup by object key (applied as 320c_acculynx_job_documents_storage_path_idx) ──
+-- The CRM's Storage predicate (CRM migration 20261010010000, crm_private.authorize_acculynx_document_object) checks
+-- every signed key against storage_path; without this index each signature scans the table.
+CREATE INDEX IF NOT EXISTS acculynx_job_documents_storage_path_idx
+  ON public.acculynx_job_documents (storage_path) WHERE storage_status = 'stored' AND removed_at IS NULL;

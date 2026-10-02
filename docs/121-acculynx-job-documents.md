@@ -83,7 +83,7 @@ Rollback: nothing reads these tables yet. To withdraw a load, set `removed_at` o
 
 ## 6. Next
 
-1. **CRM read contract** (CRM repo, same pattern as photos, docs/120 §6): grant `crm_profile_reader` an allow-list of feed columns, `crm.read_job_documents(...)` with server-signed URLs, and role filtering (reps: no material or subcontractor costs, no failed-check files).
+1. **CRM read contract: built, PR [Clvrwrk/CRM_PWA#106](https://github.com/Clvrwrk/CRM_PWA/pull/106)** (CRM migration `20261010010000`; not merged or applied yet). `GET /api/v1/jobs/{job_key}/documents` with server-signed URLs; visibility is the job page's; draft role rule (reps: no costs, no unsorted, checked files only; PMs: no customer billing). Production preflight passed and was rolled back. Brain side: **320c** added the `storage_path` index its Storage check uses (applied).
 2. **Classify the 371 unsorted** from `text_content` (type + confidence, `doc_type_method = 'classifier'`, evidence), reviewed in the Admin exceptions queue.
 3. **Text references → links**: job numbers inside documents (`(KS216)`, "INS-2, INS-4, INS-5") as `text_reference` evidence links; ABC invoice PDFs to `abc_invoices`.
 4. **OCR** the ~330 PDFs without a text layer.
