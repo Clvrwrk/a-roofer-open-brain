@@ -1,6 +1,6 @@
 # 122 — Prod DB load, 2026-10-02: stale Command Center containers and full-table pollers
 
-**Date:** 2026-10-02 · **Asked by:** Chris · **Status:** cause found; migration 323 applied to prod; app fixes on `main` (this commit); **host cleanup waits on Chris** (§5)
+**Date:** 2026-10-02 · **Asked by:** Chris · **Status:** cause found; migration 323 applied to prod; app fixes deployed to cc.proexteriorsus.net (`0c6a79cd`, live check: 2 agent calls → rollup count 2, cold 8.9 s / cached 0.8 s); **host cleanup waits on Chris** (§5)
 
 ```mermaid
 flowchart LR
@@ -63,7 +63,7 @@ Effects beyond DB load:
 
 | fix | where | verified |
 |---|---|---|
-| `bump_command_center_activity(route, actor, hour)`: one atomic `INSERT … ON CONFLICT DO UPDATE request_count + 1` | `schemas/cleverwork-roofer/323-activity-rollup-atomic-bump.sql`, **applied to prod** (ledger `20261002200346 323_activity_rollup_atomic_bump`; shares number 323 with the unrelated `323-acculynx-job-walk-cron.sql`, applied 10 minutes later by a parallel session) | As service_role inside a rolled-back transaction: insert = 1, second call = 2. anon and authenticated have no execute. Local dev server against prod: three API calls → count 3. |
+| `bump_command_center_activity(route, actor, hour)`: one atomic `INSERT … ON CONFLICT DO UPDATE request_count + 1` | `schemas/cleverwork-roofer/323-activity-rollup-atomic-bump.sql`, **applied to prod** (ledger `20261002200346 323_activity_rollup_atomic_bump`; the parallel session's job-walk cron was renumbered to `324-acculynx-job-walk-cron.sql` in 67d93ef2) | As service_role inside a rolled-back transaction: insert = 1, second call = 2. anon and authenticated have no execute. Local dev server against prod: three API calls → count 3. |
 | `persistActivityRollup` calls the RPC: one round trip, no lost counts | `app/command-center/src/lib/activity-rollups.server.ts` | same |
 | `selectAllCached`: 60 s TTL, in-flight dedupe, rejections not cached, copy per caller. All 13 source reads in the two loaders use it. | `app/command-center/src/lib/executive-pipeline.ts` | Local against prod: cold `/api/executive/pipeline.json` 8.8 s, repeat **0.077 s**, identical 29,623-byte payload, status `live`. No loader mutates source rows (checked). 412 tests pass and the build is green. |
 | `COMMAND_CENTER_SLACK_RUNTIME=off` stops the supervisor from starting Slack even when tokens are present | `app/command-center/runtime/start-command-center.mjs` | Only affects images built from this commit onward. The CRM release flow must set it on every non-Coolify container (§5). |
