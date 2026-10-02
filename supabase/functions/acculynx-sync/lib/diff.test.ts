@@ -12,7 +12,7 @@
 //
 // Run: deno test supabase/functions/acculynx-sync/lib/diff.test.ts --allow-env
 import { assertEquals } from "jsr:@std/assert@1";
-import { markNotSeen } from "./diff.ts";
+import { markNotSeen, reviveSeen } from "./diff.ts";
 
 // ---------------------------------------------------------------------------
 // Mock Supabase client: tracks all chained calls for assertion
@@ -134,4 +134,26 @@ Deno.test("markNotSeen — operates on the specified table name", async () => {
 
   const fromCall = calls.find((c) => c.method === "from");
   assertEquals(fromCall?.args[0], "acculynx_jobs", "from() must use the passed table name");
+});
+
+// ---------------------------------------------------------------------------
+// reviveSeen (migration 320): a row the sweep sees again loses its not_seen_in_api mark.
+// ---------------------------------------------------------------------------
+
+Deno.test("reviveSeen — clears only the not_seen_in_api mark on rows seen since the sweep started", async () => {
+  const calls: { method: string; args: unknown[] }[] = [];
+  const b: Record<string, unknown> = {};
+  for (const m of ["from", "update", "eq", "delete"]) {
+    b[m] = (...args: unknown[]) => { calls.push({ method: m, args }); return b; };
+  }
+  b.gte = (...args: unknown[]) => { calls.push({ method: "gte", args }); return Promise.resolve({ error: null }); };
+
+  await reviveSeen(b, "acculynx_contacts", "texas", "2026-10-01T03:00:00Z");
+
+  assertEquals(calls[0], { method: "from", args: ["acculynx_contacts"] });
+  assertEquals(calls.find((c) => c.method === "update")?.args[0], { archived_at: null, archive_reason: null });
+  const eqs = calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assertEquals(eqs, [["account_key", "texas"], ["archive_reason", "not_seen_in_api"]]);
+  assertEquals(calls.find((c) => c.method === "gte")?.args, ["last_seen_by_api", "2026-10-01T03:00:00Z"]);
+  assertEquals(calls.some((c) => c.method === "delete"), false, "never deletes (hard rule 1)");
 });
