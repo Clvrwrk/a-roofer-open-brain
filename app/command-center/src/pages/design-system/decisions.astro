@@ -109,6 +109,7 @@ const actions: Row[] = [
   ["An office-level change reloads the page rather than patching cells one by one.", "It invalidates every row.", "friday-wip.astro:780-781", ""],
   ["Agent and human actions are visually distinguished by badge (Alex, Maya, Lucinda).", "Provenance at a glance.", "docs/59:26; invoice-audit-tree.ts:41-43", ""],
   ["The deploy gate is explain-then-ship: state the change, its impact and the rollback, then push.", "Agent ships; human reads.", "CONVENTIONS.md:110", "2026-06-29"],
+  ["Customer journey card on every job (CRM): the 10-phase bar, the current phase with days and its source (AccuLynx milestone or CRM move), the phase's gates as Met / Not met / Needs confirmation / Not applicable / Waived, each tagged Inferred or Confirmed, the owner per gate (Company or Unfilled when the office has no seat holder), the next action, and Move forward only when every gate is clear; Move back is admin-only with a reason.", "Inferred results are evidence until a person confirms them; manual gates never read Met on their own; every confirm, waive and N/A is append-only, needs a note and is checked in SQL. Gate list v1 (38 gates) sits at the top of the Job Profile and the Customer record. Chris approved the mockup as drawn (claude.ai/artifact/Kwje1UD3gpXQ3hbT16nfkK).", "CRM repo docs/DECISIONS.md JOURNEY-1–JOURNEY-12; docs/124", "2026-10-05"],
 ];
 
 const nav: Row[] = [
