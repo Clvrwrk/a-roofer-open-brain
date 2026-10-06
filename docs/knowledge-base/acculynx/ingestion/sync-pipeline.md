@@ -87,6 +87,12 @@ job-walk errors in the last 6h.
   `ok (partial: N rows, archive skipped)`. Before this, deadline-cut passes had archived 422 of
   455 estimates and 7,197 of 7,256 contacts and nothing restored them; migration 325 repaired
   the history, keeping archived any row an account's latest complete sweep proved gone.
+  Applied 2026-10-06 as `325_acculynx_unarchive_reseen` (ledger `20261006123149`, statements
+  sha256 `9071af43…` = file), about 6.5 h after acculynx-sync v54 went live. By then v54 had
+  already restored the contacts itself, so 325 restored 157 estimates (147 Wichita, 5 Texas,
+  5 Colorado) and 0 contacts, and held back 1 Colorado estimate and 1 Wichita contact that a
+  complete sweep proved gone. 446 of 455 estimates are active. Previous stamps are kept in
+  `public.acculynx_archive_backfill_325` for exact rollback.
 - Small pages: `pageSize=25` (jobs, `pageStartIndex`), `50` (users).
 - HTTP 429 → retry with `Retry-After` + exponential backoff (3 retries).
 - ~110s runtime budget per invocation; the `job_walk` watermark advances **per job** (via the
