@@ -18,6 +18,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 // All tests in this file will FAIL (RED) because the stub throws before doing
 // anything. Plan 03 (GREEN) replaces the stub with the real implementation.
 import { syncContacts } from "./contacts.ts";
+import { newSweepOutcome } from "../lib/diff.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -255,4 +256,36 @@ Deno.test("syncContacts — pageStartIndex advances by 1 per page (page-number p
     `pageStartIndex must increment by 1 per page (page number), got: ${JSON.stringify(seenPageStartIndex)}`,
   );
   assertEquals(result, 160, "returns the API-reported total count");
+});
+
+// ---------------------------------------------------------------------------
+// 2026-10-05 (migration 325): partial passes archived 7,197 of 7,256 contacts.
+// ---------------------------------------------------------------------------
+
+Deno.test("syncContacts outcome — a clean sweep to the last page is complete", async () => {
+  const outcome = newSweepOutcome();
+  const { sb } = makeUpsertSb();
+  await syncContacts(sb, ACCT, "test-api-key", Date.now() + 60_000, null, makeContactsPages([[{ id: "c1" }, { id: "c2" }]]), outcome);
+  assertEquals(outcome, { complete: true, pages: 1, seen: 2 });
+});
+
+Deno.test("syncContacts outcome — a pass stopped by the deadline or a non-200 is partial", async () => {
+  const cut = newSweepOutcome();
+  const { sb } = makeUpsertSb();
+  await syncContacts(sb, ACCT, "test-api-key", Date.now() - 1, null, makeContactsPages([[{ id: "c1" }]]), cut);
+  assertEquals(cut.complete, false);
+
+  const failed = newSweepOutcome();
+  const fail500 = () => Promise.resolve(new Response("{}", { status: 500, headers: { "content-type": "application/json" } }));
+  await syncContacts(sb, ACCT, "test-api-key", Date.now() + 60_000, null, fail500, failed);
+  assertEquals(failed, { complete: false, pages: 0, seen: 0 });
+});
+
+Deno.test("syncContacts outcome — a 200 whose body is not the list shape (no items, no count) is partial", async () => {
+  // A non-JSON or unparseable 200 reads as an empty first page with no count; trusting it would archive every contact.
+  const outcome = newSweepOutcome();
+  const { sb } = makeUpsertSb();
+  const html = () => Promise.resolve(new Response("<html>gateway</html>", { status: 200, headers: { "content-type": "text/html" } }));
+  await syncContacts(sb, ACCT, "test-api-key", Date.now() + 60_000, null, html, outcome);
+  assertEquals(outcome.complete, false);
 });

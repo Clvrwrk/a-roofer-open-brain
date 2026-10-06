@@ -7,7 +7,8 @@
 // Hard rules honored:
 //   - Rule 2: apiKey resolved only at runtime via Deno.env.get(env_secret_name);
 //             the NAME is warned on skip, the VALUE is never logged (T-02-05)
-//   - Rule 1: all diff detection uses markNotSeen (.update only, never .delete) (T-02-06)
+//   - Rule 1: all diff detection uses markNotSeen (.update only, never .delete) (T-02-06); it runs only after a
+//             complete sweep, and unarchiveSeen restores rows seen again (migration 325, 2026-10-05)
 //   - T-02-04: apiKey passed as explicit param to every resource fn (no module-level key)
 //   - T-02-07: serial account loop — 30 req/s IP limit enforced (no concurrent fan-out)
 //
@@ -18,7 +19,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { loadProductionAccounts, resolveKey } from "./lib/accounts.ts";
 import { readWatermark, advanceWatermark } from "./lib/watermark.ts";
-import { markNotSeen } from "./lib/diff.ts";
+import { newSweepOutcome, settleSweep } from "./lib/diff.ts";
 import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
@@ -657,10 +658,13 @@ async function runAccountSync(
   const contactsSweepStart = new Date().toISOString();
   try {
     const contactsWm = await readWatermark(sb, acct.account_key, "contacts");
-    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm);
+    const contactsSweep = newSweepOutcome();
+    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm, fetch, contactsSweep);
 
-    // Mark rows not seen in this sweep
-    await markNotSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
+    // Restore rows this pass saw again, then archive the unseen ones only after a whole, error-free sweep
+    // (migration 325: partial passes cut by the deadline had archived nearly every contact).
+    const contactsSettled = await settleSweep(sb, "acculynx_contacts", acct.account_key, contactsSweepStart, contactsSweep);
+    if (contactsSettled.restored) console.log(`[contacts] ${acct.account_key}: ${contactsSettled.restored} rows un-archived (seen again)`);
 
     // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
@@ -670,7 +674,7 @@ async function runAccountSync(
       last_sync_at: new Date().toISOString(),
       ...(contactApiCount !== null ? { last_api_count: contactApiCount } : {}),
     });
-    result.contacts = "ok";
+    result.contacts = contactsSweep.complete ? "ok" : `ok (partial: ${contactsSweep.seen} rows, archive skipped)`;
   } catch (e) {
     result.contacts = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/contacts: ${(e as Error).message}`);
@@ -682,9 +686,13 @@ async function runAccountSync(
   const estimatesSweepStart = new Date().toISOString();
   try {
     const estimatesWm = await readWatermark(sb, acct.account_key, "estimates");
-    const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
+    const estimatesSweep = newSweepOutcome();
+    const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm, fetch, estimatesSweep);
 
-    await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
+    // Restore rows this pass saw again, then archive the unseen ones only after a whole, error-free sweep
+    // (migration 325: 422 of 455 estimates were archived by deadline-cut passes and never restored).
+    const estimatesSettled = await settleSweep(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart, estimatesSweep);
+    if (estimatesSettled.restored) console.log(`[estimates] ${acct.account_key}: ${estimatesSettled.restored} rows un-archived (seen again)`);
     // Detail pass (migration 319): title, number, dates and totals come only from GET /estimates/{id}.
     const estimateDetails = await enrichEstimateDetails(sb, acct, apiKey, deadline);
     if (estimateDetails) console.log(`[estimates] ${acct.account_key}: ${estimateDetails} detail rows refreshed`);
@@ -697,7 +705,7 @@ async function runAccountSync(
       last_sync_at: new Date().toISOString(),
       ...(estimateApiCount !== null ? { last_api_count: estimateApiCount } : {}),
     });
-    result.estimates = "ok";
+    result.estimates = estimatesSweep.complete ? "ok" : `ok (partial: ${estimatesSweep.seen} rows, archive skipped)`;
   } catch (e) {
     result.estimates = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/estimates: ${(e as Error).message}`);

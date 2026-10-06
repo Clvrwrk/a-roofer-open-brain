@@ -77,6 +77,16 @@ job-walk errors in the last 6h.
 - Incremental: `dateFilterType=ModifiedDate`, `startDate = watermark.last_modified_date`,
   `sortBy=ModifiedDate Ascending` for the `jobs` resource. `contacts`/`estimates` are full
   sweeps; `job_walk` uses the D-15/D-16 schedule above instead of a date filter.
+- **Archive only after a complete sweep (2026-10-05, migration 325).** After each `contacts` /
+  `estimates` pass, `settleSweep()` (`lib/diff.ts`) first restores every row archived as
+  `not_seen_in_api` that this pass saw again (`last_seen_by_api >= sweep start`; other archive
+  reasons are left alone), then runs `markNotSeen()` only if the pass was complete: started at
+  page 0, reached the last page, no non-200 page, no failed upsert, and the API reported a
+  `count` that the rows seen reach. A 200 without the list shape (non-JSON or unparseable, so no
+  `count`) is never trusted. A pass cut by the per-account deadline archives nothing and reports
+  `ok (partial: N rows, archive skipped)`. Before this, deadline-cut passes had archived 422 of
+  455 estimates and 7,197 of 7,256 contacts and nothing restored them; migration 325 repaired
+  the history, keeping archived any row an account's latest complete sweep proved gone.
 - Small pages: `pageSize=25` (jobs, `pageStartIndex`), `50` (users).
 - HTTP 429 → retry with `Retry-After` + exponential backoff (3 retries).
 - ~110s runtime budget per invocation; the `job_walk` watermark advances **per job** (via the

@@ -15,7 +15,12 @@
 // Fix (Rule 1 — 2026-06-30): onConflict changed from "id,account_key" to "id"
 // (table PK is id only; no composite unique constraint exists).
 
+// Fix (2026-10-05, migration 325): the sweep reports a SweepOutcome (see lib/diff.ts). index.ts runs markNotSeen
+// only when outcome.complete, and always runs unarchiveSeen. Partial passes had archived 7,197 of 7,256 contacts.
+
 // deno-lint-ignore-file no-explicit-any
+
+import type { SweepOutcome } from "../lib/diff.ts";
 
 const ACCULYNX_BASE = "https://api.acculynx.com/api/v2";
 const PACE_MS = 130; // ~8 req/s; keeps us well under the 30 req/s IP limit
@@ -103,6 +108,7 @@ function mapContact(item: any, acct: any, now: string): Record<string, unknown> 
  * @param deadline   - epoch ms budget limit (Date.now() >= deadline → stop)
  * @param watermark  - current watermark row (null = first run)
  * @param fetchFn    - injectable fetch function (defaults to global fetch for prod)
+ * @param outcome    - optional; filled in with pages/seen and complete (true only for a whole, error-free sweep)
  * @returns          - API-reported total count (for last_api_count watermark field), or null
  */
 export async function syncContacts(
@@ -112,6 +118,7 @@ export async function syncContacts(
   deadline: number,
   watermark: any,
   fetchFn: typeof fetch = fetch,
+  outcome?: SweepOutcome,
 ): Promise<number | null> {
   // pageStartIndex is a PAGE NUMBER (0-based), NOT a record offset — the AccuLynx
   // pagination quirk (jobs use recordStartIndex = record offset; contacts/estimates use
@@ -121,9 +128,13 @@ export async function syncContacts(
   // and only re-fetching the tail (observed 2026-07-01: wichita contacts stuck at 64 of
   // 1314 = one full page + the 14-row tail page).
   const PAGE_SIZE = 50;
-  let pageNo: number = watermark?.last_page_index ?? 0;
+  const startPage: number = watermark?.last_page_index ?? 0;
+  let pageNo: number = startPage;
   const now = new Date().toISOString();
   let lastApiCount: number | null = null;
+  let reachedEnd = false;
+  let failed = false;
+  if (outcome) Object.assign(outcome, { complete: false, pages: 0, seen: 0 });
 
   while (Date.now() < deadline) {
     const url = `${ACCULYNX_BASE}/contacts?pageSize=${PAGE_SIZE}&pageStartIndex=${pageNo}`;
@@ -132,6 +143,7 @@ export async function syncContacts(
 
     if (status !== 200) {
       console.warn(`[contacts] unexpected status ${status} for ${acct.account_key}`);
+      failed = true;
       break;
     }
 
@@ -143,18 +155,31 @@ export async function syncContacts(
       lastApiCount = typedBody.count;
     }
 
-    if (items.length === 0) break; // empty page — sweep complete
+    if (items.length === 0) { reachedEnd = true; break; } // empty page — sweep complete
 
     const rows = items.map((item: any) => mapContact(item, acct, now));
 
     const { error } = await sb
       .from("acculynx_contacts")
       .upsert(rows, { onConflict: "id" });
-    if (error) console.warn(`[contacts] upsert: ${error.message}`);
+    if (error) {
+      console.warn(`[contacts] upsert: ${error.message}`);
+      failed = true; // these rows keep an old last_seen_by_api, so this pass must not archive
+    } else if (outcome) {
+      outcome.seen += rows.length;
+    }
+    if (outcome) outcome.pages += 1;
 
     pageNo += 1;                          // advance ONE page (page-number semantics)
-    if (items.length < PAGE_SIZE) break;  // last (partial) page — sweep complete
+    if (items.length < PAGE_SIZE) { reachedEnd = true; break; } // last (partial) page — sweep complete
   }
 
+  // Archiving is trusted only for a whole, error-free sweep from page 0 that saw at least the API's own count.
+  if (outcome) {
+    // A 200 that is not the list shape (non-JSON or unparseable, so no items and no count) reads as an empty last
+    // page; without the API's count it is never trusted, or it would archive the whole account (review 2026-10-05).
+    outcome.complete = reachedEnd && !failed && startPage === 0 &&
+      lastApiCount !== null && outcome.seen >= lastApiCount;
+  }
   return lastApiCount;
 }
