@@ -208,6 +208,7 @@ const radiusUse: Record<string, string> = {
       </DsRule>
       <DsRule id="S-03" title="Radius is 8px by default; pills are full; one radius per visual group." source="Design.md 'Shape'; DSN-015">
         <p>Boards: 14 top-level, 10 nested, 8 inputs, 999 pills.</p>
+        <p>Clarification (2026-10-05): this is the Command Center's own scale. The CRM uses the corner rule in S-10, which replaces full-radius pills there.</p>
       </DsRule>
       <DsRule id="S-04" title="Density is chosen per surface — reading or working — and never mixed within one." source="docs/40 §2; WIP density rework 2026-08-21">
         <p>A board that needs a paragraph puts it in a note at 12.5px, not a 14px block.</p>
@@ -226,6 +227,9 @@ const radiusUse: Record<string, string> = {
       </DsRule>
       <DsRule id="S-09" title="Sticky offsets and pane heights are measured from the rendered DOM, never hardcoded." source="standards/design/v1.md § Long-list disclosure">
         <p>A 5px-short offset is a 5px band of body rows above the header.</p>
+      </DsRule>
+      <DsRule id="S-10" title="CRM corner rule: controls 8px, containers 12px, status tags 4px, circles only for people and counts." source="CRM repo docs/DECISIONS.md NEST-6 (Chris 2026-10-05; mockup claude.ai/artifact/BbsguKoAycSCXit7SboQtC)">
+        <p>Adopted by the CRM (crm.proexteriorsus.net) on 2026-10-05. Anything you can click or type into takes 8px (<code>--pwa-radius-control</code>). Anything that holds other things takes 12px (<code>--pwa-radius-card</code>), and any bar or pane nested inside it takes 8px. Read-only status tags take 4px (<code>--radius-sm</code>) and are never clickable. A full circle is used only for avatars, dots and count bubbles; the CRM has no pills. No token value changes. Command Center boards keep S-03 until a decision says otherwise.</p>
       </DsRule>
     </div>
   </DsSection>

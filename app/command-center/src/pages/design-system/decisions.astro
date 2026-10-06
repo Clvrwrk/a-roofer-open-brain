@@ -20,6 +20,8 @@ const nesting: Row[] = [
   ["Never join a branch by bare branch number; branch numbers collide across vendors.", "Migration 208 found the collision; the client enforces it too.", "CONVENTIONS.md:121; src/lib/branch-price-list.ts:119", ""],
   ["Territory Map is the home of the app; roofing is regional so the map is the primary navigation surface.", "Chris's nav interview.", "src/lib/nav.ts:26-29", "2026-06-17"],
   ["PE offices carry the roof badge on the map so our locations read differently from vendor branches.", "Identity at a glance.", "VendorTerritoryMap.astro:492-495", ""],
+  ["The CRM (crm.proexteriorsus.net) nests every job list Office → Sales Rep → Stage → Job: Customers, Properties (last-active rep) and Staff (Office → Role group → Person → Stage) follow it.", "The CRM counterpart of UX-01: office first, then the owner, then the ten journey phases. Office bars open and rep bars closed on load; open state per surface in localStorage; ?office=&rep=&stage= deep links. Counts cover only the jobs the viewer may read. Chris approved the mockup as drawn (claude.ai/artifact/BbsguKoAycSCXit7SboQtC).", "CRM repo docs/DECISIONS.md NEST-1, NEST-2", "2026-10-05"],
+  ["CRM Jobs nests Office → Sales Rep → Trade → Estimates; a job with no trade sits in a 'No trade recorded' group sorted last, and Jobs is one menu link with no milestone or phase sub-menus.", "Trade is how a job is scoped after the sale; estimates sit under the job, and the primary estimate past Approved is tagged 'Approved · inferred' because AccuLynx sends no approval flag.", "CRM repo docs/DECISIONS.md NEST-1, NEST-4", "2026-10-05"],
 ];
 
 const filters: Row[] = [

@@ -63,6 +63,7 @@ const jobs = [
 
   <DsSection id="pills" title="Status pills & badges">
     <p>A pill is a word with a fill. Every status, yes/no, tier and TBD is a pill; a pill without a word is a bug. Geometry: 2px 9px padding, 999px radius, 11px, 600–700 weight, no wrap.</p>
+    <p>CRM exception (2026-10-05, <a href="/design-system/spacing#rule-S-10">S-10</a>): the CRM adopted the corner rule, so a pill there renders as a 4px status tag that is never clickable. Filter chips and segments are 8px controls, and circles are kept only for avatars, dots and count bubbles. This chapter's pill geometry still applies to the Command Center.</p>
     <DsSpec label="Shell health badges" code=".health-badge .health-ready | -watch | -blocked">
       <span class="health-badge health-ready">Ready</span><span class="health-badge health-watch">Watch</span><span class="health-badge health-blocked">Blocked</span>
     </DsSpec>
