@@ -1,6 +1,6 @@
 # 124 — CRM job journey: gate list v1, where it lives, and the pending lien-waiver wording
 
-**Date:** 2026-10-05 · **Decided by:** Chris (CTO), mockup approved "as drawn" (private artifact claude.ai/artifact/Kwje1UD3gpXQ3hbT16nfkK; boards Main, Actions, Catalog, Phone) · **Status:** in build in the CRM repo (`Clvrwrk/CRM_PWA`, branch `claude/crm-job-journey`, migration `20261024010000_crm_job_journey.sql`); not merged, not applied, not deployed · **Canonical record:** CRM repo `docs/DECISIONS.md` JOURNEY-1–JOURNEY-12 and `docs/design/CRM-JOB-JOURNEY.md`
+**Date:** 2026-10-05 · **Decided by:** Chris (CTO), mockup approved "as drawn" (private artifact claude.ai/artifact/Kwje1UD3gpXQ3hbT16nfkK; boards Main, Actions, Catalog, Phone) · **Status:** live on crm.proexteriorsus.net since 2026-10-06T15:53Z (`Clvrwrk/CRM_PWA` PR #140 merged as `61602f2b`; migration `20261024010000_crm_job_journey.sql` applied 2026-10-06, sha = file; release record `FULL-RELEASE-2026-10-06-61602f2b.md`). JOURNEY-13 (role holders open the jobs they cover) is in build on branch `claude/crm-journey-role-access`, not applied · **Canonical record:** CRM repo `docs/DECISIONS.md` JOURNEY-1–JOURNEY-13 and `docs/design/CRM-JOB-JOURNEY.md`
 
 ```mermaid
 flowchart LR
@@ -41,6 +41,15 @@ The CRM had the ten journey phases in four places that never met: names in code,
 - **Permissions are in SQL:** gate owner or approve role, the job's rep (Sales Consultant gates and next action), the job's sales manager or a manager over its office, admins. View as is read-only.
 - **The drawn rows are enforced in SQL too:** Not applicable only on the 5 gates the list allows (never a lien waiver entry gate or *Balance paid in full*); Confirm never overrides an automatic Not met result (so money owed cannot be confirmed away); *Payment condition met* is waived only by Executive approval or an admin; proposal exceptions are approved by Sales Manager approvals, a manager or an admin, not the rep alone.
 - **Company-level holder:** a seat with no office of its own is company-level even under an office-scoped parent, so the Administrative Operations and production management seats (no office, Texas parent) cover the offices with no holder, as the Catalog board shows.
+
+## JOURNEY-13: holding a journey role opens the jobs it covers (Chris, 2026-10-06; in build)
+
+- **Who:** a member holding an active seat in a journey role. Sales Consultant does not count, because that role is the job's rep; neither do the AI roles.
+- **Which jobs:** every **open** job in the seat's office, at every stage. A company-level seat covers only the offices with no holder of that role, plus jobs with no office. This is the same rule as the card's "Company" tag.
+- **Rights:** the job's rep's rights. Reassigning the rep, cancelling, marking lost, reopening, marking proposal ready, readiness review or waive, and assigning work requests still need a manager, admin or owner basis. The database enforces these limits.
+- **Lists and View-as:** covered jobs appear in the nested lists, Search, Today › Team, My Jobs (tagged "journey role") and the property directory; Today › Mine stays owned jobs only. View-as shows the target's jobs only where the admin can also see them, and stays read-only.
+- **Who gains:** 10 non-admin holders (6 managers, 3 project managers, 1 sales rep), 3,349 (person, open job) pairs on 2026-10-06. Admins gain nothing.
+- **Also fixed:** journey actions and journey reads now use one rule. Before this, a company seat could act on jobs it could not open, in every office.
 
 ## Pending admin change: lien-waiver wording in Team › Roles
 
