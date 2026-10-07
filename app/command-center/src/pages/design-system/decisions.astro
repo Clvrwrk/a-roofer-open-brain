@@ -113,6 +113,7 @@ const actions: Row[] = [
   ["Journey role holders open the jobs their role covers (CRM, JOURNEY-13): every open job in the seat's office (a company seat covers offices with no holder), with the rep's rights; reassign, cancel, lost, readiness waive and request assign stay with managers and admins.", "One rule decides who owns a gate, who can open the job and who can act on it, so the card, the lists and the database never disagree. Covered jobs list in nest, Search, Today › Team and My Jobs (tagged journey role); Today › Mine stays owned jobs.", "CRM repo docs/DECISIONS.md JOURNEY-13; docs/124", "2026-10-06"],
   ["My jobs is a nest (CRM, MY-JOBS-NEST-1–4): Jobs opens on My jobs (rep, job role, journey role, PM workload) with a toggle to All jobs I can see; same Office › Sales rep › Job type › Estimates nesting; every job and rep bar says why it is yours.", "One nesting everywhere, and the reason a job is on your list is never a guess. Filters apply before paging; office groups open, rep groups closed.", "CRM repo docs/DECISIONS.md MY-JOBS-NEST-1–4", "2026-10-07"],
   ["Next task on the office bar (CRM, MY-JOBS-NEST-5): each office bar carries one link to the most urgent next task among your jobs in that office (overdue first, then soonest due); clicking it never toggles the bar.", "The first thing to do is one click from the top of the list. This is the one sanctioned link inside a nest summary.", "CRM repo docs/DECISIONS.md MY-JOBS-NEST-5", "2026-10-07"],
+  ["Search opens the hits (CRM, SEARCH-INTO-CUSTOMERS-1, -2): typing in the Customers nest search opens every office, sales rep and stage bar holding a match and loads their rows in one read, while the matches fit one bounded read (100); past that the bars stay as they were and the line says how to narrow. The search keeps its own open state in memory, so clearing it puts every bar back as it was. It matches name, job number, lead id, address, estimate number and the job title.", "A filtered search reveals its hits (the Credit Memos rule, carried to the CRM), and the old flat Search list found nothing the nest search does not. The bound keeps Expand all's limit: a search read is never the read of every job.", "CRM repo docs/DECISIONS.md SEARCH-INTO-CUSTOMERS-1, -2; UX-12", "2026-10-07"],
   ["Greyed with the reason, never hidden (CRM, MY-JOBS-NEST-6): an action the server would refuse on this job stays in place at 50% opacity, focusable and click-inert, with a one-line reason directly under it (aria-describedby); driven by per-job flags from the server; if the flags fail to load, today's behaviour applies.", "Nobody clicks and gets refused, and nobody wonders where a button went. The server remains the authority.", "CRM repo docs/DECISIONS.md MY-JOBS-NEST-6; brand 04-layout-web-app.md:137", "2026-10-07"],
 ];
 
@@ -127,6 +128,7 @@ const nav: Row[] = [
   ["36 of 38 pages share AppShell; auth/denied and submit-agreement are the documented standalones.", "Consistency audit.", "docs/90:68-71", "2026-08-18"],
   ["A duplicate surface is a defect (the second map page was removed); an orphan page is a defect the daily sweep flags.", "One path to each thing.", "docs/91:41-49; docs/92:19", ""],
   ["/agents doubles as the shared 'is it up' surface for both the CC and the CRM.", "One board.", "docs/111:36", "2026-09-11"],
+  ["Search is not a destination (CRM, SEARCH-INTO-CUSTOMERS-3): the Search button in the header and the More sheet opens Customers with its search box focused and Customers highlighted; an old ?workspace=search link lands there and the address becomes ?workspace=customers. The flat search list remains only where the nested read is unavailable (practice, an older server).", "Two screens that answered the same question were a duplicate surface. One surface, one search.", "CRM repo docs/DECISIONS.md SEARCH-INTO-CUSTOMERS-3; UX-12", "2026-10-07"],
   ["The design system lives at /design-system under AI Agents in the rail.", "Its audience is whoever builds the next surface.", "src/lib/nav.ts (2026-09-14)", "2026-09-14"],
 ];
 
@@ -198,6 +200,9 @@ const never: string[] = [
       </DsRule>
       <DsRule id="UX-05" title="Filters, reveal and open state persist per surface in localStorage." source="standards/design/v1.md:110-112">
         <p>A planning surface looks the way it was left.</p>
+      </DsRule>
+      <DsRule id="UX-12" title="One search per list, and it opens its hits: every branch holding a match opens in a state of its own that clearing the search restores; a second search destination is never added beside a list that has a search box." source="CRM repo docs/DECISIONS.md SEARCH-INTO-CUSTOMERS-1–3">
+        <p>Bound the auto-open (one read of the matches, never of every row); above the bound, say how to narrow instead.</p>
       </DsRule>
     </div>
   </DsSection>
