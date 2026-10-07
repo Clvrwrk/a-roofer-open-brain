@@ -41,3 +41,19 @@
 - Readiness approval by Thursday 08:00 CT.
 - Follow-ups: per-job `can_*` flags so refused buttons hide; My Jobs length for company seats.
 - **Next CRM release pin:** derive from `61602f2bc51e`, port 4467.
+
+## Session (continued, night of 2026-10-06/07): JOURNEY-13 live, My jobs nest
+
+**Deliverables:**
+- **JOURNEY-13:** Chris dry-ran it via the Management API (all_ok=t) and applied it (ledger 20261006211939 and 20261006211940, sha = files). Release `91ad20cf` went live at 23:22Z.
+  - **Incident:** from 21:19Z to 23:22Z My Jobs failed for role holders, because the live parser rejected the new `journey_role` reason.
+  - **Lesson:** ship the parser before widening an RPC answer, or use new functions and routes only.
+- **My jobs nest plus greyed actions (MY-JOBS-NEST-1–9):**
+  - Mockup approved as drawn: https://claude.ai/artifact/9wRugCJHHGLtzz9yMUZ7LV.
+  - Built and reviewed: 3 test gaps closed, 13 mutants caught.
+  - Dry run: all_ok=t.
+  - Applied before the merge, inert because it adds new functions and routes only: ledger 20261007052547.
+  - PR #143 merged as `9a1e4d9e`; live at 2026-10-07 06:34Z on port 4468.
+- **Release records:** PR #141 covers four releases. Design-system rows are on brain main 404229e8.
+
+**Open threads:** Chris's signed-in check of My jobs, Next task and greyed buttons; P6 readiness approval by Thu 08:00 CT; merge #141.
