@@ -1800,8 +1800,23 @@ const TERRITORY_SURFACE_DEGRADED_TTL_MS = 5_000;
 const TERRITORY_SURFACE_MAX_STALE_MS = 24 * 60 * 60_000;
 let territorySurfaceCache: { expiresAt: number; payload: VendorTerritoryMapPayload } | null = null;
 let territorySurfaceInflight: Promise<VendorTerritoryMapPayload> | null = null;
+// Bumped by every invalidate. A load that started before an assignment carries
+// the older generation, so its result must not refill the cache or clear the
+// newer load's in-flight slot; otherwise the map misses the assignment for a
+// full live TTL.
+let territorySurfaceGeneration = 0;
+let territoryPayloadLoader: (env: RuntimeEnv) => Promise<VendorTerritoryMapPayload> = loadVendorTerritoryMapPayload;
+
+/** Test seam: swap the Supabase-backed loader; pass null to restore it and drop the cache. */
+export function setVendorTerritoryPayloadLoaderForTests(
+  loader: ((env: RuntimeEnv) => Promise<VendorTerritoryMapPayload>) | null,
+) {
+  territoryPayloadLoader = loader ?? loadVendorTerritoryMapPayload;
+  invalidateVendorTerritorySurfaceCache();
+}
 
 export function invalidateVendorTerritorySurfaceCache() {
+  territorySurfaceGeneration += 1;
   territorySurfaceCache = null;
   territorySurfaceInflight = null;
 }
@@ -1814,16 +1829,20 @@ export async function loadVendorTerritorySurface(env: RuntimeEnv = getRuntimeEnv
   }
 
   if (!territorySurfaceInflight) {
-    territorySurfaceInflight = loadVendorTerritoryMapPayload(env)
+    const generation = territorySurfaceGeneration;
+    const inflight: Promise<VendorTerritoryMapPayload> = territoryPayloadLoader(env)
       .then((payload) => {
-        const ttl = payload.source === "live" ? TERRITORY_SURFACE_LIVE_TTL_MS : TERRITORY_SURFACE_DEGRADED_TTL_MS;
-        territorySurfaceCache = { expiresAt: Date.now() + ttl, payload };
+        if (generation === territorySurfaceGeneration) {
+          const ttl = payload.source === "live" ? TERRITORY_SURFACE_LIVE_TTL_MS : TERRITORY_SURFACE_DEGRADED_TTL_MS;
+          territorySurfaceCache = { expiresAt: Date.now() + ttl, payload };
+        }
         return payload;
       })
       .finally(() => {
-        territorySurfaceInflight = null;
+        if (territorySurfaceInflight === inflight) territorySurfaceInflight = null;
       });
-    territorySurfaceInflight.catch(() => undefined);
+    territorySurfaceInflight = inflight;
+    inflight.catch(() => undefined);
   }
 
   if (cached && cached.expiresAt + TERRITORY_SURFACE_MAX_STALE_MS > now) {
