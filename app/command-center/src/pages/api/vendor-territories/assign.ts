@@ -8,7 +8,7 @@ import {
 import { jsonApiResponse } from "@lib/agent-api";
 import { recordLiveWorkDecision, type LiveWorkItem } from "@lib/live-work";
 import { createServerSupabaseClient } from "@lib/supabase.server";
-import { loadVendorTerritoryMapPayload } from "@lib/vendor-territories";
+import { invalidateVendorTerritorySurfaceCache, loadVendorTerritoryMapPayload } from "@lib/vendor-territories";
 
 export const prerender = false;
 
@@ -83,6 +83,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       { status: 409 },
     );
   }
+
+  // The map surface is cached for 10 minutes; drop it so the next read shows this assignment.
+  invalidateVendorTerritorySurfaceCache();
 
   // Routing a branch to an office changes the OFFICE gate — which agreement is
   // allowed to price that branch's invoices at all (migration 217). It reaches
