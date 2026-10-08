@@ -14,7 +14,7 @@
 --   psql $DATABASE_URL -f scripts/verify-acculynx-cron.sql
 --
 -- Expected output when healthy:
---   Section 1 → exactly ONE row: an acculynx sync job with schedule '0 * * * *'; the command
+--   Section 1 → exactly ONE row: an acculynx sync job with schedule '4 * * * *' (was '0 * * * *' until mig 326); the command
 --               (or the trigger_acculynx_sync body it calls) drives multiAccount:true; and NO row
 --               named 'acculynx-sync-daily' (the legacy daily job) remains.
 --   Section 2 → ZERO rows (every dispatched pg_net request has been reconciled within the grace window).
@@ -24,7 +24,7 @@
 --       before the cutover wave; this file is committed now and becomes fully runnable after 03-02.
 
 -- ── Section 1: cron schedule assertion ───────────────────────────────────────
--- Healthy = exactly one hourly acculynx sync row ('0 * * * *') and the legacy daily job gone.
+-- Healthy = exactly one hourly acculynx sync row ('4 * * * *' since mig 326, plus the :30 job walk from mig 324) and the legacy daily job gone.
 select jobid, jobname, schedule, command
 from cron.job
 where jobname ilike '%acculynx%'

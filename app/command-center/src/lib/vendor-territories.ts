@@ -1793,7 +1793,9 @@ export async function loadVendorTerritoryMapPayload(
   }
 }
 
-const TERRITORY_SURFACE_LIVE_TTL_MS = 30_000;
+// Offices and branch territories change a few times a month; territory_snapshot
+// costs ~1.2 s per call (8 s under load). Edits call invalidateVendorTerritorySurfaceCache.
+const TERRITORY_SURFACE_LIVE_TTL_MS = 10 * 60_000;
 const TERRITORY_SURFACE_DEGRADED_TTL_MS = 5_000;
 const TERRITORY_SURFACE_MAX_STALE_MS = 24 * 60 * 60_000;
 let territorySurfaceCache: { expiresAt: number; payload: VendorTerritoryMapPayload } | null = null;
