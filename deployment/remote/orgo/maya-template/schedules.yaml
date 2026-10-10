@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "enabled": false,
+  "timezone": "America/Chicago",
+  "registry": "single-durable-registry",
+  "schedules": [
+    {
+      "name": "weekday-outcome",
+      "cron": "0 9 * * 1-5",
+      "freshness_minutes": 120,
+      "artifact": "accepted weekday outcome"
+    },
+    {
+      "name": "saturday-review",
+      "cron": "0 10 * * 6",
+      "freshness_minutes": 60,
+      "artifact": "reviews/YYYY-Www-saturday.md"
+    },
+    {
+      "name": "sunday-goals",
+      "cron": "0 16 * * 0",
+      "freshness_minutes": 60,
+      "artifact": "goals/YYYY-Www.md"
+    }
+  ]
+}
