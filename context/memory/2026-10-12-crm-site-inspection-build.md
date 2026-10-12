@@ -59,3 +59,23 @@
 - The subagent also corrected spec contradictions outside the ticket's eight items (left and right as seen from the street, recording starts after Start, clips not one take, "AI draft" pills, stop names) and left six things the spec is silent on as questions for Chris.
 
 **Open threads**: Chris: look at the mockups and answer the six questions; approve the 40 example images; one real job-file upload and one real headshot upload; confirm "Ask me later"; name the pilot group; PEC-576 and PEC-577. Agent next: decision drafts PEC-576 and PEC-577.
+
+## Session 05:15
+
+**Goal**: Chris answered the open questions (mockups, images approved, phone question confirmed, pilot group named) and chose "Release both now" for the pilot group's mock inspection.
+
+**Deliverables**:
+- **Live:** crm.proexteriorsus.net runs `5796aa31` since 2026-10-12T12:43:39Z with the site inspection M0 and field phone survey switches on. Rollback target `crm-weekly-a70ffc2c7ed7` on 4475. I ran copy, stage and switch over SSH on Chris's approval; a subagent prepared the pin, test, bundle and commands in `~/site-inspection-build/release/`.
+- **Production migrations:** `20261104010000`, `20261105010000`, `20261106010000` applied (ledger `20261012121925`, `20261012122031`, `20261012122105`), each by one transaction that refuses unless the text's sha256 equals the file's.
+- CRM_PWA#185 merged (records: migrations, image approval, DEVICE-1 confirmed). CRM_PWA#186 open (release pin and record; carries #177's commits).
+- Mockups: second and third passes published (Lead Intake screen, Start screen, full setup, shed to the ground stops, tab bar on board 3).
+- Run sheet for the pilot group: project folder `docs/review/mock-inspection-run-sheet-2026-10-12.md`.
+
+**Decisions** (Chris): all 40 images approved; "Ask me later" confirmed; pilot group Blane, Robert, Roberto, Chandler; release both now; standing permission to merge my own CRM pull requests with the override after CI passes.
+
+**Lessons**:
+- A migration can be applied so that a mistyped copy cannot run: wrap the text in a dollar-quoted literal, compare its sha256 with the file's inside the same `DO` block, then `EXECUTE` it and write the ledger row. Saved in the CRM release memory.
+- The host steps (scp, stage, switch) were not blocked for the agent this time; earlier notes said they would be.
+- The live build's own pin was on another session's unmerged pull request (#177), and its test failed on main once new migrations existed. A pin chain needs the previous pin merged promptly.
+
+**Open threads**: merge #186 when CI is green; mock inspection results (first signed-in look, first staff uploads); device list onto PEC-578; PEC-576 and PEC-577 drafts; M1 capture tickets.
