@@ -27,6 +27,7 @@ Collect baseline invoice volume, discrepancy rate, average credit memo value, cu
 ## APPROVED — Ready to build
 
 ---
+
 ### crm-site-inspection-walkthrough
 
 **File:** `proposals/2026-10-11-crm-site-inspection-walkthrough.md`
@@ -40,7 +41,6 @@ Site inspections are photographed without a protocol, so coverage differs from r
 
 **Decision:**
 Approved under the mission-grade exemption (today's time per inspection and miss rate are not measured). Build by milestone, M0 first. M5, which lets one CRM worker write to CompanyCam, waits for its own decision (PEC-576).
-
 
 ---
 

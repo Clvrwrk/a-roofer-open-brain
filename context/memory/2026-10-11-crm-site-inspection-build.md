@@ -25,3 +25,25 @@
 - Other decision drafts not written yet: PEC-575 (voice), PEC-576 (CompanyCam, ADR 0009), PEC-577 (reports).
 - This Open Brain branch is pushed, not merged: a push to `main` deploys the Command Center and it holds only the A3, the backlog entry and this log.
 - Local test database: Docker container `site-inspection-pg` on 127.0.0.1:55439 (throwaway).
+
+## Session 23:40 (same sitting, after Chris answered)
+
+**Goal**: Chris answered PEC-574 in the session: all eleven foundations defaults accepted; A3 approved for M0 to M4, M5 held for PEC-576. Continue the build.
+
+**Deliverables**:
+- A3 and proposals backlog marked approved; `docs/decisions/D1-foundations.md` marked approved; PEC-574 Done in Linear.
+- CRM branch `claude/site-inspection-begin` (stacked on #179): PEC-581 (set up and begin) and PEC-583 (protocol v1 as data, shared evaluator, route screen). Migration `20261104010000_crm_site_inspection.sql`, page `/site-inspection`, API `/api/site-inspection`, switch `CRM_SITE_INSPECTION_ENABLED`, `docs/architecture/SITE-INSPECTION.md`, INSPECT-1–11 in the CRM `docs/DECISIONS.md`.
+- Fix pushed to #179: the autofix workflow must mirror every `verify.yml` check (a unit test enforces it).
+
+**Decisions** (agent):
+- PEC-581 and PEC-583 ship in one PR with one migration: three unapplied migrations rewriting the same function in a row would be worse. PEC-582 (setup screen) gets its own migration.
+- Begin starts an arrival already checked in on Inspection & Assessment rather than recording a second one.
+- "Who can add them" = people who manage assignments for the job's office (`crm_private.can_manage_office`).
+- One inspection open per sales effort at a time.
+- The database suite is a vitest file under `tests/database` (run by `test:db:core`), because a plain script cannot import the TypeScript request handler.
+
+**Lessons**:
+- A `LANGUAGE sql` function is checked when created. Several database suites replay only some migrations, so a new migration's SQL-language function that calls a later-skipped helper fails there. Use plpgsql for helpers that call across migrations.
+- Run the whole unit suite after touching `.github/workflows/verify.yml`; `tests/unit/error-autofix-pipeline.test.ts` pins `autofix.yml` to it.
+
+**Open threads**: PEC-582 (setup screen, readiness check; access notes need a table outside the audit capture, which records whole rows), PEC-597–599 (launch points), PEC-584 (example images), PEC-588 (mockups), decision drafts PEC-575–577.
