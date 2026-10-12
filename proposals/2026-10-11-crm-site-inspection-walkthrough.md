@@ -2,7 +2,7 @@
 
 Proposed by: Chris (brief of 2026-10-11; Linear project CRM_PWA_SITE_INSPECTION, PEC-570 to PEC-644)
 Date: 2026-10-11
-Status: pending
+Status: approved (M0 to M4; M5 held for PEC-576)
 Affected clients: pro-exteriors
 A3 file: proposals/2026-10-11-crm-site-inspection-walkthrough.md
 
@@ -79,12 +79,12 @@ A3 file: proposals/2026-10-11-crm-site-inspection-walkthrough.md
 
 ## 8. Decision
 
-- [ ] **Approve** — build by milestone, M0 first; pilot client: pro-exteriors
+- [x] **Approve** — M0 to M4, built by milestone, M0 first; pilot client: pro-exteriors. M5 (CompanyCam writing) is held for its own decision, PEC-576; M6 follows the same gate as its parts
 - [ ] **Kill** — reason:
 - [ ] **Defer** — revisit at: , condition:
 
 Approver: Chris
-Approved / decided on:
+Approved / decided on: 2026-10-11 (in the build session, with the eleven foundations decisions of PEC-574, all accepted as drafted)
 
 **Recommendation: approve M0 to M4** (rails and proof, guided capture, offline and voice, transcript and review, reports). **Hold M5** (CompanyCam writing) for its own decision, PEC-576.
 

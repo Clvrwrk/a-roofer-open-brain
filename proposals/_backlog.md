@@ -24,10 +24,13 @@ Collect baseline invoice volume, discrepancy rate, average credit memo value, cu
 
 ---
 
+## APPROVED — Ready to build
+
+---
 ### crm-site-inspection-walkthrough
 
 **File:** `proposals/2026-10-11-crm-site-inspection-walkthrough.md`
-**Status:** PENDING
+**Status:** APPROVED 2026-10-11 by Chris — M0 to M4; M5 (CompanyCam writing) held for PEC-576
 **Proposed on:** 2026-10-11
 **Pilot client:** pro-exteriors
 **Assigned to:** Chris + Claude build session (Linear project CRM_PWA_SITE_INSPECTION, PEC-570 to PEC-644)
@@ -35,12 +38,9 @@ Collect baseline invoice volume, discrepancy rate, average credit memo value, cu
 **Summary of the problem:**
 Site inspections are photographed without a protocol, so coverage differs from rep to rep, the CRM's 50-photo gate counts photos instead of coverage, what the rep said on the roof is lost, and nothing links a new lead's property to its one CompanyCam project.
 
-**Decision needed:**
-Approve the guided walkthrough inside the CRM under the mission-grade exemption (today's time per inspection and miss rate are not measured). Recommended: approve M0 to M4; hold M5, which lets one CRM worker write to CompanyCam, for its own decision (PEC-576).
+**Decision:**
+Approved under the mission-grade exemption (today's time per inspection and miss rate are not measured). Build by milestone, M0 first. M5, which lets one CRM worker write to CompanyCam, waits for its own decision (PEC-576).
 
----
-
-## APPROVED — Ready to build
 
 ---
 
