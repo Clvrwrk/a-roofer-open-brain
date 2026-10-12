@@ -79,3 +79,21 @@
 - The live build's own pin was on another session's unmerged pull request (#177), and its test failed on main once new migrations existed. A pin chain needs the previous pin merged promptly.
 
 **Open threads**: merge #186 when CI is green; mock inspection results (first signed-in look, first staff uploads); device list onto PEC-578; PEC-576 and PEC-577 drafts; M1 capture tickets.
+
+## Session 06:00
+
+**Goal**: Chris's first real use of the live M0: "Started the inspection but got stuck on this screen"; and a request to replace Repair/Replacement on lead intake with multi-select job types.
+
+**Deliverables**:
+- **Live:** `09a0fa19` since 2026-10-12T13:55:27Z (CRM_PWA#187, Linear PEC-646): a begun inspection leads with "What to do now", Add photos and Finish in Inspection & Assessment. Rollback `crm-weekly-5796aa310c89` on 4476. No SQL. Chris approved ("Yes, release when green").
+- CRM_PWA#188 open: pins, tests and records for both releases of the day; replaces #186 (closed).
+- Linear PEC-647 opened for the job types change; a subagent is building it in `~/site-inspection-build/job-types/crm`.
+
+**Decisions** (Chris): release the fix when green; job types are the eleven AccuLynx trade names; at least one is required.
+**Decisions** (agent): the fix does not pretend capture exists; it names where photos go today. For job types, `work_type` stays as a column and becomes optional, and the shared database functions keep accepting the old shape so the rollback build still works.
+
+**Lessons**:
+- Shipping a milestone that ends at a screen with no next action is a dead end even when it is "as designed". Every released screen needs its next step, even if the step is "do this elsewhere for now".
+- A no-SQL release after a SQL release takes no `--migrations-applied` flag; passing it stops the engine.
+
+**Open threads**: merge #188 when green; job types review, migration and release; Chris to confirm the fix on a phone; pilot group results; device list onto PEC-578.
