@@ -97,3 +97,22 @@
 - A no-SQL release after a SQL release takes no `--migrations-applied` flag; passing it stops the engine.
 
 **Open threads**: merge #188 when green; job types review, migration and release; Chris to confirm the fix on a phone; pilot group results; device list onto PEC-578.
+
+## Session 09:20
+
+**Goal**: finish and release Lead Intake job types (Linear PEC-647) after the session limit interrupted the build.
+
+**Deliverables**:
+- **Live:** `60ee8063` since 2026-10-12T16:57:24Z (CRM_PWA#189): New lead step 3 and Lead Intake ask multi-select job types in place of Repair / Replacement. Rollback `crm-weekly-09a0fa190e36` on 4477.
+- **Production migration** `20261107010000_crm_lead_job_types.sql` applied (ledger `20261012165126`) with the self-checking method; verified in a rolled-back run as a real sales rep with both the earlier and the new request shape.
+- CRM_PWA#188 merged (records for the first two releases; also landed #177). CRM_PWA#190 open (record for this release).
+- PEC-646 Done: Chris confirmed the next-step fix on the live site.
+
+**Decisions** (Chris): release job types when green; the eleven names and "at least one required" confirmed.
+**Decisions** (agent): `work_type` kept and made optional rather than defaulted; the earlier reader keeps its output shape and the new build reads through a `_v2` reader, because the live build parses drafts strictly.
+
+**Lessons**:
+- A subagent that hits the session limit can have finished its work with only the report lost: check its log, its commits and its CI log before redoing anything. Subagents do not survive the restart; durable logs and one-pass scripts on disk let a new one take over.
+- Before re-issuing a function body in a migration, compare production's `md5(pg_get_functiondef(oid))` with a database built from main's migrations. All five matched here.
+
+**Open threads**: merge #190 when green; Chris to confirm the job types screens; job types on the Jobs surface and the staff manuals (follow-ups); pilot group results; device list onto PEC-578; M1 capture.
