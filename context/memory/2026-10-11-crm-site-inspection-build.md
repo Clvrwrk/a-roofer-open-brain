@@ -47,3 +47,15 @@
 - Run the whole unit suite after touching `.github/workflows/verify.yml`; `tests/unit/error-autofix-pipeline.test.ts` pins `autofix.yml` to it.
 
 **Open threads**: PEC-582 (setup screen, readiness check; access notes need a table outside the audit capture, which records whole rows), PEC-597–599 (launch points), PEC-584 (example images), PEC-588 (mockups), decision drafts PEC-575–577.
+
+## Session 00:10 (2026-10-12, same sitting)
+
+**Goal**: finish the first working slice and leave it reviewable.
+
+**Deliverables**: draft PR CRM_PWA#180 (`claude/site-inspection-begin`, on #179): PEC-581, PEC-583, PEC-597, PEC-598, PEC-599. Eleven tickets are In Review in Linear. Voice decision drafted (`docs/decisions/D2-voice.md`, posted on PEC-575). Handoff rewritten at the project folder's `docs/handoffs/current.md`.
+
+**Decisions** (agent): launch links render only when the CRM host passes the address, so practice mode and the Sales mirror show nothing; the property profile's chooser sends an AccuLynx job to its Job page because the profile's job list has no sales effort id; function pins live in `scripts/test-site-inspection.mjs` because SR-24 only reads `scripts/test-*`.
+
+**Verified locally**: typecheck 0 errors; 2,359 unit tests; build; 46 browser tests; the 68-suite CI database chain; `validate_build_docs.py` including SR-24. Not verified: the page inside the running CRM (needs the canonical switches and a real sign-in).
+
+**Open threads**: PEC-582 next. Chris: review #178 → #179 → #180, PEC-580, PEC-575, PEC-578.
