@@ -24,6 +24,20 @@
 -- TAMPST is flagged on the quote "DISC 9-26, replacement TAMSS"; TAMSS was not quoted.
 --
 -- 27 distinct SKUs.
+--
+-- BRANCH IDENTITY (verified live 2026-10-20): SRPEN = vendor_branches 'SBP-PENSACOLA'
+-- (SRS BUILDING PRODUCTS - PENSACOLA, 8771 Ely Road). SRS prints the 5-letter code in the
+-- invoice "Branch :" field, so an alias SRPEN -> SBP-PENSACOLA is added (mig 253 pattern,
+-- cf. AMDEN -> SBP-DENVER); without it SRPEN invoices land with no branch and fail closed.
+
+INSERT INTO public.vendor_branch_alias
+  (vendor_id, alias_key, alias_raw, vendor_branch_id, status, source, decided_by, decided_at, notes)
+SELECT v.id, 'SRPEN', 'SRPEN', vb.id, 'resolved', 'vendor_document', 'Chris Hussey', now(),
+       '2026-10-20: SRS prints this code in the "Branch:" field of its quotes/invoices (quotes 0051901988 et al., SRS BUILDING PROD - PENSACOLA, 8771 Ely Rd). Mig 328.'
+  FROM public.vendors v
+  JOIN public.vendor_branches vb ON vb.vendor_id = v.id AND vb.branch_number = 'SBP-PENSACOLA'
+ WHERE v.slug = 'srs'
+ON CONFLICT (vendor_id, alias_key) DO NOTHING;
 
 DO $$
 DECLARE n int;
@@ -75,7 +89,7 @@ INSERT INTO public.price_agreement_items
    negotiated_price, price_uom, match_type, needs_review, approval_status,
    approved_by, approved_at, notes)
 SELECT '484ede71-87b2-462f-b1cb-e2dc57619fda'::uuid, s.item, s.d, lower(s.d), s.p, s.u,
-       'item_number', false, 'approved', 'Chris Hussey', now(), 'SRPEN ' || s.src
+       'exact', false, 'approved', 'Chris Hussey', now(), 'SRPEN ' || s.src
 FROM (VALUES
   ('TAM31005423',      '3 BD/SQ TAMKO HERITAGE WEATHERED WOOD LINE 2, 42 BD/PAL',                      'SQ',    95.00, 'quotes 0051901988, 0051905940'),
   ('TAM31005009',      '3 BD/SQ TAMKO HP TITAN XT RUSTIC CEDAR PROLINE, LINE 4, 36 BD/PAL',            'SQ',   104.00, 'quote 0051901988'),

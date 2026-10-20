@@ -12,17 +12,23 @@
 --   node scripts/geocode-vendor-branches.mjs --assign-only   (rpc assign_branch_territories)
 -- which marks every ABC / SRS / QXO branch inside exactly one active ring as covered.
 --
--- region_id is left NULL: it only feeds the ABC regional path, and no ABC Florida book
--- exists. office x ABC posture is deliberately left unrecorded for Chris to rule on.
+-- REGION: a new 'FL' regions row, the same pattern Atlanta used ('GA'). region_id feeds the
+-- ABC regional path and the map's region label; no ABC Florida book exists yet, and
+-- office x ABC posture is deliberately left unrecorded for Chris to rule on.
+
+INSERT INTO public.regions (region_code, region_name, primary_city, primary_state, is_active, notes)
+SELECT 'FL', 'Pensacola, FL', 'Pensacola', 'FL', true,
+       '2026-10-20 (Chris): region for the Pensacola, FL office (mig 327).'
+WHERE NOT EXISTS (SELECT 1 FROM public.regions WHERE region_code = 'FL');
 
 INSERT INTO public.office
   (id, name, office_type, region_id, address, city, state, postal_code,
    latitude, longitude, geocode_status, drive_time_minutes, is_active, notes)
-VALUES
-  ('4a1d6c2e-0f3b-4e8a-9c27-5e1b8d3f6a90'::uuid, 'Pensacola, FL', 'brick_mortar', NULL,
-   '545 Brent Lane #141', 'Pensacola', 'FL', '32503',
-   30.474544, -87.222206, 'manual', 120, true,
-   '2026-10-20 (Chris): new fixed Florida office. 2-hour drive-time ring. Main SRS branch SRPEN (SRS Building Prod - Pensacola, 8771 Ely Rd). Coordinates from US Census geocoder exact match.')
+SELECT '4a1d6c2e-0f3b-4e8a-9c27-5e1b8d3f6a90'::uuid, 'Pensacola, FL', 'brick_mortar', r.id,
+       '545 Brent Lane #141', 'Pensacola', 'FL', '32503',
+       30.474544, -87.222206, 'manual', 120, true,
+       '2026-10-20 (Chris): new fixed Florida office. 2-hour drive-time ring. Main SRS branch SRPEN = SBP-PENSACOLA (8771 Ely Rd). Coordinates from US Census geocoder exact match.'
+  FROM public.regions r WHERE r.region_code = 'FL'
 ON CONFLICT (id) DO NOTHING;
 
 -- office x vendor posture (mig 245 table). SRS has a book (mig 328); QXO has none by
@@ -43,6 +49,10 @@ DECLARE n int;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.office WHERE id = '4a1d6c2e-0f3b-4e8a-9c27-5e1b8d3f6a90' AND is_active) THEN
     RAISE EXCEPTION '327 Pensacola office row missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.office o JOIN public.regions r ON r.id = o.region_id
+                  WHERE o.id = '4a1d6c2e-0f3b-4e8a-9c27-5e1b8d3f6a90' AND r.region_code = 'FL') THEN
+    RAISE EXCEPTION '327 Pensacola office not linked to region FL';
   END IF;
   SELECT count(*) INTO n FROM public.office_vendor_agreement_status
    WHERE office_id = '4a1d6c2e-0f3b-4e8a-9c27-5e1b8d3f6a90';
