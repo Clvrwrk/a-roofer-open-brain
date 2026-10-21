@@ -2,6 +2,7 @@
 
 **Status:** design · 2026-10-21 · owner: Chris Hussey
 **Canvas:** [People & Payroll Workspace](https://claude.ai/artifact/K6pnJN7XMnDWaJuHUC4SnS), 51 artboards
+**Figma:** [hr. workspace · People, payroll, offices & assets](https://www.figma.com/design/ZQjC2uvBK3NMiquq43ewBl): a Read me page, then one page per canvas row. Every screen carries a "Why it works this way" note and a "Still to design" note, both as cards under the frame and as Figma annotations. The screens are flat layers, not yet wired to components or variables.
 **Platform context:** [docs/127](127-platform-surfaces-and-sitemap.md)
 
 `hr.proexteriorsus.net` is the full HR suite: people and payroll through the PEO, 1099 contractors and crews, the redesigned title/seat/access model, office management, and company assets. It follows the Command Center design system (navy rail, Inter, status pills, 10-row disclosure UX-06, attachment intake UX-11, confirmations that state effect and non-effects CMP-08).
