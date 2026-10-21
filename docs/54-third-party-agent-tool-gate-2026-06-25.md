@@ -14,6 +14,7 @@ Scope: external skills, plugins, MCP servers, agent wrappers, installer scripts,
 | `headroomlabs-ai/headroom` | Defer | Revisit only if token/memory compression becomes a validated bottleneck. | Do not let it rewrite `CLAUDE.md`/`AGENTS.md` or wrap production agents without A3 approval. |
 | `DietrichGebert/ponytail` | Principle-only | Borrow the bias toward simple, reusable, standard-library-first work. | Do not install plugin hooks, hidden lifecycle context, or statusline changes. |
 | `JuliusBrussee/caveman` | Reject | None. | Conflicts with professional tone/workflow and uses risky installer/memory rewrite patterns. |
+| `mattpocock/skills` (plugin `mattpocock-skills`) | Allow (2026-10-21) | Engineering workflow skills enabled in repo `.claude/settings.json` and the cloud setup script. A3: [`proposals/a3-mattpocock-skills-plugin.md`](../proposals/a3-mattpocock-skills-plugin.md). | Skills only (no hooks or MCPs) as of v1.3.1; re-review if a release adds hooks or MCP servers. |
 
 ## Required Gate Before Any Install
 
