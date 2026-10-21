@@ -1,7 +1,7 @@
 # 128 · hr. workspace design: people, pay, offices & assets
 
 **Status:** design · 2026-10-21 · owner: Chris Hussey
-**Canvas:** [People & Payroll Workspace](https://claude.ai/artifact/K6pnJN7XMnDWaJuHUC4SnS), 63 artboards
+**Canvas:** [People & Payroll Workspace](https://claude.ai/artifact/K6pnJN7XMnDWaJuHUC4SnS), 51 artboards
 **Platform context:** [docs/127](127-platform-surfaces-and-sitemap.md)
 
 `hr.proexteriorsus.net` is the full HR suite: people and payroll through the PEO, 1099 contractors and crews, the redesigned title/seat/access model, office management, and company assets. It follows the Command Center design system (navy rail, Inter, status pills, 10-row disclosure UX-06, attachment intake UX-11, confirmations that state effect and non-effects CMP-08).
