@@ -61,6 +61,10 @@ Any work surface that can render an unbounded list opens showing **10 rows**, wi
 
 Every work surface that holds files, photos, videos or documents shows a **placeholder icon** with what belongs there when empty; is a **drag-and-drop** target; opens the device's own tools in **one click** (file picker on a computer, Photo library · Take photo · Choose file on a phone); and keeps any **camera** button while adding **Photo library** beside it. Never put `capture` on the only file input. One shared component per app. Contract: [`standards/design/v1.md`](standards/design/v1.md) § Attachment intake and [`CONVENTIONS.md`](CONVENTIONS.md) §11b.
 
+## Self-healing loop (every surface, by default)
+
+Every app, service and work surface ships inside the self-healing loop: Sentry -> deduped Linear bug log -> reproduce-first draft-PR fix (where a verify chain exists) -> human merge -> verify-and-close against production (resolve, or reopen with evidence). Nothing auto-merges; the fixing agent holds no credentials. A new surface is not done until it has a Sentry project, `/healthz` with `buildCommit`, and the vendored kit (`scripts/self-heal/`, `.github/workflows/self-heal.yml`). Contract: [`docs/127-self-healing-loop.md`](docs/127-self-healing-loop.md) and [`CONVENTIONS.md`](CONVENTIONS.md) §10d.
+
 ## Session wrap-up / handoff
 
 **Canonical procedure: `CONVENTIONS.md` §13** (shared across all harnesses). End every session here.
