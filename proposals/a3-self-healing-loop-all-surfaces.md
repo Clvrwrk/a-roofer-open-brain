@@ -2,7 +2,7 @@
 
 Proposed by: Chris (CTO), via Claude Code
 Date: 2026-10-21
-Status: pending (everything ships disabled; each stage is enabled by Chris per surface)
+Status: approved 2026-10-21 by Chris. Every stage still ships disabled; each stage is enabled per surface.
 Affected clients: template-wide (all Cleverwork surfaces: Command Center, CRM, PM, Executive, Courses, and every future surface)
 A3 file: proposals/a3-self-healing-loop-all-surfaces.md
 Extends: [CRM_PWA A3: error autofix pipeline](https://github.com/Clvrwrk/CRM_PWA/blob/main/docs/proposals/A3-error-autofix-pipeline.md) (approved 2026-09-29, CRM scope only). Standard: [docs/127](../docs/127-self-healing-loop.md).
@@ -69,8 +69,8 @@ Per surface, using CRM A3 section 8 assumptions: current cost X ≈ $8,483 per m
 
 ## 8. Decision
 
-- [ ] A3 approved (Chris)
+- [x] A3 approved (Chris, 2026-10-21)
 - [ ] Per-surface activation recorded in docs/127 "Rollout status"
 
-Decision: [ ] Approve  [ ] Kill  [ ] Defer
-Approver:  Date:
+Decision: [x] Approve  [ ] Kill  [ ] Defer
+Approver: Chris Hussey  Date: 2026-10-21
