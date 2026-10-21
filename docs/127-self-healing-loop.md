@@ -82,9 +82,9 @@ A surface is not done until it is in the loop. For any new app, service or work 
 |---|---|---|---|---|
 | CRM_PWA | `pwa-crm` | live (Stage 1) | built, off | PR, off |
 | a-roofer-open-brain (Command Center) | `cc-proexteriorsus` | kit added, off (thin webhook defers once `SELF_HEAL_TRIAGE_OWNS_LINEAR=true`) | not yet | kit added, off |
-| pm.proexteriorsus.net | needs a project | kit added, off | not yet | kit added, off |
-| PE_CC_EXECUTIVE | needs a project | kit added, off | not yet | kit added, off |
-| PE-CC-COURSES | needs a project | kit added, off | not yet | kit added, off |
+| pm.proexteriorsus.net | `pm-scheduler` | kit added, off | not yet | kit added, off |
+| PE_CC_EXECUTIVE | `pe-cc-executive` | kit added, off | not yet | kit added, off |
+| PE-CC-COURSES | `pe-cc-courses` | kit added, off | not yet | kit added, off |
 
 ## What only a human can do
 
