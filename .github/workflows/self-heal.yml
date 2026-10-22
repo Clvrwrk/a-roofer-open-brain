@@ -1,0 +1,101 @@
+# Self-healing loop (docs/127-self-healing-loop.md): Sentry -> Linear bug log, then verify-and-close.
+#
+# SHIPS DISABLED. Stage switches are repository variables, each a separate human decision:
+#   SELF_HEAL_TRIAGE_ENABLED=true   detect + triage: new/regressed Sentry issues -> deduped Linear bug logs
+#   SELF_HEAL_VERIFY_ENABLED=true   verify + close: shipped fixes checked against production, resolved or reopened
+# Kill switch: AUTOFIX_KILL_SWITCH=true stops every job and both scripts.
+# The fix-proposal stage (reproduce-first agent -> draft PR) is added per surface once its verify chain
+# exists; CRM_PWA .github/workflows/autofix.yml is the reference. Nothing here merges, deploys or pushes.
+name: Self-heal loop (disabled until enabled)
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and plan only; make no Linear or Sentry writes
+        type: boolean
+        default: true
+
+permissions: {}
+
+env:
+  SENTRY_ORG: ${{ vars.SENTRY_ORG || 'cleverwork' }}
+  SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'cc-proexteriorsus' }}
+  LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
+  LINEAR_TRIAGE_STATE_ID: ${{ vars.LINEAR_TRIAGE_STATE_ID }}
+  LINEAR_DONE_STATE_ID: ${{ vars.LINEAR_DONE_STATE_ID }}
+  LINEAR_REOPEN_STATE_ID: ${{ vars.LINEAR_REOPEN_STATE_ID }}
+  LINEAR_LABEL_BUG: ${{ vars.LINEAR_LABEL_BUG }}
+  LINEAR_LABEL_SOURCE_SENTRY: ${{ vars.LINEAR_LABEL_SOURCE_SENTRY }}
+  LINEAR_LABEL_SOURCE_USER: ${{ vars.LINEAR_LABEL_SOURCE_USER }}
+  LINEAR_LABEL_AUTOFIX_QUEUED: ${{ vars.LINEAR_LABEL_AUTOFIX_QUEUED }}
+  LINEAR_LABEL_AUTOFIX_RUNNING: ${{ vars.LINEAR_LABEL_AUTOFIX_RUNNING }}
+  LINEAR_LABEL_AUTOFIX_PR_OPEN: ${{ vars.LINEAR_LABEL_AUTOFIX_PR_OPEN }}
+  LINEAR_LABEL_NEEDS_HUMAN: ${{ vars.LINEAR_LABEL_NEEDS_HUMAN }}
+  LINEAR_LABEL_VERIFY_PENDING: ${{ vars.LINEAR_LABEL_VERIFY_PENDING }}
+  LINEAR_LABEL_VERIFIED: ${{ vars.LINEAR_LABEL_VERIFIED }}
+  LINEAR_LABEL_REGRESSED: ${{ vars.LINEAR_LABEL_REGRESSED }}
+  TRIAGE_MIN_SEVERITY: ${{ vars.TRIAGE_MIN_SEVERITY || 'S3' }}
+  SELF_HEAL_HEALTH_URL: ${{ vars.SELF_HEAL_HEALTH_URL || 'https://cc.proexteriorsus.net/healthz' }}
+  SELF_HEAL_SOAK_HOURS: ${{ vars.SELF_HEAL_SOAK_HOURS || '72' }}
+  SELF_HEAL_WATCH_DAYS: ${{ vars.SELF_HEAL_WATCH_DAYS || '14' }}
+  AUTOFIX_KILL_SWITCH: ${{ vars.AUTOFIX_KILL_SWITCH }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+
+jobs:
+  triage:
+    name: Sentry to Linear triage
+    # A manual dry run may run before enablement; anything that writes needs the stage switch.
+    if: ${{ vars.AUTOFIX_KILL_SWITCH != 'true' && (vars.SELF_HEAL_TRIAGE_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: self-heal-triage
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Triage new and regressed Sentry issues into the Linear bug log
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node scripts/self-heal/sentry-to-linear.mjs
+          else node scripts/self-heal/sentry-to-linear.mjs --apply; fi
+
+  verify:
+    name: Verify shipped fixes, then resolve or reopen
+    needs: triage
+    # Runs after triage (or alone when triage is off); idempotent, so every tick is safe.
+    if: ${{ !cancelled() && vars.AUTOFIX_KILL_SWITCH != 'true' && (vars.SELF_HEAL_VERIFY_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    concurrency:
+      group: self-heal-verify
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify, then resolve or reopen
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node scripts/self-heal/verify-and-close.mjs
+          else node scripts/self-heal/verify-and-close.mjs --apply; fi
