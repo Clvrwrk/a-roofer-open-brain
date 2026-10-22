@@ -39,6 +39,30 @@ reviews:
     - "!archive/**"          # historical dumps; not for review
     - "!**/*.excalidraw"
     - "!**/*.log"
+    # --- Prose is not code (Chris, 2026-10-21) --------------------------------
+    # CodeRabbit reviews code only; blogs, scripts, copy and docs are validated
+    # by an internal Ringer swarm instead. A PR that touches only these files gets
+    # no CodeRabbit review. Exclusions always win and also drop the files from
+    # CodeRabbit's checkout, so markdown is excluded folder by folder rather than
+    # with "!**/*.md". Still reviewed on purpose:
+    #   - agents/** and skills/** markdown: agent profiles and skills that the
+    #     brain loads and validates at runtime, so they change behaviour.
+    #   - CLAUDE.md, AGENTS.md, CONVENTIONS.md: the hard rules, and the source of
+    #     knowledge_base.code_guidelines below.
+    - "!docs/**/*.md"
+    - "!context/**/*.md"
+    - "!plans/**/*.md"
+    - "!.planning/**/*.md"
+    - "!proposals/**/*.md"
+    - "!standards/**/*.md"
+    - "!recipes/**/*.md"
+    - "!integrations/**/*.md"
+    - "!deployment/**/*.md"
+    - "!.codex/**/*.md"
+    - "!.claude/**/*.md"
+    - "!README.md"
+    - "!LICENSE.md"
+    - "!SECURITY.md"
 
   # --- Hard-rule enforcement (from CLAUDE.md rules 1-11 + CONVENTIONS.md) ------
   path_instructions:
