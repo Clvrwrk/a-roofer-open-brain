@@ -12,7 +12,7 @@ try {
  console.log(JSON.stringify({status:'ok',delivered:d.delivered,components:d.health.length,failing:d.health.filter(h=>h.consecutive_failures>0).length}));
 } catch {
  const id=randomUUID().replaceAll('-','');
- const event={event_id:id,platform:'other',level:'error',environment:'production',message:'Sync health monitor unavailable',fingerprint:['sync-health-monitor-unavailable'],tags:{surface:'sync-health',error_code:'monitor_unavailable'}};
+ const event={event_id:id,platform:'other',logger:'integration-sync-health',level:'error',environment:'production',message:'Sync health monitor unavailable',fingerprint:['sync-health-monitor-unavailable'],tags:{route:'/sync/monitor',surface:'sync-health',error_code:'provider_unavailable'}};
  const body=[JSON.stringify({event_id:id}),JSON.stringify({type:'event'}),JSON.stringify(event),''].join('\n');
  try{await fetch(SENTRY,{method:'POST',headers:{'Content-Type':'application/x-sentry-envelope'},body,signal:AbortSignal.timeout(10000)});}catch{}
  console.error('Sync health monitor unavailable; see Sentry.');process.exitCode=1;

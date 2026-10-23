@@ -50,6 +50,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 
+import { restoreContactParents } from "./contact-parents.ts";
 import { advanceWatermark } from "../lib/watermark.ts";
 import {
   mapInvoiceHeader,
@@ -475,7 +476,19 @@ export async function syncJobWalk(
       (Array.isArray(contactsBody) ? (contactsBody as unknown[]) : []);
     if (jobContacts.length > 0) {
       const contactRows = jobContacts.map((c: any) => mapJobContact(c, ctx));
-      const { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      let { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      // A newly linked contact can be absent from the slower account-wide sweep.
+      // Restore it from its own authenticated endpoint; never invent a parent or drop the FK.
+      if (error?.code === "23503" && error.message?.includes("acculynx_job_contacts_contact_id_fkey")) {
+        const restored = await restoreContactParents(sb, acct, contactRows, deadline, async (id) => {
+          await sleep(PACE_MS);
+          const endpoint = `/contacts/${encodeURIComponent(id)}`;
+          const response = await acculynxGet(`${ACCULYNX_BASE}${endpoint}`, apiKey, fetchFn);
+          await archiveRaw(sb, syncBatchId, "contacts", endpoint, response.status, response.body);
+          return response;
+        });
+        if (restored) ({ error } = await sb.from("acculynx_job_contacts").upsert(contactRows));
+      }
       if (error) {
         await recordWalkError(
           sb,
