@@ -31,3 +31,5 @@ Production `/healthz` matched cb824f3998c9556c5c425f776c987fa6bcd6535a. Watchdog
 Additional database regression: latest third transient failure dispatches one bounded recovery; five failures committed before polling dispatch none; a committed later success suppresses retry of an old third failure. Migration339 applies this latest-outcome guard. Both disposable test containers were removed with their anonymous volumes.
 
 Approved BetterStack-GlobalAPI_PE_CC_DEV item has no credential value (CLI and app verified). No transfer occurred. Testing/using the alternate BetterStack_PE_CC_DEV_API item was blocked by automatic approval review because the source differs; a specific approval request is pending. No alternate credential has been used or copied.
+
+Rollback validation: saved follow-through rollback was executed successfully against a fresh synthetic PostgreSQL fixture, including disabling only the new financial schedules before restoring the older trigger. Three saved function definitions now have statement terminators. No production rollback was performed.

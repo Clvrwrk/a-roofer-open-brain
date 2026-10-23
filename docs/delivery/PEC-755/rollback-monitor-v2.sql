@@ -1,3 +1,10 @@
+-- Emergency rollback of the follow-through monitor/trigger only; preserve financial and incident history.
+-- Stop new financial-only schedules before restoring the older trigger contract.
+DO $$DECLARE j record; BEGIN
+ FOR j IN SELECT jobid FROM cron.job WHERE jobname LIKE 'acculynx-financial-%' LOOP PERFORM cron.unschedule(j.jobid); END LOOP;
+ UPDATE public.integration_sync_expectations SET kind='retired' WHERE ref LIKE 'acculynx-financial-%';
+END $$;
+
 CREATE OR REPLACE FUNCTION public.monitor_integration_syncs()
  RETURNS integer
  LANGUAGE plpgsql
@@ -70,7 +77,7 @@ BEGIN
  END LOOP;
  PERFORM public.observe_integration_sync('monitor:integration-sync-health',clock_timestamp(),true,NULL);
  RETURN n;
-END $function$
+END $function$;
 
 CREATE OR REPLACE FUNCTION public.observe_integration_sync(p_component text, p_at timestamp with time zone, p_ok boolean, p_code text, p_retry jsonb DEFAULT NULL::jsonb)
  RETURNS void
@@ -103,7 +110,7 @@ BEGIN
   r:=public.trigger_acculynx_sync(p_retry);
   IF r>0 THEN UPDATE public.integration_sync_health SET recovery_attempts=recovery_attempts+1,last_recovery_at=clock_timestamp() WHERE component_key=p_component; END IF;
  END IF;
-END $function$
+END $function$;
 
 CREATE OR REPLACE FUNCTION public.trigger_acculynx_sync(p_resources jsonb DEFAULT '{"multiAccount": true}'::jsonb)
  RETURNS bigint
@@ -142,5 +149,5 @@ BEGIN
  INSERT INTO public.crm_sync_log(sync_batch_id,sync_type,status,api_endpoint,notes)
  VALUES('cron-trigger-'||v_run,'cron_trigger','queued','acculynx-sync',v_body::text);
  RETURN v_request;
-END $function$
+END $function$;
 
