@@ -25,3 +25,14 @@ Deno.test('database health recording failure uses sanitized independent Sentry f
 Deno.test('successful durable health report needs no fallback delivery',async()=>{
  let sent=false;await reportIhmOutcome({rpc:()=>({abortSignal:async()=>({error:null})})},true,null,async()=>{sent=true;return new Response('{}');});assertEquals(sent,false);
 });
+
+Deno.test('per-call recording conforms to the deployed private probe RPC contract',async()=>{
+ let accepted=false,sent=false;
+ const client={rpc:(name:string,args:any)=>({abortSignal:async()=>{
+  assertEquals(name,'record_integration_probe');
+  assertEquals(args,{p_component:'int.hailrecon-webhook',p_ok:false,p_code:'probe_failed'});
+  accepted=true;return {error:null};
+ }})};
+ await reportIhmOutcome(client,false,'webhook_projection_failed',async()=>{sent=true;return new Response('{}');});
+ assertEquals(accepted,true);assertEquals(sent,false);
+});
