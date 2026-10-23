@@ -443,6 +443,7 @@ export async function syncJobWalk(
     const encodedJobId = encodeURIComponent(jobId);
     const ctx = { ...ctxBase, job_id: jobId };
     const walkStartedAt = new Date().toISOString();
+    let moneyComplete = true;
 
     // 0. The job's own record (preselected mode). Only the milestone and modified
     //    fields are written: the detail body is not the list shape mapJob() expects,
@@ -490,6 +491,7 @@ export async function syncJobWalk(
         if (restored) ({ error } = await sb.from("acculynx_job_contacts").upsert(contactRows));
       }
       if (error) {
+        moneyComplete = false; // keep dependency failures eligible for the next candidate pass
         await recordWalkError(
           sb,
           acct.account_key,
@@ -502,7 +504,6 @@ export async function syncJobWalk(
       }
     }
 
-    let moneyComplete = true;
     // 2. Financials (single object, not paginated)
     await sleep(PACE_MS);
     const financialsEndpoint = `/jobs/${encodedJobId}/financials`;

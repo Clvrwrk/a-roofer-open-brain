@@ -771,3 +771,14 @@ Deno.test("incomplete financial observation never advances freshness or scoped C
   assertEquals(walked,[]);
   assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
 });
+
+Deno.test("a failed contact dependency remains eligible for retry despite successful money reads", async () => {
+  const base=makeJobWalkFetch(["job-contact-failed"],{}).mockFetch;
+  const mockFetch=(async(input:RequestInfo|URL,init?:RequestInit)=>String(input).endsWith("/contacts")?new Response(JSON.stringify({items:[{id:"relation",contact:{id:"contact"}}]}),{status:200,headers:{"content-type":"application/json"}}):base(input)) as typeof fetch;
+  const {sb,updateCalls}=makeWalkSb();
+  (sb as any).__setForceError("acculynx_job_contacts","dependency not ready");
+  const walked:string[]=[];
+  await syncJobWalk(sb,ACCT,"synthetic-key",Date.now()+60000,null,["job-contact-failed"],mockFetch,"batch-test",new Map(),{preselected:true,walked});
+  assertEquals(walked,[]);
+  assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
+});
