@@ -76,3 +76,11 @@ test('Linear-normalized bullets replace and deduplicate bug log fields',()=>{
  assert.doesNotMatch(twice,/Root cause:\*\* (pending|old)/);
  assert.match(twice,/Fix:\*\* pending/);
 });
+
+
+test('required and independent verification both block high or critical dependencies',()=>{
+ const required=readFileSync(new URL('../.github/workflows/verify.yml',import.meta.url),'utf8');
+ const independent=readFileSync(new URL('../.github/workflows/autofix.yml',import.meta.url),'utf8');
+ assert.match(required,/npm audit --audit-level=high --prefix app\/command-center/);
+ assert.match(independent,/- id: typecheck_build_unit\s+run: npm audit --audit-level=high --prefix app\/command-center && npm test/);
+});

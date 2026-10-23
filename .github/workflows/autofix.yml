@@ -235,7 +235,7 @@ jobs:
           node-version: '22'
       - run: npm ci --prefix app/command-center
       - id: typecheck_build_unit
-        run: npm test --prefix app/command-center && npm run build --prefix app/command-center && node --test scripts/test-self-heal-*.mjs
+        run: npm audit --audit-level=high --prefix app/command-center && npm test --prefix app/command-center && npm run build --prefix app/command-center && node --test scripts/test-self-heal-*.mjs
       - name: Record the verification result
         if: ${{ always() }}
         env:
