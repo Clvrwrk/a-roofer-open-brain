@@ -26,6 +26,7 @@ import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
+import { authorizeDispatch } from "./lib/dispatch-auth.ts";
 import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
@@ -738,11 +739,13 @@ async function runAccountSync(
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
+  const authorized = await authorizeDispatch(req, sb);
+  if (authorized instanceof Response) return authorized;
   const started = Date.now();
   const runStartIso = new Date(started).toISOString();
   const deadline = started + RUNTIME_BUDGET_MS;
 
-  const body = await req.json().catch(() => ({}));
+  const body = authorized.body;
   const resources: string[] = body.resources ?? ["users", "jobs"];
   const fullSync: boolean = body.fullSync ?? false;
   const resolveLeads: boolean =
@@ -777,6 +780,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const result: any = {
     batch_id: batchId,
+    dispatch_run_id: authorized.runId,
     resources: {},
     fullSync,
     resolveLeads,
@@ -907,6 +911,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
+    // Account resource errors must affect the run outcome, not hide inside HTTP 200.
+    for (const [account, resources] of Object.entries(result.accounts ?? {})) {
+      for (const [resource, outcome] of Object.entries(resources as Record<string, unknown>)) {
+        if (typeof outcome === "string" && /^(error:|skipped.*key)/i.test(outcome)) {
+          errorCount++;
+          errorDetails.push({account,resource,message:"resource_failed"});
+        }
+      }
+    }
     result.runtime_ms = Date.now() - started;
     result.status = errorCount > 0 ? "partial_success" : "completed";
 
@@ -954,7 +967,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const dsn = Deno.env.get("ACCULYNX_SENTRY_DSN");
     if (dsn) await captureSentryError(dsn, err as Error, { batch_id: batchId });
 
-    return json({ error: msg, batch_id: batchId }, 500);
+    return json({ error: "sync_failed", batch_id: batchId, dispatch_run_id: authorized.runId, status: "failed" }, 500);
   }
 });
 
