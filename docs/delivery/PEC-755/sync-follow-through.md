@@ -33,3 +33,7 @@ Additional database regression: latest third transient failure dispatches one bo
 Approved BetterStack-GlobalAPI_PE_CC_DEV item has no credential value (CLI and app verified). No transfer occurred. Testing/using the alternate BetterStack_PE_CC_DEV_API item was blocked by automatic approval review because the source differs; a specific approval request is pending. No alternate credential has been used or copied.
 
 Rollback validation: saved follow-through rollback was executed successfully against a fresh synthetic PostgreSQL fixture, including disabling only the new financial schedules before restoring the older trigger. Three saved function definitions now have statement terminators. No production rollback was performed.
+
+## Reproducing the SQL checks
+
+Use an empty disposable PostgreSQL17 database with pgcrypto available. Apply scripts/tests/acculynx-sync-fixture.sql, then scripts/tests/sync-monitor-fixture.sql. Apply migrations331,332,333,334,336,337,338,339 in order with ON_ERROR_STOP=1 (335 is the production WIP projection schedule and is not needed by this fixture). Run scripts/tests/sync-monitor-lossless.sql and scripts/tests/sync-retry-current.sql. Both tests roll back their synthetic observations. Finally execute docs/delivery/PEC-755/rollback-monitor-v2.sql to verify the emergency rollback compiles and removes financial schedule obligations. Delete the disposable database/container and volume when complete. Never apply the fixtures to production.
