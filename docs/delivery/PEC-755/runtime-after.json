@@ -1,0 +1,627 @@
+{
+  "generatedAt": "2026-10-23T18:14:24.465Z",
+  "summary": {
+    "green": 68,
+    "yellow": 11,
+    "red": 5,
+    "unknown": 4
+  },
+  "components": [
+    {
+      "key": "site.healthz",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 200 \u00b7 44 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "page.agents",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 302 \u00b7 170 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "page.auth-md",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 200 \u00b7 53 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.accounting.kpi-pills",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 54 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.invoice-audit.pending-verification",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 49 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.executive.cash-runway",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 48 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.agent.work-queue",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 162 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.credit-memos.pending",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 182 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.companycam.photos",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 185 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "api.accounting.friday-wip",
+      "light": "green",
+      "headline": "self-ping \u00b7 ping HTTP 401 \u00b7 199 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "site"
+    },
+    {
+      "key": "int.supabase-rest",
+      "light": "red",
+      "headline": "credential rejected \u00b7 HTTP 401",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.supabase-auth",
+      "light": "green",
+      "headline": "authenticated \u00b7 HTTP 200 \u00b7 335 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.workos",
+      "light": "green",
+      "headline": "authenticated \u00b7 HTTP 200 \u00b7 451 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.jobtread",
+      "light": "green",
+      "headline": "ping HTTP 200 \u00b7 241 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.acculynx",
+      "light": "green",
+      "headline": "ping HTTP 401 \u00b7 274 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.companycam",
+      "light": "green",
+      "headline": "ping HTTP 401 \u00b7 383 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.quickbooks",
+      "light": "green",
+      "headline": "ping HTTP 200 \u00b7 634 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.slack",
+      "light": "green",
+      "headline": "authenticated \u00b7 HTTP 200 \u00b7 158 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.abc-supply",
+      "light": "green",
+      "headline": "ping HTTP 200 \u00b7 750 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.coolify",
+      "light": "green",
+      "headline": "ping HTTP 200 \u00b7 95 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.betterstack",
+      "light": "yellow",
+      "headline": "reachable \u00b7 HTTP 401 \u00b7 credential not configured on this deployment",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.github",
+      "light": "yellow",
+      "headline": "reachable \u00b7 HTTP 200 \u00b7 credential not configured on this deployment",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.linear",
+      "light": "green",
+      "headline": "authenticated \u00b7 HTTP 200 \u00b7 278 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.agentmail",
+      "light": "green",
+      "headline": "authenticated \u00b7 HTTP 200 \u00b7 236 ms",
+      "lastAt": "2026-10-23T18:14:24.465Z",
+      "group": "integrations"
+    },
+    {
+      "key": "feed.abc_invoices",
+      "light": "green",
+      "headline": "current \u00b7 newest row 11 h ago \u00b7 8 in 24 h",
+      "lastAt": "2026-10-23T07:31:19.479022+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.mv_invoice_audit_line",
+      "light": "green",
+      "headline": "current \u00b7 newest row 10 min ago",
+      "lastAt": "2026-10-23T18:03:56.448383+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.acculynx_watermark",
+      "light": "green",
+      "headline": "current \u00b7 newest row 7 min ago",
+      "lastAt": "2026-10-23T18:07:07.78+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.vendor_invoices",
+      "light": "red",
+      "headline": "stale \u00b7 newest row 31 d ago",
+      "lastAt": "2026-09-22T13:06:57.124504+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.wip_ar_master",
+      "light": "green",
+      "headline": "current \u00b7 newest row 11 min ago",
+      "lastAt": "2026-10-23T18:03:40.952175+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.credit_memo_receipts",
+      "light": "green",
+      "headline": "current \u00b7 newest row 11 h ago \u00b7 1 in 24 h",
+      "lastAt": "2026-10-23T07:33:00.055694+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "pgcron.acculynx-geoid-match-daily",
+      "light": "green",
+      "headline": "ok \u00b7 last success 9 h ago",
+      "lastAt": "2026-10-23T08:45:03.890258+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.pvp_refresh_nightly",
+      "light": "green",
+      "headline": "ok \u00b7 last success 11 h ago",
+      "lastAt": "2026-10-23T07:00:02.183562+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.top20_refresh_quarterly",
+      "light": "green",
+      "headline": "ok \u00b7 last success 22 d ago",
+      "lastAt": "2026-10-01T11:00:02.252929+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-hourly-sync",
+      "light": "green",
+      "headline": "ok \u00b7 last success 84s ago",
+      "lastAt": "2026-10-23T18:13:00.1859+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-reconcile",
+      "light": "green",
+      "headline": "ok \u00b7 last success 4 min ago",
+      "lastAt": "2026-10-23T18:10:00.166885+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-alert-check",
+      "light": "green",
+      "headline": "ok \u00b7 last success 9 min ago",
+      "lastAt": "2026-10-23T18:05:01.545637+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.wip-ar-master-nightly",
+      "light": "green",
+      "headline": "ok \u00b7 last success 9 h ago",
+      "lastAt": "2026-10-23T09:00:00.119852+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.wip-ar-week-roll-thursday",
+      "light": "green",
+      "headline": "ok \u00b7 last success 33 h ago",
+      "lastAt": "2026-10-22T08:45:00.12231+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-office-pricing-matviews",
+      "light": "green",
+      "headline": "ok \u00b7 last success 10 min ago",
+      "lastAt": "2026-10-23T18:03:56.448383+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.nightly-silo-assertions",
+      "light": "green",
+      "headline": "ok \u00b7 last success 9 h ago",
+      "lastAt": "2026-10-23T09:30:00.395009+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.service-matview-refresh-requests",
+      "light": "green",
+      "headline": "ok \u00b7 last success 24s ago",
+      "lastAt": "2026-10-23T18:14:00.200321+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-overhead-matview",
+      "light": "green",
+      "headline": "ok \u00b7 last success 11 h ago",
+      "lastAt": "2026-10-23T07:35:03.926247+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-order-acculynx-match",
+      "light": "green",
+      "headline": "ok \u00b7 last success 7 min ago",
+      "lastAt": "2026-10-23T18:07:00.869966+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-hail-heatzone-coverage",
+      "light": "green",
+      "headline": "ok \u00b7 last success 2 min ago",
+      "lastAt": "2026-10-23T18:12:03.947866+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.runtime-heartbeat-pump",
+      "light": "green",
+      "headline": "ok \u00b7 last success 4 min ago",
+      "lastAt": "2026-10-23T18:10:00.791503+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.integration-sync-health",
+      "light": "green",
+      "headline": "ok \u00b7 last success 24s ago",
+      "lastAt": "2026-10-23T18:14:00.679053+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.crm-acculynx-nightly-sync",
+      "light": "green",
+      "headline": "ok \u00b7 last success 9 h ago",
+      "lastAt": "2026-10-23T09:30:10.933832+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-job-walk",
+      "light": "red",
+      "headline": "last run failed \u00b7 68 consecutive failures \u00b7 last success 3 d ago",
+      "lastAt": "2026-10-20T21:30:00.223064+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "systemd.openbrain-abc-sync",
+      "light": "green",
+      "headline": "ok \u00b7 last success 11 h ago",
+      "lastAt": "2026-10-23T07:32:42.126969+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-jt-sentinel",
+      "light": "red",
+      "headline": "last run failed \u00b7 1 failure \u00b7 never succeeded",
+      "lastAt": "2026-10-23T17:00:17.778795+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-maya-gate",
+      "light": "green",
+      "headline": "ok \u00b7 last success 8 min ago",
+      "lastAt": "2026-10-23T18:06:11.983835+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-maya-qa",
+      "light": "yellow",
+      "headline": "completed with warnings (exit 1) \u00b7 9 h ago",
+      "lastAt": "2026-10-23T09:30:01.978657+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-qbo-thursday-sync",
+      "light": "green",
+      "headline": "ok \u00b7 last success 17 h ago",
+      "lastAt": "2026-10-23T01:07:44.480109+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-site-sweep",
+      "light": "yellow",
+      "headline": "completed with warnings (exit 1) \u00b7 7 h ago",
+      "lastAt": "2026-10-23T11:00:24.862583+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-companycam-sync",
+      "light": "green",
+      "headline": "ok \u00b7 last success 11 h ago",
+      "lastAt": "2026-10-23T07:16:31.83286+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-companycam-copy",
+      "light": "green",
+      "headline": "ok \u00b7 last success 6 min ago",
+      "lastAt": "2026-10-23T18:08:03.40188+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-wip-pack-thursday",
+      "light": "green",
+      "headline": "ok \u00b7 last success 10 h ago",
+      "lastAt": "2026-10-23T08:20:25.008523+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "edge.acculynx-sync",
+      "light": "yellow",
+      "headline": "latest dispatch pending \u00b7 84s ago",
+      "lastAt": "2026-10-23T18:13:00.107721+00:00",
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-webhook",
+      "light": "unknown",
+      "headline": "no outcome telemetry wired yet",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-read-sweep",
+      "light": "unknown",
+      "headline": "no outcome telemetry wired yet",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-write-sweep",
+      "light": "unknown",
+      "headline": "no outcome telemetry wired yet",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-write-action",
+      "light": "unknown",
+      "headline": "no outcome telemetry wired yet",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "agent.alex-rivers",
+      "light": "green",
+      "headline": "owns 2 jobs \u00b7 worst green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.maya-chen",
+      "light": "yellow",
+      "headline": "owns 2 jobs \u00b7 worst yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.casey-morgan",
+      "light": "green",
+      "headline": "owns 1 job \u00b7 worst green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.jordan-price",
+      "light": "green",
+      "headline": "owns 3 jobs \u00b7 worst green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.lena-brooks",
+      "light": "green",
+      "headline": "identity only (no scheduled work)",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.rowan-vale",
+      "light": "green",
+      "headline": "identity only (no scheduled work)",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.sam-torres",
+      "light": "yellow",
+      "headline": "owns 1 job \u00b7 worst yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.ops-conductor",
+      "light": "red",
+      "headline": "owns 2 jobs \u00b7 worst red",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.openbrain-shared",
+      "light": "green",
+      "headline": "identity only (no scheduled work)",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-accounting",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-ops",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-sales",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-marketing",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-exec",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-capture",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-researcher",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-conductor",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-innovator",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-historian",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-auditor",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-quality-control",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.hermes",
+      "light": "green",
+      "headline": "API service credential configured",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.dev-conductor",
+      "light": "yellow",
+      "headline": "no API service credential on this deployment",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.session-analyst",
+      "light": "yellow",
+      "headline": "no API service credential on this deployment",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-acculynx",
+      "light": "yellow",
+      "headline": "no API service credential on this deployment",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "deploy.command-center",
+      "light": "yellow",
+      "headline": "running 34a0585 \u00b7 set GITHUB_TOKEN to compare with origin/main",
+      "lastAt": null,
+      "group": "deploy"
+    }
+  ]
+}
