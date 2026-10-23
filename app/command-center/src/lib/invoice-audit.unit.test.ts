@@ -458,3 +458,33 @@ describe("deriveDisposition — human closeout (mig 293)", () => {
   });
 });
 
+
+describe("supplier settlement readback", () => {
+  beforeEach(() => { vi.resetModules(); mockCreateServerSupabaseClient.mockReset(); });
+  it("reads SRS closure and dates from its own statement", async () => {
+    const row = (invoice_number: string) => ({ invoice_number, invoice_date: "2026-08-01", total_amount: 100, office: "Wichita", line_count: 1, no_price_lines: 0, flagged_lines: 0 });
+    mockCreateServerSupabaseClient.mockReturnValue({ client: makeClient({
+      v_invoice_audit_invoice: [row("MEMO"), row("HISTORY"), row("OPEN")],
+      v_invoice_audit_invoice_vendor: ["MEMO", "HISTORY", "OPEN"].map(invoice_number => ({ invoice_number, vendor_slug: "srs" })),
+      abc_invoices: [{ invoice_number: "OPEN", ar_status: "paid", date_paid: "2026-09-01" }],
+      vendor_invoices: [
+        { invoice_number: "MEMO", ar_status: "closed", date_paid: "2026-10-22", vendors: { slug: "srs" } },
+        { invoice_number: "HISTORY", ar_status: "closed", date_paid: null, vendors: { slug: "srs" } },
+        { invoice_number: "OPEN", ar_status: "open", date_paid: null, vendors: { slug: "srs" } },
+      ],
+    }) });
+    const { loadInvoiceAuditSummary } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const invoices = data.offices.flatMap(o => o.branches.flatMap(b => b.invoices));
+    expect(invoices.find(i => i.invoiceNumber === "MEMO")).toMatchObject({ paid: true, paidAt: "2026-10-22", toBePaid: false });
+    expect(invoices.find(i => i.invoiceNumber === "HISTORY")).toMatchObject({ paid: true, paidAt: "", toBePaid: false });
+    expect(invoices.find(i => i.invoiceNumber === "OPEN")).toMatchObject({ paid: false, paidAt: "" });
+  });
+  it("blocks another payment batch for pending and verified receipts", async () => {
+    const { derivePaymentState } = await import("./invoice-audit");
+    for (const status of ["paid_pending_verification", "paid_verified"]) {
+      expect(derivePaymentState({ status, processed_at: "2026-10-22" })).toMatchObject({ processedAt: "2026-10-22", awaitingPayment: false });
+    }
+    expect(derivePaymentState({ status: "returned", processed_at: "2026-10-22" }).processedAt).toBe("");
+  });
+});

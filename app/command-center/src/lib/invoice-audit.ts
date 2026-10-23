@@ -144,7 +144,7 @@ export interface Invoice {
   closeoutReason: string; // the human's reason, shown wherever the disposition is
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
-  paymentStatus: "" | "exported" | "paid" | "returned" | "void";
+  paymentStatus: "" | "exported" | "paid" | "paid_pending_verification" | "paid_verified" | "returned" | "void";
   hasPdf: boolean;
   jobNumber: string;
   clientName: string;
@@ -346,18 +346,41 @@ export function buildScopeAndTotals(
 }
 
 // Two-phase payment state derived from the invoice_payment_processed ledger.
-// Only 'exported'/'paid' rows block the To-Be-Paid queue (set processedAt);
+// Exported and confirmed/pending payment rows block To-Be-Paid (set processedAt);
 // 'returned'/'void' make the invoice eligible again. 'exported' (and only
 // 'exported') is Awaiting Payment — sent for payment but not yet confirmed paid.
 type PaymentLedgerRow = { processed_at?: string | null; status?: string | null } | null | undefined;
 export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymentStatus" | "processedAt" | "awaitingPayment"> {
   const status = ((led?.status ?? "") as Invoice["paymentStatus"]);
-  const blocks = status === "exported" || status === "paid";
+  const blocks = ["exported", "paid", "paid_pending_verification", "paid_verified"].includes(status);
   return {
     paymentStatus: status,
     processedAt: blocks ? (led?.processed_at ?? "") : "",
     awaitingPayment: status === "exported",
   };
+}
+
+// Supplier statements report closure; payment dates come only from dated evidence.
+// Keep this readback independent of the gate that authorizes a NEW payment.
+export function deriveInvoiceSettlement(ar: { ar_status?: string | null; date_paid?: string | null } | undefined, doc?: { payment_status?: string | null; paid_at?: string | null }): Pick<Invoice, "paid" | "paidAt"> {
+  if (ar?.ar_status != null) return {
+    paid: ar.ar_status === "paid" || ar.ar_status === "closed",
+    paidAt: ar.date_paid ? String(ar.date_paid).slice(0, 10) : "",
+  };
+  return { paid: doc?.payment_status === "paid", paidAt: doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "" };
+}
+const arKey = (vendor: string, invoice: string) => `${vendor}:${invoice}`;
+async function loadInvoiceArRows(client: any, invoiceNumber?: string): Promise<any[]> {
+  const query = (table: string, columns: string) => () => {
+    const q = client.from(table).select(columns);
+    return invoiceNumber ? q.eq("invoice_number", invoiceNumber) : q;
+  };
+  const [abc, suppliers] = await Promise.all([
+    fetchAllForInvoiceAudit(query("abc_invoices", "invoice_number,ar_status,date_paid")),
+    fetchAllForInvoiceAudit(query("vendor_invoices", "invoice_number,ar_status,date_paid,vendors!inner(slug)")),
+  ]);
+  return [...abc.map(r => ({ ...r, vendor_slug: "abc-supply" })),
+    ...suppliers.map(r => ({ ...r, vendor_slug: r.vendors?.slug })).filter(r => r.vendor_slug)];
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
@@ -407,7 +430,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
     // invoice_documents gate is a secondary internal signal we reconcile to this.
-    fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    loadInvoiceArRows(client),
     fetchAll(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
     // Current ABC API price per item per branch (monthly seed, migration 134).
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
@@ -444,7 +467,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
 
   // ABC AR report: ar_status drives open/paid (source of truth); date_paid is the report due date proxy.
   const arByInvoice = new Map<string, any>();
-  for (const a of arRows) arByInvoice.set(a.invoice_number, a);
+  for (const a of arRows) arByInvoice.set(arKey(a.vendor_slug ?? "abc-supply", a.invoice_number), a);
 
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
@@ -529,14 +552,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     hasWork: false,
     // Open vs paid = ABC AR report (ar_status). Falls back to the internal gate only when an
     // invoice has no AR-report coverage (e.g. brand-new, pre-reconcile).
-    paid: arByInvoice.has(i.invoice_number)
-      ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
-      : docByInvoice.get(i.invoice_number)?.payment_status === "paid",
-    paidAt: arByInvoice.get(i.invoice_number)?.date_paid
-      ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
-      : docByInvoice.get(i.invoice_number)?.paid_at
-        ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
-        : "",
+    ...deriveInvoiceSettlement(arByInvoice.get(arKey(vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply", i.invoice_number)), docByInvoice.get(i.invoice_number)),
     ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
     actionable: false,
@@ -786,7 +802,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
   const arByInvoice = new Map<string, any>();
-  for (const a of arRows) arByInvoice.set(a.invoice_number, a);
+  for (const a of arRows) arByInvoice.set(arKey(a.vendor_slug ?? "abc-supply", a.invoice_number), a);
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
   const progressByInvoice = buildLineProgressByInvoice(lineRows, auditRows);
@@ -808,9 +824,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const rowVendor = vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply";
     // abc_invoices AR status only ever describes ABC's ledger — never let a
     // colliding SRS/QXO number inherit ABC's paid state (silo eval 2026-08-07).
-    const paid = rowVendor === "abc-supply" && arByInvoice.has(i.invoice_number)
-      ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
-      : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
+    const settlement = deriveInvoiceSettlement(arByInvoice.get(arKey(rowVendor, i.invoice_number)), docByInvoice.get(i.invoice_number));
     const paymentState = derivePaymentState(processedByInvoice.get(i.invoice_number));
     const invoice: Invoice & { hasPriceList: boolean; searchText: string } = {
       vendor: rowVendor,
@@ -840,12 +854,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       registerExportedAt: registerExportedByInvoice.get(i.invoice_number) ?? "",
       closedOut: closeoutByInvoice.has(i.invoice_number),
       closeoutReason: closeoutByInvoice.get(i.invoice_number) ?? "",
-      paid,
-      paidAt: arByInvoice.get(i.invoice_number)?.date_paid
-        ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
-        : docByInvoice.get(i.invoice_number)?.paid_at
-          ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
-          : "",
+      ...settlement,
       ...paymentState,
       toBePaid: false,
       actionable: false,
@@ -993,7 +1002,7 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
     // lookup is what powers the default "Open invoices" filter.
-    fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    loadInvoiceArRows(client),
     // Progress bars need real audit rollups, but not full line detail. Fetch only the
     // invoice/line identity and auditable flag, then join to current audit status in memory.
     fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("invoice_number,line_id,is_auditable,uom_mismatch,negotiated_price,unit_price,quantity")),
@@ -1111,7 +1120,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
         .select("invoice_number,pe_job_number,client_name,job_category_name,acculynx_job_id,canonical_po,naming_status,matched")
         .eq("invoice_number", wanted),
     ),
-    fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
+    loadInvoiceArRows(client, wanted),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
     // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
     fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,third_price_date,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
@@ -1123,7 +1132,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   const cascadeByLine = new Map<string, any>();
   for (const c of cascadeRows) cascadeByLine.set(c.line_id, c);
   const doc = docRows[0] ?? null;
-  const ar = arRows[0] ?? null;
+  const ar = arRows.find((row: any) => row.vendor_slug === detailVendor);
   const ax = acculynxRows[0] ?? null;
   const processed = processedRows[0] ?? null;
   const closeout = (closeoutRows ?? [])[0] ?? null;
@@ -1176,7 +1185,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     };
   }).sort((a, b) => Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0));
 
-  const paid = detailVendor === "abc-supply" && ar ? ar.ar_status === "paid" : doc?.payment_status === "paid";
+  const settlement = deriveInvoiceSettlement(ar, doc);
   const invoice: Invoice = {
     vendor: detailVendor,
     invoiceNumber: i.invoice_number,
@@ -1204,8 +1213,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
         (line.uomMismatch || line.negotiatedPrice == null || (line.qty > 0 && line.unitPrice > line.negotiatedPrice)),
     ).length,
     hasWork: lines.some((line) => line.auditStatus === "passed" || line.auditStatus === "disputed"),
-    paid,
-    paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",
+    ...settlement,
     ...derivePaymentState(processed),
     toBePaid: false,
     actionable: false,
