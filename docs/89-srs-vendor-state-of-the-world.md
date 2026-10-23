@@ -4,6 +4,39 @@
 documented in one place so agents stop re-discovering it. This is that place —
 update it whenever SRS state changes.
 
+## Current manual-intake behavior (2026-10-23)
+
+The October manual batch was reconciled from explicit detailed open/closed exports,
+invoice PDFs, and a dated payment memo. Source files remain in their existing
+accounting Dropbox folders. Supplied PDFs are in the private `invoices` bucket and
+resolve through the live signed Invoice Audit route. Backup and raw replay artifacts
+remain in owner-only local recovery storage, outside Git.
+
+- Supplier `vendor_invoices.ar_status` and evidenced `date_paid` now drive Invoice
+  Audit summary, full load, and detail, keyed by vendor plus invoice number. A closed
+  statement without a payment date stays undated. Recording vendor settlement does
+  not mutate the internal gate that authorizes a new payment.
+- `paid_pending_verification` and `paid_verified` ledger rows block duplicate
+  payment batching. Classification accepts PostgreSQL UUIDs produced by the existing
+  deterministic vendor-line ID scheme; line/invoice ownership is still checked.
+- The credit packet generator filters by vendor, gets SRS dates from the supplier
+  mirror, refuses negative/credit documents as new claims, and requires agreement
+  provenance. Its correspondence no longer carries the old ABC-only historical text.
+- `CDFTW` is a documented alias of existing `SBP-SWFORTWORTH`: the supplier name
+  and street address on the source invoice match exactly. Its existing Richardson
+  pricing assignment was reused. `SSCOP` likewise resolves to existing Coppell.
+- The batch's positive item lines have current audit decisions; genuine variances
+  remain claims, received credits settle only with matching source evidence, and
+  open vendor credits remain open unless the payment memo proves application.
+
+Remaining product gaps: `vendor_payment_memo_apply` is still ABC-only, so this
+manual SRS batch used a bounded raw-memo/ledger reconciliation. The received-CM
+page/disposition path remains ABC-specific. The old **new-payment** pricing gate
+still tests current expiry; it was neither overridden nor weakened. A fully
+scheduled supplier import and a reusable SRS re-audit writer remain separate work.
+Financial batch receipts and draft packets are private operational artifacts, not
+repository content; the supplier health monitor returned to green after intake.
+
 ## Ingestion (manual weekly, Monday nights)
 
 - SRS invoices arrive as **Billtrust CSV + one PDF per invoice, manually,
