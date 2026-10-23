@@ -762,3 +762,12 @@ Deno.test("headerFieldsFromDetail — writes only fields the body carries, never
   assertEquals(headerFieldsFromDetail({}, seen), null);
   assertEquals(headerFieldsFromDetail({ currentMilestone: null, modifiedDate: "" }, seen), null);
 });
+
+Deno.test("incomplete financial observation never advances freshness or scoped CRM writes", async () => {
+  const {mockFetch}=makeJobWalkFetch(["job-failed"],{}, {status:500,body:{error:"upstream"}});
+  const {sb,updateCalls}=makeWalkSb();
+  const walked:string[]=[];
+  await syncJobWalk(sb,ACCT,"synthetic-key",Date.now()+60000,{account_key:ACCT.account_key,resource_type:"job_walk"},["job-failed"],mockFetch,"batch-test",new Map(),{preselected:true,walked});
+  assertEquals(walked,[]);
+  assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
+});

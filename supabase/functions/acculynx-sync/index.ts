@@ -913,12 +913,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // Account resource errors must affect the run outcome, not hide inside HTTP 200.
     for (const [account, resources] of Object.entries(result.accounts ?? {})) {
+      if (typeof resources === "string") {
+        errorCount++;
+        errorDetails.push({account,resource:"account",message:"account_not_synced"});
+        continue;
+      }
       for (const [resource, outcome] of Object.entries(resources as Record<string, unknown>)) {
         if (typeof outcome === "string" && /^(error:|skipped.*key)/i.test(outcome)) {
           errorCount++;
           errorDetails.push({account,resource,message:"resource_failed"});
         }
       }
+    }
+    const {count: walkErrors, error: errorRead} = await sb.from("acculynx_job_walk_errors")
+      .select("id", {count:"exact", head:true}).eq("sync_batch_id", batchId);
+    if (errorRead || (walkErrors ?? 0)>0) {
+      errorCount += walkErrors || 1;
+      errorDetails.push({resource:"job_walk",message:"incomplete_observations"});
     }
     result.runtime_ms = Date.now() - started;
     result.status = errorCount > 0 ? "partial_success" : "completed";

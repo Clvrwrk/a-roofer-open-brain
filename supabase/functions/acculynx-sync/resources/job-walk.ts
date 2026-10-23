@@ -489,6 +489,7 @@ export async function syncJobWalk(
       }
     }
 
+    let moneyComplete = true;
     // 2. Financials (single object, not paginated)
     await sleep(PACE_MS);
     const financialsEndpoint = `/jobs/${encodedJobId}/financials`;
@@ -502,6 +503,7 @@ export async function syncJobWalk(
       const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
       if (error) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -513,6 +515,7 @@ export async function syncJobWalk(
         );
       }
     } else {
+      moneyComplete = false;
       await recordWalkError(
         sb,
         acct.account_key,
@@ -625,11 +628,16 @@ export async function syncJobWalk(
     const invoiceStubs: any[] = (invListBody as { items?: any[] })?.items ??
       (Array.isArray(invListBody) ? (invListBody as any[]) : []);
 
+    if (invListStatus !== 200 || !Array.isArray((invListBody as any)?.items)) {
+      moneyComplete = false;
+      await recordWalkError(sb, acct.account_key, jobId, "invoices", syncBatchId, "Invalid invoice list; financial observation remains incomplete", invListStatus);
+    }
     if (invoiceStubs.length > 0) {
       // Upsert invoice headers
       const headerRows = invoiceStubs.map((inv: any) => mapInvoiceHeader(inv, ctx));
       const { error: hErr } = await sb.from("acculynx_invoices").upsert(headerRows);
       if (hErr) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -695,8 +703,8 @@ export async function syncJobWalk(
       if (repName) repNameByJobId.set(jobId, repName);
     }
 
-    options.walked?.push(jobId);
-    if (preselected) {
+    if (moneyComplete) options.walked?.push(jobId);
+    if (preselected && moneyComplete) {
       const { error } = await sb.from("acculynx_jobs").update({ walked_at: walkStartedAt }).eq("id", jobId);
       if (error) console.warn(`[job-walk] walked_at stamp for ${jobId}: ${error.message}`);
     }

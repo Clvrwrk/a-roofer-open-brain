@@ -101,3 +101,6 @@ raw data/
 
 # Generated QB export batches — client invoice data, never committed (hard rule 2)
 exports/
+
+# Runtime cache may be a symlink on external storage.
+/app/command-center/node_modules

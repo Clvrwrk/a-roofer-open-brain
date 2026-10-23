@@ -1,0 +1,24 @@
+{
+  "project": "rnhmvcpsvtqjlffpsayu",
+  "captured_at": "2026-10-23",
+  "scope": "Affected SQL definitions and exact deployed Edge source. No data overwritten by planned migrations. Not a full database backup.",
+  "edge_version": 54,
+  "rollback_sql_sha256": "1c34d98f63175914a00dfffe9953169239bd207964061943c42a78e7fc8960ac",
+  "edge_files": {
+    "acculynx-sync/index.ts": "f3e2899dbba4fd71f8288a20b8f478661c3ae4c89628947012614afec35151e0",
+    "acculynx-sync/lib/accounts.ts": "1f7f6f8505195b67a0db8ddf1dca9bd1ca0c04814580e9fbb66ac17520e58235",
+    "acculynx-sync/lib/watermark.ts": "91f7aab1d6a6b189e10aaf6fdde7bf8f84c765a78554eb0aef6fa542f45b5b91",
+    "acculynx-sync/lib/diff.ts": "f0dcd908c1896dbc080e35ca57c69a896a6c67c13c8371836633b5c02af61a82",
+    "acculynx-sync/lib/alerts.ts": "35b08e4bd7c27307c1ca80d1a86b7b0e4157ca65ee4ef3a69e7c6a2f99eb16b6",
+    "acculynx-sync/resources/jobs.ts": "1d5dd8373121212704b99d1fef8e80858b7e87b2ed77d71190e2c2a3785e901b",
+    "acculynx-sync/resources/contacts.ts": "57f06957ec22c67a579e8d572d6c6e37d2c2cef642d05d950c5f6042859c4eee",
+    "acculynx-sync/resources/estimates.ts": "20655861b2c5de468f4d6fd2cfc563b3f53de33de7421f4fbb1c16be92c73c4d",
+    "acculynx-sync/resources/users.ts": "ef1084f20806d84aac27deb1679f9de0278077058b446e46e9c965a492a28c0a",
+    "acculynx-sync/resources/job-walk.ts": "2e1717f5336d9b12402f4697a06c6888ef59599a84f2c6e71742da90f6cdc0c3",
+    "acculynx-sync/lib/mappers.ts": "812b2a88bc1aa86fd0ca004b99e7c515b639d936ba021fecf760111ea6186175",
+    "acculynx-sync/resources/crm-pipeline.ts": "0d655716b49cb66287049498214a0a0b68d222241584499334791afe443017c8"
+  },
+  "edge_source_commit": "d74e630b8e3d0a271e2f1a076cc20d2c0d87620a",
+  "edge_source_verified": "All deployed files match this Git commit byte for byte",
+  "platform_backup_status": "Unable to verify: CLI and configured Management API token return HTTP 401. Affected definitions saved; additive changes preserve existing data."
+}

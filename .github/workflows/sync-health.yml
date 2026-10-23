@@ -1,0 +1,26 @@
+name: Integration sync health
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: integration-sync-health
+  cancel-in-progress: false
+jobs:
+  watch:
+    if: vars.SYNC_HEALTH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/sync-health-watch.mjs
+        env:
+          SYNC_HEALTH_SERVICE_TOKEN: ${{ secrets.SYNC_HEALTH_SERVICE_TOKEN }}
