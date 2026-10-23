@@ -39,3 +39,5 @@ SELECT pg_temp.assert(NOT has_function_privilege('anon','public.claim_acculynx_s
 SELECT pg_temp.assert(NOT has_table_privilege('authenticated','public.acculynx_sync_runs','SELECT'),'user cannot read run metadata');
 SELECT pg_temp.assert((SELECT count(*)=4 FROM public.v_acculynx_cron_outcomes WHERE sync_batch_id ~ '^cron-trigger-[0-9a-f-]{36}$'),'new view preserves all runs');
 SELECT 'PASS: restart-safe dispatch, replay, expiry, overlap, scope, correlation, partial response, transport, ACL';
+-- Run after 333: valid backend ingress remains compatible with the hardened dispatcher.
+SELECT pg_temp.assert(has_function_privilege('service_role','public.trigger_acculynx_sync(jsonb)','EXECUTE'),'trusted backend can enqueue');

@@ -26,6 +26,7 @@ import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
+import { startSyncAudit, auditStatus } from "./lib/audit.ts";
 import { authorizeDispatch } from "./lib/dispatch-auth.ts";
 import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
@@ -768,15 +769,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const batchId = `sync-${runStartIso.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
 
-  await sb.from("crm_sync_log").insert({
-    sync_batch_id: batchId,
-    sync_type: multiAccount
-      ? "multi_account"
-      : (fullSync ? "full_sync" : resources.join(",") || "api_incremental"),
-    started_at: runStartIso,
-    status: "running",
-    api_endpoint: "acculynx-sync",
-  });
+  if (!await startSyncAudit(sb,batchId,runStartIso)) return json({error:"audit_log_unavailable",dispatch_run_id:authorized.runId,status:"failed"},503);
 
   const result: any = {
     batch_id: batchId,
@@ -936,7 +929,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     await sb.from("crm_sync_log").update({
       completed_at: new Date().toISOString(),
-      status: result.status,
+      status: auditStatus(result.status),
       rows_fetched: totalFetched,
       error_count: errorCount,
       error_details: errorDetails.length ? errorDetails : null,

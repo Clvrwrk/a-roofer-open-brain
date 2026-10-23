@@ -1,0 +1,13 @@
+{
+  "status": "live",
+  "matches": [
+    {
+      "jobNumber": "MC-80",
+      "collectedRevenue": 199500,
+      "outstandingAr": 465500,
+      "billedAr": 0,
+      "billedTotal": 199500,
+      "computedAt": "2026-10-23T18:03:40.952175+00:00"
+    }
+  ]
+}
