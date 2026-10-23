@@ -25,6 +25,7 @@ import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
+import { syncWipFinancials } from "./resources/wip-financials.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
 import { startSyncAudit, auditStatus } from "./lib/audit.ts";
 import { authorizeDispatch } from "./lib/dispatch-auth.ts";
@@ -582,9 +583,17 @@ async function runAccountSync(
   deadline: number,
   batchId: string,
   jobWalkOnly = false,
+  financialsOnly = false,
 ): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
   const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
 
+  if (financialsOnly) {
+    const pass = await syncWipFinancials(sb, acct, apiKey, deadline - CRM_RESERVE_MS, batchId);
+    result.jobWalk = pass.errors ? `error: financial_refresh_failed (${pass.errors})` : `ok (financials ${pass.walked.length} of ${pass.candidates})`;
+    const crm = await syncCrmPipeline(sb, acct, deadline, new Map(), batchId, pass.walked);
+    result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
+    return result;
+  }
   if (jobWalkOnly) {
     // The walk stops CRM_RESERVE_MS early so the scoped crm_pipeline write below always
     // runs: on 2026-10-02 20:13 UTC the walk used every slice to the millisecond and the
@@ -757,6 +766,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // full budget of their own instead of whatever the users/jobs/contacts/estimates
   // steps leave. Uses its own rotation cursor so it never shifts the :00 run's order.
   const jobWalkOnly: boolean = body.jobWalkOnly === true;
+  const financialsOnly: boolean = body.financialsOnly === true;
   // accountFilter: optional array of account_key strings to restrict the fan-out.
   // When set, only the named production account(s) are synced, giving each the full
   // ~110s budget instead of sharing it across all enabled accounts (fixes wichita budget
@@ -850,7 +860,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const perAccountShareMs = Math.max(0, Math.floor(msRemaining / Math.max(1, remainingAccounts)));
         const perAccountDeadline = Math.min(deadline, Date.now() + perAccountShareMs);
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly);
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly, financialsOnly);
         remainingAccounts--;
       }
 
@@ -869,7 +879,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // v10 legacy resources (users, jobs, resolveLeads) — preserved for backward compat
-    if (!multiAccount || resources.includes("users")) {
+    if (!multiAccount || (!financialsOnly && resources.includes("users"))) {
       if (resources.includes("users")) {
         try {
           result.resources.users = await legacySyncUsers(batchId, deadline);

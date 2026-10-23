@@ -73,7 +73,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * would erase trusted balances and give them a fresh observation timestamp.
  * Zero and explicit null are valid; optional totals may be absent or null.
  */
-function isJobFinancialsBody(body: unknown): boolean {
+export function isJobFinancialsBody(body: unknown): boolean {
   if (!body || typeof body !== "object" || Array.isArray(body)) return false;
   const financials = body as Record<string, unknown>;
   const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(financials, key);
@@ -98,7 +98,7 @@ function isJobFinancialsBody(body: unknown): boolean {
  * Fetch a URL with 429 retry + exponential backoff.
  * apiKey is an explicit parameter to prevent cross-account key bleed (T-02-04).
  */
-async function acculynxGet(
+export async function acculynxGet(
   url: string,
   apiKey: string,
   fetchFn: typeof fetch,
@@ -131,7 +131,7 @@ async function acculynxGet(
  * http_status, page_index, payload). Non-fatal: a raw-archive failure is logged but does
  * not block the typed upsert — the archive is best-effort provenance, not a hard gate.
  */
-async function archiveRaw(
+export async function archiveRaw(
   sb: any,
   syncBatchId: string | undefined,
   resourceType: string,

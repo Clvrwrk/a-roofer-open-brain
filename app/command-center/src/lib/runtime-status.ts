@@ -232,9 +232,19 @@ async function rows<T>(client: SupabaseClient, table: string, columns: string, e
 }
 
 let mainCommitCache: { at: number; sha: string | null } | null = null;
+export function attestedCommit(data: {value?: {commit?: string}; updated_at?: string} | null, now: number): string | null {
+  const age=now-Date.parse(data?.updated_at??'');
+  return Number.isFinite(age)&&age>=-60000&&age<1800000&&/^[a-f0-9]{40}$/.test(data?.value?.commit??'')?data!.value!.commit!:null;
+}
+
 async function loadMainCommit(env: RuntimeEnv, now: number): Promise<string | null> {
   const token = env.GITHUB_TOKEN?.trim();
-  if (!token) return null;
+  if (!token) {
+    const {client}=createServerSupabaseClient(env);
+    if(!client)return null;
+    const {data}=await client.from('integration_monitor_state').select('value,updated_at').eq('key','github-watchdog').maybeSingle();
+    return attestedCommit(data,now);
+  }
   if (mainCommitCache && now - mainCommitCache.at < 300_000) return mainCommitCache.sha;
   try {
     const res = await fetch("https://api.github.com/repos/Clvrwrk/a-roofer-open-brain/commits/main", {
@@ -407,7 +417,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const buildCommit = firstSet(env.COMMAND_CENTER_BUILD_SHA, env.SOURCE_COMMIT, env.COOLIFY_GIT_COMMIT, env.GIT_COMMIT);
   const deployLight: Light = !buildCommit ? "unknown" : !mainCommit ? "yellow" : mainCommit.startsWith(buildCommit) || buildCommit.startsWith(mainCommit) ? "green" : "red";
   push({ key: "deploy.command-center", group: "deploy", kind: "deploy", label: "Command Center build", purpose: "Deployed commit vs origin/main (hard rule 11)", light: deployLight,
-    headline: !buildCommit ? "build commit unknown" : !mainCommit ? `running ${buildCommit.slice(0, 7)} · set GITHUB_TOKEN to compare with origin/main` : deployLight === "green" ? `running ${buildCommit.slice(0, 7)} = origin/main` : `DEPLOY DRIFT · running ${buildCommit.slice(0, 7)}, origin/main is ${mainCommit.slice(0, 7)}`,
+    headline: !buildCommit ? "build commit unknown" : !mainCommit ? `running ${buildCommit.slice(0, 7)} · awaiting fresh GitHub Actions deployment attestation` : deployLight === "green" ? `running ${buildCommit.slice(0, 7)} = origin/main` : `DEPLOY DRIFT · running ${buildCommit.slice(0, 7)}, origin/main is ${mainCommit.slice(0, 7)}`,
     detail: "Coolify builds from GitHub; /healthz publishes buildCommit.", cadenceLabel: null, lastAt: null, evidence: [] });
 
   // Assemble.

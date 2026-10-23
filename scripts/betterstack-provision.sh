@@ -80,7 +80,6 @@ pgcron.service-matview-refresh-requests|pg_cron|15|PE-CC · pg_cron 15 · servic
 pgcron.refresh-overhead-matview|pg_cron|16|PE-CC · pg_cron 16 · refresh-overhead-matview|86400|7200
 pgcron.refresh-order-acculynx-match|pg_cron|18|PE-CC · pg_cron 18 · refresh-order-acculynx-match|900|600
 systemd.openbrain-abc-sync|systemd|openbrain-abc-sync.service|PE-CC · systemd · openbrain-abc-sync (03:30 ET)|86400|7200
-systemd.openbrain-jt-sentinel|systemd|openbrain-jt-sentinel.service|PE-CC · systemd · openbrain-jt-sentinel (10:00 PT)|86400|7200
 systemd.openbrain-maya-gate|systemd|openbrain-maya-gate.service|PE-CC · systemd · openbrain-maya-gate (15 min)|900|600
 systemd.openbrain-maya-qa|systemd|openbrain-maya-qa.service|PE-CC · systemd · openbrain-maya-qa (04:30 CT)|86400|7200
 systemd.openbrain-qbo-thursday-sync|systemd|openbrain-qbo-thursday-sync.service|PE-CC · systemd · openbrain-qbo-thursday-sync (20:00 CT)|86400|7200

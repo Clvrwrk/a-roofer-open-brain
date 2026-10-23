@@ -11,3 +11,16 @@ for(const actor of [undefined,{type:"human",id:"ob-auditor"},{type:"service_agen
   expect(response.status).toBe(403);expect(client.create).not.toHaveBeenCalled();
  });
 }
+
+it('returns unavailable when an alert was accepted but the durable acknowledgement failed',async()=>{
+ const events=[{event_id:'fixture',component_key:'fixture'}];
+ const db={rpc:vi.fn().mockResolvedValue({data:{pending:1,oldestPendingAt:new Date().toISOString()},error:null}),from:(table:string)=>{
+  if(table==='integration_sync_events')return {select:()=>({is:()=>({not:()=>({order:()=>({limit:async()=>({data:events,error:null})})})})}),update:()=>({eq:async()=>({error:{message:'fixture ack failure'}})})};
+  return {select:()=>({order:async()=>({data:[],error:null})})};
+ }};
+ client.create.mockReturnValue({client:db});
+ const sender=await import('@lib/sync-health');
+ vi.spyOn(sender,'sendSyncHealthEvent').mockResolvedValue(true);
+ const response=await POST({locals:{actor:{type:'service_agent',id:'ob-auditor'}}} as any);
+ expect(response.status).toBe(503);expect((await response.json()).healthy).toBe(false);
+});

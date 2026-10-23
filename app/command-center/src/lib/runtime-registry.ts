@@ -110,7 +110,6 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
 
 export const SYSTEMD_JOBS: SystemdSpec[] = [
   { key: "systemd.openbrain-abc-sync", unit: "openbrain-abc-sync.service", label: "ABC nightly sync", purpose: "Catalog sync → invoice ingest → PDF backfill → Alex No-Price triage", cadenceS: 86_400, scheduleLabel: "03:30 ET daily", docs: "scripts/abc-nightly-sync.sh" },
-  { key: "systemd.openbrain-jt-sentinel", unit: "openbrain-jt-sentinel.service", label: "JobTread sync sentinel", purpose: "Daily JobTread mirror sweep + drift report", cadenceS: 86_400, scheduleLabel: "10:00 PT daily", docs: "docs/80" },
   { key: "systemd.openbrain-maya-gate", unit: "openbrain-maya-gate.service", label: "Maya gate pass", purpose: "PEC intake diagnose → Slack-approved repair gate", cadenceS: 900, scheduleLabel: "every 15 min", docs: "scripts/maya-gate.sh" },
   { key: "systemd.openbrain-maya-qa", unit: "openbrain-maya-qa.service", label: "Maya nightly QA", purpose: "Wide site walk + chaos forensic pass of the live site", cadenceS: 86_400, scheduleLabel: "04:30 CT daily" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
@@ -134,10 +133,9 @@ export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
 ];
 
 export const INTEGRATIONS: IntegrationSpec[] = [
-  { key: "int.supabase-rest", label: "Supabase PostgREST (shared prod DB)", purpose: "Every work surface reads through it", url: "{SUPABASE_URL}/rest/v1/roof_system_category?select=key&limit=1", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.supabase-rest", label: "Supabase PostgREST (shared prod DB)", purpose: "Every work surface reads through it", url: "{SUPABASE_URL}/rest/v1/roof_system_category?select=key&limit=1", authEnv: "SUPABASE_SERVICE_ROLE_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
   { key: "int.supabase-auth", label: "Supabase Auth", purpose: "GoTrue health behind the same project", url: "{SUPABASE_URL}/auth/v1/health", authEnv: "SUPABASE_ANON_KEY", auth: "apikey", expectAuthed: 200, expectAnon: 401 },
   { key: "int.workos", label: "WorkOS", purpose: "Staff sign-in for cc and crm", url: "https://api.workos.com/user_management/users?limit=1", authEnv: "WORKOS_API_KEY", expectAuthed: 200, expectAnon: 401 },
-  { key: "int.jobtread", label: "JobTread (Pave API)", purpose: "Job mirror + sync sentinel", url: "https://api.jobtread.com/pave", method: "POST", body: '{"query":{}}', expectAnon: 200, credentialHome: "grant key on the agent host (master.env)" },
   { key: "int.acculynx", label: "AccuLynx API", purpose: "Hourly sync for 8 accounts (edge function)", url: "https://api.acculynx.com/api/v2/users", expectAnon: 401, credentialHome: "per-account keys in Supabase edge-function secrets" },
   { key: "int.companycam", label: "CompanyCam Public API", purpose: "Job-site photo mirror (read-only, docs/120)", url: "https://app.companycam.com/public_api/v1/companies/current", expectAnon: 401, credentialHome: "personal access token on the agent host (master.env; 1Password CW_Master)" },
   { key: "int.quickbooks", label: "QuickBooks Online (Intuit platform)", purpose: "Read-only mirror (hard rule 13)", url: "https://oauth.platform.intuit.com/op/v1/jwks", expectAnon: 200, credentialHome: "OAuth tokens on the agent host" },
@@ -145,7 +143,7 @@ export const INTEGRATIONS: IntegrationSpec[] = [
   { key: "int.abc-supply", label: "ABC Supply Partners API", purpose: "Nightly invoice / order mirror", url: "https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357/.well-known/openid-configuration", expectAnon: 200, credentialHome: "client credentials on the agent host (partners.abcsupply.com)" },
   { key: "int.coolify", label: "Coolify (deploy host)", purpose: "Builds and runs this app", url: "https://coolify.proexteriorsus.net/api/health", expectAnon: 200 },
   { key: "int.betterstack", label: "Better Stack Uptime API", purpose: "Outside-in site monitors + job heartbeats", url: "https://uptime.betterstack.com/api/v2/monitors?per_page=1", authEnv: "BETTERSTACK_API_TOKEN", expectAuthed: 200, expectAnon: 401 },
-  { key: "int.github", label: "GitHub API", purpose: "origin/main for the deploy-drift light", url: "https://api.github.com/user", anonUrl: "https://api.github.com/", authEnv: "GITHUB_TOKEN", expectAuthed: 200, expectAnon: 200 },
+  { key: "int.github", label: "GitHub API", purpose: "API reachability; authenticated deploy comparison is attested by scoped GitHub Actions", url: "https://api.github.com/", expectAnon: 200 },
   { key: "int.linear", label: "Linear", purpose: "Issue tracking (PEC tickets)", url: "https://api.linear.app/graphql", anonUrl: "https://api.linear.app/graphql", method: "POST", body: '{"query":"{ viewer { id } }"}', authEnv: "LINEAR_API_KEY", auth: "raw", expectAuthed: 200, expectAnon: 400 },
   { key: "int.agentmail", label: "AgentMail", purpose: "Agent mailboxes (Maya intake)", url: "https://api.agentmail.to/v0/inboxes", authEnv: "AGENTMAIL_API_KEY", expectAuthed: 200, expectAnon: 401 },
 ];
@@ -175,7 +173,7 @@ export const AGENTS: AgentSpec[] = [
   { key: "agent.lena-brooks", displayName: "Lena Brooks", handle: "lena_brooks", role: "Marketing", slackTokenEnv: "LENA_BROOKS_BOT_TOKEN", jobKeys: [] },
   { key: "agent.rowan-vale", displayName: "Rowan Vale", handle: "rowan_vale", role: "Research (external-only)", slackTokenEnv: "ROWAN_VALE_BOT_TOKEN", jobKeys: [] },
   { key: "agent.sam-torres", displayName: "Sam Torres", handle: "sam_torres", role: "QA — site sweep", slackTokenEnv: "SAM_TORRES_BOT_TOKEN", jobKeys: ["systemd.openbrain-site-sweep"] },
-  { key: "agent.ops-conductor", displayName: "Ops Conductor", handle: "ops_conductor", role: "Conductor — routing, digests", slackTokenEnv: "OPS_CONDUCTOR_BOT_TOKEN", serviceIdentityId: "conductor", jobKeys: ["systemd.openbrain-jt-sentinel", "pgcron.acculynx-hourly-sync"] },
+  { key: "agent.ops-conductor", displayName: "Ops Conductor", handle: "ops_conductor", role: "Conductor — routing, digests", slackTokenEnv: "OPS_CONDUCTOR_BOT_TOKEN", serviceIdentityId: "conductor", jobKeys: ["pgcron.acculynx-hourly-sync"] },
   { key: "agent.openbrain-shared", displayName: "openbrain (shared fallback)", handle: "openbrain", role: "Shared Slack bot identity", slackTokenEnv: "SLACK_BOT_TOKEN", jobKeys: [] },
 ];
 

@@ -24,7 +24,7 @@ fi
 # 1. Secrets present (names from config/.env.example)
 if [[ -f "$ROOT/.env" ]]; then
   ok ".env present"
-  for k in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY OB_ACCESS_KEY_HISTORIAN BRAIN_MCP_URL; do
+  for k in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
     if grep -q "^${k}=" "$ROOT/.env" && is_set "${!k:-}"; then ok "env: $k set"; else bad "env: $k missing or placeholder"; fi
   done
 else bad ".env missing"; fi
@@ -59,13 +59,8 @@ if command -v deno >/dev/null; then
   else bad "server smoke tests failed (cd server && deno test tests/)"; fi
 else warn "deno unavailable — skipping server tests"; fi
 
-# 5. MCP container reachable (tools/list)
-if is_set "${BRAIN_MCP_URL:-}" && is_set "${OB_ACCESS_KEY_HISTORIAN:-}" && command -v curl >/dev/null; then
-  code=$(curl -s -o /dev/null -w "%{http_code}" "$BRAIN_MCP_URL" \
-    -H "x-ob-access-key: $OB_ACCESS_KEY_HISTORIAN" -H "Content-Type: application/json" \
-    -d '{"method":"tools/list"}' 2>/dev/null)
-  [[ "$code" == "200" ]] && ok "brain-mcp tools/list → 200" || warn "brain-mcp tools/list → ${code:-no response}"
-else warn "BRAIN_MCP_URL / access key unset — skipping live MCP ping"; fi
+# 5. The knowledge MCP scaffold is not a Command Center dependency.
+ok "knowledge MCP remains uncommissioned; excluded from production readiness"
 
 # 6. Command Center reachable and serving the live dashboard build (if configured)
 DASHBOARD_ORIGIN="${DASHBOARD_URL:-${COMMAND_CENTER_PUBLIC_URL:-}}"
