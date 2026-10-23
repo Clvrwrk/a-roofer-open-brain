@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {createHash} from 'node:crypto';
-import {NAMED_AGENT_IDENTITIES,resolveServiceActorFromToken} from './access-control';
+import {NAMED_AGENT_IDENTITIES,resolveServiceActorFromToken,resolveActorFromSessionUser} from './access-control';
 import {resolveRegistryServiceActorFromBearer} from './agent-service-token.server';
 import {SYSTEMD_JOBS,AGENTS} from './runtime-registry';
 import {resolveAgentToken} from './slack-agents';
@@ -14,6 +14,9 @@ describe('Maya retirement',()=>{
   expect(NAMED_AGENT_IDENTITIES.some(x=>x.id==='maya-chen')).toBe(false);
   expect([...SYSTEMD_JOBS,...AGENTS].some(x=>x.key.includes('maya'))).toBe(false);
   expect(resolveAgentToken('maya').token).toBeUndefined();
+ });
+ it('denies old browser sessions even when signed-in open access is enabled',()=>{
+  expect(resolveActorFromSessionUser({email:'maya.chen@cc.proexteriorsus.net'} as never,{COMMAND_CENTER_OPEN_ACCESS:'true'})).toBeNull();
  });
  it('rejects a still-active old registry digest',async()=>{
   const lookup=vi.fn(async()=>({agent_id:'maya-chen',state:'active' as const,not_before:null,expires_at:null}));
