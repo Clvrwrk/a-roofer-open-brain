@@ -1,5 +1,3 @@
-// Vendored from Clvrwrk/CRM_PWA scripts/triage/lib.mjs @ 731cf4a (canonical copy and tests live there).
-// Self-healing loop kit: docs/127-self-healing-loop.md. Do not fork behaviour here; change CRM_PWA first, then re-vendor.
 // Shared helpers for the error -> Linear bug log -> autofix pipeline.
 // Node 22, no dependencies. Every network call goes through createHttp so a dry run
 // can prove it made zero writes. Governance: docs/proposals/A3-error-autofix-pipeline.md.
@@ -86,8 +84,10 @@ export function readConfig(env, { apply = false } = {}) {
       key: env.LINEAR_API_KEY || '',
       teamId: env.LINEAR_TEAM_ID || '',
       triageStateId: env.LINEAR_TRIAGE_STATE_ID || '',
+      humanAssigneeId: UUID_RE.test(env.LINEAR_HUMAN_ASSIGNEE_ID || '') ? env.LINEAR_HUMAN_ASSIGNEE_ID : '',
       labels,
     },
+    repository: /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '') ? env.GITHUB_REPOSITORY : '',
     maxIssues: positiveInt(env.TRIAGE_MAX_ISSUES, 25),
     maxPerRun: positiveInt(env.AUTOFIX_MAX_PER_RUN, 2),
     // Impact gate: new bug logs are filed only at this severity or worse (S1 worst). S4 files everything.
@@ -193,7 +193,7 @@ export function sentryClient(cfg, http) {
 // ---------------------------------------------------------------------------
 // Linear GraphQL. Queries are reads; every mutation is flagged as a write.
 // ---------------------------------------------------------------------------
-const ISSUE_FIELDS = 'id identifier title url description labels { nodes { id name } }';
+const ISSUE_FIELDS = 'id identifier title url description assignee { id } labels { nodes { id name } }';
 
 export function linearClient(cfg, http) {
   const { key, teamId } = cfg.linear;
@@ -226,8 +226,9 @@ export function linearClient(cfg, http) {
       const data = await gql(`query($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`, { id });
       return data.issue ?? null;
     },
-    async createIssue({ title, description, priority, labelIds }) {
+    async createIssue({ title, description, priority, labelIds, assigneeId }) {
       const input = { teamId, title, description, priority, labelIds };
+      if (assigneeId) input.assigneeId = assigneeId;
       if (cfg.linear.triageStateId) input.stateId = cfg.linear.triageStateId;
       const data = await gql(`mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }`, { input }, { mutation: true });
       if (!data.issueCreate?.success) throw new Error('Linear issueCreate did not succeed');
@@ -266,3 +267,10 @@ export function setBugLogField(description, field, value) {
 }
 
 export const sha16 = text => createHash('sha256').update(String(text)).digest('hex').slice(0, 16);
+
+// A shared Linear team is not a repository boundary. Unstamped legacy tickets wait for human routing.
+export function repositoryMarker(cfg) { return cfg.repository ? `self-heal-repository:${cfg.repository};` : ''; }
+export function ownsIssue(cfg, issue) {
+  const markers = [...String(issue.description ?? '').matchAll(/self-heal-repository:([^;\s]+);/g)].map(m => m[1]);
+  return Boolean(cfg.repository && markers.length === 1 && markers[0] === cfg.repository);
+}

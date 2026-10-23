@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Vendored from Clvrwrk/CRM_PWA scripts/triage/sentry-to-linear.mjs @ 731cf4a (canonical copy and tests live there).
-// Self-healing loop kit: docs/127-self-healing-loop.md. Do not fork behaviour here; change CRM_PWA first, then re-vendor.
 // Sentry (pwa-crm) -> Linear bug log triage.
 //
 //   node scripts/triage/sentry-to-linear.mjs            # dry run (default): reads only, prints the plan
@@ -12,7 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import {
   createHttp, labelNames, linearClient, missingForApply, readConfig, sentryClient,
-  setBugLogField, sha16, stripPii, truncate,
+  setBugLogField, sha16, stripPii, truncate, repositoryMarker,
 } from './lib.mjs';
 
 // ---------------------------------------------------------------------------
@@ -347,13 +345,20 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
     }
 
     if (existing) {
-      const description = refreshDescription(existing.description ?? '', s, sev, cls);
+      let description = refreshDescription(existing.description ?? '', s, sev, cls);
+      const marker = repositoryMarker(cfg);
+      const stamped = /self-heal-repository:([^;\s]+);/.exec(description);
+      if (stamped && stamped[1] !== cfg.repository) {
+        actions.push({...base, action:'ownership-conflict', linear:existing.identifier});
+        continue;
+      }
+      if (marker && !stamped) description += `\n${marker}\n`;
       const names = labelNames(existing);
       const requeue = s.regressed && cls.fixable && !['autofix:queued', 'autofix:running', 'autofix:pr-open'].some(n => names.has(n));
-      const action = { ...base, action: description === existing.description && !requeue ? 'unchanged' : 'update', linear: existing.identifier, requeue };
+      const action = { ...base, action: description === existing.description && !requeue && (!cfg.linear.humanAssigneeId || existing.assignee?.id === cfg.linear.humanAssigneeId) ? 'unchanged' : 'update', linear: existing.identifier, requeue };
       actions.push(action); log(action);
       if (cfg.apply && action.action === 'update') {
-        const input = { description };
+        const input = { description, ...(cfg.linear.humanAssigneeId ? {assigneeId:cfg.linear.humanAssigneeId} : {}) };
         if (requeue) input.addedLabelIds = [cfg.linear.labels.queued];
         await linear.updateIssue(existing.id, input);
         if (requeue) await linear.comment(existing.id, `Regressed in release ${s.release ?? 'unknown'}; re-queued for autofix.`);
@@ -371,11 +376,11 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
     }
 
     const title = buildTitle(s, sev);
-    const description = buildDescription(s, sev, cls);
+    const description = buildDescription(s, sev, cls) + (repositoryMarker(cfg) ? `\n${repositoryMarker(cfg)}\n` : "");
     const action = { ...base, action: 'create', title, labels: labelKeys };
     actions.push(action); log(action);
     if (cfg.apply) {
-      const created = await linear.createIssue({ title, description, priority: sev.priority, labelIds: labelKeys.map(k => cfg.linear.labels[k]) });
+      const created = await linear.createIssue({ title, description, priority: sev.priority, labelIds: labelKeys.map(k => cfg.linear.labels[k]), assigneeId: cfg.linear.humanAssigneeId || undefined });
       await linear.attach(created.id, s.sentryUrl, `Sentry ${s.shortId}`, `${s.count} events, ${s.usersAffected} users`);
       await sentry.comment(s.sentryId, `Tracked in Linear ${created.identifier}: ${created.url}`);
       action.linear = created.identifier;

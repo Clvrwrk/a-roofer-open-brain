@@ -1,4 +1,6 @@
 [Unit]
+# Retired: intentionally impossible start condition; timers are disabled/masked on host.
+ConditionPathExists=/run/openbrain-maya-retired-do-not-create
 Description=Maya diagnose -> Slack-approved repair gate pass (A3; PEC intakes -> #pe-cc-dev-team)
 After=network-online.target
 Wants=network-online.target

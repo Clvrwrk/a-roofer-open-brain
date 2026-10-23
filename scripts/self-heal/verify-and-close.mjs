@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Vendored from Clvrwrk/CRM_PWA scripts/triage/verify-and-close.mjs @ 731cf4a (canonical copy and tests live there).
-// Self-healing loop kit: docs/127-self-healing-loop.md. Do not fork behaviour here; change CRM_PWA first, then re-vendor.
 // Self-healing loop, stage 6: verify a shipped fix in production, then close or reopen.
 //
 //   node scripts/triage/verify-and-close.mjs            # dry run (default): reads only, prints the plan
@@ -25,7 +23,7 @@
 import { pathToFileURL } from 'node:url';
 import {
   DryRunWriteRefused, IDENTIFIER_RE, createHttp, labelIds, labelNames, linearClient, readConfig, setBugLogField,
-  stripPii, truncate,
+  stripPii, truncate, ownsIssue,
 } from './lib.mjs';
 
 const HOUR = 3600_000;
@@ -195,7 +193,7 @@ async function listCandidates(cfg, linear) {
     prOpen: issues(first: $first, filter: { team: { id: { eq: $team } }, labels: { id: { eq: $prOpen } } }) { nodes { ${CANDIDATE_FIELDS} } }
   }`, { team: teamId, sentry: labels.sourceSentry, prOpen: labels.prOpen || labels.sourceSentry, since, first: cfg.verify.maxCandidates });
   const byId = new Map();
-  for (const issue of [...(data.completed?.nodes ?? []), ...(data.prOpen?.nodes ?? [])]) if (IDENTIFIER_RE.test(issue.identifier)) byId.set(issue.id, issue);
+  for (const issue of [...(data.completed?.nodes ?? []), ...(data.prOpen?.nodes ?? [])]) if (IDENTIFIER_RE.test(issue.identifier) && ownsIssue(cfg, issue)) byId.set(issue.id, issue);
   return [...byId.values()];
 }
 

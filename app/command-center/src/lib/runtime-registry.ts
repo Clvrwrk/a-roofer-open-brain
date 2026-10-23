@@ -110,8 +110,6 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
 
 export const SYSTEMD_JOBS: SystemdSpec[] = [
   { key: "systemd.openbrain-abc-sync", unit: "openbrain-abc-sync.service", label: "ABC nightly sync", purpose: "Catalog sync → invoice ingest → PDF backfill → Alex No-Price triage", cadenceS: 86_400, scheduleLabel: "03:30 ET daily", docs: "scripts/abc-nightly-sync.sh" },
-  { key: "systemd.openbrain-maya-gate", unit: "openbrain-maya-gate.service", label: "Maya gate pass", purpose: "PEC intake diagnose → Slack-approved repair gate", cadenceS: 900, scheduleLabel: "every 15 min", docs: "scripts/maya-gate.sh" },
-  { key: "systemd.openbrain-maya-qa", unit: "openbrain-maya-qa.service", label: "Maya nightly QA", purpose: "Wide site walk + chaos forensic pass of the live site", cadenceS: 86_400, scheduleLabel: "04:30 CT daily" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
   { key: "systemd.openbrain-site-sweep", unit: "openbrain-site-sweep.service", label: "Site quality sweep", purpose: "Static + live + DB money-truth checks (PEC-218)", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/92" },
   { key: "systemd.openbrain-companycam-sync", unit: "openbrain-companycam-sync.service", label: "CompanyCam mirror sync", purpose: "Projects + photos metadata → companycam_* mirror, job/property links, copy priority (docs/120)", cadenceS: 86_400, scheduleLabel: "02:15 CT daily (full sweep Sun)", docs: "docs/120" },
@@ -139,13 +137,13 @@ export const INTEGRATIONS: IntegrationSpec[] = [
   { key: "int.acculynx", label: "AccuLynx API", purpose: "Hourly sync for 8 accounts (edge function)", url: "https://api.acculynx.com/api/v2/users", expectAnon: 401, credentialHome: "per-account keys in Supabase edge-function secrets" },
   { key: "int.companycam", label: "CompanyCam Public API", purpose: "Job-site photo mirror (read-only, docs/120)", url: "https://app.companycam.com/public_api/v1/companies/current", expectAnon: 401, credentialHome: "personal access token on the agent host (master.env; 1Password CW_Master)" },
   { key: "int.quickbooks", label: "QuickBooks Online (Intuit platform)", purpose: "Read-only mirror (hard rule 13)", url: "https://oauth.platform.intuit.com/op/v1/jwks", expectAnon: 200, credentialHome: "OAuth tokens on the agent host" },
-  { key: "int.slack", label: "Slack API", purpose: "Agent bot identities post here", url: "https://slack.com/api/auth.test", anonUrl: "https://slack.com/api/api.test", authEnv: "MAYA_CHEN_BOT_TOKEN", expectAuthed: 200, expectAnon: 200, expectBody: '"ok":true', credentialHome: "bot tokens per agent (slack-agents skill)" },
+  { key: "int.slack", label: "Slack API", purpose: "Agent bot identities post here", url: "https://slack.com/api/auth.test", anonUrl: "https://slack.com/api/api.test", authEnv: "SLACK_BOT_TOKEN", expectAuthed: 200, expectAnon: 200, expectBody: '"ok":true', credentialHome: "bot tokens per agent (slack-agents skill)" },
   { key: "int.abc-supply", label: "ABC Supply Partners API", purpose: "Nightly invoice / order mirror", url: "https://auth.partners.abcsupply.com/oauth2/ausvvp0xuwGKLenYy357/.well-known/openid-configuration", expectAnon: 200, credentialHome: "client credentials on the agent host (partners.abcsupply.com)" },
   { key: "int.coolify", label: "Coolify (deploy host)", purpose: "Builds and runs this app", url: "https://coolify.proexteriorsus.net/api/health", expectAnon: 200 },
   { key: "int.betterstack", label: "Better Stack Uptime API", purpose: "Outside-in site monitors + job heartbeats", url: "https://uptime.betterstack.com/api/v2/monitors?per_page=1", authEnv: "BETTERSTACK_API_TOKEN", expectAuthed: 200, expectAnon: 401 },
   { key: "int.github", label: "GitHub API", purpose: "API reachability; authenticated deploy comparison is attested by scoped GitHub Actions", url: "https://api.github.com/", expectAnon: 200 },
   { key: "int.linear", label: "Linear", purpose: "Issue tracking (PEC tickets)", url: "https://api.linear.app/graphql", anonUrl: "https://api.linear.app/graphql", method: "POST", body: '{"query":"{ viewer { id } }"}', authEnv: "LINEAR_API_KEY", auth: "raw", expectAuthed: 200, expectAnon: 400 },
-  { key: "int.agentmail", label: "AgentMail", purpose: "Agent mailboxes (Maya intake)", url: "https://api.agentmail.to/v0/inboxes", authEnv: "AGENTMAIL_API_KEY", expectAuthed: 200, expectAnon: 401 },
+  { key: "int.agentmail", label: "AgentMail", purpose: "Accounting service mailboxes", url: "https://api.agentmail.to/v0/inboxes", authEnv: "AGENTMAIL_API_KEY", expectAuthed: 200, expectAnon: 401 },
 ];
 
 export const FEEDS: FeedSpec[] = [
@@ -167,7 +165,6 @@ export const EDGE_FUNCTIONS: EdgeFunctionSpec[] = [
 
 export const AGENTS: AgentSpec[] = [
   { key: "agent.alex-rivers", displayName: "Alex Rivers", handle: "alex_rivers", role: "Pricing — No-Price triage, agreement gaps", slackTokenEnv: "ALEX_RIVERS_BOT_TOKEN", jobKeys: ["systemd.openbrain-abc-sync", "pgcron.refresh-office-pricing-matviews"] },
-  { key: "agent.maya-chen", displayName: "Maya Chen", handle: "maya_chen_accounting", role: "Accounting — intake gate, nightly QA", slackTokenEnv: "MAYA_CHEN_BOT_TOKEN", jobKeys: ["systemd.openbrain-maya-gate", "systemd.openbrain-maya-qa"] },
   { key: "agent.casey-morgan", displayName: "Casey Morgan", handle: "casey_morgan", role: "Vendor comms — credit-memo requests", slackTokenEnv: "CASEY_MORGAN_BOT_TOKEN", jobKeys: ["pgcron.refresh-office-pricing-matviews"] },
   { key: "agent.jordan-price", displayName: "Jordan Price", handle: "jordan_price", role: "Finance — WIP/AR pack, cash surfaces", slackTokenEnv: "JORDAN_PRICE_BOT_TOKEN", jobKeys: ["systemd.openbrain-wip-pack-thursday", "pgcron.wip-ar-master-nightly", "pgcron.refresh-overhead-matview"] },
   { key: "agent.lena-brooks", displayName: "Lena Brooks", handle: "lena_brooks", role: "Marketing", slackTokenEnv: "LENA_BROOKS_BOT_TOKEN", jobKeys: [] },

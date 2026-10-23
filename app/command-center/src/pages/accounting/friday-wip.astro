@@ -88,7 +88,7 @@ const gmBasisLabel: Record<string, string> = {
       </label>
       <a class="fw-btn" href="/api/accounting/friday-wip/pack" title="Latest Excel pack (published nightly to the wip-packs bucket)">Download pack</a>
       <a class="fw-btn" href={`/api/accounting/friday-wip/accrual.csv?cutoff=${today}`} title="Per-job billed-to-date + costs-incurred-to-date at a cutoff, for the CPA's earned-revenue calc">Accrual snapshot CSV</a>
-      <button class="fw-btn fw-btn-primary" id="fw-send" type="button" title="Maya emails the summary + pack link to the internal distribution (Lucinda / Chandler / Tabatha / Chris)">Email via Maya</button>
+      <button class="fw-btn fw-btn-primary" id="fw-send" type="button" disabled title="Email automation retired; download the pack for manual distribution">Email retired</button>
       <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{runtimeLabel}</span>
       <span class="fw-count">{generatedAt}</span>
       <div class="fw-theme" role="group" aria-label="Theme">

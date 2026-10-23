@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveRegistryServiceActorFromBearer } from "./agent-service-token.server";
 
 describe("Supabase named-agent service token registry", () => {
-  it("resolves an active Maya digest without passing the raw token to storage", async () => {
+  it("resolves an active Alex digest without passing the raw token to storage", async () => {
     const lookup = vi.fn(async () => ({
-      agent_id: "maya-chen",
+      agent_id: "alex-rivers",
       state: "active" as const,
       not_before: "2026-08-01T00:00:00.000Z",
       expires_at: "2027-08-01T00:00:00.000Z",
     }));
-    const rawToken = "test-only-maya-registry-token";
+    const rawToken = "test-only-alex-registry-token";
     const request = new Request("https://cc.example/api/agent/intake", {
       headers: { authorization: `Bearer ${rawToken}` },
     });
@@ -19,7 +19,7 @@ describe("Supabase named-agent service token registry", () => {
 
     expect(lookup).toHaveBeenCalledWith(createHash("sha256").update(rawToken).digest("hex"));
     expect(lookup).not.toHaveBeenCalledWith(rawToken);
-    expect(actor).toMatchObject({ id: "maya-chen", type: "named_agent", source: "service_token" });
+    expect(actor).toMatchObject({ id: "alex-rivers", type: "named_agent", source: "service_token" });
     expect(actor?.permissions).not.toContain("approval.decide_prod_write");
   });
 
@@ -28,13 +28,13 @@ describe("Supabase named-agent service token registry", () => {
       headers: { authorization: "Bearer test-token" },
     });
     const expired = async () => ({
-      agent_id: "maya-chen",
+      agent_id: "alex-rivers",
       state: "active" as const,
       not_before: null,
       expires_at: "2020-01-01T00:00:00.000Z",
     });
     const revoked = async () => ({
-      agent_id: "maya-chen",
+      agent_id: "alex-rivers",
       state: "revoked" as const,
       not_before: null,
       expires_at: null,
