@@ -75,36 +75,6 @@ CREDIT_MEMOS   = OB_INTERNAL
 CATALOG_REVIEW = OB_INTERNAL
 
 AGENTS = {
-    "maya.chen@cc.proexteriorsus.net": [
-        make_job("maya-gmail-poll", "every 2m",
-            "You are Maya Chen, Pro Exteriors document intake agent. Poll Gmail for all 7 aliases (invoices, ap, creditmemos, priceagreement, ar, hr, payroll) using in:anywhere. For each unread: classify by alias, extract vendor/invoice/amount/date, flag SPAM-labeled for human review, escalate HR/Payroll without extracting. Post brief notification to #ob-agents-internal. Silent when nothing new.",
-            ["google-workspace", "nepq-agent-communication"], ["web", "file"], VENDOR_INTAKE),
-        make_job("maya-morning-audit", "0 7 * * 1-5",
-            "You are Maya Chen. Check Command Center work queue for unprocessed invoices. Post NEPQ morning audit to #ob-agents-internal: count by category, flag >30 day items, flag prior-day HR/Payroll. Max 5 bullets. 90-second read.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-daily-summary", "0 17 * * 1-5",
-            "You are Maya Chen. Post end-of-day NEPQ summary to #ob-agents-internal. Format: WHAT HAPPENED (documents processed, work items created) → WHAT IT MEANS (patterns) → NEEDS YOUR ATTENTION (specific items or 'Nothing today ✅'). Never list everything — only surface what matters.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-vendor-aging", "0 8 * * 1",
-            "You are Maya Chen. Pull all open invoice work items. Group by vendor. Age: 0-30/31-60/61-90/90+. Flag vendors >60 days. Post aging summary to #ob-agents-internal. CFMA: DSO target <45 days.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-doc-quality-audit", "0 9 * * 5",
-            "You are Maya Chen. Review this week's work items for extraction quality patterns. Which vendors had low-confidence extractions? Which document types caused failures? Post findings to #ob-agents-internal. Tag Sam Torres if >2 failure patterns.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-vendor-onboarding", "0 9 1 * *",
-            "You are Maya Chen. Monthly: check work items for first-time vendors this month. List new vendors. Flag any without price agreements to #ob-agents-internal. Post summary to #ob-agents-internal.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-extraction-accuracy", "0 10 1 * *",
-            "You are Maya Chen. Monthly: compare Maya-created work against human corrections. Calculate accuracy by document type and submit the evidence packet to Sam Torres. Keep all work rooted in the CAT source issue.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-vendor-relationship-audit", "0 9 1 1,4,7,10 *",
-            "You are Maya Chen. Quarterly: review the top 20 vendors by invoice volume. Surface extraction failures above 5 percent and recurring pricing discrepancies with source evidence. Route findings to Alex and Jordan; do not alter prices.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-        make_job("maya-intake-system-review", "0 9 15 1 *",
-            "You are Maya Chen. Annual: produce extraction accuracy, vendor-count, and document-volume trends. Propose alias or process changes to Dev Conductor; do not apply them. Keep the proposal linked to its CAT source.",
-            ["nepq-agent-communication"], ["web"], VENDOR_INTAKE),
-    ],
-
     "alex.rivers@cc.proexteriorsus.net": [
         make_job("alex-morning-abc-sync", "0 7 * * 1-5",
             "You are Alex Rivers, pricing variance analyst. Review invoice work items since yesterday 5pm. For each line item: resolve SKU against ABC Supply catalog, apply UOM conversion, match to active price agreement (check date range), calculate variance. Flag >$50/line or >$200/invoice. Post NEPQ pricing report to #ob-agents-internal. Silent if nothing flagged.",
@@ -190,7 +160,7 @@ total_deployed = 0
 
 for email, jobs in AGENTS.items():
     if email == "maya.chen@cc.proexteriorsus.net":
-        print("  ⏭️  Maya skipped: Orgo CAT-first runtime owns mailbox and recurring schedules")
+        print("  ⏭️  Maya retired: no jobs may be created")
         continue
     jobs_data = {"jobs": jobs, "_version": 1}
     jobs_json = json.dumps(jobs_data, indent=2)
@@ -234,10 +204,4 @@ echo "OK:{email}:$(wc -c < {remote_cron_dir}/jobs.json)bytes"
 print(f"\n{'='*55}")
 print(f"Total cron jobs deployed: {total_deployed}")
 
-# Verify by listing from one agent
-out, _ = ssh(
-    f"python3 -c \""
-    f"import json; d=json.load(open('/mnt/kasm_profiles/maya.chen@cc.proexteriorsus.net/{IMAGE_ID}/.hermes/cron/jobs.json')); "
-    f"print('Maya jobs:', len(d['jobs'])); [print(' -', j['name']) for j in d['jobs']]\""
-)
-print(f"\nVerification:\n{out}")
+# Maya schedule verification removed: persona retired.

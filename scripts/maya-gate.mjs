@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+console.error("Maya retired 2026-10-23; no work executed."); process.exit(0);
 // Maya diagnose → Slack-approved repair gate (A3: proposals/a3-maya-diagnose-repair-slack-gate.md).
 //
 //   node scripts/maya-gate.mjs run          # full pass: notices, diagnose, approvals

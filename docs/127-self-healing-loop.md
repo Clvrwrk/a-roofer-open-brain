@@ -94,3 +94,18 @@ A surface is not done until it is in the loop. For any new app, service or work 
 - Branch protection on `main` (human approval + the verify check) before any fix-proposal stage.
 - An Anthropic workspace key with a monthly spend cap before any agent stage.
 - Flip each switch after a dry run; record the date here.
+
+## Activation hardening — 2026-10-23
+
+Operator authorized enabling the fixing agent, assigning human-review tickets, retiring Maya and repairing Better Stack.
+Human reviewer: Christopher Hussey. Every new/refreshed issue is repository-stamped; selection, reporting and production
+verification refuse foreign or unstamped tickets. Legacy provenance is stamped only after Sentry confirms the project.
+The trusted publisher opens a draft PR and requests `Clvrwrk` (Christopher Hussey); the fixing agent never merges or deploys.
+Command Center fixes are limited to application source and synthetic drill fixtures, excluding auth, monitoring and schema.
+One active fix per repository, 50 turns and $5 maximum per run; dedicated PE-Self-Heal-Anthropic credential in GitHub Secrets.
+Maya timers stopped/disabled on the agent host; principal kill gate enabled in Supabase; application identity and retired
+mail/runtime/webhook paths are removed or return 410. Historical accounting evidence remains available for human review.
+Better Stack credential repaired from the approved 1Password item. Live API readback: green, 12 monitors and 19 heartbeats.
+Local verification: 459 Command Center tests, seven pipeline tests and production build passed.
+Full live Sentry-to-Linear-to-agent-to-draft-PR validation remains pending until reviewed implementation PRs are merged.
+Rollback: disable AUTOFIX_AGENT_ENABLED or set AUTOFIX_KILL_SWITCH; revert reviewed changes. No automatic merge is permitted.

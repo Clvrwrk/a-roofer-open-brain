@@ -6,7 +6,7 @@
 # Kill switch: AUTOFIX_KILL_SWITCH=true stops every job and both scripts.
 # The fix-proposal stage (reproduce-first agent -> draft PR) is added per surface once its verify chain
 # exists; CRM_PWA .github/workflows/autofix.yml is the reference. Nothing here merges, deploys or pushes.
-name: Self-heal loop (disabled until enabled)
+name: Verify Command Center fixes
 
 on:
   schedule:
@@ -23,6 +23,7 @@ permissions: {}
 env:
   SENTRY_ORG: ${{ vars.SENTRY_ORG || 'cleverwork' }}
   SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'cc-proexteriorsus' }}
+  LINEAR_HUMAN_ASSIGNEE_ID: ${{ vars.LINEAR_HUMAN_ASSIGNEE_ID }}
   LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
   LINEAR_TRIAGE_STATE_ID: ${{ vars.LINEAR_TRIAGE_STATE_ID }}
   LINEAR_DONE_STATE_ID: ${{ vars.LINEAR_DONE_STATE_ID }}
@@ -45,35 +46,8 @@ env:
   DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
 jobs:
-  triage:
-    name: Sentry to Linear triage
-    # A manual dry run may run before enablement; anything that writes needs the stage switch.
-    if: ${{ vars.AUTOFIX_KILL_SWITCH != 'true' && (vars.SELF_HEAL_TRIAGE_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    concurrency:
-      group: self-heal-triage
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Triage new and regressed Sentry issues into the Linear bug log
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-        run: |
-          if [ "$DRY_RUN" = "true" ]; then node scripts/self-heal/sentry-to-linear.mjs
-          else node scripts/self-heal/sentry-to-linear.mjs --apply; fi
-
   verify:
     name: Verify shipped fixes, then resolve or reopen
-    needs: triage
     # Runs after triage (or alone when triage is off); idempotent, so every tick is safe.
     if: ${{ !cancelled() && vars.AUTOFIX_KILL_SWITCH != 'true' && (vars.SELF_HEAL_VERIFY_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) }}
     runs-on: ubuntu-latest

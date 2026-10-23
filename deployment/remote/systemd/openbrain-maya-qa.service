@@ -1,4 +1,6 @@
 [Unit]
+# Retired: intentionally impossible start condition; timers are disabled/masked on host.
+ConditionPathExists=/run/openbrain-maya-retired-do-not-create
 Description=Maya nightly QA of cc.proexteriorsus.net (wide walk + chaos forensic pass)
 After=network-online.target
 Wants=network-online.target

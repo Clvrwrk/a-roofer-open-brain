@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+console.error("Maya retired 2026-10-23; no work executed."); process.exit(0);
 /**
  * maya-qa-orchestrate.mjs — nightly QA of cc.proexteriorsus.net, conducted by Maya.
  *

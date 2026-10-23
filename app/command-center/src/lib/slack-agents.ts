@@ -35,7 +35,6 @@ export const SLACK_AGENTS: Record<string, SlackAgentIdentity> = {
   alex: { slug: "alex-rivers", displayName: "Alex Rivers", tokenEnvKey: "ALEX_RIVERS_BOT_TOKEN", canonicalAppId: "A0BD4C9SUPP" },
   casey: { slug: "casey-morgan", displayName: "Casey Morgan", tokenEnvKey: "CASEY_MORGAN_BOT_TOKEN", canonicalAppId: "A0BD85UG23C" },
   jordan: { slug: "jordan-price", displayName: "Jordan Price", tokenEnvKey: "JORDAN_PRICE_BOT_TOKEN", canonicalAppId: "A0BE2EMAA8Y" },
-  maya: { slug: "maya-chen", displayName: "Maya Chen", tokenEnvKey: "MAYA_CHEN_BOT_TOKEN", canonicalAppId: "A0BD0PAEU2E" },
   lena: { slug: "lena-brooks", displayName: "Lena Brooks", tokenEnvKey: "LENA_BROOKS_BOT_TOKEN", canonicalAppId: "A0BD1RH3FPD" },
   rowan: { slug: "rowan-vale", displayName: "Rowan Vale", tokenEnvKey: "ROWAN_VALE_BOT_TOKEN", canonicalAppId: "A0BD1RMHFBM" },
   sam: { slug: "sam-torres", displayName: "Sam Torres", tokenEnvKey: "SAM_TORRES_BOT_TOKEN", canonicalAppId: "A0BD86ATVHQ" },
@@ -60,6 +59,7 @@ export function resolveAgentToken(agent?: string): AgentTokenResolution {
   if (!agent) return { token: shared, source: shared ? "fallback" : "none", identity: null };
 
   const key = agent.toLowerCase();
+  if (["maya", "maya-chen"].includes(key)) return {token: undefined, source: "none", identity: null};
   const identity =
     SLACK_AGENTS[key] ?? Object.values(SLACK_AGENTS).find((a) => a.slug === key) ?? null;
   if (!identity) return { token: shared, source: shared ? "fallback" : "none", identity: null };

@@ -33,7 +33,7 @@ jobs:
           SYNC_HEALTH_SERVICE_TOKEN: ${{ secrets.SYNC_HEALTH_SERVICE_TOKEN }}
 
   triage:
-    if: vars.SYNC_HEALTH_TRIAGE_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+    if: (vars.SYNC_HEALTH_TRIAGE_ENABLED == 'true' && vars.SELF_HEAL_TRIAGE_ENABLED != 'true') || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -45,6 +45,7 @@ jobs:
       LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
       TRIAGE_MIN_SEVERITY: S3
       AUTOFIX_KILL_SWITCH: ${{ vars.AUTOFIX_KILL_SWITCH }}
+      LINEAR_HUMAN_ASSIGNEE_ID: ${{ vars.LINEAR_HUMAN_ASSIGNEE_ID }}
       LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
       LINEAR_TRIAGE_STATE_ID: ${{ vars.LINEAR_TRIAGE_STATE_ID }}
       LINEAR_LABEL_BUG: ${{ vars.LINEAR_LABEL_BUG }}
