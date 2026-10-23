@@ -214,7 +214,7 @@ export function linearClient(cfg, http) {
         issues(first: 5, filter: { team: { id: { eq: $team } }, or: [{ description: { contains: $a } }, { description: { contains: $b } }] }) { nodes { ${ISSUE_FIELDS} } }
       }`, { team: teamId, a: `sentry-issue-id:${sentryId};`, b: `sig:${signature};` });
       const nodes = data.issues?.nodes ?? [];
-      return nodes.find(n => n.description?.includes(`sentry-issue-id:${sentryId};`)) ?? nodes[0] ?? null;
+      return nodes.find(n => n.description?.includes(`sentry-issue-id:${sentryId};`)) ?? nodes.find(n => ownsIssue(cfg, n)) ?? null;
     },
     async listByLabel(labelId, first = 50) {
       const data = await gql(`query($team: ID!, $label: ID!, $first: Int!) {

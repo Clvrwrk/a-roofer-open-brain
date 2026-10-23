@@ -330,6 +330,10 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
     let existing = bySignature.get(s.signature) ?? null;
     if (!existing && linear.available) existing = await linear.findBySentry(s.sentryId, s.signature);
 
+    if (existing && /self-heal-repository:/.test(existing.description ?? '') && !String(existing.description).includes(repositoryMarker(cfg))) {
+      actions.push({...base, action:'ownership-conflict', linear:existing.identifier});
+      continue;
+    }
     if (existing && !existing.description?.includes(`sentry-issue-id:${s.sentryId};`)) {
       const action = { ...base, action: 'link-duplicate', linear: existing.identifier };
       actions.push(action); log(action);
