@@ -209,7 +209,7 @@ export async function report({ cfg, linear, issueId, decision: given, prUrl, run
   const input = {
     description,
     ...(cfg.linear.humanAssigneeId ? {assigneeId:cfg.linear.humanAssigneeId} : {}),
-    removedLabelIds: [labels.running, labels.queued].filter(Boolean),
+    removedLabelIds: [labels.running, labels.queued].filter(id => id && (issue.labels?.nodes ?? []).some(label => label.id === id)),
     addedLabelIds: [published ? labels.prOpen : labels.needsHuman],
   };
   const plan = { issue: issue.identifier, published, addLabel: published ? 'autofix:pr-open' : 'needs-human', reasons: decision?.reasons ?? [] };

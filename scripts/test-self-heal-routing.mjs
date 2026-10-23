@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {readConfig, ownsIssue, repositoryMarker} from './self-heal/lib.mjs';
-import {select,recordVerification} from './self-heal/autofix-queue.mjs';
+import {select,recordVerification,report} from './self-heal/autofix-queue.mjs';
 import {runTriage} from './self-heal/sentry-to-linear.mjs';
 import {evaluatePatch} from './self-heal/patch-policy.mjs';
 const repo='Clvrwrk/a-roofer-open-brain',owner='002bc1e6-c102-42f7-86cc-45b7c499dae3';
@@ -53,4 +53,16 @@ test('publisher opens drafts, requests human review, never merges or deploys',()
  assert.match(workflow,/gh pr create --draft --reviewer Clvrwrk/);
  assert.doesNotMatch(workflow,/gh pr merge|enableAutoMerge|COOLIFY_API|SUPABASE_SERVICE_ROLE_KEY/);
  assert.match(workflow,/--max-budget-usd 5/);
+});
+
+test('published receipt removes only labels still present and safely retries',async()=>{
+ const item={...ticket(77),labels:{nodes:[{id:'running'}]}}, updates=[];
+ const linear={getIssue:async()=>item,updateIssue:async(id,input)=>{
+  for(const removed of input.removedLabelIds) assert.ok(item.labels.nodes.some(l=>l.id===removed),'Linear rejects removing an absent label');
+  updates.push(input);item.labels.nodes=item.labels.nodes.filter(l=>!input.removedLabelIds.includes(l.id));
+ },attach:async()=>{},comment:async()=>{}};
+ for(let i=0;i<2;i++) await report({cfg,linear,issueId:item.id,decision:{publish:true,result:{root_cause:'synthetic'}},prUrl:'https://github.com/Clvrwrk/example/pull/1'});
+ assert.deepEqual(updates[0].removedLabelIds,['running']);
+ assert.deepEqual(updates[1].removedLabelIds,[]);
+ assert.equal(updates[0].assigneeId,owner);
 });
