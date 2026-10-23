@@ -258,9 +258,15 @@ export const BUG_LOG_FIELDS = ['Symptom', 'Impact', 'Root cause', 'Fix', 'Verifi
 export function setBugLogField(description, field, value) {
   if (!BUG_LOG_FIELDS.includes(field)) throw new Error('Unknown bug log field');
   const clean = truncate(stripPii(value).replace(/\s*\n\s*/g, ' '), 1500);
-  const pattern = new RegExp(`^- \\*\\*${field.replace(/ /g, '\\s')}:\\*\\*.*$`, 'm');
+  const pattern = new RegExp(`^[ \\t]*[-*+]\\s+\\*\\*${field.replace(/ /g, '\\s+')}:\\*\\*.*$`, 'gm');
   const line = `- **${field}:** ${clean}`;
-  if (pattern.test(description)) return description.replace(pattern, () => line);
+  let found = false;
+  const updated = description.replace(pattern, () => {
+    if (found) return '';
+    found = true;
+    return line;
+  });
+  if (found) return updated;
   const heading = /^## Bug log\s*$/m;
   if (heading.test(description)) return description.replace(heading, match => `${match}\n${line}`);
   return `${description.trimEnd()}\n\n## Bug log\n${line}\n`;
