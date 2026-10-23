@@ -181,7 +181,7 @@ jobs:
           claude_args: >-
             --max-turns 50
             --max-budget-usd 5
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm run:*),Bash(npm test:*),Bash(npx vitest:*),Bash(npx playwright test:*),Bash(node scripts/:*),Bash(python3 scripts/:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(ls:*),Bash(grep:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm run:*),Bash(npm test:*),Bash(npx vitest:*),Bash(npx playwright test:*),Bash(node scripts/:*),Bash(node --test:*),Bash(python3 scripts/:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(ls:*),Bash(grep:*)"
             --disallowedTools "WebFetch,WebSearch"
       - name: Package the change under the patch policy (no secrets)
         if: ${{ !cancelled() }}
