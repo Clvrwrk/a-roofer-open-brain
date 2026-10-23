@@ -2,6 +2,8 @@
 // per component from the system that actually knows (D2): pg_cron run details, the
 // host-job report table, feed freshness, and Better Stack monitors + heartbeats.
 // Colour rules are D5, applied by classifyScheduled() / classifyFeed() below.
+import {loadHailReconReceipt} from "./hailrecon-state";
+import {BUSINESS_SYNC_PROVIDERS,integrationGroup} from "./sync-scope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SERVICE_AGENT_IDENTITIES, getServiceTokenHashEnvKey } from "./access-control";
 import { loadBetterStackSnapshot, type BetterStackHeartbeat, type BetterStackMonitor } from "./betterstack.server";
@@ -36,6 +38,7 @@ export interface RuntimeComponent {
   lastAt: string | null;
   evidence: string[];
   href?: string;
+  commissioned?: boolean;
 }
 
 export interface RuntimeGroup {
@@ -270,6 +273,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const betterStackPromise = loadBetterStackSnapshot(env, now);
   const mainCommitPromise = loadMainCommit(env, now);
   const integrationProbesPromise = probeIntegrations(INTEGRATIONS, env, now);
+  const hailReconPromise=loadHailReconReceipt(client,now);
 
   const [cronRows, hostRows, hbRows, feedRows, outcomeRows] = client
     ? await Promise.all([
@@ -323,9 +327,23 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
     const evidence: string[] = [];
     if (spec.authEnv) evidence.push(r?.credentialConfigured ? `${spec.authEnv} present → authenticated ping` : `${spec.authEnv} not set here → reachability ping`);
     if (spec.credentialHome) evidence.push(`credential lives: ${spec.credentialHome}`);
-    push({ key: spec.key, group: "integrations", kind: "integration", label: spec.label, purpose: spec.purpose, light, headline,
+    push({ key: spec.key, group: integrationGroup(spec.key), kind: "integration", label: spec.label, purpose: spec.purpose, light, headline,
       detail: `${r?.mode ?? "ping"} ${spec.method ?? "GET"} ${r?.url ?? spec.url} · expects HTTP ${expected}${spec.expectBody ? ` with ${spec.expectBody}` : ""}`,
       cadenceLabel: "every 60 s", lastAt: r?.checkedAt ?? null, evidence, href: r?.url ?? undefined });
+  }
+
+  const hailRecon=await hailReconPromise;
+  push({key:'int.hailrecon',group:'integrations',kind:'integration',label:'HailRecon',
+    purpose:'Interactive Hail Maps signed webhook ingestion',light:hailRecon.light,
+    headline:hailRecon.light==='green'&&hailRecon.lastAt?`Latest accepted hail alert ${humanAge(now-Date.parse(hailRecon.lastAt))}`:hailRecon.headline,
+    detail:'Receipt evidence from the existing IHM webhook. Event-driven; this is not proof of every webhook type or every app readback.',
+    cadenceLabel:'event-driven',lastAt:hailRecon.lastAt,evidence:['ihm-webhook-receiver → ihm_hail_alerts'],commissioned:true});
+
+  // Approved scope is explicit even when a live connection is not commissioned.
+  for(const provider of BUSINESS_SYNC_PROVIDERS.filter(p=>!p.commissioned)){
+    push({key:provider.probeKey,group:'integrations',kind:'integration',label:provider.label,
+      purpose:provider.gap,light:'unknown',headline:'Live sync not verified',detail:provider.gap,
+      cadenceLabel:null,lastAt:null,evidence:[],commissioned:false});
   }
 
   // Data feeds.
@@ -423,6 +441,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   // Assemble.
   const groups: RuntimeGroup[] = GROUP_ORDER.map((g) => {
     const list = components.filter((c) => c.group === g.id);
+    if(g.id==='integrations')list.sort((a,b)=>BUSINESS_SYNC_PROVIDERS.findIndex(p=>p.probeKey===a.key)-BUSINESS_SYNC_PROVIDERS.findIndex(p=>p.probeKey===b.key));
     const counts = emptyCounts();
     for (const c of list) counts[c.light]++;
     return { ...g, counts, components: list };

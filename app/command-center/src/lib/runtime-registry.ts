@@ -179,7 +179,9 @@ export const AGENTS: AgentSpec[] = [
 
 export const GROUP_ORDER: Array<{ id: string; label: string; description: string }> = [
   { id: "site", label: "Site & APIs", description: "Outside-in from Better Stack when it is configured; otherwise the app pings its own public routes (a 401 on an API route means the app and its auth gate are up)." },
-  { id: "integrations", label: "Connected systems · direct pings", description: "The Command Center pings each system we depend on itself, once a minute — no third-party monitor in the path. Green = the documented healthy answer: 200, or the code that endpoint gives every anonymous caller where the credential deliberately lives elsewhere." },
+  { id: "integrations", label: "Business connections", description: "HailRecon, CompanyCam, AccuLynx, QBO and National Weather Service / NOAA. Connectivity is separate from successful data sync. An unverified connection stays unknown until its live ingestion and app readback are proven." },
+  { id: "platform", label: "Platform & security", description: "Database, authentication, deployment, communications and monitoring services that support our app. These checks remain active and are separate from business data connections." },
+  { id: "accounting-inputs", label: "Supplier accounting inputs", description: "ABC Supply and SRS/QXO invoice imports remain active accounting inputs, as confirmed by Chris. They are separate from the five business connections." },
   { id: "feeds", label: "Data feeds", description: "Is the data the work surfaces read actually current? Green-but-empty is yellow on purpose." },
   { id: "pg_cron", label: "Scheduled jobs · database (pg_cron)", description: "Latest run result, time since last success, and the Better Stack heartbeat." },
   { id: "systemd", label: "Scheduled jobs · agent host (systemd)", description: "Reported by each unit's ExecStopPost hook (mig 286); heartbeat from Better Stack." },

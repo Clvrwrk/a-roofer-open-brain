@@ -1,5 +1,9 @@
 # Bridge Layer — Cleverwork Roofer Brain
 
+## Current business scope — 2026-10-23
+
+Chris’s approved provider list is **HailRecon, CompanyCam, AccuLynx, QBO and National Weather Service / NOAA**, feeding **CC, CRM, HR, PM and Admin** through the shared authorized backend. The current status and remaining commissioning work are in [business-sync-scope.md](../../docs/delivery/PEC-755/business-sync-scope.md); the machine-readable catalog is [sync-scope.ts](../../app/command-center/src/lib/sync-scope.ts). Platform/security services remain monitored separately. ABC Supply and SRS/QXO invoice imports remain active accounting inputs, as explicitly confirmed by Chris. The older adapter taxonomy below is historical capability documentation, not authorization to activate extra providers or a brain MCP.
+
 The bridge layer is how external operational systems feed the brain. Every bridge is an **adapter**: it
 ingests data from a source system and produces **atoms** conforming to `public.thoughts` (plus the
 property-first extension columns in `schemas/cleverwork-roofer/`) along with resolved or created rows in

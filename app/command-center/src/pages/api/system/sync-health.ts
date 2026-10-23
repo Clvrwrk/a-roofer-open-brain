@@ -1,3 +1,4 @@
+import {shouldMonitorComponent,syncScope} from "@lib/sync-scope";
 import type { APIRoute } from "astro";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -23,7 +24,7 @@ export const POST: APIRoute = async ({locals,request}) => {
     if(error)return jsonApiResponse({error:'watchdog_record_failed'},{status:503});
   }
   const board = await loadRuntimeBoard();
-  for (const c of board.groups.flatMap(g=>g.components).filter(c=>["integrations","feeds","site"].includes(c.group))) {
+  for (const c of board.groups.flatMap(g=>g.components).filter(shouldMonitorComponent)) {
     const {error:probeError}=await client.rpc("record_integration_probe",{p_component:c.key,p_ok:c.light==="green",p_code:c.light==="unknown"?"probe_unverified":"probe_failed"});
     if(probeError)return jsonApiResponse({error:"probe_record_failed"},{status:503});
   }
@@ -35,5 +36,5 @@ export const POST: APIRoute = async ({locals,request}) => {
   const {data:health,error:healthError}=await client.from("integration_sync_health").select("component_key,consecutive_failures,failure_code,updated_at").order("component_key");
   if(healthError)return jsonApiResponse({error:"health_unavailable"},{status:503});
   const activeHealth=health?.filter(h=>!['runtime:systemd.openbrain-jt-sentinel','int.jobtread'].includes(h.component_key));
-  return jsonApiResponse({status:delivery.healthy?'ok':'relay_failed',...delivery,health:activeHealth,buildCommit:board.deploy?.buildCommit,monitorAt:health?.find(h=>h.component_key==='monitor:integration-sync-health')?.updated_at},{status:delivery.healthy?200:503});
+  return jsonApiResponse({status:delivery.healthy?'ok':'relay_failed',...delivery,scope:syncScope(),health:activeHealth,buildCommit:board.deploy?.buildCommit,monitorAt:health?.find(h=>h.component_key==='monitor:integration-sync-health')?.updated_at},{status:delivery.healthy?200:503});
 };
