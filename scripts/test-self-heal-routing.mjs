@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {readConfig, ownsIssue, repositoryMarker} from './self-heal/lib.mjs';
+import {readConfig, ownsIssue, repositoryMarker,setBugLogField} from './self-heal/lib.mjs';
 import {select,recordVerification,report} from './self-heal/autofix-queue.mjs';
 import {runTriage} from './self-heal/sentry-to-linear.mjs';
 import {evaluatePatch} from './self-heal/patch-policy.mjs';
@@ -65,4 +65,14 @@ test('published receipt removes only labels still present and safely retries',as
  assert.deepEqual(updates[0].removedLabelIds,['running']);
  assert.deepEqual(updates[1].removedLabelIds,[]);
  assert.equal(updates[0].assigneeId,owner);
+});
+
+test('Linear-normalized bullets replace and deduplicate bug log fields',()=>{
+ const before='## Bug log\n* **Root cause:** pending\n- **Root cause:** old\n* **Fix:** pending\n* **Verification:** pending\n';
+ const once=setBugLogField(before,'Root cause','confirmed cause');
+ const twice=setBugLogField(once.replace(/^- /gm,'* '),'Root cause','confirmed cause');
+ assert.equal((twice.match(/\*\*Root cause:\*\*/g)||[]).length,1);
+ assert.match(twice,/Root cause:\*\* confirmed cause/);
+ assert.doesNotMatch(twice,/Root cause:\*\* (pending|old)/);
+ assert.match(twice,/Fix:\*\* pending/);
 });
