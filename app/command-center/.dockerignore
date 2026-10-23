@@ -3,3 +3,10 @@
 dist
 node_modules
 npm-debug.log*
+
+# Keep local credentials out of every build stage.
+.env
+.env.*
+**/.env
+**/.env.*
+.npmrc

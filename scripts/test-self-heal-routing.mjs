@@ -84,3 +84,12 @@ test('required and independent verification both block high or critical dependen
  assert.match(required,/npm audit --audit-level=high --prefix app\/command-center/);
  assert.match(independent,/- id: typecheck_build_unit\s+run: npm audit --audit-level=high --prefix app\/command-center && npm test/);
 });
+
+
+test('private build tokens use secret mounts and environment files stay outside the image context',()=>{
+ const docker=readFileSync(new URL('../app/command-center/Dockerfile',import.meta.url),'utf8');
+ const ignore=readFileSync(new URL('../app/command-center/.dockerignore',import.meta.url),'utf8');
+ assert.doesNotMatch(docker,/^\s*(ARG|ENV)\s+SENTRY_AUTH_TOKEN/m);
+ assert.match(docker,/RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN/);
+ for(const rule of ['.env','.env.*','**/.env','**/.env.*','.npmrc']) assert.ok(ignore.split('\n').includes(rule),rule);
+});
