@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {it,expect} from 'vitest';
 import {BUSINESS_SYNC_PROVIDERS,APP_SYNC_DESTINATIONS,integrationGroup,shouldMonitorComponent,syncScope} from './sync-scope';
 it('limits the business provider catalog to Chris’s five services',()=>{
@@ -19,4 +20,21 @@ it('never labels an uncommissioned connection healthy or polls a guessed endpoin
  expect(BUSINESS_SYNC_PROVIDERS.find(p=>p.id==='weather')?.label).toBe('National Weather Service / NOAA');
  expect(shouldMonitorComponent({group:'integrations',commissioned:false})).toBe(false);
  expect(BUSINESS_SYNC_PROVIDERS.filter(p=>!p.commissioned).every(p=>!('url' in p))).toBe(true);
+});
+
+it('excludes exact retired registrations without dropping active providers or similar names',()=>{
+ for(const key of ['runtime:systemd.openbrain-maya-gate','runtime:systemd.openbrain-maya-qa','runtime:systemd.openbrain-jt-sentinel','int.jobtread']) expect(shouldMonitorComponent({key,group:'platform'})).toBe(false);
+ expect(shouldMonitorComponent({key:'int.companycam',group:'integrations'})).toBe(true);
+ expect(shouldMonitorComponent({key:'supplier:carlos-amaya',group:'accounting-inputs'})).toBe(true);
+});
+
+it('keeps retired identities out of provider provisioning and active bridge bindings',()=>{
+ const provision=readFileSync(new URL('../../../../scripts/betterstack-provision.sh',import.meta.url),'utf8');
+ expect(provision).not.toContain('systemd.openbrain-maya-');
+ expect(provision).toContain('pgcron.wip-ar-master-nightly|pg_cron|21|');
+ expect(provision).toContain('pgcron.wip-ar-week-roll-thursday|pg_cron|22|');
+ for(const bridge of ['unstructured','media-ai']){
+  const metadata=JSON.parse(readFileSync(new URL(`../../../../integrations/bridges/${bridge}/metadata.json`,import.meta.url),'utf8'));
+  expect(metadata.bound_agents).not.toContain('maya');expect(metadata.bound_agents).toContain('ops-conductor');
+ }
 });
