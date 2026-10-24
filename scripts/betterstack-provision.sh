@@ -72,16 +72,14 @@ pgcron.top20_refresh_quarterly|pg_cron|4|PE-CC · pg_cron 4 · top20_refresh_qua
 pgcron.acculynx-hourly-sync|pg_cron|5|PE-CC · pg_cron 5 · acculynx-hourly-sync|3600|900
 pgcron.acculynx-reconcile|pg_cron|6|PE-CC · pg_cron 6 · acculynx-reconcile|600|600
 pgcron.acculynx-alert-check|pg_cron|7|PE-CC · pg_cron 7 · acculynx-alert-check|900|600
-pgcron.wip-ar-master-nightly|pg_cron|11|PE-CC · pg_cron 11 · wip-ar-master-nightly|86400|7200
-pgcron.wip-ar-week-roll-thursday|pg_cron|12|PE-CC · pg_cron 12 · wip-ar-week-roll-thursday|604800|21600
+pgcron.wip-ar-master-nightly|pg_cron|21|PE-CC · pg_cron 21 · wip-ar-master-nightly|86400|7200
+pgcron.wip-ar-week-roll-thursday|pg_cron|22|PE-CC · pg_cron 22 · wip-ar-week-roll-thursday|604800|21600
 pgcron.refresh-office-pricing-matviews|pg_cron|13|PE-CC · pg_cron 13 · refresh-office-pricing-matviews|900|600
 pgcron.nightly-silo-assertions|pg_cron|14|PE-CC · pg_cron 14 · nightly-silo-assertions|86400|7200
 pgcron.service-matview-refresh-requests|pg_cron|15|PE-CC · pg_cron 15 · service-matview-refresh-requests|300|600
 pgcron.refresh-overhead-matview|pg_cron|16|PE-CC · pg_cron 16 · refresh-overhead-matview|86400|7200
 pgcron.refresh-order-acculynx-match|pg_cron|18|PE-CC · pg_cron 18 · refresh-order-acculynx-match|900|600
 systemd.openbrain-abc-sync|systemd|openbrain-abc-sync.service|PE-CC · systemd · openbrain-abc-sync (03:30 ET)|86400|7200
-systemd.openbrain-maya-gate|systemd|openbrain-maya-gate.service|PE-CC · systemd · openbrain-maya-gate (15 min)|900|600
-systemd.openbrain-maya-qa|systemd|openbrain-maya-qa.service|PE-CC · systemd · openbrain-maya-qa (04:30 CT)|86400|7200
 systemd.openbrain-qbo-thursday-sync|systemd|openbrain-qbo-thursday-sync.service|PE-CC · systemd · openbrain-qbo-thursday-sync (20:00 CT)|86400|7200
 systemd.openbrain-site-sweep|systemd|openbrain-site-sweep.service|PE-CC · systemd · openbrain-site-sweep (06:00 CT)|86400|7200
 systemd.openbrain-wip-pack-thursday|systemd|openbrain-wip-pack-thursday.service|PE-CC · systemd · openbrain-wip-pack-thursday (06:00 CT)|86400|7200
