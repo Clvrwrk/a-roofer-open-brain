@@ -26,13 +26,14 @@ it('returns unavailable when an alert was accepted but the durable acknowledgeme
 });
 
 it('continues platform and supplier monitoring while exposing uncommissioned business gaps',async()=>{
- const db={rpc:vi.fn().mockResolvedValue({data:{pending:0,oldestPendingAt:null},error:null}),from:(table:string)=>table==='integration_sync_events'?{select:()=>({is:()=>({not:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})})}:{select:()=>({order:async()=>({data:[],error:null})})}};
+ const db={rpc:vi.fn().mockResolvedValue({data:{pending:0,oldestPendingAt:null},error:null}),from:(table:string)=>table==='integration_sync_events'?{select:()=>({is:()=>({not:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})})}:{select:()=>({order:async()=>({data:[{component_key:'runtime:systemd.openbrain-maya-gate'},{component_key:'int.companycam'}],error:null})})}};
  client.create.mockReturnValue({client:db});
  const runtime=await import('@lib/runtime-status');
- vi.mocked(runtime.loadRuntimeBoard).mockResolvedValueOnce({groups:[{components:[{key:'int.betterstack',group:'platform',light:'red'},{key:'int.abc-supply',group:'accounting-inputs',light:'green'},{key:'int.weather',group:'integrations',light:'unknown',commissioned:false}]}]} as any);
+ vi.mocked(runtime.loadRuntimeBoard).mockResolvedValueOnce({groups:[{components:[{key:'runtime:systemd.openbrain-maya-gate',group:'platform',light:'red'},{key:'int.betterstack',group:'platform',light:'red'},{key:'int.abc-supply',group:'accounting-inputs',light:'green'},{key:'int.weather',group:'integrations',light:'unknown',commissioned:false}]}]} as any);
  const response=await POST({locals:{actor:{type:'service_agent',id:'ob-auditor'}}} as any);
  expect(db.rpc).toHaveBeenCalledWith('record_integration_probe',{p_component:'int.betterstack',p_ok:false,p_code:'probe_failed'});
  expect(db.rpc).toHaveBeenCalledWith('record_integration_probe',{p_component:'int.abc-supply',p_ok:true,p_code:'probe_failed'});
  expect(db.rpc).not.toHaveBeenCalledWith('record_integration_probe',expect.objectContaining({p_component:'int.weather'}));
- const body=await response.json();expect(body.scope.providers).toHaveLength(5);expect(body.scope.destinations).toHaveLength(5);expect(body.scope.gaps).toHaveLength(1);
+ expect(db.rpc).not.toHaveBeenCalledWith('record_integration_probe',expect.objectContaining({p_component:'runtime:systemd.openbrain-maya-gate'}));
+ const body=await response.json();expect(body.health.map((h:any)=>h.component_key)).toEqual(['int.companycam']);expect(body.scope.providers).toHaveLength(5);expect(body.scope.destinations).toHaveLength(5);expect(body.scope.gaps).toHaveLength(1);
 });

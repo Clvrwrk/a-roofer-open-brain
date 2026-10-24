@@ -1,4 +1,4 @@
-import {shouldMonitorComponent,syncScope} from "@lib/sync-scope";
+import {shouldMonitorComponent,syncScope,isActiveSyncComponent,RETIRED_SYNC_FILTER} from "@lib/sync-scope";
 import type { APIRoute } from "astro";
 import { jsonApiResponse } from "@lib/agent-api";
 import { createServerSupabaseClient } from "@lib/supabase.server";
@@ -29,12 +29,12 @@ export const POST: APIRoute = async ({locals,request}) => {
     if(probeError)return jsonApiResponse({error:"probe_record_failed"},{status:503});
   }
   const {data,error} = await client.from("integration_sync_events")
-    .select("event_id,component_key,failures,failure_code,incident_id,occurred_at")
-    .is("delivered_at",null).not("component_key","in","(runtime:systemd.openbrain-jt-sentinel,int.jobtread)").order("created_at").limit(20);
+    .select("event_id,component_key,failures,failure_code,incident_id,occurred_at,created_at")
+    .is("delivered_at",null).not("component_key","in",RETIRED_SYNC_FILTER).order("created_at").limit(20);
   if(error) { captureException(new Error("sync_health_outbox_unavailable")); return jsonApiResponse({error:"health_unavailable"},{status:503}); }
   const delivery=await deliverSyncHealth(data??[],client,sendSyncHealthEvent);
   const {data:health,error:healthError}=await client.from("integration_sync_health").select("component_key,consecutive_failures,failure_code,updated_at").order("component_key");
   if(healthError)return jsonApiResponse({error:"health_unavailable"},{status:503});
-  const activeHealth=health?.filter(h=>!['runtime:systemd.openbrain-jt-sentinel','int.jobtread'].includes(h.component_key));
+  const activeHealth=health?.filter(h=>isActiveSyncComponent(h.component_key));
   return jsonApiResponse({status:delivery.healthy?'ok':'relay_failed',...delivery,scope:syncScope(),health:activeHealth,buildCommit:board.deploy?.buildCommit,monitorAt:health?.find(h=>h.component_key==='monitor:integration-sync-health')?.updated_at},{status:delivery.healthy?200:503});
 };

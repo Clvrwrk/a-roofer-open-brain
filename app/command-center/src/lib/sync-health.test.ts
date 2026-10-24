@@ -15,3 +15,13 @@ describe("sync health relay",()=>{
   expect(await sendSyncHealthEvent(e,vi.fn().mockRejectedValue(new Error("network")))).toBe(false);
  });
 });
+
+it('uses the failure occurrence, including legacy created_at fallback, instead of relay time',async()=>{
+ const fn=vi.fn().mockResolvedValue(new Response('{}',{status:200}));
+ for(const dates of [{occurred_at:'2026-10-23T21:00:00Z',created_at:'2026-10-23T22:00:00Z'},{occurred_at:null,created_at:'2026-10-23T21:00:00Z'}]){
+  await sendSyncHealthEvent({...e,...dates},fn);
+  const event=JSON.parse(fn.mock.calls.at(-1)![1].body.split('\n')[2]);
+  expect(event.timestamp).toBe(Date.parse('2026-10-23T21:00:00Z')/1000);
+  expect(event.extra.occurred_at).toBe('2026-10-23T21:00:00Z');
+ }
+});
