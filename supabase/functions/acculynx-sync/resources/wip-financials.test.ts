@@ -10,17 +10,35 @@ Deno.test('financial pass archives source, pages all invoices, then marks financ
  const result=await syncWipFinancials(sb,acct,'fixture',Date.now()+10000,'batch',fetcher,0);
  assertEquals(result.walked,['job']);assertEquals(calls,3);
  assertEquals(writes.filter(x=>x.table==='acculynx_invoices')[0].rows.length,2);
- assertEquals(writes.at(-1).table,'acculynx_job_financials');
+ assertEquals(writes.at(-1).table,'acculynx_invoices');
  assertEquals(writes[0].table,'acculynx_raw');
 });
-Deno.test('bad financial or truncated invoice payload never makes money fresh',async()=>{
- for(const badFinancial of [true,false]){
- const {sb,writes}=setup();const fetcher=(async(input:any)=>String(input).includes('/financials')?response(badFinancial?{error:'bad'}:{approvedJobValue:100,balanceDue:20}):response({count:1,items:[]})) as typeof fetch;
+Deno.test('invalid financial payload never makes money fresh',async()=>{
+ const {sb,writes}=setup();const fetcher=(async(input:any)=>String(input).includes('/financials')?response({error:'bad'}):response({count:1,items:[]})) as typeof fetch;
  const result=await syncWipFinancials(sb,acct,'fixture',Date.now()+10000,'batch',fetcher,0);
  assertEquals(result.errors,1);assertEquals(writes.some(x=>x.table==='acculynx_job_financials'),false);
- }
+});
+Deno.test('truncated invoice payload keeps a valid financial snapshot fresh',async()=>{
+ const {sb,writes}=setup();const fetcher=(async(input:any)=>String(input).includes('/financials')?response({approvedJobValue:100,balanceDue:20}):response({count:1,items:[]})) as typeof fetch;
+ const result=await syncWipFinancials(sb,acct,'fixture',Date.now()+10000,'batch',fetcher,0);
+ assertEquals(result.errors,1);assertEquals(writes.some(x=>x.table==='acculynx_job_financials'),true);
 });
 Deno.test('budget stop performs no provider call and remains resumable',async()=>{
  const {sb}=setup();let calls=0;const result=await syncWipFinancials(sb,acct,'fixture',0,'batch',(()=>{calls++;throw new Error();}) as typeof fetch,0);
  assertEquals(calls,0);assertEquals(result.walked,[]);
+});
+Deno.test('persists job financials before invoice headers finish paging',async()=>{
+ const {sb,writes}=setup();
+ const fetcher=(async(input:any)=>String(input).includes('/financials')?response({approvedJobValue:100,balanceDue:20}):response({count:1,items:[{id:'inv1',totalPrice:100,balanceDue:20}]})) as typeof fetch;
+ await syncWipFinancials(sb,acct,'fixture',Date.now()+10000,'batch',fetcher,0);
+ const finIdx=writes.findIndex(x=>x.table==='acculynx_job_financials');
+ const invIdx=writes.findIndex(x=>x.table==='acculynx_invoices');
+ assertEquals(finIdx>=0,true);assertEquals(invIdx>=0,true);assertEquals(finIdx<invIdx,true);
+});
+Deno.test('budget stop during invoice paging still refreshes job financial snapshot',async()=>{
+ const {sb,writes}=setup();
+ const fetcher=(async(input:any)=>String(input).includes('/financials')?response({approvedJobValue:100,balanceDue:20}):response({count:50,items:[{id:'inv1',totalPrice:100,balanceDue:20}]})) as typeof fetch;
+ const result=await syncWipFinancials(sb,acct,'fixture',Date.now()+500,'batch',fetcher,0);
+ assertEquals(result.walked,['job']);
+ assertEquals(writes.some(x=>x.table==='acculynx_job_financials'),true);
 });

@@ -19,9 +19,13 @@ export async function syncWipFinancials(sb:any,acct:any,apiKey:string,deadline:n
  for(const row of candidates){
   if(Date.now()>=deadline)break;
   const id=row.job_id;const ctx={account_key:acct.account_key,market:acct.market,job_id:id,now:new Date().toISOString()};
+  let financialPersisted=false;
   try{
    const financial=await get(`/jobs/${encodeURIComponent(id)}/financials`,'job_financials');
    if(financial.status!==200||!isJobFinancialsBody(financial.body))throw new Error('invalid_financial_observation');
+   const {error:financialWriteError}=await sb.from('acculynx_job_financials').upsert(mapJobFinancials(financial.body,ctx));
+   if(financialWriteError)throw new Error('financial_write_failed');
+   financialPersisted=true;
    const headers:any[]=[];let page=0;let complete=false;
    while(Date.now()<deadline&&page<200){
     const invoices=await get(`/jobs/${encodeURIComponent(id)}/invoices?pageSize=25&pageStartIndex=${page}`,'invoices');
@@ -35,13 +39,14 @@ export async function syncWipFinancials(sb:any,acct:any,apiKey:string,deadline:n
     if(!body.items.length)throw new Error('truncated_invoice_observation');
     page++;
    }
-   if(!complete)break; // resumable budget stop, never falsely fresh
    if(headers.length){const {error}=await sb.from('acculynx_invoices').upsert(headers);if(error)throw new Error('invoice_header_write_failed');}
-   const {error}=await sb.from('acculynx_job_financials').upsert(mapJobFinancials(financial.body,ctx));
-   if(error)throw new Error('financial_write_failed');
    walked.push(id);
+   if(!complete)break; // invoice headers resume next pass; money snapshot already fresh
   }catch(e){
-   if((e as Error).message==='financial_budget_stop')break;
+   if((e as Error).message==='financial_budget_stop'){
+    if(financialPersisted&&!walked.includes(id))walked.push(id);
+    break;
+   }
    errors++;
    await sb.from('acculynx_job_walk_errors').insert({account_key:acct.account_key,job_id:id,resource_type:'financial_refresh',sync_batch_id:batchId,error_message:(e as Error).message,http_status:null});
   }

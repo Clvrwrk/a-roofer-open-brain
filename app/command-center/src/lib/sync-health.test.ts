@@ -10,6 +10,13 @@ describe("sync health relay",()=>{
   expect(JSON.parse(parts[2]).event_id).toBe(e.event_id.replaceAll("-",""));
   expect(parts[2]).not.toContain("sensitive");
  });
+ it("tags stale financial backlog with stale_financials, not provider_unavailable",async()=>{
+  const fn=vi.fn().mockResolvedValue(new Response("{}",{status:200}));
+  await sendSyncHealthEvent({...e,failure_code:"stale_financials",component_key:"acculynx-office:wichita"},fn);
+  const event=JSON.parse(fn.mock.calls[0][1].body.split("\n")[2]);
+  expect(event.tags.error_code).toBe("stale_financials");
+  expect(event.extra.failure_code).toBe("stale_financials");
+ });
  it("keeps failed deliveries pending",async()=>{
   expect(await sendSyncHealthEvent(e,vi.fn().mockResolvedValue(new Response("",{status:429})))).toBe(false);
   expect(await sendSyncHealthEvent(e,vi.fn().mockRejectedValue(new Error("network")))).toBe(false);
