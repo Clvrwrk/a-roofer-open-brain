@@ -1,53 +1,60 @@
 # Open Brain Command Center
 
-Astro SSR human-in-the-loop command surface for Pro Exteriors. The app reads live server-side Supabase mirrors, writes dashboard decisions to durable workflow tables, and mirrors those decisions to Slack through `slack_mirror_events`.
+Astro SSR operations and review application for Pro Exteriors. It reads Supabase-backed operational mirrors server-side, presents decision workflows and exposes authorized agent APIs. WorkOS gates the production app; service tokens authorize selected `/api/*` routes rather than human HTML pages.
 
-## Run locally
+## Local setup
 
-```bash
-npm install
-npm run dev
-```
-
-Open `http://127.0.0.1:4321`, or pass a port explicitly when another dev server is already running:
+Use Node.js 22 and npm, from this directory:
 
 ```bash
-npm run dev -- --port 4326
+npm ci
+npm test
+npm run build
+HOST=127.0.0.1 PORT=4399 \
+COMMAND_CENTER_SLACK_RUNTIME=off COMMAND_CENTER_PREWARM=off \
+npm run start:web
 ```
 
-## Routes
+Open [127.0.0.1:4399](http://127.0.0.1:4399); Ctrl-C stops the foreground process. The no-secret path renders a limited local app and does not establish live-data readiness. `npm run dev` starts the interactive Astro development server. `npm run check` currently aliases the build; it is not a separate comprehensive type checker.
 
-- `/` shows the cross-department live work queue derived from Supabase source tables.
-- `/abc-price-agreement-gaps` shows the ABC fixed-agreement guardrail queue for human review by branch, invoice, SKU, agreement window, and price variance.
-- `/weekly-snapshot` renders the AccuLynx-style two-week productivity snapshot with click-through drilldowns for locations, sales reps, AR, claims, and activity.
-- `/weekly-snapshot/:slice`, `/weekly-snapshot/rep/:rep`, and `/weekly-snapshot/records/:record` render the active drilldown pages behind snapshot metrics, rows, and records.
-- `/accounting` is the Accounting department home for Lucinda, with margin-protection metrics, ABC review work, credit memo state, and the confirmed human authority model.
-- `/operations`, `/sales`, `/marketing`, `/executive`, and `/system` render department home dashboards with source-backed queues.
-- `/operations/:slug`, `/sales/:slug`, `/marketing/:slug`, `/executive/:slug`, and `/system/:slug` render filtered live detail dashboards for queue click-throughs.
-- `/accounting/invoices`, `/accounting/price-agreement-gaps`, `/accounting/credit-memos`, `/accounting/product-matches`, and `/accounting/vendor-regions` render live ABC/Supabase-backed margin-protection dashboards.
-- `/accounting/review-queue`, `/accounting/ar-aging`, `/accounting/insurance-proceeds`, `/accounting/change-orders`, `/accounting/job-costing`, `/accounting/close`, `/accounting/vendor-intake`, and `/accounting/audit-log` render Accounting dashboards from current mirrors and workflow/action tables.
-- `/accounting/credit-memos/:invoice` renders the invoice-level credit memo packet.
-- `/api/product-surface.json` returns the sanitized server-side product/pricing snapshot.
-- `/api/agent/session` returns the current human, named-agent, or service-agent actor and its permitted surfaces.
-- `/api/agent/work-queue` returns the actor-filtered queue for agents that operate without a browser session.
-- `/api/agent/work-queue/:workId/decision` accepts approval, rejection, evidence-request, and resume signals according to actor permissions.
-- `/agents` shows the live agent monitor sourced from department queues, workflow state, Slack mirrors, and auth discovery.
-- `/auth.md` returns the LLM-readable agent-auth instructions for this service.
-- `/.well-known/oauth-protected-resource` returns the protected resource metadata.
-- `/.well-known/oauth-authorization-server` returns the OAuth authorization server metadata with the `agent_auth` block.
-- `/agent/identity`, `/agent/identity/claim`, `/agent/identity/claim/complete`, `/oauth2/token`, `/oauth2/revoke`, and `/agent/event/notify` are reserved POST endpoints that currently return `not_implemented`.
-- `/api/agentmail/webhook` receives AgentMail webhook events and verifies Svix signatures before logging sanitized event metadata.
-- `/healthz` returns a server-side health payload without exposing secrets.
+`npm start` uses the runtime supervisor and can start Slack listeners. The `start:web` command above runs the web server directly. Keep background loops disabled when reviewing a copied checkout. The reviewed Astro preview command reported a wildcard host and runs a daemon; if used, verify its bind address and stop it with `astro preview stop`.
 
-## Runtime notes
+## Configuration
 
-- The app resolves environment variables from process env first, then local `.env` / `.env.local` files found by walking up from the app/runtime path. Production should use Coolify env, not repo files.
-- WorkOS is not enforced in local/default mode. Set `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, and `COMMAND_CENTER_AUTH_MODE=workos` when the real auth layer is enabled.
-- The product surface uses server-only Supabase credentials. Set `SUPABASE_URL` or `PUBLIC_SUPABASE_URL`, plus `SUPABASE_SERVICE_ROLE_KEY`. Do not expose the service-role key with a `PUBLIC_` variable.
-- The weekly snapshot uses live Supabase mirrors only: CRM pipeline, AccuLynx job mirror health, ABC invoice/review rows, and dashboard action logs. Missing payment/QB data renders as a live empty/unavailable state, never copied screenshot numbers.
-- Agent auth discovery defaults to `https://cc.proexteriorsus.net`. Override with `COMMAND_CENTER_PUBLIC_URL` or `AGENT_AUTH_ISSUER` for another deployment origin.
-- Agent service API access uses `AGENT_SERVICE_TOKENS` for phase-1 bearer-token auth. Format: `agent-id:token,other-agent:token`. Prefer vault-backed per-agent tokens in production and rotate any key that was visible in chat.
-- AgentMail uses `AGENTMAIL_API_KEY`, `AGENTMAIL_DOMAIN`, `AGENTMAIL_WEBHOOK_URL`, and `AGENTMAIL_WEBHOOK_SECRET` or `AGENTMAIL_WEBHOOK_SECRETS`. The production webhook URL is `https://cc.proexteriorsus.net/api/agentmail/webhook`.
-- Astro `security.checkOrigin` is disabled because OAuth token/revocation and agent SET endpoints must accept machine-to-machine POSTs without browser Origin headers. Those routes must enforce JWT, issuer, audience, replay, and token checks in the runtime phase.
-- Agent runtime calls should use server-only environment variables such as `AGENT_RUNTIME_URL`.
-- Dashboard decisions write to `dashboard_work_items` and `dashboard_action_log`, then create `slack_mirror_events` rows. Slack delivery requires the bot to be in the configured mirror channel or have the required Slack scope.
+Variable names are documented in [`config/.env.example`](../../config/.env.example). Process variables take precedence; the runtime also walks ancestors for `.env` and `.env.local`. Moving source folders can change which file is discovered. Do not reuse a production credential file for ordinary local development or put server credentials into browser bundles.
+
+The production Docker context is this directory: its package files, `public/`, `runtime/` and built `dist/` are app-local. The approved pipeline builds on push to the configured branch; source-path moves require CI and Coolify configuration review.
+
+## Route families
+
+| Path | Current role |
+| --- | --- |
+| `/` | Territory Map. |
+| `/accounting` | Redirect to `/accounting/invoice-audit`. |
+| `/accounting/*` | Invoice audit, agreement workflows, credit memos, Friday WIP/AR and accounting review. |
+| `/operations/*` | Operations queues, estimate/order audits and review work. |
+| `/executive/*` | Pipeline, cash flow/runway and fixed-cost surfaces. |
+| `/sales/*`, `/marketing/*`, `/system/*` | Department and system routes; live Sales paths may be owned by the CRM companion router. |
+| `/agents`, `/api/system/sync-health` | Runtime and integration monitoring with authorization/readiness distinctions. |
+| `/design-system/*` | Living tokens, components, decisions and agent handbook. |
+| `/api/agent/*` | Authorized agent identities, queues and supported actions. |
+| `/auth/*` | WorkOS sign-in/session flows. |
+| `/oauth2/*` and reserved OAuth endpoints | Partial/reserved interfaces; do not infer a complete OAuth authorization server. |
+| `/healthz` | Public liveness and build identity only. |
+
+The authoritative route list is [`src/pages/`](src/pages/), not an exhaustive prose enumeration. A route's presence does not establish its production readiness. See the [CC/CRM proxy boundary](../../deployment/proxy/README.md) before changing `/sales` routing.
+
+## Verification
+
+```bash
+npm test
+npm run build
+```
+
+The root [Verify Command Center workflow](../../.github/workflows/verify.yml) additionally runs dependency audit, root self-heal checks and Edge observer/relay tests. Sentry upload credentials are optional for a local build; without them release/source-map upload is skipped with a warning.
+
+Check `/healthz` for the deployed `buildCommit`, then verify protected API denials and approved authenticated workflows. Local tests, public liveness, live-data readiness and human/device acceptance are different evidence. The historical root `verify-deployment.sh` has not been reconciled with the current protected routes and reduced public-health response.
+
+## Shared contracts
+
+Read the [repository conventions](../../CONVENTIONS.md), [CRM companion boundary](../../docs/111-crm-pwa-companion-repo.md), [pricing/UOM silo rules](../../docs/105-price-agreement-silo-rules.md), [design system](../../docs/112-design-system-site.md) and [self-healing loop](../../docs/127-self-healing-loop.md). Shared migrations, ingestion functions, provider adapters and deployment files remain at their repository-level roots.

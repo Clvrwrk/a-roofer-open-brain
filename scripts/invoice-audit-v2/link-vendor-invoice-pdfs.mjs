@@ -8,11 +8,12 @@
 // Filename convention: invoice_<INVOICE_NUMBER>.pdf (other files reported as skipped).
 // Idempotent: re-upload overwrites the same storage path; upserts by (vendor, invoice).
 
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-const ROOT = resolve(new URL("../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
 
 function parseDotenv(path) {
