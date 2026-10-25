@@ -34,11 +34,12 @@
  *      LINEAR_API_KEY, SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY — each optional;
  *      the sweep degrades loudly, never silently.
  */
+import { fileURLToPath } from "node:url";
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, relative, extname, dirname } from "node:path";
 import { execSync } from "node:child_process";
 
-const REPO = process.env.SWEEP_REPO_ROOT || join(dirname(new URL(import.meta.url).pathname), "..");
+const REPO = process.env.SWEEP_REPO_ROOT || join(dirname(fileURLToPath(new URL(import.meta.url))), "..");
 const SRC = join(REPO, "app/command-center/src");
 const PAGES = join(SRC, "pages");
 const SITE = process.env.SWEEP_SITE || "https://cc.proexteriorsus.net";

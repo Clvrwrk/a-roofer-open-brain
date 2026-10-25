@@ -19,11 +19,12 @@
  * silently stops covering pages that get added, which is how orphans survive.
  * State: <STATE_DIR>/chaos-cycle.json, the current cycle's already-used routes.
  */
+import { fileURLToPath } from "node:url";
 import { readdirSync, statSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, relative, extname, dirname } from "node:path";
 import { createHash } from "node:crypto";
 
-const REPO = process.env.CHAOS_REPO_ROOT || join(dirname(new URL(import.meta.url).pathname), "..");
+const REPO = process.env.CHAOS_REPO_ROOT || join(dirname(fileURLToPath(new URL(import.meta.url))), "..");
 const PAGES = join(REPO, "app/command-center/src/pages");
 const STATE_DIR = process.env.CHAOS_STATE_DIR || join(process.env.HOME || "/root", ".site-sweep");
 const STATE = join(STATE_DIR, "chaos-cycle.json");

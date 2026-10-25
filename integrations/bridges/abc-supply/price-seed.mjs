@@ -20,10 +20,11 @@
 //   node price-seed.mjs                           # full sweep (all branches)
 //   node price-seed.mjs --cycle=2026-06           # explicit pricing cycle key
 
+import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ENV_PATH = resolve(ROOT, ".env");
 
 // ---- env (manual parse; last value wins so ABC_SUPPLY_ENV=Production overrides a stray Sandbox) ----
@@ -63,7 +64,7 @@ const SB_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 if (!CLIENT_ID || !CLIENT_SECRET) { console.error("Missing ABC_SUPPLY_CLIENT_ID/SECRET"); process.exit(1); }
 if (!SB_URL || !SB_KEY) { console.error("Missing Supabase URL/service-role key"); process.exit(1); }
 
-const RUN_DIR = resolve(new URL(".", import.meta.url).pathname, ".price-seed-runs");
+const RUN_DIR = resolve(fileURLToPath(new URL(".", import.meta.url)), ".price-seed-runs");
 mkdirSync(RUN_DIR, { recursive: true });
 const CKPT = resolve(RUN_DIR, `checkpoint-${SCOPE}-${CYCLE}.json`);
 const ckpt = existsSync(CKPT) ? JSON.parse(readFileSync(CKPT, "utf8")) : { done: [], stats: {} };
