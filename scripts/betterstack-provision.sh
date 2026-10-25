@@ -42,6 +42,8 @@ status|/api/invoice-audit/pending-verification|PE-CC · api · invoice-audit/pen
 status|/api/executive/cash-runway.json|PE-CC · api · executive/cash-runway|300|401
 status|/api/agent/work-queue|PE-CC · api · agent/work-queue|300|401
 status|/api/credit-memos/pending|PE-CC · api · credit-memos/pending|300|401
+status|/api/companycam/photos|PE-CC · api · companycam/photos|300|401
+status|/api/weather|PE-CC · api · weather|300|401
 status|/api/accounting/friday-wip.json|PE-CC · api · accounting/friday-wip|300|401
 EOF
 )
@@ -79,6 +81,7 @@ pgcron.nightly-silo-assertions|pg_cron|14|PE-CC · pg_cron 14 · nightly-silo-as
 pgcron.service-matview-refresh-requests|pg_cron|15|PE-CC · pg_cron 15 · service-matview-refresh-requests|300|600
 pgcron.refresh-overhead-matview|pg_cron|16|PE-CC · pg_cron 16 · refresh-overhead-matview|86400|7200
 pgcron.refresh-order-acculynx-match|pg_cron|18|PE-CC · pg_cron 18 · refresh-order-acculynx-match|900|600
+systemd.openbrain-sync-health-relay|systemd|openbrain-sync-health-relay.service|PE-CC · systemd · openbrain-sync-health-relay (minute)|60|120
 systemd.openbrain-abc-sync|systemd|openbrain-abc-sync.service|PE-CC · systemd · openbrain-abc-sync (03:30 ET)|86400|7200
 systemd.openbrain-qbo-thursday-sync|systemd|openbrain-qbo-thursday-sync.service|PE-CC · systemd · openbrain-qbo-thursday-sync (20:00 CT)|86400|7200
 systemd.openbrain-site-sweep|systemd|openbrain-site-sweep.service|PE-CC · systemd · openbrain-site-sweep (06:00 CT)|86400|7200

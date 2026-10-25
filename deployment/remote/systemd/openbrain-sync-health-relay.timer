@@ -1,0 +1,12 @@
+[Unit]
+Description=Relay sync failures independently of GitHub scheduler latency
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+RandomizedDelaySec=5s
+AccuracySec=1s
+Unit=openbrain-sync-health-relay.service
+
+[Install]
+WantedBy=timers.target

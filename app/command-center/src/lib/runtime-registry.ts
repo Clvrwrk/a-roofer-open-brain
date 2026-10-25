@@ -109,6 +109,7 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
 ];
 
 export const SYSTEMD_JOBS: SystemdSpec[] = [
+  { key: "systemd.openbrain-sync-health-relay", unit: "openbrain-sync-health-relay.service", label: "Independent sync relay", purpose: "Minute outbox delivery independent of GitHub scheduling", cadenceS: 60, scheduleLabel: "every 60–65 s", docs: "docs/129" },
   { key: "systemd.openbrain-abc-sync", unit: "openbrain-abc-sync.service", label: "ABC nightly sync", purpose: "Catalog sync → invoice ingest → PDF backfill → Alex No-Price triage", cadenceS: 86_400, scheduleLabel: "03:30 ET daily", docs: "scripts/abc-nightly-sync.sh" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
   { key: "systemd.openbrain-site-sweep", unit: "openbrain-site-sweep.service", label: "Site quality sweep", purpose: "Static + live + DB money-truth checks (PEC-218)", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/92" },
@@ -126,6 +127,7 @@ export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
   { key: "api.executive.cash-runway", path: "/api/executive/cash-runway.json", label: "executive/cash-runway", kind: "api", purpose: "Cash runway (13WCF)", expect: 401 },
   { key: "api.agent.work-queue", path: "/api/agent/work-queue", label: "agent/work-queue", kind: "api", purpose: "Agent work queue", expect: 401 },
   { key: "api.credit-memos.pending", path: "/api/credit-memos/pending", label: "credit-memos/pending", kind: "api", purpose: "Claim-It pending CM lines", expect: 401 },
+  { key: "api.weather", path: "/api/weather", label: "weather", kind: "api", purpose: "Active-office NWS forecasts", expect: 401 },
   { key: "api.companycam.photos", path: "/api/companycam/photos", label: "companycam/photos", kind: "api", purpose: "Job-site photo feed (docs/120)", expect: 401 },
   { key: "api.accounting.friday-wip", path: "/api/accounting/friday-wip.json", label: "accounting/friday-wip", kind: "api", purpose: "Friday WIP/AR board", expect: 401 },
 ];

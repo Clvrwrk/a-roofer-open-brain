@@ -14,7 +14,7 @@ it('keeps platform and supplier monitoring when they leave the business list',()
  expect(shouldMonitorComponent({group:integrationGroup('int.abc-supply')})).toBe(true);
 });
 it('never labels an uncommissioned connection healthy or polls a guessed endpoint',()=>{
- expect(syncScope().gaps.map(g=>g.provider)).toEqual(['weather']);
+ expect(syncScope().gaps).toEqual([]);
  expect(syncScope().coverage).toBe('incomplete');
  expect(syncScope().supplierInputs).toBe('retained_accounting_inputs');
  expect(BUSINESS_SYNC_PROVIDERS.find(p=>p.id==='weather')?.label).toBe('National Weather Service / NOAA');

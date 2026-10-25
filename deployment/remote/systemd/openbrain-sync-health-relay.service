@@ -1,0 +1,19 @@
+[Unit]
+Description=Independent sync outcome relay (no provider writes)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+LoadCredentialEncrypted=auditor:/etc/credstore.encrypted/openbrain-sync-health-relay
+WorkingDirectory=/opt/openbrain/a-roofers-open-brain
+ExecStart=/opt/openbrain/runtimes/node-v22.23.4-linux-x64/bin/node /opt/openbrain/a-roofers-open-brain/scripts/sync-health-relay.mjs --credential-file %d/auditor
+ExecStopPost=+/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-sync-health-relay
+TimeoutStartSec=80
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
