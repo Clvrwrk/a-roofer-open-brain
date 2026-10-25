@@ -27,7 +27,7 @@ Measured GitHub watchdog run intervals were 8–56 minutes in the inspected samp
 
 ## Release gate and rollout
 
-Human approval before merge remains mandatory. After exact-head CI and human approval: merge, deploy the four instrumented edge functions first (same JWT settings), deploy Command Center, then install/enable the host relay service and timer. Provision only the missing first-party monitors. Read `/healthz` for the exact commit; read `/api/weather` and the restricted runtime/sync-health APIs; verify all four observer markers, current office forecasts, private CompanyCam thumbnail and alert-outbox drain. Do not execute a provider write for this drill.
+Human approval before merge remains mandatory. After exact-head CI and human approval: merge, deploy the four instrumented edge functions first (same JWT settings), deploy Command Center, then install/enable the host relay service and timer. Register its minute heartbeat (60-second period, 120-second grace) through the existing runtime heartbeat pump and add the matching 180-second runtime expectation; preserve all other registrations. Provision only the missing first-party monitors. Read `/healthz` for the exact commit; read `/api/weather` and the restricted runtime/sync-health APIs; verify all four observer markers, current office forecasts, private CompanyCam thumbnail and alert-outbox drain. Do not execute a provider write for this drill.
 
 Rollback: stop/disable the new host timer; redeploy the preceding CC commit cde40fdef7fc491c645b223cc6a9f2b062ca6b71; restore the saved edge preimages with their original JWT settings. Preserve all outcome/history rows. Monitor creation is reversible by pausing the exact new monitor.
 

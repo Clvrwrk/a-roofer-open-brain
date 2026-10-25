@@ -8,6 +8,7 @@ Type=oneshot
 User=root
 WorkingDirectory=/opt/openbrain/a-roofers-open-brain
 ExecStart=/usr/bin/node /opt/openbrain/a-roofers-open-brain/scripts/sync-health-relay.mjs --env-file /opt/openbrain/a-roofers-open-brain/.env
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-sync-health-relay
 TimeoutStartSec=80
 NoNewPrivileges=true
 PrivateTmp=true

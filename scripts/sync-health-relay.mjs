@@ -13,7 +13,7 @@ export async function relay(token,fetcher=fetch,now=Date.now()){
  const r=await fetcher(ENDPOINT,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:'{}',redirect:'error',signal:AbortSignal.timeout(60000)});
  if(!r.ok)throw Error('relay_endpoint_failed');
  const d=await r.json();const age=now-Date.parse(d.monitorAt??'');
- if(d.healthy!==true||!Number.isFinite(age)||age>180000||age< -60000)throw Error('relay_unhealthy');
+ if(d.healthy!==true||!Array.isArray(d.health)||d.health.length===0||!Number.isFinite(age)||age>180000||age< -60000)throw Error('relay_unhealthy');
  return {status:'ok',delivered:d.delivered,pending:d.pending,components:d.health?.length};
 }
 async function reportUnavailable(){

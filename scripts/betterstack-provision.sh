@@ -81,6 +81,7 @@ pgcron.nightly-silo-assertions|pg_cron|14|PE-CC · pg_cron 14 · nightly-silo-as
 pgcron.service-matview-refresh-requests|pg_cron|15|PE-CC · pg_cron 15 · service-matview-refresh-requests|300|600
 pgcron.refresh-overhead-matview|pg_cron|16|PE-CC · pg_cron 16 · refresh-overhead-matview|86400|7200
 pgcron.refresh-order-acculynx-match|pg_cron|18|PE-CC · pg_cron 18 · refresh-order-acculynx-match|900|600
+systemd.openbrain-sync-health-relay|systemd|openbrain-sync-health-relay.service|PE-CC · systemd · openbrain-sync-health-relay (minute)|60|120
 systemd.openbrain-abc-sync|systemd|openbrain-abc-sync.service|PE-CC · systemd · openbrain-abc-sync (03:30 ET)|86400|7200
 systemd.openbrain-qbo-thursday-sync|systemd|openbrain-qbo-thursday-sync.service|PE-CC · systemd · openbrain-qbo-thursday-sync (20:00 CT)|86400|7200
 systemd.openbrain-site-sweep|systemd|openbrain-site-sweep.service|PE-CC · systemd · openbrain-site-sweep (06:00 CT)|86400|7200

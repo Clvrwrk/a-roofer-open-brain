@@ -6,7 +6,7 @@ test('selects only the existing auditor credential without evaluating the file',
  assert.equal(relayToken('AGENT_SERVICE_TOKENS=ob-ops:other'),'');
 });
 test('uses the fixed destination, no watchdog impersonation, and validates monitor freshness',async()=>{
- const now=Date.now();let opts;const fetcher=async(url,o)=>{assert.equal(url,ENDPOINT);opts=o;return Response.json({healthy:true,monitorAt:new Date(now).toISOString(),health:[],pending:0,delivered:0});};
+ const now=Date.now();let opts;const fetcher=async(url,o)=>{assert.equal(url,ENDPOINT);opts=o;return Response.json({healthy:true,monitorAt:new Date(now).toISOString(),health:[{component_key:'fixture'}],pending:0,delivered:0});};
  assert.equal((await relay('fixture',fetcher,now)).status,'ok');assert.equal(opts.redirect,'error');assert.equal(opts.body,'{}');
  await assert.rejects(relay('fixture',async()=>Response.json({healthy:true,monitorAt:'2000-01-01'}),now));
  await assert.rejects(relay('',fetcher,now));
