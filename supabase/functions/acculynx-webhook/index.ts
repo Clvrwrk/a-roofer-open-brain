@@ -1,3 +1,4 @@
+import {observeEdgeHandler} from "../_shared/edge-observer.ts";
 // acculynx-webhook — Edge Function entrypoint (Phase 7, plan 07-08, D-17)
 //
 // Public-facing receiver for AccuLynx webhook POSTs. Thin Deno.serve HTTP boundary — all
@@ -59,7 +60,7 @@ const WEBHOOK_ACCOUNT_MAP: Record<string, string> = (() => {
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   // The URL token segment is the last path component:
@@ -128,7 +129,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   return json({ status: "ok", enqueuedAction: route.enqueuedAction }, 200);
-});
+},sb));
 
 function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });

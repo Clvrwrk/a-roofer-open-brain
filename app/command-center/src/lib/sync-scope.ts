@@ -5,7 +5,7 @@ export const BUSINESS_SYNC_PROVIDERS = [
  {id:'companycam',label:'CompanyCam',probeKey:'int.companycam',commissioned:true,access:'read_only'},
  {id:'acculynx',label:'AccuLynx',probeKey:'int.acculynx',commissioned:true,access:'read_ingestion'},
  {id:'qbo',label:'QuickBooks Online',probeKey:'int.quickbooks',commissioned:true,access:'read_only'},
- {id:'weather',label:'National Weather Service / NOAA',probeKey:'int.weather',commissioned:false,gap:'NWS/NOAA is approved; live weather refresh and app readback are not yet verified. Historical hail data is not a live forecast.'},
+ {id:'weather',label:'National Weather Service / NOAA',probeKey:'int.weather',commissioned:true,access:'read_only_office_forecasts'},
 ] as const;
 export const APP_SYNC_DESTINATIONS = [
  {id:'cc',label:'Command Center',verification:'partial',readback:'WIP report propagation verified through its production API'},
@@ -28,11 +28,11 @@ export function isActiveSyncComponent(key:string):boolean{
  return !(RETIRED_SYNC_COMPONENTS as readonly string[]).includes(key);
 }
 // Moving a provider into its correct dashboard group must not stop its security monitor.
-export function shouldMonitorComponent(c:{key?:string;group:string;commissioned?:boolean}):boolean{
- return (!c.key||isActiveSyncComponent(c.key))&&c.commissioned!==false&&['site','integrations','platform','accounting-inputs','feeds'].includes(c.group);
+export function shouldMonitorComponent(c:{key?:string;group:string;commissioned?:boolean;monitorKey?:string}):boolean{
+ return (!c.key||isActiveSyncComponent(c.key))&&c.commissioned!==false&&(['site','integrations','platform','accounting-inputs','feeds'].includes(c.group)||(c.group==='edge'&&Boolean(c.monitorKey)));
 }
 export function syncScope(){
  return {providers:BUSINESS_SYNC_PROVIDERS,destinations:APP_SYNC_DESTINATIONS,transport:'shared_authorized_backend',
-  coverage:'incomplete',gaps:BUSINESS_SYNC_PROVIDERS.filter(p=>!p.commissioned).map(p=>({provider:p.id,reason:p.gap})),
+  coverage:'incomplete',gaps:BUSINESS_SYNC_PROVIDERS.filter(p=>!p.commissioned).map(p=>({provider:p.id,reason:'Live sync not commissioned'})),
   supplierInputs:'retained_accounting_inputs'};
 }

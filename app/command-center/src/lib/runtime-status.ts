@@ -1,3 +1,5 @@
+import {loadOfficeWeather} from "./weather.server";
+import {loadEdgeOutcomes} from "./edge-outcomes.server";
 // Runtime board engine for /agents (docs/109). Computes one red / yellow / green light
 // per component from the system that actually knows (D2): pg_cron run details, the
 // host-job report table, feed freshness, and Better Stack monitors + heartbeats.
@@ -39,6 +41,7 @@ export interface RuntimeComponent {
   evidence: string[];
   href?: string;
   commissioned?: boolean;
+  monitorKey?: string;
 }
 
 export interface RuntimeGroup {
@@ -274,6 +277,8 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const mainCommitPromise = loadMainCommit(env, now);
   const integrationProbesPromise = probeIntegrations(INTEGRATIONS, env, now);
   const hailReconPromise=loadHailReconReceipt(client,now);
+  const weatherPromise=loadOfficeWeather(client,now);
+  const edgeOutcomesPromise=loadEdgeOutcomes(client,env,now);
 
   const [cronRows, hostRows, hbRows, feedRows, outcomeRows] = client
     ? await Promise.all([
@@ -303,13 +308,13 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   // Site & APIs — Better Stack from outside when configured (D10: a 401 on an API route is
   // the healthy answer); otherwise the app pings its own public routes (D16) so the group
   // never sits on "not configured" because a token is missing.
-  const selfPings = betterStack.state === "ok" ? new Map<string, ProbeResult>() : new Map(
-    (await probeIntegrations(MONITORED_ROUTES.map((route): IntegrationSpec => ({ key: route.key, label: route.label, purpose: route.purpose, url: `${site}${route.path}`, expectAnon: route.expect, expectBody: route.expectBody })), env, now)).map((r) => [r.key, r]),
+  const selfPings = new Map(
+    (await probeIntegrations(MONITORED_ROUTES.filter(route=>!monitorsByUrl.has(`${site}${route.path}`)).map((route): IntegrationSpec => ({ key: route.key, label: route.label, purpose: route.purpose, url: `${site}${route.path}`, expectAnon: route.expect, expectBody: route.expectBody })), env, now)).map((r) => [r.key, r]),
   );
   for (const route of MONITORED_ROUTES) {
     const m = monitorsByUrl.get(`${site}${route.path}`);
     const self = selfPings.get(route.key);
-    const { light, headline } = betterStack.state === "ok"
+    const { light, headline } = m
       ? monitorLight(m)
       : self ? classifyProbe(self, route.expect, false) : { light: "unknown" as Light, headline: `Better Stack ${betterStack.state}` };
     const why = betterStack.state === "unconfigured" ? "Better Stack not configured on this deployment" : betterStack.state === "error" ? `Better Stack error: ${betterStack.detail}` : null;
@@ -339,12 +344,11 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
     detail:'Receipt evidence from the existing IHM webhook. Event-driven; this is not proof of every webhook type or every app readback.',
     cadenceLabel:'event-driven',lastAt:hailRecon.lastAt,evidence:['ihm-webhook-receiver → ihm_hail_alerts'],commissioned:true});
 
-  // Approved scope is explicit even when a live connection is not commissioned.
-  for(const provider of BUSINESS_SYNC_PROVIDERS.filter(p=>!p.commissioned)){
-    push({key:provider.probeKey,group:'integrations',kind:'integration',label:provider.label,
-      purpose:provider.gap,light:'unknown',headline:'Live sync not verified',detail:provider.gap,
-      cadenceLabel:null,lastAt:null,evidence:[],commissioned:false});
-  }
+  const weather=await weatherPromise;
+  push({key:'int.weather',group:'integrations',kind:'integration',label:'National Weather Service / NOAA',purpose:'Active-office public forecasts',
+    light:weather.status==='live'?'green':'red',headline:weather.status==='live'?`${weather.offices.length} office forecasts current`:'Office forecast refresh incomplete',
+    detail:'Read-only api.weather.gov points → forecast, refreshed by the watchdog and shared with /api/weather. No customer coordinates.',
+    cadenceLabel:'every 5 min',lastAt:weather.refreshedAt,evidence:weather.offices.map(o=>`${o.name}: ${o.error??o.generatedAt}`),href:`${site}/api/weather`,commissioned:true});
 
   // Data feeds.
   for (const feed of FEEDS) {
@@ -394,7 +398,8 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
       detail: `${job.unit} · ${job.scheduleLabel}${job.docs ? ` · ${job.docs}` : ""}`, cadenceLabel: cadenceLabel(job.cadenceS), lastAt: r?.finished_at ?? null, evidence });
   }
 
-  // Edge functions — only acculynx-sync has dispatch telemetry today; say so for the rest.
+  // Scheduled sync uses dispatch receipts; the other handlers have safe health and per-POST outcomes.
+  const edgeOutcomes=await edgeOutcomesPromise;
   const latestOutcome = outcomeRows[0];
   for (const fn of EDGE_FUNCTIONS) {
     if (fn.name === "acculynx-sync") {
@@ -405,7 +410,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
         headline: o ? `latest dispatch ${o.outcome} · ${o.fired_at ? humanAge(now - Date.parse(o.fired_at)) : ""}` : "no dispatch telemetry",
         detail: `${bad} of the last ${outcomeRows.length} dispatches were not success`, cadenceLabel: "hourly", lastAt: o?.fired_at ?? null, evidence: o?.error_msg ? [`error: ${o.error_msg}`] : [] });
     } else {
-      push({ key: fn.key, group: "edge", kind: "edge_function", label: fn.label, purpose: fn.purpose, light: "unknown", headline: "no outcome telemetry wired yet", detail: "Deployed as a Supabase edge function; invocation logs live in the Supabase dashboard.", cadenceLabel: null, lastAt: null, evidence: [] });
+      const observed=edgeOutcomes.find(e=>e.key===fn.key);if(observed)push(observed);
     }
   }
 

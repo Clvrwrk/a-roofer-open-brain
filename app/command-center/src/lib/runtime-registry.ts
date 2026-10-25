@@ -126,6 +126,7 @@ export const MONITORED_ROUTES: MonitoredRouteSpec[] = [
   { key: "api.executive.cash-runway", path: "/api/executive/cash-runway.json", label: "executive/cash-runway", kind: "api", purpose: "Cash runway (13WCF)", expect: 401 },
   { key: "api.agent.work-queue", path: "/api/agent/work-queue", label: "agent/work-queue", kind: "api", purpose: "Agent work queue", expect: 401 },
   { key: "api.credit-memos.pending", path: "/api/credit-memos/pending", label: "credit-memos/pending", kind: "api", purpose: "Claim-It pending CM lines", expect: 401 },
+  { key: "api.weather", path: "/api/weather", label: "weather", kind: "api", purpose: "Active-office NWS forecasts", expect: 401 },
   { key: "api.companycam.photos", path: "/api/companycam/photos", label: "companycam/photos", kind: "api", purpose: "Job-site photo feed (docs/120)", expect: 401 },
   { key: "api.accounting.friday-wip", path: "/api/accounting/friday-wip.json", label: "accounting/friday-wip", kind: "api", purpose: "Friday WIP/AR board", expect: 401 },
 ];

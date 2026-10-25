@@ -1,0 +1,17 @@
+[Unit]
+Description=Independent sync outcome relay (no provider writes)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/openbrain/a-roofers-open-brain
+ExecStart=/usr/bin/node /opt/openbrain/a-roofers-open-brain/scripts/sync-health-relay.mjs --env-file /opt/openbrain/a-roofers-open-brain/.env
+TimeoutStartSec=80
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true

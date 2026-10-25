@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({locals,request}) => {
   }
   const board = await loadRuntimeBoard();
   for (const c of board.groups.flatMap(g=>g.components).filter(shouldMonitorComponent)) {
-    const {error:probeError}=await client.rpc("record_integration_probe",{p_component:c.key,p_ok:c.light==="green",p_code:c.light==="unknown"?"probe_unverified":"probe_failed"});
+    const {error:probeError}=await client.rpc("record_integration_probe",{p_component:c.monitorKey??c.key,p_ok:c.light==="green",p_code:c.light==="unknown"?"probe_unverified":"probe_failed"});
     if(probeError)return jsonApiResponse({error:"probe_record_failed"},{status:503});
   }
   const {data,error} = await client.from("integration_sync_events")

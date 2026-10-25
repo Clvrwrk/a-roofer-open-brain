@@ -42,6 +42,8 @@ status|/api/invoice-audit/pending-verification|PE-CC · api · invoice-audit/pen
 status|/api/executive/cash-runway.json|PE-CC · api · executive/cash-runway|300|401
 status|/api/agent/work-queue|PE-CC · api · agent/work-queue|300|401
 status|/api/credit-memos/pending|PE-CC · api · credit-memos/pending|300|401
+status|/api/companycam/photos|PE-CC · api · companycam/photos|300|401
+status|/api/weather|PE-CC · api · weather|300|401
 status|/api/accounting/friday-wip.json|PE-CC · api · accounting/friday-wip|300|401
 EOF
 )

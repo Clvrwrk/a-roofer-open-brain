@@ -1,3 +1,4 @@
+import {observeEdgeHandler} from "../_shared/edge-observer.ts";
 // acculynx-write-action — Edge Function entrypoint (Phase 5, plan 05-01 Task 3)
 //
 // The SOLE code path that writes to AccuLynx, prod or sandbox (D-02). Thin HTTP
@@ -182,7 +183,7 @@ async function persistExecutionResult(
   }
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-write-action",async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   let input: WriteActionInput;
@@ -267,7 +268,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     request: { method: built.method, path: built.path },
     result: { status: result.status, body: redactSample(result.body) },
   });
-});
+},sb));
 
 function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
