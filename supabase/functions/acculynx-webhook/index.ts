@@ -60,7 +60,7 @@ const WEBHOOK_ACCOUNT_MAP: Record<string, string> = (() => {
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
 
-Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request,outcome): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   // The URL token segment is the last path component:
@@ -105,6 +105,7 @@ Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request): Promise<R
   }
 
   const route = routeTopic(payload, WEBHOOK_ACCOUNT_MAP);
+  if(!route.enqueuedAction)outcome.skip();
 
   let logResult;
   try {
@@ -125,6 +126,7 @@ Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request): Promise<R
   } catch (e) {
     // Enqueue failure does not change the 200 response to AccuLynx (avoid retry-storm on our
     // own downstream error) — it is surfaced via server logs for operator follow-up.
+    outcome.fail();
     console.error(`[acculynx-webhook] enqueue failed: ${(e as Error).message}`);
   }
 

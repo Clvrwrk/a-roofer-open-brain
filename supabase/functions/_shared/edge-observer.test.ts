@@ -26,3 +26,21 @@ test('telemetry failure does not turn a completed provider write into a retryabl
  const h=observeEdgeHandler('acculynx-write-action',async()=>new Response('done'),broken,async()=>{});
  assert.equal((await h(new Request('https://example.test/',{method:'POST'}))).status,200);
 });
+test('a successful HTTP envelope cannot conceal a failed write or downstream enqueue',async()=>{
+ calls=[];
+ const failed=observeEdgeHandler('acculynx-write-action',async()=>Response.json({status:'failed',result:{status:503}}),db());
+ assert.equal((await failed(new Request('https://example.test/',{method:'POST'}))).status,200);
+ assert.equal((calls[0][1] as any).p_ok,false);
+ calls=[];
+ const enqueue=observeEdgeHandler('acculynx-webhook',async(_req,outcome)=>{outcome.fail();return Response.json({status:'ok'});},db());
+ assert.equal((await enqueue(new Request('https://example.test/',{method:'POST'}))).status,200);
+ assert.equal((calls[0][1] as any).p_ok,false);
+});
+test('previews and replay acknowledgements do not clear a failed execution',async()=>{
+ calls=[];
+ for(const status of ['preview','already_executed','replay-ack']){
+  const h=observeEdgeHandler('acculynx-write-action',async()=>Response.json({status}),db());
+  await h(new Request('https://example.test/',{method:'POST'}));
+ }
+ assert.equal(calls.length,0);
+});

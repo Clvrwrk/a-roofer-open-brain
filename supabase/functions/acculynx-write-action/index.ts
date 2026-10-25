@@ -115,7 +115,7 @@ interface WriteActionInput {
  * table doesn't exist yet (Wave 1 Plan 02) or the lookup otherwise fails — callers must treat
  * null as "no prior success found" and proceed, since the table not existing yet cannot itself
  * block Task 3 from type-checking/deploying ahead of that migration. */
-async function findPriorSuccess(idempotencyKey: string): Promise<Record<string, unknown> | null> {
+async function findPriorSuccess(idempotencyKey: string,onFailure:()=>void=()=>{}): Promise<Record<string, unknown> | null> {
   try {
     const { data, error } = await sb
       .from("acculynx_write_action_log")
@@ -124,11 +124,13 @@ async function findPriorSuccess(idempotencyKey: string): Promise<Record<string, 
       .eq("status", "success")
       .maybeSingle();
     if (error) {
+      onFailure();
       console.warn(`[acculynx-write-action] idempotency lookup skipped: ${error.message}`);
       return null;
     }
     return data ?? null;
   } catch (e) {
+    onFailure();
     console.warn(`[acculynx-write-action] idempotency lookup skipped: ${String(e)}`);
     return null;
   }
@@ -142,6 +144,7 @@ async function persistExecutionResult(
   idempotencyKey: string,
   built: { method: string; path: string; body?: unknown },
   result: { status: number; body: unknown },
+  onFailure:()=>void=()=>{},
 ): Promise<void> {
   const success = result.status >= 200 && result.status < 300;
   try {
@@ -155,9 +158,10 @@ async function persistExecutionResult(
           updated_at: new Date().toISOString(),
         })
         .eq("work_key", input.workKey);
-      if (error) console.warn(`[acculynx-write-action] pending-write update skipped: ${error.message}`);
+      if (error) {onFailure();console.warn(`[acculynx-write-action] pending-write update skipped: ${error.message}`);}
     }
   } catch (e) {
+    onFailure();
     console.warn(`[acculynx-write-action] pending-write update skipped: ${String(e)}`);
   }
 
@@ -177,13 +181,14 @@ async function persistExecutionResult(
       work_key: input.workKey ?? null,
       created_at: new Date().toISOString(),
     });
-    if (error) console.warn(`[acculynx-write-action] audit-log insert skipped: ${error.message}`);
+    if (error) {onFailure();console.warn(`[acculynx-write-action] audit-log insert skipped: ${error.message}`);}
   } catch (e) {
+    onFailure();
     console.warn(`[acculynx-write-action] audit-log insert skipped: ${String(e)}`);
   }
 }
 
-Deno.serve(observeEdgeHandler("acculynx-write-action",async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-write-action",async (req: Request,outcome): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   let input: WriteActionInput;
@@ -238,7 +243,7 @@ Deno.serve(observeEdgeHandler("acculynx-write-action",async (req: Request): Prom
 
   // Double-fire prevention (D-05): if a prior success already exists for this exact
   // idempotency key, return it WITHOUT re-firing against AccuLynx.
-  const prior = await findPriorSuccess(idempotencyKey);
+  const prior = await findPriorSuccess(idempotencyKey,outcome.fail);
   if (prior) {
     return json({
       status: "already_executed",
@@ -260,6 +265,7 @@ Deno.serve(observeEdgeHandler("acculynx-write-action",async (req: Request): Prom
     idempotencyKey,
     built,
     result,
+    outcome.fail,
   );
 
   return json({
