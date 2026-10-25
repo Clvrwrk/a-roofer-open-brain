@@ -24,8 +24,10 @@ async function reportUnavailable(){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  const path=process.argv[process.argv.indexOf('--env-file')+1];
-  const token=process.env.SYNC_HEALTH_SERVICE_TOKEN||relayToken(readFileSync(path,'utf8'));
+  const fileIndex=process.argv.indexOf('--credential-file');
+  const envIndex=process.argv.indexOf('--env-file');
+  if(fileIndex<0&&envIndex<0&&!process.env.SYNC_HEALTH_SERVICE_TOKEN)throw Error('relay_credential_missing');
+  const token=process.env.SYNC_HEALTH_SERVICE_TOKEN||(fileIndex>=0?readFileSync(process.argv[fileIndex+1],'utf8').trim():relayToken(readFileSync(process.argv[envIndex+1],'utf8')));
   console.log(JSON.stringify(await relay(token)));
  }catch{console.error('Independent sync relay failed; see monitoring.');await reportUnavailable();process.exitCode=1;}
 }

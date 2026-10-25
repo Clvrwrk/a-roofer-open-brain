@@ -23,7 +23,7 @@ GET `?health=1` exercises only the handler/database path. It returns an observer
 
 ## Independent delivery
 
-Measured GitHub watchdog run intervals were 8–56 minutes in the inspected sample, despite a five-minute cron. The new host timer relays the durable outbox every 60 seconds plus up to five seconds jitter. It uses the auditor credential already present on that host; it loads no database/admin credential and transfers no token from GitHub or 1Password. It does not impersonate a GitHub commit attestation. GitHub stays the independent backup/triage path. Detection, delivery, triage and remediation are separate stages; no component promises universal real-time repair.
+Measured GitHub watchdog run intervals were 8–56 minutes in the inspected sample, despite a five-minute cron. The new host timer relays the durable outbox every 60 seconds plus up to five seconds jitter. It uses the auditor credential already present on that host. At the approved installation step, a root-only helper encrypts a same-host copy into systemd credentials. The relay runs as a dynamic user with only that credential, cannot read the root environment, and loads no database/admin credential. The fixed existing ExecStopPost reporter remains a separate privileged helper. No token is transferred from GitHub or 1Password. It does not impersonate a GitHub commit attestation. GitHub stays the independent backup/triage path. Detection, delivery, triage and remediation are separate stages; no component promises universal real-time repair.
 
 ## Release gate and rollout
 
