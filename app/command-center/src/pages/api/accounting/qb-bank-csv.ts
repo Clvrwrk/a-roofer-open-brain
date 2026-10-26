@@ -219,6 +219,31 @@ export const GET: APIRoute = async ({ locals, url }) => {
       for (const c of cmAudit ?? []) originalByCm.set(String(c.invoice_number), c.original_invoice_number);
     }
 
+    // PEC-214: a CM can be in this preview while its original predates `since`.
+    // The match view alone can still call that original "Commercial". Read only
+    // those referenced originals so the original Customer PO# gets the same
+    // override; do not add their invoice rows to this window or stamp anything.
+    const selectedInvoices = new Set((invs ?? []).map(i => String(i.invoice_number)));
+    const outsideOriginals = [...new Set([...originalByCm.values()]
+      .filter((n): n is string => !!n && !selectedInvoices.has(String(n))))];
+    for (let offset = 0; offset < outsideOriginals.length; offset += 200) {
+      const batch = outsideOriginals.slice(offset, offset + 200);
+      const { data: originals, error } = await client.from("abc_invoices")
+        .select("invoice_number, ship_to_name, purchase_order_number")
+        .in("invoice_number", batch);
+      if (error || !originals || batch.some(n => !originals.some(i => String(i.invoice_number) === n))) {
+        return jsonApiResponse({ error: "abc_original_invoices", error_description: "Original invoices unavailable for credit-memo resolution." }, { status: 409 });
+      }
+      for (const original of originals) {
+        const n = String(original.invoice_number);
+        const prior = jobByInvoice.get(n);
+        jobByInvoice.set(n, {
+          job: commercialCheckNo(original.ship_to_name, original.purchase_order_number) ?? prior?.job ?? null,
+          client: prior?.client ?? null,
+        });
+      }
+    }
+
     for (const i of invs ?? []) {
       const n = String(i.invoice_number);
       const total = Math.abs(Number(i.total_amount ?? 0));
