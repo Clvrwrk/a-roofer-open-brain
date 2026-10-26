@@ -209,7 +209,9 @@ export const GET: APIRoute = async ({ locals, url }) => {
       jobByInvoice.set(n, { job: po, client: jobByInvoice.get(n)?.client ?? null });
     }
 
-    const cmNumbers = (invs ?? []).filter((i) => i.is_credit_memo).map((i) => String(i.invoice_number));
+    const cmNumbers = (invs ?? [])
+      .filter((i) => i.is_credit_memo && !exported.has(`cm_actual:${String(i.invoice_number)}`))
+      .map((i) => String(i.invoice_number));
     const originalByCm = new Map<string, string | null>();
     if (cmNumbers.length) {
       const { data: cmAudit } = await client

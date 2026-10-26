@@ -100,6 +100,14 @@ describe("ABC QB bank preview credit-memo original reference", () => {
     expect(await response.text()).toContain("2026-08-20,KS-42,CMINV#CM-1-OriginalINV#ORIGINAL-1 - Synthetic original,,10.00\n");
   });
 
+  it("ignores an already-exported CM whose original is missing and still returns the eligible invoice", async () => {
+    state.tables.qb_bank_export_log = [{ vendor_slug: "abc-supply", row_kind: "cm_actual", doc_number: "CM-1" }];
+    state.tables.abc_invoices = state.tables.abc_invoices.filter(r => r.invoice_number !== "ORIGINAL-1");
+    const response = await preview();
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("Date,Check No,Description,Spent,Received\n" + noncommercialRow);
+  });
+
   it("does not export the CM own PO when the referenced original is missing", async () => {
     state.tables.abc_invoices = state.tables.abc_invoices.filter(r => r.invoice_number !== "ORIGINAL-1");
     const response = await preview();
