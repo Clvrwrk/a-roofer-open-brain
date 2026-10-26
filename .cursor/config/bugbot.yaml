@@ -1,0 +1,12 @@
+# .cursor/config/bugbot.yaml (read from the PR base branch)
+version: 1
+triggers:
+  drafts: false
+  frequency: oncePerPr
+review:
+  effort: low
+  incremental: false
+prSummary:
+  mode: disabled
+autofix:
+  mode: disabled

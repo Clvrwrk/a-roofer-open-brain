@@ -1,0 +1,5 @@
+{
+  "autoReview": [],
+  "triggerOnDrafts": false,
+  "ignorePatterns": "**/*.md\n**/*.mdx\ndocs/**\n**/docs/**\n**/*.png\n**/*.jpg\n**/*.jpeg\n**/*.gif\n**/*.webp\n**/*.avif\n**/*.svg\n**/*.ico\n**/*.mp4\nsrc/data/journal.ts"
+}
