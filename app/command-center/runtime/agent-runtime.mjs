@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as Sentry from "@sentry/node";
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
+import { toolsForRole } from "./agent-tools.mjs";
 import { loadPersona } from "./personas.mjs";
 
 const AUTHORIZED_STATE = "authorized";
@@ -49,7 +50,7 @@ function userPrompt({ message, decision, files }) {
   ].join("\n\n");
 }
 
-export async function runAgentTurn({ personaId, displayName, message, decision, files, env, registry, model, logger }) {
+export async function runAgentTurn({ personaId, displayName, message, decision, files, env, registry, model, logger, fetchImpl }) {
   const policy = agentPolicy(registry, personaId);
   if (!policy.allowed) return { ok: false, error: policy.reason };
   const resolvedModel = model ?? (await modelFromEnv(env));
@@ -59,6 +60,8 @@ export async function runAgentTurn({ personaId, displayName, message, decision, 
       model: resolvedModel,
       system: systemPrompt({ displayName, principal: policy.principal }),
       prompt: userPrompt({ message, decision, files }),
+      tools: toolsForRole(policy.principal.role, env, fetchImpl),
+      stopWhen: stepCountIs(Number(env.AGENT_MAX_STEPS || 5)),
       abortSignal: AbortSignal.timeout(Number(env.AGENT_TURN_TIMEOUT_MS || 120000)),
       telemetry: { functionId: `roofing-ops-agent:${personaId}` },
     });
