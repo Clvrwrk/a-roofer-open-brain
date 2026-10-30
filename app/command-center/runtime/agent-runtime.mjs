@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import * as Sentry from "@sentry/node";
 import { generateText, stepCountIs } from "ai";
 import { toolsForRole } from "./agent-tools.mjs";
+import { loadPersona } from "./personas.mjs";
 
 const AUTHORIZED_STATE = "authorized";
 
@@ -28,7 +29,9 @@ export async function modelFromEnv(env) {
 }
 
 function systemPrompt({ displayName, principal }) {
+  const persona = loadPersona(principal.persona_id);
   return [
+    ...(persona ? [`Your persona (SOUL.md):\n${persona}`] : []),
     `You are ${displayName}, a named Roofing-Ops Open Brain agent (role: ${principal.role}) responding in Slack.`,
     "Answer in a friendly, business-focused voice. Use NEPQ: situation, impact, next step.",
     "Stay strictly inside your role. If the request is undefined by SOP, say so and route to Ops Conductor for Chris instructions/SOP improvement.",
