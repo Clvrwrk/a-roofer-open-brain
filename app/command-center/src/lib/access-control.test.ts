@@ -36,19 +36,19 @@ describe("SERVICE_AGENT_IDENTITIES — ob-acculynx roster entry (REQ-09 / SC2)",
 });
 
 describe("named-agent runtime bearer identities", () => {
-  it("resolves Maya's hashed runtime token as Maya with scoped non-approval permissions", () => {
-    expect(NAMED_AGENT_IDENTITIES.some((agent) => agent.id === "maya-chen")).toBe(true);
+  it("resolves Alex's hashed runtime token as Alex with scoped non-approval permissions", () => {
+    expect(NAMED_AGENT_IDENTITIES.some((agent) => agent.id === "alex-rivers")).toBe(true);
     const token = "test-maya-runtime-token";
     const hash = createHash("sha256").update(token).digest("hex");
     const actor = resolveServiceActorFromToken(token, {
-      AGENT_SERVICE_TOKEN_SHA256_MAYA_CHEN: hash,
+      AGENT_SERVICE_TOKEN_SHA256_ALEX_RIVERS: hash,
     } as never);
 
     expect(actor).toMatchObject({
-      id: "maya-chen",
+      id: "alex-rivers",
       type: "named_agent",
       source: "service_token",
-      departmentAccess: ["accounting", "system"],
+      departmentAccess: ["accounting", "operations", "system"],
     });
     expect(actor!.permissions).toContain("evidence.attach");
     expect(actor!.permissions).not.toContain("approval.decide");

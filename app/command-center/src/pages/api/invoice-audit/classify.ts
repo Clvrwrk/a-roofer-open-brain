@@ -6,8 +6,10 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
+// PostgreSQL UUIDs include the deterministic MD5-based vendor line IDs.
+// Ownership is checked against the audit engine below; RFC version bits are not a gate.
 const isUuid = (v: unknown) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v ?? ""));
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v ?? ""));
 
 interface ClassifyLine {
   invoiceLineId: string;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+console.error("Maya retired 2026-10-23; no work executed."); process.exit(0);
 /**
  * maya-qa-orchestrate.mjs — nightly QA of cc.proexteriorsus.net, conducted by Maya.
  *
@@ -14,13 +15,14 @@
  *
  * ENV: ORGO_API_KEY, SLACK_BOT_TOKEN, SLACK_DEV_CHANNEL_ID, MAYA_QA_COMPUTER_ID.
  */
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 
 // Both passes read WALK_SESSION_COOKIE and delete the file once loaded, so the sealed
 // value never outlives the run it was minted for.
 
-const HERE = dirname(new URL(import.meta.url).pathname);
+const HERE = dirname(fileURLToPath(new URL(import.meta.url)));
 const CID = process.env.MAYA_QA_COMPUTER_ID || "37b262e0-a915-47e6-8c3b-f180a32ab6fe";
 const KEY = process.env.ORGO_API_KEY;
 const QA_HOME = process.env.MAYA_QA_HOME || "/opt/pe-cc-agents/maya-qa";

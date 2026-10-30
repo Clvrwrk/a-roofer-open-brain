@@ -1,4 +1,4 @@
-export type RoofingAgentId = "maya" | "alex" | "casey" | "jordan" | "sam" | "rowan" | "lena" | "ops";
+export type RoofingAgentId = "alex" | "casey" | "jordan" | "sam" | "rowan" | "lena" | "ops";
 
 export interface RoofingOpsFileSummary {
   id: string;
@@ -37,12 +37,6 @@ export interface RoofingOpsClassification {
 }
 
 export const ROOFING_AGENT_SCOPES: Record<RoofingAgentId, RoofingAgentScope> = {
-  maya: {
-    agent: "maya",
-    displayName: "Maya Chen",
-    domains: ["document_intake", "invoice_intake", "ap", "ar", "credit_memo_intake", "price_agreement_intake", "hr_escalation", "payroll_escalation"],
-    keywords: ["invoice", "upload", "pdf", "ap", "ar", "credit memo", "creditmemos", "price agreement", "vendor document", "intake", "payroll", "hr"],
-  },
   alex: {
     agent: "alex",
     displayName: "Alex Rivers",
@@ -83,8 +77,8 @@ export const ROOFING_AGENT_SCOPES: Record<RoofingAgentId, RoofingAgentScope> = {
   ops: {
     agent: "ops",
     displayName: "Ops Conductor",
-    domains: ["routing", "overlap", "unknown", "bug", "feature", "enhancement", "dev_escalation"],
-    keywords: ["bug", "feature", "enhancement", "not working", "broken", "can you build", "route this", "who owns", "devteam", "dev team"],
+    domains: ["document_intake", "invoice_intake", "routing", "overlap", "unknown", "bug", "feature", "enhancement", "dev_escalation"],
+    keywords: ["upload", "pdf", "intake", "invoice", "bug", "feature", "enhancement", "not working", "broken", "can you build", "route this", "who owns", "devteam", "dev team"],
   },
 };
 

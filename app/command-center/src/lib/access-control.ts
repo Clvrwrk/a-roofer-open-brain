@@ -95,15 +95,6 @@ const VIEWER_PERMISSIONS: CommandCenterPermission[] = ["command_center.read", "w
 
 export const NAMED_AGENT_IDENTITIES: NamedAgentIdentity[] = [
   {
-    id: "maya-chen",
-    displayName: "Maya Chen",
-    email: "maya.chen@cc.proexteriorsus.net",
-    mapsTo: ["@ob-accounting", "Capture"],
-    desktopEnabled: true,
-    departmentAccess: ["accounting", "system"],
-    role: "document-intake",
-  },
-  {
     id: "alex-rivers",
     displayName: "Alex Rivers",
     email: "alex.rivers@cc.proexteriorsus.net",
@@ -550,7 +541,7 @@ export function resolveActorFromSessionUser(
   env: RuntimeEnv = getRuntimeEnv(),
 ): CommandCenterActor | null {
   const email = cleanEmail(user.email);
-  if (!email) return null;
+  if (!email || email === "maya.chen@cc.proexteriorsus.net") return null;
 
   const namedAgent = NAMED_AGENT_IDENTITIES.find((agent) => agent.email === email);
   if (namedAgent) return namedAgentToActor(namedAgent);

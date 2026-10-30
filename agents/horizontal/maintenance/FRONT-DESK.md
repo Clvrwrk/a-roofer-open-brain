@@ -14,7 +14,8 @@ Hermes is the front receptionist for the repo: every agent should be able to ask
 
 | Path | Status | Purpose |
 | --- | --- | --- |
-| `app/command-center/` | planned | Future production Astro SSR front end and UI islands. The current prototype remains in `deployment/remote/dashboard/` until migrated. |
+| `app/command-center/` | active | Production Astro SSR application. Keep its deployed path stable; `app/CC_PWA` indexes it. |
+| `app/*_PWA/` | app homes / local intake | Read each `APP-INDEX.md`; companion source links preserve separate repository histories. |
 | `agents/` | active | Agent charters, IO contracts, and operating docs. |
 | `config/` | active | Client-editable configuration and brand tokens. No secrets. |
 | `data/` | planned | Sanitized seed/reference data only. Raw client spreadsheets, invoices, and exports stay out of git. |
@@ -35,7 +36,7 @@ Hermes is the front receptionist for the repo: every agent should be able to ask
 
 | Lane | Examples | Default action |
 | --- | --- | --- |
-| Product app code | command center UI, dashboard endpoints, auth, agent monitoring | Route to `app/command-center/` when the Astro migration phase begins. |
+| Product app code | command center UI, dashboard endpoints, auth, agent monitoring | Use the owning app's established source root; Command Center is `app/command-center/`. Companion apps retain independent roots. |
 | Runtime/deploy code | Coolify, Docker, health checks, Slack manifests | Route to `deployment/`. |
 | Brain/schema work | Supabase migrations, SQL, RPCs, data contracts | Route to `schemas/` or `integrations/bridges/`. |
 | Agent work | charters, IO contracts, prompts, task rules | Route to `agents/`, `skills/`, or `recipes/`. |

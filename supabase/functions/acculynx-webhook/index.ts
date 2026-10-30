@@ -1,3 +1,4 @@
+import {observeEdgeHandler} from "../_shared/edge-observer.ts";
 // acculynx-webhook — Edge Function entrypoint (Phase 7, plan 07-08, D-17)
 //
 // Public-facing receiver for AccuLynx webhook POSTs. Thin Deno.serve HTTP boundary — all
@@ -59,7 +60,7 @@ const WEBHOOK_ACCOUNT_MAP: Record<string, string> = (() => {
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-webhook",async (req: Request,outcome): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   // The URL token segment is the last path component:
@@ -104,6 +105,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const route = routeTopic(payload, WEBHOOK_ACCOUNT_MAP);
+  if(!route.enqueuedAction)outcome.skip();
 
   let logResult;
   try {
@@ -124,11 +126,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch (e) {
     // Enqueue failure does not change the 200 response to AccuLynx (avoid retry-storm on our
     // own downstream error) — it is surfaced via server logs for operator follow-up.
+    outcome.fail();
     console.error(`[acculynx-webhook] enqueue failed: ${(e as Error).message}`);
   }
 
   return json({ status: "ok", enqueuedAction: route.enqueuedAction }, 200);
-});
+},sb));
 
 function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });

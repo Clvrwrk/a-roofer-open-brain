@@ -1,0 +1,21 @@
+name: Verify Command Center
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix app/command-center
+      - run: npm audit --audit-level=high --prefix app/command-center
+      - run: npm test --prefix app/command-center
+      - run: npm run build --prefix app/command-center
+      - run: node --test scripts/test-self-heal-*.mjs
+      - run: node --test scripts/tests/local-script-paths.test.mjs
+      - run: node --experimental-strip-types --test supabase/functions/_shared/edge-observer.test.ts scripts/tests/sync-health-relay.test.mjs

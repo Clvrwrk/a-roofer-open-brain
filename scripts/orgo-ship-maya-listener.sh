@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "Maya retired 2026-10-23; no work executed." >&2; exit 0
 # Ship the Maya Slack listener release to her Orgo desktop (pe-maya-chen).
 #
 # Transport: Orgo REST API bash execution (POST /api/computers/{id}/bash) —

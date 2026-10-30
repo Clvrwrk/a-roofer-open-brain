@@ -25,7 +25,10 @@ import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
 import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
+import { syncWipFinancials } from "./resources/wip-financials.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
+import { startSyncAudit, auditStatus } from "./lib/audit.ts";
+import { authorizeDispatch } from "./lib/dispatch-auth.ts";
 import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
@@ -580,9 +583,17 @@ async function runAccountSync(
   deadline: number,
   batchId: string,
   jobWalkOnly = false,
+  financialsOnly = false,
 ): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
   const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
 
+  if (financialsOnly) {
+    const pass = await syncWipFinancials(sb, acct, apiKey, deadline - CRM_RESERVE_MS, batchId);
+    result.jobWalk = pass.errors ? `error: financial_refresh_failed (${pass.errors})` : `ok (financials ${pass.walked.length} of ${pass.candidates})`;
+    const crm = await syncCrmPipeline(sb, acct, deadline, new Map(), batchId, pass.walked);
+    result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
+    return result;
+  }
   if (jobWalkOnly) {
     // The walk stops CRM_RESERVE_MS early so the scoped crm_pipeline write below always
     // runs: on 2026-10-02 20:13 UTC the walk used every slice to the millisecond and the
@@ -738,11 +749,13 @@ async function runAccountSync(
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
+  const authorized = await authorizeDispatch(req, sb);
+  if (authorized instanceof Response) return authorized;
   const started = Date.now();
   const runStartIso = new Date(started).toISOString();
   const deadline = started + RUNTIME_BUDGET_MS;
 
-  const body = await req.json().catch(() => ({}));
+  const body = authorized.body;
   const resources: string[] = body.resources ?? ["users", "jobs"];
   const fullSync: boolean = body.fullSync ?? false;
   const resolveLeads: boolean =
@@ -753,6 +766,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // full budget of their own instead of whatever the users/jobs/contacts/estimates
   // steps leave. Uses its own rotation cursor so it never shifts the :00 run's order.
   const jobWalkOnly: boolean = body.jobWalkOnly === true;
+  const financialsOnly: boolean = body.financialsOnly === true;
   // accountFilter: optional array of account_key strings to restrict the fan-out.
   // When set, only the named production account(s) are synced, giving each the full
   // ~110s budget instead of sharing it across all enabled accounts (fixes wichita budget
@@ -765,18 +779,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const batchId = `sync-${runStartIso.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
 
-  await sb.from("crm_sync_log").insert({
-    sync_batch_id: batchId,
-    sync_type: multiAccount
-      ? "multi_account"
-      : (fullSync ? "full_sync" : resources.join(",") || "api_incremental"),
-    started_at: runStartIso,
-    status: "running",
-    api_endpoint: "acculynx-sync",
-  });
+  if (!await startSyncAudit(sb,batchId,runStartIso)) return json({error:"audit_log_unavailable",dispatch_run_id:authorized.runId,status:"failed"},503);
 
   const result: any = {
     batch_id: batchId,
+    dispatch_run_id: authorized.runId,
     resources: {},
     fullSync,
     resolveLeads,
@@ -853,7 +860,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const perAccountShareMs = Math.max(0, Math.floor(msRemaining / Math.max(1, remainingAccounts)));
         const perAccountDeadline = Math.min(deadline, Date.now() + perAccountShareMs);
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly);
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly, financialsOnly);
         remainingAccounts--;
       }
 
@@ -872,7 +879,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // v10 legacy resources (users, jobs, resolveLeads) — preserved for backward compat
-    if (!multiAccount || resources.includes("users")) {
+    if (!multiAccount || (!financialsOnly && resources.includes("users"))) {
       if (resources.includes("users")) {
         try {
           result.resources.users = await legacySyncUsers(batchId, deadline);
@@ -907,12 +914,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
+    // Account resource errors must affect the run outcome, not hide inside HTTP 200.
+    for (const [account, resources] of Object.entries(result.accounts ?? {})) {
+      if (typeof resources === "string") {
+        errorCount++;
+        errorDetails.push({account,resource:"account",message:"account_not_synced"});
+        continue;
+      }
+      for (const [resource, outcome] of Object.entries(resources as Record<string, unknown>)) {
+        if (typeof outcome === "string" && /^(error:|skipped.*key)/i.test(outcome)) {
+          errorCount++;
+          errorDetails.push({account,resource,message:"resource_failed"});
+        }
+      }
+    }
+    const {count: walkErrors, error: errorRead} = await sb.from("acculynx_job_walk_errors")
+      .select("id", {count:"exact", head:true}).eq("sync_batch_id", batchId);
+    if (errorRead || (walkErrors ?? 0)>0) {
+      errorCount += walkErrors || 1;
+      errorDetails.push({resource:"job_walk",message:"incomplete_observations"});
+    }
     result.runtime_ms = Date.now() - started;
     result.status = errorCount > 0 ? "partial_success" : "completed";
 
     await sb.from("crm_sync_log").update({
       completed_at: new Date().toISOString(),
-      status: result.status,
+      status: auditStatus(result.status),
       rows_fetched: totalFetched,
       error_count: errorCount,
       error_details: errorDetails.length ? errorDetails : null,
@@ -954,7 +981,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const dsn = Deno.env.get("ACCULYNX_SENTRY_DSN");
     if (dsn) await captureSentryError(dsn, err as Error, { batch_id: batchId });
 
-    return json({ error: msg, batch_id: batchId }, 500);
+    return json({ error: "sync_failed", batch_id: batchId, dispatch_run_id: authorized.runId, status: "failed" }, 500);
   }
 });
 

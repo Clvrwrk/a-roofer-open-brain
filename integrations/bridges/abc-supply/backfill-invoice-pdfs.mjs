@@ -9,11 +9,12 @@
 //
 // Auth + config mirror production-sync.mjs (OAuth client_credentials, prod base by default).
 
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ENV_PATH = resolve(ROOT, ".env");
 
 const DEFAULTS = {

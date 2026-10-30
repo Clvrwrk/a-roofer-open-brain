@@ -50,6 +50,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 
+import { restoreContactParents } from "./contact-parents.ts";
 import { advanceWatermark } from "../lib/watermark.ts";
 import {
   mapInvoiceHeader,
@@ -72,7 +73,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * would erase trusted balances and give them a fresh observation timestamp.
  * Zero and explicit null are valid; optional totals may be absent or null.
  */
-function isJobFinancialsBody(body: unknown): boolean {
+export function isJobFinancialsBody(body: unknown): boolean {
   if (!body || typeof body !== "object" || Array.isArray(body)) return false;
   const financials = body as Record<string, unknown>;
   const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(financials, key);
@@ -97,7 +98,7 @@ function isJobFinancialsBody(body: unknown): boolean {
  * Fetch a URL with 429 retry + exponential backoff.
  * apiKey is an explicit parameter to prevent cross-account key bleed (T-02-04).
  */
-async function acculynxGet(
+export async function acculynxGet(
   url: string,
   apiKey: string,
   fetchFn: typeof fetch,
@@ -130,7 +131,7 @@ async function acculynxGet(
  * http_status, page_index, payload). Non-fatal: a raw-archive failure is logged but does
  * not block the typed upsert — the archive is best-effort provenance, not a hard gate.
  */
-async function archiveRaw(
+export async function archiveRaw(
   sb: any,
   syncBatchId: string | undefined,
   resourceType: string,
@@ -442,6 +443,7 @@ export async function syncJobWalk(
     const encodedJobId = encodeURIComponent(jobId);
     const ctx = { ...ctxBase, job_id: jobId };
     const walkStartedAt = new Date().toISOString();
+    let moneyComplete = true;
 
     // 0. The job's own record (preselected mode). Only the milestone and modified
     //    fields are written: the detail body is not the list shape mapJob() expects,
@@ -475,8 +477,21 @@ export async function syncJobWalk(
       (Array.isArray(contactsBody) ? (contactsBody as unknown[]) : []);
     if (jobContacts.length > 0) {
       const contactRows = jobContacts.map((c: any) => mapJobContact(c, ctx));
-      const { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      let { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      // A newly linked contact can be absent from the slower account-wide sweep.
+      // Restore it from its own authenticated endpoint; never invent a parent or drop the FK.
+      if (error?.code === "23503" && error.message?.includes("acculynx_job_contacts_contact_id_fkey")) {
+        const restored = await restoreContactParents(sb, acct, contactRows, deadline, async (id) => {
+          await sleep(PACE_MS);
+          const endpoint = `/contacts/${encodeURIComponent(id)}`;
+          const response = await acculynxGet(`${ACCULYNX_BASE}${endpoint}`, apiKey, fetchFn);
+          await archiveRaw(sb, syncBatchId, "contacts", endpoint, response.status, response.body);
+          return response;
+        });
+        if (restored) ({ error } = await sb.from("acculynx_job_contacts").upsert(contactRows));
+      }
       if (error) {
+        moneyComplete = false; // keep dependency failures eligible for the next candidate pass
         await recordWalkError(
           sb,
           acct.account_key,
@@ -502,6 +517,7 @@ export async function syncJobWalk(
       const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
       if (error) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -513,6 +529,7 @@ export async function syncJobWalk(
         );
       }
     } else {
+      moneyComplete = false;
       await recordWalkError(
         sb,
         acct.account_key,
@@ -625,11 +642,16 @@ export async function syncJobWalk(
     const invoiceStubs: any[] = (invListBody as { items?: any[] })?.items ??
       (Array.isArray(invListBody) ? (invListBody as any[]) : []);
 
+    if (invListStatus !== 200 || !Array.isArray((invListBody as any)?.items)) {
+      moneyComplete = false;
+      await recordWalkError(sb, acct.account_key, jobId, "invoices", syncBatchId, "Invalid invoice list; financial observation remains incomplete", invListStatus);
+    }
     if (invoiceStubs.length > 0) {
       // Upsert invoice headers
       const headerRows = invoiceStubs.map((inv: any) => mapInvoiceHeader(inv, ctx));
       const { error: hErr } = await sb.from("acculynx_invoices").upsert(headerRows);
       if (hErr) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -695,8 +717,8 @@ export async function syncJobWalk(
       if (repName) repNameByJobId.set(jobId, repName);
     }
 
-    options.walked?.push(jobId);
-    if (preselected) {
+    if (moneyComplete) options.walked?.push(jobId);
+    if (preselected && moneyComplete) {
       const { error } = await sb.from("acculynx_jobs").update({ walked_at: walkStartedAt }).eq("id", jobId);
       if (error) console.warn(`[job-walk] walked_at stamp for ${jobId}: ${error.message}`);
     }

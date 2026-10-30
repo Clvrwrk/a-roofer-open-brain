@@ -176,6 +176,10 @@ Where a price sheet genuinely quotes in a different unit from the invoice, recor
 
 Migrations **119–122** (2026-06-19). Full contract: [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
 
+## 10d. Self-healing loop (every surface, by default)
+
+Every app, service and work surface ships inside the self-healing loop: Sentry (release = build commit, PII scrubbed, handled errors captured with route and error code) -> scheduled triage into a deduped Linear bug log with evidence -> reproduce-first fix proposal as a draft PR where a verify chain exists -> human merge -> verify-and-close (deploy confirmed via `/healthz` `buildCommit`, soak, then resolve Sentry + Linear Done `verified`, or reopen `regressed` with evidence). Nothing auto-merges or auto-deploys; the fixing agent holds no credentials. A surface is not done until it has a Sentry project, a `/healthz` with `buildCommit`, and the vendored kit (`scripts/self-heal/` + `.github/workflows/self-heal.yml`, canonical source CRM_PWA `scripts/triage/`). Inngest and PostHog are deferred (doc 54). Standard: [`docs/127-self-healing-loop.md`](docs/127-self-healing-loop.md); A3: [`proposals/a3-self-healing-loop-all-surfaces.md`](proposals/a3-self-healing-loop-all-surfaces.md).
+
 ## 11. Design system (one source of truth for every visual asset)
 
 - Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
