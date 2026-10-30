@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "Maya retired 2026-10-23; no work executed." >&2; exit 0
 # Maya diagnose → Slack-approved repair gate runner (A3; scripts/maya-gate.mjs).
 # systemd: deployment/remote/systemd/openbrain-maya-gate.{service,timer} (*/15 min).
 set -euo pipefail

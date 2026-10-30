@@ -6,7 +6,7 @@
   "source_system_type": "provider-registry",
   "enabled": false,
   "origin": "cleverwork",
-  "bound_agents": ["maya", "alex", "sam", "ops-conductor", "lena"],
+  "bound_agents": ["alex", "sam", "ops-conductor", "lena"],
   "env_vars": {
     "required": [],
     "optional": [

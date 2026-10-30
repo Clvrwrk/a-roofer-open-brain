@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+console.error("Maya retired 2026-10-23; no work executed."); process.exit(0);
 // Maya diagnose → Slack-approved repair gate (A3: proposals/a3-maya-diagnose-repair-slack-gate.md).
 //
 //   node scripts/maya-gate.mjs run          # full pass: notices, diagnose, approvals
@@ -181,7 +182,9 @@ async function phaseNotices() {
 // ---------------------------------------------------------------------------
 // PHASE A — diagnose
 // ---------------------------------------------------------------------------
-const JOB_NUMBER_RE = /\b([A-Z]{2,3}-\d{1,4})\b/g;
+// A CRM job number keeps its suffix (TX-460-PECRM): truncating it to TX-460 would diagnose the
+// AccuLynx job that happens to share the number (mig 316, docs/118).
+const JOB_NUMBER_RE = /\b([A-Z]{2,3}-\d{1,4}(?:-PECRM)?)\b/g;
 
 async function findNewIntakes() {
   const data = await linear(

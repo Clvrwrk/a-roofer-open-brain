@@ -1,0 +1,533 @@
+{
+  "generatedAt": "2026-10-23T17:56:38.726Z",
+  "summary": {
+    "green": 66,
+    "yellow": 10,
+    "red": 7,
+    "unknown": 4
+  },
+  "components": [
+    {
+      "key": "site.healthz",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "page.agents",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "page.auth-md",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.accounting.kpi-pills",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.invoice-audit.pending-verification",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.executive.cash-runway",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.agent.work-queue",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.credit-memos.pending",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.companycam.photos",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "api.accounting.friday-wip",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "site"
+    },
+    {
+      "key": "int.supabase-rest",
+      "light": "red",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.supabase-auth",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.workos",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.jobtread",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.acculynx",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.companycam",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.quickbooks",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.slack",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.abc-supply",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.coolify",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.betterstack",
+      "light": "yellow",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.github",
+      "light": "yellow",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.linear",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "int.agentmail",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:38.726Z",
+      "group": "integrations"
+    },
+    {
+      "key": "feed.abc_invoices",
+      "light": "green",
+      "lastAt": "2026-10-23T07:31:19.479022+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.mv_invoice_audit_line",
+      "light": "green",
+      "lastAt": "2026-10-23T17:48:57.087452+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.acculynx_watermark",
+      "light": "red",
+      "lastAt": "2026-10-20T22:05:41.386+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.vendor_invoices",
+      "light": "red",
+      "lastAt": "2026-09-22T13:06:57.124504+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.wip_ar_master",
+      "light": "green",
+      "lastAt": "2026-10-23T08:20:01.567307+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "feed.credit_memo_receipts",
+      "light": "green",
+      "lastAt": "2026-10-23T07:33:00.055694+00:00",
+      "group": "feeds"
+    },
+    {
+      "key": "pgcron.acculynx-geoid-match-daily",
+      "light": "green",
+      "lastAt": "2026-10-23T08:45:03.890258+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.pvp_refresh_nightly",
+      "light": "green",
+      "lastAt": "2026-10-23T07:00:02.183562+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.top20_refresh_quarterly",
+      "light": "green",
+      "lastAt": "2026-10-01T11:00:02.252929+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-hourly-sync",
+      "light": "red",
+      "lastAt": "2026-10-20T22:04:00.167456+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-reconcile",
+      "light": "green",
+      "lastAt": "2026-10-23T17:50:00.18026+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-alert-check",
+      "light": "green",
+      "lastAt": "2026-10-23T17:50:01.808287+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.wip-ar-master-nightly",
+      "light": "green",
+      "lastAt": "2026-10-23T09:00:00.119852+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.wip-ar-week-roll-thursday",
+      "light": "green",
+      "lastAt": "2026-10-22T08:45:00.12231+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-office-pricing-matviews",
+      "light": "green",
+      "lastAt": "2026-10-23T17:48:57.087452+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.nightly-silo-assertions",
+      "light": "green",
+      "lastAt": "2026-10-23T09:30:00.395009+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.service-matview-refresh-requests",
+      "light": "green",
+      "lastAt": "2026-10-23T17:56:00.41572+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-overhead-matview",
+      "light": "green",
+      "lastAt": "2026-10-23T07:35:03.926247+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-order-acculynx-match",
+      "light": "green",
+      "lastAt": "2026-10-23T17:52:00.808819+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.refresh-hail-heatzone-coverage",
+      "light": "green",
+      "lastAt": "2026-10-23T17:42:05.179873+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.runtime-heartbeat-pump",
+      "light": "green",
+      "lastAt": "2026-10-23T17:55:00.427561+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.crm-acculynx-nightly-sync",
+      "light": "green",
+      "lastAt": "2026-10-23T09:30:10.933832+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "pgcron.acculynx-job-walk",
+      "light": "red",
+      "lastAt": "2026-10-20T21:30:00.223064+00:00",
+      "group": "pg_cron"
+    },
+    {
+      "key": "systemd.openbrain-abc-sync",
+      "light": "green",
+      "lastAt": "2026-10-23T07:32:42.126969+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-jt-sentinel",
+      "light": "red",
+      "lastAt": "2026-10-23T17:00:17.778795+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-maya-gate",
+      "light": "green",
+      "lastAt": "2026-10-23T17:51:11.622206+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-maya-qa",
+      "light": "yellow",
+      "lastAt": "2026-10-23T09:30:01.978657+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-qbo-thursday-sync",
+      "light": "green",
+      "lastAt": "2026-10-23T01:07:44.480109+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-site-sweep",
+      "light": "yellow",
+      "lastAt": "2026-10-23T11:00:24.862583+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-companycam-sync",
+      "light": "green",
+      "lastAt": "2026-10-23T07:16:31.83286+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-companycam-copy",
+      "light": "green",
+      "lastAt": "2026-10-23T17:38:03.537981+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "systemd.openbrain-wip-pack-thursday",
+      "light": "green",
+      "lastAt": "2026-10-23T08:20:25.008523+00:00",
+      "group": "systemd"
+    },
+    {
+      "key": "edge.acculynx-sync",
+      "light": "green",
+      "lastAt": "2026-10-20T22:04:00.083483+00:00",
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-webhook",
+      "light": "unknown",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-read-sweep",
+      "light": "unknown",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-write-sweep",
+      "light": "unknown",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "edge.acculynx-write-action",
+      "light": "unknown",
+      "lastAt": null,
+      "group": "edge"
+    },
+    {
+      "key": "agent.alex-rivers",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.maya-chen",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.casey-morgan",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.jordan-price",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.lena-brooks",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.rowan-vale",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.sam-torres",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.ops-conductor",
+      "light": "red",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "agent.openbrain-shared",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-accounting",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-ops",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-sales",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-marketing",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-exec",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-capture",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-researcher",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-conductor",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-innovator",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-historian",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-auditor",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-quality-control",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.hermes",
+      "light": "green",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.dev-conductor",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.session-analyst",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "service.ob-acculynx",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "agents"
+    },
+    {
+      "key": "deploy.command-center",
+      "light": "yellow",
+      "lastAt": null,
+      "group": "deploy"
+    }
+  ]
+}

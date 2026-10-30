@@ -25,10 +25,11 @@
 // load-once guard: once an invoice is stamped it never appears in a future file. Only
 // pass --stamp when the CSV has actually been handed to accounting and loaded.
 
+import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(new URL("..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const args = new Set(process.argv.slice(2));
 const STAMP = args.has("--stamp");
 const WEEK_ONLY = args.has("--week");

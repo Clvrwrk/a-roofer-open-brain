@@ -9,7 +9,16 @@ let shuttingDown = false;
 let slackRestartAttempts = 0;
 let slackRestartTimer = null;
 
+// Exactly one Slack runtime may run: the Coolify Command Center. Any other container built
+// from this image (the CRM /sales mirror, release-check slots) must set
+// COMMAND_CENTER_SLACK_RUNTIME=off. On 2026-10-02 ten stale mirror/release containers each
+// ran their own Socket Mode connection, DM poller and mirror drain on old code (docs/122).
+function slackRuntimeDisabled() {
+  return String(process.env.COMMAND_CENTER_SLACK_RUNTIME ?? "").toLowerCase() === "off";
+}
+
 function hasSlackRuntimeEnv() {
+  if (slackRuntimeDisabled()) return false;
   return Boolean(
     process.env.SLACK_BOT_TOKEN &&
       process.env.SLACK_APP_TOKEN &&

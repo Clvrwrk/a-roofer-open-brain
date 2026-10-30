@@ -120,7 +120,8 @@ export function parseLeadSource(name?: string | null): { parent: string | null; 
 
 export function parseJobName(jobName?: string | null): { prefix: string | null; rest: string | null } {
   if (!jobName) return { prefix: null, rest: null };
-  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+):\s*(.*)$/);
+  // CRM job numbers keep their -PECRM suffix in the prefix (mig 316, docs/118).
+  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+(?:-PECRM)?):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };
   m = jobName.match(/^([0-9]+):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };
@@ -426,13 +427,76 @@ export async function loadDurableRepsFromRaw(
  *                          acculynx_raw-sourced fallback below (current-run wins).
  * @param batchId         - sync_batch_id for cross-referencing this run
  */
+const JOB_COLUMNS =
+  "id,job_name,job_number,priority,current_milestone,milestone_date,created_date,modified_date," +
+  "lead_dead_reason,job_category_name,trade_types,location_street1,location_city,location_state," +
+  "location_state_abbrev,location_zip,latitude,longitude,lead_source_name,initial_appointment_start," +
+  "initial_appointment_end,initial_appointment_notes,raw";
+const ID_CHUNK = 100;
+
+/** syncCrmPipeline for an explicit job list: same mapping, same rep partitioning. */
+async function syncCrmPipelineForJobs(
+  sb: any,
+  acct: { account_key: string },
+  _deadline: number,
+  repNameByJobId: Map<string, string>,
+  batchId: string | undefined,
+  jobIds: string[],
+): Promise<{ upserted: number; error?: string }> {
+  const jobs: JobRow[] = [];
+  const financialsByJobId = new Map<string, JobFinancialsRow>();
+  for (let i = 0; i < jobIds.length; i += ID_CHUNK) {
+    const ids = jobIds.slice(i, i + ID_CHUNK);
+    const { data: jobRows, error: je } = await sb.from("acculynx_jobs").select(JOB_COLUMNS)
+      .eq("account_key", acct.account_key).in("id", ids);
+    if (je) return { upserted: 0, error: `jobs load: ${je.message}` };
+    jobs.push(...((jobRows ?? []) as JobRow[]));
+    const { data: finRows, error: fe } = await sb.from("acculynx_job_financials")
+      .select("job_id,approved_job_value,balance_due").in("job_id", ids);
+    if (fe) return { upserted: 0, error: `financials load: ${fe.message}` };
+    for (const f of (finRows ?? []) as JobFinancialsRow[]) financialsByJobId.set(f.job_id, f);
+  }
+  if (jobs.length === 0) return { upserted: 0 };
+
+  const merged = new Map<string, string>(await loadDurableRepsFromRaw(sb, jobs.map((j) => j.id)));
+  for (const [jobId, repName] of repNameByJobId.entries()) merged.set(jobId, repName);
+
+  const nowIso = new Date().toISOString();
+  const rows = jobs.map((job) =>
+    buildPipelineRow(job, financialsByJobId.get(job.id) ?? null, merged.get(job.id) ?? null, batchId, nowIso)
+  );
+  // Same rep partitioning as the full rebuild: a rep-less row must never share a
+  // payload with rep rows (PostgREST column-union null-wipe, 2026-07-03 incident #5).
+  // No deadline gate here: the list is only the jobs this run already walked (at most
+  // the walk's candidate cap), and skipping the write strands them — walked_at is
+  // stamped, so they are not picked again (georgia / insurance_program, 20:30 UTC
+  // 2026-10-02: walked 4, wrote 0 after one slow job ran past the 3 s reserve).
+  let upserted = 0;
+  for (const partition of [rows.filter((r) => "primary_salesperson" in r), rows.filter((r) => !("primary_salesperson" in r))]) {
+    if (partition.length === 0) continue;
+    const { error } = await sb.from("crm_pipeline").upsert(partition, { onConflict: "acculynx_job_id", ignoreDuplicates: false });
+    if (error) return { upserted, error: `crm_pipeline upsert: ${error.message}` };
+    upserted += partition.length;
+  }
+  return { upserted };
+}
+
 export async function syncCrmPipeline(
   sb: any,
   acct: { account_key: string },
   deadline: number,
   repNameByJobId: Map<string, string> = new Map(),
   batchId?: string,
+  onlyJobIds?: string[],
 ): Promise<{ upserted: number; error?: string }> {
+  // Scoped rebuild (2026-10-02): the hourly walk-only run passes the jobs it just walked,
+  // so their pipeline rows (milestone, contract, balance) refresh without re-reading and
+  // re-upserting the whole account under a loaded database. Chunked .in() lists stay far
+  // below PostgREST's URL limit (the 2026-07-03 1,286-id incident below).
+  if (onlyJobIds) {
+    if (onlyJobIds.length === 0) return { upserted: 0 };
+    return await syncCrmPipelineForJobs(sb, acct, deadline, repNameByJobId, batchId, onlyJobIds);
+  }
   const jobsPaged = await pageAll<JobRow>((from, to) =>
     sb
       .from("acculynx_jobs")

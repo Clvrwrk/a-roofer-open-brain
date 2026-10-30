@@ -1,4 +1,6 @@
 [Unit]
+# Retired by Chris 2026-10-23; retained only for historical reference.
+ConditionPathExists=/nonexistent/jobtread-retired-by-chris-2026-10-23
 Description=Daily JobTread Sync Sentinel at 10:00 America/Los_Angeles (DST-aware)
 
 [Timer]

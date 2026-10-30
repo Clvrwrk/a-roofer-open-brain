@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cadenceFromCron, classifyFeed, classifyProbe, classifyScheduled, heartbeatEvidence, monitorLight, worst } from "./runtime-status";
+import { attestedCommit, cadenceFromCron, classifyFeed, classifyProbe, classifyScheduled, heartbeatEvidence, monitorLight, worst } from "./runtime-status";
 import { resolveProbeUrl } from "./integration-probes.server";
 
 const NOW = Date.parse("2026-09-11T15:00:00Z");
@@ -113,4 +113,14 @@ describe("resolveProbeUrl", () => {
     expect(resolveProbeUrl("{SUPABASE_URL}/rest/v1/", {})).toBeNull();
     expect(resolveProbeUrl("{SUPABASE_URL}/rest/v1/", { SUPABASE_URL: "__set_me__" })).toBeNull();
   });
+});
+
+describe('Actions commit attestation',()=>{
+ it('accepts fresh valid commit and refuses stale, future, or malformed receipts',()=>{
+  const row={value:{commit:'a'.repeat(40)},updated_at:ago(60)};
+  expect(attestedCommit(row,NOW)).toBe('a'.repeat(40));
+  expect(attestedCommit({...row,updated_at:ago(1801)},NOW)).toBeNull();
+  expect(attestedCommit({...row,updated_at:ago(-120)},NOW)).toBeNull();
+  expect(attestedCommit({...row,value:{commit:'bad'}},NOW)).toBeNull();
+ });
 });

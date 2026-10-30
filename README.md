@@ -1,81 +1,111 @@
-# a-roofers-open-brain
+# A Roofer's Open Brain
 
-> A property-first, era-aware persistent memory layer for a roofing company — with a 13-agent workforce as its interface.
->
-> **The agents are the interface. The brain is the asset. The data is the product.**
+A property-first operations and persistent-memory platform for roofing companies, built by [Cleverwork](https://cleverwork.io) and used by Pro Exteriors.
 
-Built and maintained by [Cleverwork](https://cleverwork.io). This repo is the deployable template a single roofing client's brain is provisioned from. Clone it, fill in `config/roofer.config.yaml`, run `scripts/new-client.sh`, and you have an isolated brain running on Supabase + containerized MCPs with Slack-native agents.
+This repository contains the **Command Center** web application and shared backend, ingestion, integration and agent-governance infrastructure. CRM, HR and scheduling also have companion applications with their own source and release boundaries.
 
----
+Knowledge and operational evidence attach to the physical property, with provenance and the era of practice preserved. People review consequential decisions; agent roles help capture, retrieve, prepare and audit the work.
 
-## Why this exists
-
-The roofing trade is losing institutional knowledge for the third time in 30 years. The early-90s computing transition and the mid-2000s SaaS transition each stranded a generation of know-how on yellow pads and in retiring foremen's heads. The boomer/Gen-X retirement wave is the third. `a-roofers-open-brain` is the deliberate intervention: capture the knowledge **as the work happens**, stamp it with its era and the code in effect, bind it to the **property** it was performed on, and keep it reliable for 5+ years.
-
-Roofing is unusually property-bound: every job happens at a parcel, in a jurisdiction, under a code version, with a manufacturer warranty and an inspector culture. So the **property is the primary key**, not the client. That one decision unlocks cross-client property history — the moat no competitor can buy.
-
-## What you get
-
-- **13 agents per client.** 5 vertical (client-facing in Slack) + 8 horizontal (infrastructure). See [`AGENTS.md`](AGENTS.md).
-- **A property-first, era-aware schema** that extends the [OB1](https://natebjones.com) memory spine. See [`schemas/`](schemas/).
-- **Roofer-native bridges** — AccuLynx-first, plus CompanyCam, QuickBooks, EagleView, StartInfinity. See [`integrations/bridges/`](integrations/bridges/).
-- **The post-op debrief pipeline + EEAT flywheel + storm-response recipe.** See [`recipes/`](recipes/).
-- **Lean governance baked in** — Six Sigma A3 with a 10x ROI gate, Auditor vs. Quality Control separation, a 5S Maintenance playbook. See [`proposals/`](proposals/) and [`standards/`](standards/).
-- **A workspace front desk for agents** — Hermes/Maintenance keeps the repo map, import triage, naming conformance, and move manifests current so agents do not burn context on the wrong files. See [`agents/horizontal/maintenance/FRONT-DESK.md`](agents/horizontal/maintenance/FRONT-DESK.md).
-
-## Quickstart
-
-```bash
-# 1. Clone
-git clone <this-repo> a-roofers-open-brain && cd a-roofers-open-brain
-
-# 2. Configure your company (the ONLY file most roofers edit)
-cp config/roofer.config.example.yaml config/roofer.config.yaml
-cp config/.env.example .env
-$EDITOR config/roofer.config.yaml   # company, service area, AccuLynx, jurisdictions, manufacturers
-$EDITOR .env                        # secrets (never commit this file)
-
-# 3. Provision an isolated brain (Supabase project + schema + MCP containers + dashboard)
-./scripts/new-client.sh
-
-# 4. Verify end-to-end
-./scripts/verify-deployment.sh
+```mermaid
+flowchart LR
+  P[Authorized provider inputs] --> B[Shared Supabase backend]
+  B --> CC[Command Center — this repository]
+  B --> CRM[CRM — companion repository]
+  B --> HR[HR — companion application]
+  B --> PM[Scheduling — companion repository]
+  A[People and agent workflows] --> CC
 ```
 
-Full walkthrough: [`docs/01-onboard-a-roofer.md`](docs/01-onboard-a-roofer.md). Stuck? [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Customizing beyond the config file: [`docs/CUSTOMIZATION.md`](docs/CUSTOMIZATION.md).
+## What is here
 
-## Repository layout
+- **Accounting:** vendor invoice audits, negotiated-price agreement workflows, credit-memo review, Friday WIP/AR, cash-flow and export preparation.
+- **Operations and property work:** order and estimate audits, territory/property review, source-backed queues and integration health.
+- **Executive and system surfaces:** pipeline and cash visibility, runtime/sync status, review queues and the living design system.
+- **Shared infrastructure:** property-first SQL migrations, Supabase Edge Functions, provider adapters, operational scripts and deployment configuration.
+- **Agent operating model:** five department roles and eight infrastructure roles, with charters, recipes, provenance and human approval boundaries. Thirteen roles do not imply thirteen independently deployed services.
 
-| Path | What lives here |
+Capabilities and provider commissioning vary. The current provider scope names HailRecon, CompanyCam, AccuLynx, QuickBooks Online and NWS/NOAA; ABC/SRS/QXO remain accounting inputs. A retained adapter directory is not evidence that its provider is active. See the [integration catalog](integrations/bridges/README.md) and [sync coverage limits](docs/129-sync-verification-gaps.md).
+
+## Applications and ownership
+
+| Surface | Source | Boundary |
+| --- | --- | --- |
+| Command Center | [`app/command-center/`](app/command-center/) | Implemented here; production uses WorkOS authentication. |
+| CRM | [Clvrwrk/CRM_PWA](https://github.com/Clvrwrk/CRM_PWA) | Separate application/release, sharing authorized backend and identity contracts. |
+| HR | `apps/hr` in [CRM_PWA](https://github.com/Clvrwrk/CRM_PWA/tree/main/apps/hr) | Separately deployed app; the observed release is an HR shell, not a completed payroll system. |
+| Project management / scheduling | [Clvrwrk/pm.proexteriorsus.net](https://github.com/Clvrwrk/pm.proexteriorsus.net) | Separate web/API/worker repository; the observed live hostname is `scheduler.proexteriorsus.net`. |
+| Admin | Host application features and access/configuration workflows | No standalone Admin app is established by this repository. |
+
+The knowledge MCP under [`server/`](server/) is **uncommissioned scaffold**. Current Command Center and ingestion paths use Supabase server-side. Cross-application propagation and staff/device acceptance remain separate verification steps.
+
+The CC/CRM contract includes shared property identity, database readers, WorkOS session compatibility and a path-scoped Sales companion. Read the [companion-system boundary](docs/111-crm-pwa-companion-repo.md) before changing shared infrastructure.
+
+## Try the Command Center locally
+
+Use **Node.js 22** and npm. There is no root `package.json`; run app commands inside `app/command-center`.
+
+```bash
+git clone https://github.com/Clvrwrk/a-roofer-open-brain.git a-roofers-open-brain
+cd a-roofers-open-brain/app/command-center
+npm ci
+npm test
+npm run build
+
+# Foreground SSR server, bound to this computer only; background loops disabled.
+HOST=127.0.0.1 PORT=4399 \
+COMMAND_CENTER_SLACK_RUNTIME=off COMMAND_CENTER_PREWARM=off \
+npm run start:web
+```
+
+Open [localhost:4399](http://127.0.0.1:4399). Stop the foreground process with Ctrl-C.
+
+Without credentials, the app starts in a limited local mode: data-backed pages can show unavailable or empty sections. This exercises rendering and tests, not production data or provider readiness. `npm run dev` is available for interactive development; the built server is useful for checking the no-secret path without Vite's error overlay.
+
+For approved live-data development, obtain the appropriate isolated configuration; variable names are in [`config/.env.example`](config/.env.example). The runtime reads process environment and ancestor `.env`/`.env.local` files. A company configuration may connect to shared production. Keep credentials server-side and keep local writes away from production workflow tables.
+
+`npm start` also supervises runtime processes and can start Slack listeners. Use the foreground web-only command above for a basic local review. Full operator provisioning is a separate process: the historical `new-client.sh` and `verify-deployment.sh` scripts are not a validated installer/verifier for today's complete production stack.
+
+## Repository map
+
+| Path | Purpose |
 | --- | --- |
-| [`docs/`](docs/) | Architecture brief, onboarding, debrief script, philosophy, model matrix, security, FAQ, troubleshooting, customization |
-| [`schemas/`](schemas/) | `ob1-base/` (vendored OB1 spine, attributed) + `cleverwork-roofer/` (property-first SQL migrations) |
-| [`agents/`](agents/) | `horizontal/` (8 infrastructure agents) + `vertical/` (5 roofer-facing agents) |
-| [`skills/`](skills/) | `_template/`, `infranodus/` (cited), `ob1/` (cited), `cleverwork-roofer/` (originals) |
-| [`integrations/bridges/`](integrations/bridges/) | Data adapters, AccuLynx-first |
-| [`recipes/`](recipes/) | Post-op debrief, EEAT flywheel, storm-response, property + client onboarding |
-| [`standards/`](standards/) | Quality Control's versioned work-product standards (incl. `design/` — the DESIGN.md design-token contract) |
-| [`proposals/`](proposals/) | A3 templates + skill backlog (the 10x ROI gate) |
-| [`server/`](server/) | Deno + MCP container on Hetzner MCP server + smoke tests |
-| [`deployment/`](deployment/) | `remote/` (default: Supabase + Coolify) + `local/` (held in reserve) |
-| [`scripts/`](scripts/) | `new-client.sh`, `verify-deployment.sh`, `kaizen-review.sh` |
-| [`config/`](config/) | `roofer.config.yaml` + `brand/DESIGN.md` — the customization surface |
-| `app/command-center/` | Planned production Astro SSR app home; see [`docs/22-gsd-app-transition-roadmap.md`](docs/22-gsd-app-transition-roadmap.md) |
-| `imports/`, `private/` | Local ignored intake/workbench folders for raw copied projects and client-private files |
+| [`app/command-center/`](app/command-center/) | Astro SSR application, API routes, runtime supervisors and app tests. |
+| [`schemas/`](schemas/) | Vendored base schemas and roofing-specific SQL migrations. |
+| [`supabase/functions/`](supabase/functions/) | Ingestion, webhook and sync Edge Functions. |
+| [`integrations/bridges/`](integrations/bridges/) | Provider adapters, mappings and commissioning notes. |
+| [`deployment/`](deployment/) | Remote runtime, systemd, proxy and retained legacy/local deployment material. |
+| [`scripts/`](scripts/) | Operations, verification, import/export, monitoring and maintenance tools. |
+| [`docs/`](docs/) | Architecture, contracts, decisions, delivery evidence and handoffs. |
+| [`agents/`](agents/), [`skills/`](skills/), [`recipes/`](recipes/) | Workforce charters and reusable workflows. |
+| [`config/`](config/), [`standards/`](standards/), [`proposals/`](proposals/) | Client customization, design/quality standards and reviewed proposals. |
+| [`context/`](context/) | Curated agent context; excludes secrets and raw customer exports. |
 
-## Built on the shoulders of
+Local-only imports, private data, generated exports, caches and nested checkouts are not automatically part of the product or this repository's source history.
 
-- **OB1** (Nate B. Jones) — the persistent-memory spine. Schemas, MCP container pattern, recipes, guard rails. Nate gives away practical systems like this: <https://natebjones.com> · <https://substack.com/@natesnewsletter>.
-- **Dynamous workshops** (Cole Medin) — the security + local-sovereignty layer (referenced, not redistributed; see [`LICENSE.md`](LICENSE.md)).
-- **InfraNodus skills** — the cognition layer for the thinking agents (Auditor, QC, Innovator).
-- **Andrej Karpathy's LLM Wiki** — the philosophical pattern: build the wiki once, incrementally; don't re-derive on every query.
-- **DESIGN.md** (Google Labs) — the design-token format every visual asset follows. Spec vendored under `standards/design/vendor/` (Apache-2.0); linter run via `npx @google/design.md`. <https://github.com/google-labs-code/design.md>.
-- **GSD Core** (open-gsd) — the phase loop used for the app transition and future extended projects: Discuss, Plan, Execute, Verify, Ship. Referenced as a toolchain, not vendored by default. <https://github.com/open-gsd/gsd-core>.
+## Contributing and operating safely
 
-## License
+Start with [`AGENTS.md`](AGENTS.md), [`CONVENTIONS.md`](CONVENTIONS.md) and the [current handoff](docs/handoffs/current.md). Handoffs are dated evidence; verify current Git and deployment state before relying on them.
 
-**MIT** — see [`LICENSE`](LICENSE). Structured as a fork: all Cleverwork-original work is MIT (use it, fork it, ship it commercially). The four vendored OB1 base schemas keep their FSL-1.1-MIT notice and auto-convert to MIT on OB1's release schedule; Dynamous and InfraNodus are cited concepts only, re-expressed, never redistributed. Full breakdown in [`LICENSE.md`](LICENSE.md).
+Use a scoped worktree, preserve others' edits, and run the relevant tests plus the Command Center build for app changes. Keep shared schemas, authentication and companion routing contracts explicit. File relocation needs a reviewed move manifest and a dependency/rollback assessment.
 
----
+Production rules include additive migrations, property identity preservation, server-side credentials, vendor/office/time/UOM pricing boundaries and **read-only QuickBooks Online access**. External messages and consequential business actions retain their human approval boundaries. See [security guidance](SECURITY.md), [pricing rules](docs/105-price-agreement-silo-rules.md) and the [self-healing loop](docs/127-self-healing-loop.md).
 
-_Status: Scaffold (Phase 0). Generated 2026-05-29 from the v0.1 architecture brief. See [`docs/00-architecture-brief.md`](docs/00-architecture-brief.md)._
+A green local build does not establish a deployed release, successful provider activation or staff acceptance. Production health identity and authenticated workflow checks are separate evidence.
+
+## Documentation and help
+
+- [Command Center setup and routes](app/command-center/README.md)
+- [Architecture brief](docs/00-architecture-brief.md) — original design context; use current source/contracts for implementation status
+- [CRM and shared-system contract](docs/111-crm-pwa-companion-repo.md)
+- [Living design system](docs/112-design-system-site.md)
+- [Current integration scope and gaps](docs/129-sync-verification-gaps.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Cleverwork](https://cleverwork.io) — project maintainer
+
+Report vulnerabilities through the private reporting channel in [`SECURITY.md`](SECURITY.md), rather than a public issue.
+
+## License and acknowledgments
+
+Cleverwork-original work is MIT-licensed; see [`LICENSE`](LICENSE). Vendored materials retain their own notices, including the OB1 schemas' FSL-1.1-MIT terms and the DESIGN.md specification's Apache-2.0 license. See [`LICENSE.md`](LICENSE.md) and individual source notices; do not assume every retained third-party file shares the root license.
+
+The project builds on concepts and attributed work from Nate B. Jones / OB1, Dynamous, InfraNodus, Andrej Karpathy's LLM Wiki and Google Labs' DESIGN.md. Preserve upstream attribution when redistributing applicable material.

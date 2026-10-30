@@ -39,6 +39,7 @@ interface ImportMetaEnv {
   readonly GITHUB_TOKEN?: string;
   readonly GITHUB_WEBHOOK_SECRET?: string;
   readonly SENTRY_WEBHOOK_SECRET?: string;
+  readonly SELF_HEAL_TRIAGE_OWNS_LINEAR?: string;
   readonly PEC78_ADAPTER_MODE?: "disabled" | "shadow" | "enabled";
   readonly PEC78_MAYA_PUBLIC_JWK?: string;
   readonly PEC78_MAYA_JWK_THUMBPRINT?: string;

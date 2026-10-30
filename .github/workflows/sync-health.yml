@@ -1,0 +1,73 @@
+name: Integration sync health
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read-only sync incident triage
+        type: boolean
+        default: true
+permissions: {}
+concurrency:
+  group: integration-sync-health
+  cancel-in-progress: false
+jobs:
+  watch:
+    if: vars.SYNC_HEALTH_ENABLED == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/sync-health-watch.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_HEALTH_SERVICE_TOKEN: ${{ secrets.SYNC_HEALTH_SERVICE_TOKEN }}
+
+  triage:
+    if: (vars.SYNC_HEALTH_TRIAGE_ENABLED == 'true' && vars.SELF_HEAL_TRIAGE_ENABLED != 'true') || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      SENTRY_ORG: cleverwork
+      SENTRY_PROJECT: cc-proexteriorsus
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+      TRIAGE_MIN_SEVERITY: S3
+      AUTOFIX_KILL_SWITCH: ${{ vars.AUTOFIX_KILL_SWITCH }}
+      LINEAR_HUMAN_ASSIGNEE_ID: ${{ vars.LINEAR_HUMAN_ASSIGNEE_ID }}
+      LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
+      LINEAR_TRIAGE_STATE_ID: ${{ vars.LINEAR_TRIAGE_STATE_ID }}
+      LINEAR_LABEL_BUG: ${{ vars.LINEAR_LABEL_BUG }}
+      LINEAR_LABEL_SOURCE_SENTRY: ${{ vars.LINEAR_LABEL_SOURCE_SENTRY }}
+      LINEAR_LABEL_SOURCE_USER: ${{ vars.LINEAR_LABEL_SOURCE_USER }}
+      LINEAR_LABEL_AUTOFIX_QUEUED: ${{ vars.LINEAR_LABEL_AUTOFIX_QUEUED }}
+      LINEAR_LABEL_AUTOFIX_RUNNING: ${{ vars.LINEAR_LABEL_AUTOFIX_RUNNING }}
+      LINEAR_LABEL_AUTOFIX_PR_OPEN: ${{ vars.LINEAR_LABEL_AUTOFIX_PR_OPEN }}
+      LINEAR_LABEL_NEEDS_HUMAN: ${{ vars.LINEAR_LABEL_NEEDS_HUMAN }}
+      LINEAR_LABEL_VERIFY_PENDING: ${{ vars.LINEAR_LABEL_VERIFY_PENDING }}
+      LINEAR_LABEL_VERIFIED: ${{ vars.LINEAR_LABEL_VERIFIED }}
+      LINEAR_LABEL_REGRESSED: ${{ vars.LINEAR_LABEL_REGRESSED }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sync-specific Sentry to Linear
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node scripts/sync-health-triage.mjs
+          else node scripts/sync-health-triage.mjs --apply; fi

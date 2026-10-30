@@ -421,3 +421,9 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # silently re-enable JWT verification and break the live subscription.
 [functions.acculynx-webhook]
 verify_jwt = false
+
+# companycam-webhook (docs/120 §5, migration 318c): CompanyCam cannot send a Supabase JWT.
+# Authenticity is the HMAC-SHA1 X-CompanyCam-Signature over the raw body, verified in the
+# function against the Vault secret companycam_webhook_token; unverified deliveries get 401.
+[functions.companycam-webhook]
+verify_jwt = false

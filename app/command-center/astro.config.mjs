@@ -4,6 +4,7 @@ import sentry from "@sentry/astro";
 
 export default defineConfig({
   output: "server",
+  compressHTML: true,
   integrations: [
     // Loads sentry.client.config.ts + sentry.server.config.ts and, during a production build,
     // uploads source maps (needs SENTRY_AUTH_TOKEN at build time — passed as a Docker build secret).

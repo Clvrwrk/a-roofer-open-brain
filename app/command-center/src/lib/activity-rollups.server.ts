@@ -16,6 +16,8 @@ function normalizeActorType(type: CommandCenterActorType): string {
 
 /**
  * Upsert hourly route rollup — fire-and-forget; failures must not block requests.
+ * One atomic RPC (mig 323): INSERT … ON CONFLICT increments, so concurrent requests
+ * never lose counts and a page sweep no longer queues SELECT+UPDATE pairs (docs/122).
  */
 export function persistActivityRollup(pathname: string, actorType: CommandCenterActorType) {
   const route = pathname.split("?")[0] || "/";
@@ -26,30 +28,10 @@ export function persistActivityRollup(pathname: string, actorType: CommandCenter
   if (!client) return;
 
   void (async () => {
-    const { data: existing } = await client
-      .from("command_center_activity_rollups")
-      .select("id, request_count")
-      .eq("route", route)
-      .eq("actor_type", actor)
-      .eq("hour_bucket", bucket)
-      .maybeSingle();
-
-    if (existing?.id) {
-      await client
-        .from("command_center_activity_rollups")
-        .update({
-          request_count: (existing.request_count ?? 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-      return;
-    }
-
-    await client.from("command_center_activity_rollups").insert({
-      route,
-      actor_type: actor,
-      hour_bucket: bucket,
-      request_count: 1,
+    await client.rpc("bump_command_center_activity", {
+      p_route: route,
+      p_actor_type: actor,
+      p_hour_bucket: bucket,
     });
   })().catch(() => undefined);
 }

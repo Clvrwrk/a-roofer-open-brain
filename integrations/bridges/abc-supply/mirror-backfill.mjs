@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ENV_PATH = resolve(ROOT, ".env");
 
 const DEFAULTS = {

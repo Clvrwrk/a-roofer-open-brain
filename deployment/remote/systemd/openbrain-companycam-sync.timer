@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily CompanyCam mirror sync at 02:15 America/Chicago (DST-aware)
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -34,6 +34,7 @@ Exclusive buckets: yes, a job can sit in dashboard WIP-supplement while AccuLynx
 ## Cashflow gates & memory
 
 - Anticipated deposit / ACV dates: **Operations** (#5).  
+  - *Amended 2026-10-02:* Sales owns these dates; Ops audits them (CRM EX-129, docs/77 amendment).  
 - Because AccuLynx does not retain dwell history, maintain a **brain memory log** of stage enter/exit + cashflow target dates for standard dwell-time analytics (#5).  
 - Record **deposit-posted timestamp** when deposit hits to measure invoice→deposit delay (#3).  
 - Missed cashflow dates: nested company ↔ location table — Sales Manager, Salesperson, Location, Job #, Client, Target Date, Days since target, Estimated Revenue (#14 UI).  

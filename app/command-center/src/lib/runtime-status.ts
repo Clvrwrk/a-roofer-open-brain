@@ -1,7 +1,11 @@
+import {loadOfficeWeather} from "./weather.server";
+import {loadEdgeOutcomes} from "./edge-outcomes.server";
 // Runtime board engine for /agents (docs/109). Computes one red / yellow / green light
 // per component from the system that actually knows (D2): pg_cron run details, the
 // host-job report table, feed freshness, and Better Stack monitors + heartbeats.
 // Colour rules are D5, applied by classifyScheduled() / classifyFeed() below.
+import {loadHailReconReceipt} from "./hailrecon-state";
+import {BUSINESS_SYNC_PROVIDERS,integrationGroup} from "./sync-scope";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SERVICE_AGENT_IDENTITIES, getServiceTokenHashEnvKey } from "./access-control";
 import { loadBetterStackSnapshot, type BetterStackHeartbeat, type BetterStackMonitor } from "./betterstack.server";
@@ -36,6 +40,8 @@ export interface RuntimeComponent {
   lastAt: string | null;
   evidence: string[];
   href?: string;
+  commissioned?: boolean;
+  monitorKey?: string;
 }
 
 export interface RuntimeGroup {
@@ -232,9 +238,19 @@ async function rows<T>(client: SupabaseClient, table: string, columns: string, e
 }
 
 let mainCommitCache: { at: number; sha: string | null } | null = null;
+export function attestedCommit(data: {value?: {commit?: string}; updated_at?: string} | null, now: number): string | null {
+  const age=now-Date.parse(data?.updated_at??'');
+  return Number.isFinite(age)&&age>=-60000&&age<1800000&&/^[a-f0-9]{40}$/.test(data?.value?.commit??'')?data!.value!.commit!:null;
+}
+
 async function loadMainCommit(env: RuntimeEnv, now: number): Promise<string | null> {
   const token = env.GITHUB_TOKEN?.trim();
-  if (!token) return null;
+  if (!token) {
+    const {client}=createServerSupabaseClient(env);
+    if(!client)return null;
+    const {data}=await client.from('integration_monitor_state').select('value,updated_at').eq('key','github-watchdog').maybeSingle();
+    return attestedCommit(data,now);
+  }
   if (mainCommitCache && now - mainCommitCache.at < 300_000) return mainCommitCache.sha;
   try {
     const res = await fetch("https://api.github.com/repos/Clvrwrk/a-roofer-open-brain/commits/main", {
@@ -260,6 +276,9 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const betterStackPromise = loadBetterStackSnapshot(env, now);
   const mainCommitPromise = loadMainCommit(env, now);
   const integrationProbesPromise = probeIntegrations(INTEGRATIONS, env, now);
+  const hailReconPromise=loadHailReconReceipt(client,now);
+  const weatherPromise=loadOfficeWeather(client,now);
+  const edgeOutcomesPromise=loadEdgeOutcomes(client,env,now);
 
   const [cronRows, hostRows, hbRows, feedRows, outcomeRows] = client
     ? await Promise.all([
@@ -289,13 +308,13 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   // Site & APIs — Better Stack from outside when configured (D10: a 401 on an API route is
   // the healthy answer); otherwise the app pings its own public routes (D16) so the group
   // never sits on "not configured" because a token is missing.
-  const selfPings = betterStack.state === "ok" ? new Map<string, ProbeResult>() : new Map(
-    (await probeIntegrations(MONITORED_ROUTES.map((route): IntegrationSpec => ({ key: route.key, label: route.label, purpose: route.purpose, url: `${site}${route.path}`, expectAnon: route.expect, expectBody: route.expectBody })), env, now)).map((r) => [r.key, r]),
+  const selfPings = new Map(
+    (await probeIntegrations(MONITORED_ROUTES.filter(route=>!monitorsByUrl.has(`${site}${route.path}`)).map((route): IntegrationSpec => ({ key: route.key, label: route.label, purpose: route.purpose, url: `${site}${route.path}`, expectAnon: route.expect, expectBody: route.expectBody })), env, now)).map((r) => [r.key, r]),
   );
   for (const route of MONITORED_ROUTES) {
     const m = monitorsByUrl.get(`${site}${route.path}`);
     const self = selfPings.get(route.key);
-    const { light, headline } = betterStack.state === "ok"
+    const { light, headline } = m
       ? monitorLight(m)
       : self ? classifyProbe(self, route.expect, false) : { light: "unknown" as Light, headline: `Better Stack ${betterStack.state}` };
     const why = betterStack.state === "unconfigured" ? "Better Stack not configured on this deployment" : betterStack.state === "error" ? `Better Stack error: ${betterStack.detail}` : null;
@@ -313,10 +332,23 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
     const evidence: string[] = [];
     if (spec.authEnv) evidence.push(r?.credentialConfigured ? `${spec.authEnv} present → authenticated ping` : `${spec.authEnv} not set here → reachability ping`);
     if (spec.credentialHome) evidence.push(`credential lives: ${spec.credentialHome}`);
-    push({ key: spec.key, group: "integrations", kind: "integration", label: spec.label, purpose: spec.purpose, light, headline,
+    push({ key: spec.key, group: integrationGroup(spec.key), kind: "integration", label: spec.label, purpose: spec.purpose, light, headline,
       detail: `${r?.mode ?? "ping"} ${spec.method ?? "GET"} ${r?.url ?? spec.url} · expects HTTP ${expected}${spec.expectBody ? ` with ${spec.expectBody}` : ""}`,
       cadenceLabel: "every 60 s", lastAt: r?.checkedAt ?? null, evidence, href: r?.url ?? undefined });
   }
+
+  const hailRecon=await hailReconPromise;
+  push({key:'int.hailrecon',group:'integrations',kind:'integration',label:'HailRecon',
+    purpose:'Interactive Hail Maps signed webhook ingestion',light:hailRecon.light,
+    headline:hailRecon.light==='green'&&hailRecon.lastAt?`Latest accepted hail alert ${humanAge(now-Date.parse(hailRecon.lastAt))}`:hailRecon.headline,
+    detail:'Receipt evidence from the existing IHM webhook. Event-driven; this is not proof of every webhook type or every app readback.',
+    cadenceLabel:'event-driven',lastAt:hailRecon.lastAt,evidence:['ihm-webhook-receiver → ihm_hail_alerts'],commissioned:true});
+
+  const weather=await weatherPromise;
+  push({key:'int.weather',group:'integrations',kind:'integration',label:'National Weather Service / NOAA',purpose:'Active-office public forecasts',
+    light:weather.status==='live'?'green':'red',headline:weather.status==='live'?`${weather.offices.length} office forecasts current`:'Office forecast refresh incomplete',
+    detail:'Read-only api.weather.gov points → forecast, refreshed by the watchdog and shared with /api/weather. No customer coordinates.',
+    cadenceLabel:'every 5 min',lastAt:weather.refreshedAt,evidence:weather.offices.map(o=>`${o.name}: ${o.error??o.generatedAt}`),href:`${site}/api/weather`,commissioned:true});
 
   // Data feeds.
   for (const feed of FEEDS) {
@@ -366,7 +398,8 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
       detail: `${job.unit} · ${job.scheduleLabel}${job.docs ? ` · ${job.docs}` : ""}`, cadenceLabel: cadenceLabel(job.cadenceS), lastAt: r?.finished_at ?? null, evidence });
   }
 
-  // Edge functions — only acculynx-sync has dispatch telemetry today; say so for the rest.
+  // Scheduled sync uses dispatch receipts; the other handlers have safe health and per-POST outcomes.
+  const edgeOutcomes=await edgeOutcomesPromise;
   const latestOutcome = outcomeRows[0];
   for (const fn of EDGE_FUNCTIONS) {
     if (fn.name === "acculynx-sync") {
@@ -377,7 +410,7 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
         headline: o ? `latest dispatch ${o.outcome} · ${o.fired_at ? humanAge(now - Date.parse(o.fired_at)) : ""}` : "no dispatch telemetry",
         detail: `${bad} of the last ${outcomeRows.length} dispatches were not success`, cadenceLabel: "hourly", lastAt: o?.fired_at ?? null, evidence: o?.error_msg ? [`error: ${o.error_msg}`] : [] });
     } else {
-      push({ key: fn.key, group: "edge", kind: "edge_function", label: fn.label, purpose: fn.purpose, light: "unknown", headline: "no outcome telemetry wired yet", detail: "Deployed as a Supabase edge function; invocation logs live in the Supabase dashboard.", cadenceLabel: null, lastAt: null, evidence: [] });
+      const observed=edgeOutcomes.find(e=>e.key===fn.key);if(observed)push(observed);
     }
   }
 
@@ -407,12 +440,13 @@ export async function loadRuntimeBoard(env: RuntimeEnv = getRuntimeEnv(), now = 
   const buildCommit = firstSet(env.COMMAND_CENTER_BUILD_SHA, env.SOURCE_COMMIT, env.COOLIFY_GIT_COMMIT, env.GIT_COMMIT);
   const deployLight: Light = !buildCommit ? "unknown" : !mainCommit ? "yellow" : mainCommit.startsWith(buildCommit) || buildCommit.startsWith(mainCommit) ? "green" : "red";
   push({ key: "deploy.command-center", group: "deploy", kind: "deploy", label: "Command Center build", purpose: "Deployed commit vs origin/main (hard rule 11)", light: deployLight,
-    headline: !buildCommit ? "build commit unknown" : !mainCommit ? `running ${buildCommit.slice(0, 7)} · set GITHUB_TOKEN to compare with origin/main` : deployLight === "green" ? `running ${buildCommit.slice(0, 7)} = origin/main` : `DEPLOY DRIFT · running ${buildCommit.slice(0, 7)}, origin/main is ${mainCommit.slice(0, 7)}`,
+    headline: !buildCommit ? "build commit unknown" : !mainCommit ? `running ${buildCommit.slice(0, 7)} · awaiting fresh GitHub Actions deployment attestation` : deployLight === "green" ? `running ${buildCommit.slice(0, 7)} = origin/main` : `DEPLOY DRIFT · running ${buildCommit.slice(0, 7)}, origin/main is ${mainCommit.slice(0, 7)}`,
     detail: "Coolify builds from GitHub; /healthz publishes buildCommit.", cadenceLabel: null, lastAt: null, evidence: [] });
 
   // Assemble.
   const groups: RuntimeGroup[] = GROUP_ORDER.map((g) => {
     const list = components.filter((c) => c.group === g.id);
+    if(g.id==='integrations')list.sort((a,b)=>BUSINESS_SYNC_PROVIDERS.findIndex(p=>p.probeKey===a.key)-BUSINESS_SYNC_PROVIDERS.findIndex(p=>p.probeKey===b.key));
     const counts = emptyCounts();
     for (const c of list) counts[c.light]++;
     return { ...g, counts, components: list };

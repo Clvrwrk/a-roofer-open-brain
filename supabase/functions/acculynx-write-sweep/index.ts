@@ -1,3 +1,4 @@
+import {observeEdgeHandler} from "../_shared/edge-observer.ts";
 // acculynx-write-sweep — Edge Function entrypoint (Phase 4, plans 04-02 + 04-03)
 //
 // SANDBOX-ONLY tiered red-team sweep of the 38 documented AccuLynx write operations
@@ -470,7 +471,7 @@ function classifyVerdictForRow(
   return classifyVerdict2(input);
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-write-sweep",async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   // HARD GATE: enforce sandbox-only in code before any network call.
   try {
@@ -795,7 +796,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     verdicts,
     runtime_ms: Date.now() - started,
   });
-});
+},sb));
 
 function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });

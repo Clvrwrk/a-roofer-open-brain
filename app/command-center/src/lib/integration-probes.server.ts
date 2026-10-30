@@ -56,7 +56,7 @@ export async function runProbe(spec: IntegrationSpec, env: RuntimeEnv, now = Dat
   if (!url) return { ...base, error: "probe URL needs an env value this deployment does not have" };
   const headers: Record<string, string> = { accept: "application/json, text/plain;q=0.8, */*;q=0.5", "user-agent": "open-brain-command-center/runtime-board" };
   if (cred) {
-    if (spec.auth === "apikey") { headers.apikey = cred; headers.authorization = `Bearer ${cred}`; }
+    if (spec.auth === "apikey") { headers.apikey = cred; if(!cred.startsWith("sb_"))headers.authorization = `Bearer ${cred}`; }
     else if (spec.auth === "raw") headers.authorization = cred;
     else headers.authorization = `Bearer ${cred}`;
   }

@@ -284,6 +284,73 @@ YOUTUBE_API_KEY=...
 
 Browser keys may be public by design, but must be restricted by HTTP referrer. Server keys and client secrets stay server-side only.
 
+## Claude Code Cloud Sessions
+
+Recorded 2026-10-21. Source: Anthropic's [cloud environments docs](https://code.claude.com/docs/en/cloud-environments), checked against the tools this repo's sessions used over the previous 60 days.
+
+A cloud session runs in an Anthropic-hosted VM with an outbound allowlist. Chris's Mac has no network sandbox. When a session reports "the container's network policy blocks crm.proexteriorsus.net", the host is missing from the cloud environment's allowlist.
+
+Pattern: **build and test in the cloud, deploy from the Mac.**
+
+### Where to set it
+
+Each cloud environment has its own allowlist. There is no organization-wide list.
+
+1. At claude.ai/code, open the environment selector (the first control under the message box).
+2. Find the environment under **Cloud** (or **More**), hover over its row, and click the gear icon. In a running session, use the arrow after the session title, then **Edit cloud environment**.
+3. Set network access to **Custom** and paste the allowlist below into **Allowed domains**, one per line. A leading `*.` matches every subdomain.
+4. Check **Also include default list of common package managers**. Without it, npm, PyPI and Docker Hub stop working.
+5. Store each API key as a **network secret** for its host, not as an environment variable. The proxy adds the key after the request leaves the VM, so the key never sits inside the session. A host with a network secret is reachable even without an allowlist entry.
+
+Network access changes reach running sessions within about a minute.
+
+### Allowlist
+
+Core (CRM, Command Center, prod Supabase; the CRM and the Command Center share the one Supabase project):
+
+```text
+crm.proexteriorsus.net
+cc.proexteriorsus.net
+rnhmvcpsvtqjlffpsayu.supabase.co
+```
+
+Integrations (add only when cloud sessions should run these scripts):
+
+```text
+api.supabase.com
+slack.com
+*.abcsupply.com
+api.acculynx.com
+api.linear.app
+app.companycam.com
+static.companycam.com
+api.jobtread.com
+api.agentmail.to
+api.workos.com
+```
+
+`*.abcsupply.com` covers the production and sandbox API and auth hosts. Google Maps is already covered by `*.googleapis.com` in the default list. Direct Postgres connections are not documented as allowed; use the REST API or the Supabase connector.
+
+### Works without the allowlist
+
+- **claude.ai connectors** — Supabase, Linear, Sentry, QuickBooks (Intuit), Gmail, Slack, Firecrawl, Notion, Outlook. Their traffic goes through Anthropic, not the session network. Enable them per session or per scheduled task.
+- **GitHub** — `git` and `gh` go through Anthropic's GitHub proxy with a scoped credential. The proxy rejects GitHub GraphQL, so some `gh pr …` commands fail; use the built-in PR tools.
+- **Package installs** — npm, npx and pip, through the default list.
+- **Repo skills** in `.claude/skills/` (coolify, slack-agents, workos-agent-auth, wrapup and the rest) and skills enabled on claude.ai.
+
+### Not available in cloud (the allowlist cannot fix these)
+
+- **Desktop-app tools** — the built-in browser, Claude in Chrome, the terminal panel, PR and session tools. Browser verification stays local.
+- **MCP servers in `~/.claude.json`** — linear-server, figma, excalidraw, ghl, dataforseo, ringer, apify and others. Use the matching claude.ai connector (Linear has one). A remote server can be carried by a repo `.mcp.json` (none exists yet); it would then need its host allowlisted and must pass hard rule 12. Hard rule 3 keeps stdio servers out.
+- **User-level skills and plugins** in `~/.claude/`.
+- **Anything that needs the Mac's keys** — `op` (1Password), `ssh` to Hetzner and Coolify, `docker` (the `cleverwork-docker` context runs over SSH), memsearch (the index is local). Deploys, host changes and memory search run from the Mac.
+
+### Kept off cloud on purpose
+
+- **QuickBooks API** (`quickbooks.api.intuit.com`, `oauth.platform.intuit.com`) — each refresh rotates the stored refresh token, and only production refreshes it. Read QBO through the Intuit connector (hard rule 13).
+- **`coolify.proexteriorsus.net`, `api.hetzner.cloud`** — deploys and host state stay on the Mac.
+- **Better Stack** — integration health comes from the Command Center's own pings (docs/109 D16).
+
 ## Deployment Order
 
 1. Normalize `.env` names locally.

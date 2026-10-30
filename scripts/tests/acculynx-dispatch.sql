@@ -1,0 +1,43 @@
+-- Synthetic integration assertions. ON_ERROR_STOP is required by the runner.
+CREATE FUNCTION pg_temp.assert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %',label; END IF;END$$;
+SELECT public.trigger_acculynx_sync('{"multiAccount":true,"accountFilter":["test"]}');
+SELECT pg_temp.assert((SELECT count(*)=1 FROM public.acculynx_sync_runs),'new UUID dispatch');
+SELECT pg_temp.assert(public.trigger_acculynx_sync('{"multiAccount":true}')=0,'overlap blocked');
+SELECT pg_temp.assert(public.claim_acculynx_sync_run((SELECT run_id FROM public.acculynx_sync_runs LIMIT 1),repeat('0',64)) IS NULL,'wrong capability refused');
+SELECT pg_temp.assert(public.claim_acculynx_sync_run((SELECT run_id FROM public.acculynx_sync_runs LIMIT 1),(SELECT headers->>'x-sync-token' FROM net.queue ORDER BY ctid DESC LIMIT 1)) IS NOT NULL,'valid capability claims run');
+SELECT pg_temp.assert(public.claim_acculynx_sync_run((SELECT run_id FROM public.acculynx_sync_runs LIMIT 1),(SELECT headers->>'x-sync-token' FROM net.queue ORDER BY ctid DESC LIMIT 1)) IS NULL,'replay refused');
+UPDATE public.acculynx_sync_runs SET status='completed',completed_at=now();
+SELECT setval('net.req',1,false);
+SELECT public.trigger_acculynx_sync('{"multiAccount":true}');
+SELECT pg_temp.assert((SELECT count(*)=2 FROM public.acculynx_sync_runs),'reused HTTP request ID accepted');
+SELECT pg_temp.assert((SELECT count(*)=2 FROM public.crm_sync_log WHERE sync_batch_id ~ '^cron-trigger-[0-9a-f-]{36}$'),'unique durable log IDs');
+INSERT INTO net._http_response(id,status_code,content,created) SELECT request_id,200,jsonb_build_object('dispatch_run_id',run_id,'status','completed')::text,dispatched_at-interval '1 hour' FROM public.acculynx_sync_runs WHERE status='queued';
+SELECT public.reconcile_acculynx_cron_outcomes();
+SELECT pg_temp.assert((SELECT count(*)=1 FROM public.acculynx_sync_runs WHERE status='queued'),'old response ignored');
+INSERT INTO net._http_response(id,status_code,content) SELECT request_id,200,'{"dispatch_run_id":"00000000-0000-4000-8000-000000000000","status":"completed"}' FROM public.acculynx_sync_runs WHERE status='queued';
+SELECT public.reconcile_acculynx_cron_outcomes();
+SELECT pg_temp.assert((SELECT count(*)=1 FROM public.acculynx_sync_runs WHERE status='queued'),'wrong UUID response ignored');
+INSERT INTO net._http_response(id,status_code,content) SELECT request_id,200,jsonb_build_object('dispatch_run_id',run_id,'status','partial_success')::text FROM public.acculynx_sync_runs WHERE status='queued';
+SELECT public.reconcile_acculynx_cron_outcomes();
+SELECT pg_temp.assert((SELECT count(*)=1 FROM public.acculynx_sync_runs WHERE status='failed'),'partial HTTP 200 is failure');
+SELECT public.trigger_acculynx_sync('{"multiAccount":true}');
+INSERT INTO net._http_response(id,status_code,content) SELECT request_id,502,'not JSON' FROM public.acculynx_sync_runs WHERE status='queued';
+SELECT public.reconcile_acculynx_cron_outcomes();
+SELECT pg_temp.assert((SELECT count(*)=2 FROM public.acculynx_sync_runs WHERE status='failed'),'non-JSON gateway failure reconciled safely');
+SELECT public.trigger_acculynx_sync('{"multiAccount":true}');
+UPDATE public.acculynx_sync_runs SET dispatched_at=clock_timestamp()-interval '5 minutes' WHERE status='queued';
+SELECT pg_temp.assert(public.claim_acculynx_sync_run((SELECT run_id FROM public.acculynx_sync_runs WHERE status='queued'),(SELECT headers->>'x-sync-token' FROM net.queue ORDER BY ctid DESC LIMIT 1)) IS NULL,'expired capability refused');
+SELECT public.reconcile_acculynx_cron_outcomes();
+SELECT pg_temp.assert((SELECT count(*)=1 FROM public.acculynx_sync_runs WHERE status='timed_out'),'expired run detected');
+DO $$BEGIN
+ BEGIN PERFORM public.trigger_acculynx_sync('{"multiAccount":true,"accountFilter":["other"]}'); RAISE EXCEPTION 'accepted unknown account'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN PERFORM public.trigger_acculynx_sync('{"multiAccount":true,"fullSync":true}'); RAISE EXCEPTION 'accepted override'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END$$;
+SELECT pg_temp.assert(NOT has_function_privilege('anon','public.trigger_acculynx_sync(jsonb)','EXECUTE'),'anon cannot trigger');
+SELECT pg_temp.assert(NOT has_function_privilege('authenticated','public.trigger_acculynx_sync(jsonb)','EXECUTE'),'user cannot trigger');
+SELECT pg_temp.assert(NOT has_function_privilege('anon','public.claim_acculynx_sync_run(uuid,text)','EXECUTE'),'anon cannot claim');
+SELECT pg_temp.assert(NOT has_table_privilege('authenticated','public.acculynx_sync_runs','SELECT'),'user cannot read run metadata');
+SELECT pg_temp.assert((SELECT count(*)=4 FROM public.v_acculynx_cron_outcomes WHERE sync_batch_id ~ '^cron-trigger-[0-9a-f-]{36}$'),'new view preserves all runs');
+SELECT 'PASS: restart-safe dispatch, replay, expiry, overlap, scope, correlation, partial response, transport, ACL';
+-- Run after 333: valid backend ingress remains compatible with the hardened dispatcher.
+SELECT pg_temp.assert(has_function_privilege('service_role','public.trigger_acculynx_sync(jsonb)','EXECUTE'),'trusted backend can enqueue');

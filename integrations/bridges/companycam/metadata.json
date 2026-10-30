@@ -1,18 +1,26 @@
 {
   "name": "companycam-bridge",
   "display_name": "CompanyCam",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "tier": 1,
   "source_system_type": "saas-with-api",
-  "enabled": false,
+  "enabled": true,
   "origin": "cleverwork",
+  "access_mode": "read_only",
+  "api": "https://app.companycam.com/public_api/v1",
   "bound_agents": ["capture", "conductor"],
   "env_vars": {
-    "required": ["COMPANYCAM_API_KEY"],
-    "optional": ["COMPANYCAM_WEBHOOK_SECRET"]
+    "required": ["COMPANYCAM_ACCESS_TOKEN", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+    "optional": ["COMPANYCAM_WEBHOOK_TOKEN", "COMPANYCAM_COPY_LIMIT", "COMPANYCAM_COPY_CONCURRENCY"]
   },
-  "webhook_topics": ["photo.created", "photo.updated", "project.created"],
-  "objects_ingested": ["projects", "photos", "videos", "comments", "tags"],
-  "debrief_trigger_milestone": null,
-  "notes": "Primary EEAT signal source. Photo URLs are stored, not downloaded. damage_tags list is configurable in roofer.config.yaml."
+  "credential_home": "1Password CW_Master / CompanyCam-PE-PWA-CRM (field: credential); agent host master.env",
+  "webhook_topics": [],
+  "webhook_topics_planned": ["photo.*", "project.*"],
+  "objects_ingested": ["projects", "photos (metadata + bytes)", "photo tags", "photo comments (raw)", "annotations"],
+  "objects_planned": ["videos", "documents"],
+  "tables": ["companycam_projects", "companycam_photos", "companycam_sync_state"],
+  "storage_bucket": "companycam-photos (private)",
+  "migrations": ["318 (prod records: 316_companycam_mirror, 316b_companycam_link_security_definer, 316c_companycam_link_same_property_job)"],
+  "docs": "docs/120-companycam-integration.md",
+  "notes": "Mirror-only: the client is GET-only. Metadata for every project and photo; bytes copied into the private bucket by priority (open AccuLynx jobs first) until the mirror is a full clone. Apps serve the brain copy when present, the CompanyCam CDN URL until then."
 }

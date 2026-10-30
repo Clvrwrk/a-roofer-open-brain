@@ -8,7 +8,7 @@ Maya email. Plus the CPA's accrual (earned-revenue) inputs with date cutoffs.
 ```
 AccuLynx (pg_cron hourly)──┐
 ABC Supply (03:30 ET)──────┼──► mirror tables ──► refresh_wip_ar_master()      ┌─► /accounting/friday-wip (live board, inline edits)
-QBO (Thu 20:00 CT)─────────┘        (pg_cron nightly 04:45 CT)                 ├─► Thursday 06:00 CT: build_pack.py ─► wip-packs bucket ─► Download button
+QBO (Thu 20:00 CT)─────────┘        (pg_cron daily 03:00 CT)                   ├─► daily 03:20 CT: build_pack.py ─► wip-packs bucket ─► Download button
                                         │                                      └─► "Email via Maya" ─► AgentMail ─► Lucinda/Chandler/Tabitha/Chris (internal only)
                               wip_ar_master (mig 215)
                               computed cols ← nightly · editable cols ← humans, preserved
@@ -21,8 +21,8 @@ QBO (Thu 20:00 CT)─────────┘        (pg_cron nightly 04:45 C
 | Master table `wip_ar_master` (one row per ledger job, sheet-11 columns + accrual + editable) | `schemas/cleverwork-roofer/215-friday-wip-ar-master.sql` |
 | Edit audit log `wip_ar_master_updates` | same |
 | QBO job-cost views `v_qbo_job_cost_lines` / `v_qbo_job_costs` | same |
-| `refresh_wip_ar_master(p_asof)` — nightly rebuild, human edits preserved | same; pg_cron `wip-ar-master-nightly` 10:45 UTC |
-| `roll_wip_ar_week()` — Thursday HIT/MISS scoring + date roll | same; pg_cron `wip-ar-week-roll-thursday` Thu 10:30 UTC |
+| `refresh_wip_ar_master(p_asof)` — nightly rebuild, human edits preserved | same; pg_cron `wip-ar-master-nightly` 03:00 America/Chicago (mig 322: `0 8,9 * * *` UTC, guarded to the Chicago hour so DST never shifts it) |
+| `roll_wip_ar_week()` — Thursday HIT/MISS scoring + date roll | same; pg_cron `wip-ar-week-roll-thursday` Thu 02:45 America/Chicago (mig 322, just before the 03:00 rebuild) |
 | `wip_accrual_snapshot(p_cutoff)` — CPA cutoff inputs | same |
 | Board page (grouped by location, yellow columns save inline) | `app/command-center/src/pages/accounting/friday-wip.astro` + `src/lib/friday-wip.ts` |
 | APIs: board JSON · row update · accrual CSV · latest pack · Maya send | `src/pages/api/accounting/friday-wip*` |
@@ -47,12 +47,37 @@ penny; other locations differ only by the week of live movement since the
   `collected_since`, `notes`) live only in `wip_ar_master`, are audit-logged,
   and survive every refresh. Thursday roll copies expected-paid → prior and
   scores HIT (collected=Y) / MISS (date passed, not collected).
+- Notes cell (2026-10-02): hovering a note the cell cuts off shows the whole
+  note; clicking a note opens it in a larger edit box (Enter or click-away
+  saves, Esc discards). It reuses the board's one shared popout (`#fw-guess`,
+  CMP-09) and saves through the same `/api/accounting/friday-wip/update` call.
+
+## Freshness — the board is only as current as the AccuLynx job walk (2026-10-02)
+
+The board is rebuilt from the mirror (`refresh_wip_ar_master`), and a line-by-line
+check found it equal to the mirror on 332/333 rows. A live GET of all 333 jobs then
+found 41 differing from AccuLynx (AR −$125,841, billed AR +$117,600). Causes, all in
+`acculynx-sync`, fixed in mig 321 + `811589b9`:
+
+- **Colorado frozen since 09-24:** `/users` paged by page number, but it is a record
+  offset; 97 users → ~48 overlapping calls spent the account's budget every run.
+- **Money pass starved:** the job walk scanned every job behind a cursor with a
+  121 MB `acculynx_raw LIKE` probe per job, after the contacts/estimates sweeps. It
+  now walks only `acculynx_job_walk_candidates()` — never walked, modified since
+  `acculynx_jobs.walked_at`, or on this board and not walked in 3 days, board first —
+  and runs before those sweeps.
+- **List-invisible changes:** the ModifiedDate-filtered `/jobs` list never returned
+  six jobs closed in July/August. Each walked job now re-reads `GET /jobs/{id}` for
+  its milestone; the 3-day board refresh is the backstop.
+
+To verify freshness, compare the board to **live AccuLynx**, not to the mirror —
+board vs mirror only proves the rebuild ran.
 
 ## Weekly cadence
 
 1. **Wed night/Thu early:** ABC 03:30 ET · AccuLynx hourly · QBO ran Thu 20:00 CT prior week (QBO also refreshes every Thursday evening).
-2. **Thu 05:30 CT:** `roll_wip_ar_week()` (pg_cron) scores last week's HIT/MISS.
-3. **Thu ~06:22 CT:** agent host builds the full pack (`build_pack.py --audience ar-wip`) and uploads `AR_WIP_Pack_<date>.xlsx` to the `wip-packs` bucket → **Download Thursday pack** button serves it (timer staggered off the 06:00/:15 pg_cron pile-up — PEC-415).
+2. **Thu 02:45 CT:** `roll_wip_ar_week()` (pg_cron) scores last week's HIT/MISS.
+3. **Daily 03:20 CT:** agent host builds the full pack (`build_pack.py --audience ar-wip`) and uploads `AR_WIP_Pack_<date>.xlsx` to the `wip-packs` bucket → **Download Thursday pack** button serves it (timer staggered off the 06:00/:15 pg_cron pile-up — PEC-415).
 4. **Fri meeting:** work the board at `/accounting/friday-wip`; every date/note saves live to `wip_ar_master`.
 5. **Any time:** **Email via Maya** sends the summary + 7-day pack link from `ob-accounting@agentmail.proexteriorsus.net` to `FRIDAY_WIP_RECIPIENTS` — internal addresses only, enforced by `outbound-guard.ts`; humans forward externally.
 

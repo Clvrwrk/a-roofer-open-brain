@@ -1,4 +1,6 @@
-# server/ — the internal brain MCP server
+# server/ — uncommissioned knowledge-gateway scaffold
+
+**Decision 2026-10-23 (PEC-761): leave undeployed.** No active production consumer was found. The Command Center and sync workers already use their server-side Supabase access; all three knowledge RPC dependencies below are absent from production. This service is not needed for the current WIP/sync or replacement work surface. Retain it as historical reference; commissioning it requires a separate use case, schema/authorization implementation and live acceptance. The deployment description below records the original design, not verified runtime state.
 
 A Deno HTTP service deployed as a **MCP container on Hetzner**. It is the **internal** side of the brain (Historian + Capture): it exposes retrieval and write tools over the client's own brain. It reaches PostgREST as `service_role` using environment secrets only — no keys in the repo.
 

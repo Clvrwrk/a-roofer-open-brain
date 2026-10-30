@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.actor;
   if (!actor) return buildUnauthorizedResponse();
   if (
-    !["maya-chen", "ob-accounting", "local-operator"].includes(actor.id)
+    !["ob-accounting", "local-operator"].includes(actor.id)
     || (actor.departmentAccess !== "all" && !actor.departmentAccess.includes("accounting"))
     || !hasPermission(actor, "evidence.attach")
   ) {

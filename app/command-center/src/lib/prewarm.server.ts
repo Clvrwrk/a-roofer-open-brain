@@ -81,6 +81,12 @@ function envHour(name: string, fallback: number) {
 const HUMAN_SESSION_IDLE_MS = envNumber("COMMAND_CENTER_HUMAN_SESSION_IDLE_MS", 20 * 60 * 1000);
 const MIN_SCHEDULED_WARM_GAP_MS = envNumber("COMMAND_CENTER_MIN_SCHEDULED_WARM_GAP_MS", 10 * 60 * 1000);
 const DEFAULT_DAILY_WARM_HOUR = envHour("COMMAND_CENTER_DAILY_WARM_HOUR", 5);
+// Never warm at :00. pg_cron, the AccuLynx sync and the agent-host timers all
+// used to start at :00, and a full warm on top of them starved PostgREST for
+// every other app on the shared DB (docs/125). A jitter of up to 4 minutes keeps
+// several containers from firing in the same minute.
+const DAILY_WARM_MINUTE = Math.max(0, Math.min(55, Math.floor(envNumber("COMMAND_CENTER_DAILY_WARM_MINUTE", 41))));
+const DAILY_WARM_JITTER_MS = 4 * 60 * 1000;
 const MAX_COUNTER_KEYS = 100;
 
 const LIVE_DETAIL_PREFIXES = [
@@ -164,13 +170,29 @@ function preferredDailyWarmHour() {
 
 function nextDateForHour(hour: number) {
   const next = new Date();
-  next.setHours(hour, 0, 0, 0);
+  next.setHours(hour, DAILY_WARM_MINUTE, 0, 0);
+  next.setTime(next.getTime() + Math.floor(Math.random() * DAILY_WARM_JITTER_MS));
   if (next.getTime() <= Date.now() + 60_000) next.setDate(next.getDate() + 1);
   return next;
 }
 
+/**
+ * `COMMAND_CENTER_PREWARM=off` turns off the boot and scheduled warms. Set it on
+ * every container that is not the Coolify app (the /sales mirror, check and
+ * rollback slots): each one otherwise re-reads every surface against prod.
+ */
+function prewarmDisabled() {
+  return String(getRuntimeEnv().COMMAND_CENTER_PREWARM ?? "").trim().toLowerCase() === "off";
+}
+
 function scheduleDailyWarm() {
   if (dailyWarmTimer) clearTimeout(dailyWarmTimer);
+  // A container nobody has used since boot (an unrouted or rollback slot) has
+  // nothing to warm for. Recording human activity schedules the first one.
+  if (prewarmDisabled() || humanHourCounts.size === 0) {
+    cadenceState.nextDailyWarmAtMs = 0;
+    return;
+  }
 
   const due = nextDateForHour(preferredDailyWarmHour());
   cadenceState.nextDailyWarmAtMs = due.getTime();
@@ -185,6 +207,7 @@ function scheduleDailyWarm() {
 
 function scheduleHumanSessionWarm() {
   if (humanSessionTimer) clearTimeout(humanSessionTimer);
+  if (prewarmDisabled()) return;
 
   const scheduledFor = Date.now() + HUMAN_SESSION_IDLE_MS;
   cadenceState.sessionWarmScheduledForMs = scheduledFor;
@@ -246,22 +269,26 @@ export async function warmCommandCenterCaches(trigger: CacheWarmTrigger = "manua
 
   const startedWallMs = Date.now();
   const startedPerfMs = nowMs();
-  warmInFlight = Promise.all(
-    warmTargets.map(async (target) => {
+  // One surface at a time. Each loader already fans out in parallel; running all
+  // seven at once put ~500 requests on PostgREST in one minute (docs/125).
+  warmInFlight = (async () => {
+    const results: CacheWarmResult[] = [];
+    for (const target of warmTargets) {
       const started = nowMs();
       try {
         await target.run();
-        return { name: target.name, ok: true, durationMs: Math.round((nowMs() - started) * 10) / 10 };
+        results.push({ name: target.name, ok: true, durationMs: Math.round((nowMs() - started) * 10) / 10 });
       } catch (error) {
-        return {
+        results.push({
           name: target.name,
           ok: false,
           durationMs: Math.round((nowMs() - started) * 10) / 10,
           error: error instanceof Error ? error.message : String(error),
-        };
+        });
       }
-    }),
-  )
+    }
+    return results;
+  })()
     .then((results) => {
       cadenceState.lastWarm = {
         trigger,
@@ -289,6 +316,8 @@ export function getCommandCenterWarmCadenceState() {
       humanSessionIdleMinutes: Math.round((HUMAN_SESSION_IDLE_MS / 60_000) * 10) / 10,
       minScheduledWarmGapMinutes: Math.round((MIN_SCHEDULED_WARM_GAP_MS / 60_000) * 10) / 10,
       defaultDailyWarmHour: DEFAULT_DAILY_WARM_HOUR,
+      dailyWarmMinute: DAILY_WARM_MINUTE,
+      prewarmDisabled: prewarmDisabled(),
       preferredDailyWarmHour: preferredDailyWarmHour(),
     },
     schedule: {
@@ -316,6 +345,7 @@ export function getCommandCenterWarmCadenceState() {
 export function prewarmSurfaceCaches() {
   if (prewarmStarted) return;
   prewarmStarted = true;
+  if (prewarmDisabled()) return;
 
   scheduleDailyWarm();
 
