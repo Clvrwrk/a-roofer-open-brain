@@ -20,6 +20,20 @@ const PROVIDERS = {
   openai: { keyEnv: "OPENAI_API_KEY", create: async (apiKey) => (await import("@ai-sdk/openai")).createOpenAI({ apiKey }) },
   xai: { keyEnv: "XAI_API_KEY", create: async (apiKey) => (await import("@ai-sdk/xai")).createXai({ apiKey }) },
   google: { keyEnv: "GEMINI_API_KEY", create: async (apiKey) => (await import("@ai-sdk/google")).createGoogleGenerativeAI({ apiKey }) },
+  // OpenRouter is OpenAI-compatible; use its Chat Completions endpoint (no extra dependency).
+  // Spend is capped on the OpenRouter key itself (limit + limit_reset), not here.
+  openrouter: {
+    keyEnv: "OPENROUTER_API_KEY",
+    create: async (apiKey) => {
+      const provider = (await import("@ai-sdk/openai")).createOpenAI({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        name: "openrouter",
+        headers: { "X-Title": "pe-cc-agents" },
+      });
+      return (modelId) => provider.chat(modelId);
+    },
+  },
 };
 
 export async function modelFromEnv(env) {
