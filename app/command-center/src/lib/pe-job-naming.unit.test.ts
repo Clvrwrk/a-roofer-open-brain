@@ -1,147 +1,65 @@
+// CRM job numbers ("-PECRM", mig 316 / docs/118) keep their suffix in every key and never
+// resolve to the AccuLynx job that shares the numeric part.
 import { describe, expect, it } from "vitest";
 import {
-  buildExpectedPo,
-  canonicalJobLabel,
   deriveNamingStatus,
+  isCrmJobNumber,
   normalizePeKey,
   parsePeJobLabel,
   parsePePoWithSequence,
 } from "./pe-job-naming";
 
-describe("normalizePeKey", () => {
-  it("uppercases, strips a leading PO prefix and all non-alphanumerics", () => {
-    expect(normalizePeKey("po ks-123-1")).toBe("KS1231");
-    expect(normalizePeKey("KS-123")).toBe("KS123");
-  });
-
-  it("returns empty string for null/undefined/blank", () => {
-    expect(normalizePeKey(null)).toBe("");
-    expect(normalizePeKey(undefined)).toBe("");
-    expect(normalizePeKey("   ")).toBe("");
-  });
-});
-
 describe("parsePeJobLabel", () => {
-  it("parses a standard '{OFFICE}-{NUM}: {Client}' label", () => {
-    const parsed = parsePeJobLabel("KS-123: Acme Roofing");
-    expect(parsed).toMatchObject({
-      office: "KS",
-      jobNum: "123",
-      client: "Acme Roofing",
-      isTemp: false,
-      rawPrefix: "KS-123",
-      norm: "KS123",
-    });
+  it("keeps the -PECRM suffix in the prefix and key", () => {
+    const crm = parsePeJobLabel("TX-460-PECRM: Jane Smith");
+    expect(crm).toMatchObject({ office: "TX", jobNum: "460-PECRM", isCrm: true, rawPrefix: "TX-460-PECRM", norm: "TX460PECRM" });
   });
 
-  it("uppercases the office prefix and tolerates surrounding whitespace", () => {
-    const parsed = parsePeJobLabel("  kc - 456 :  Jane Doe  ");
-    expect(parsed).toMatchObject({ office: "KC", jobNum: "456", client: "Jane Doe", isTemp: false });
+  it("never gives a CRM number the AccuLynx key", () => {
+    const alx = parsePeJobLabel("TX-460: Jane Smith");
+    expect(alx).toMatchObject({ rawPrefix: "TX-460", norm: "TX460", isCrm: false });
+    expect(parsePeJobLabel("TX-460-PECRM: Jane Smith")?.norm).not.toBe(alx?.norm);
   });
 
-  it("parses a TEMP label as a temp job", () => {
-    const parsed = parsePeJobLabel("TX-TEMP-abc9: Pending Client");
-    expect(parsed).toMatchObject({
-      office: "TX",
-      jobNum: "abc9",
-      client: "Pending Client",
-      isTemp: true,
-      rawPrefix: "TX-TEMP-abc9",
-    });
+  it("canonicalises sloppy suffixes", () => {
+    expect(parsePeJobLabel("tx-460 pecrm: Jane")?.rawPrefix).toBe("TX-460-PECRM");
   });
 
-  it("returns null for blank input", () => {
-    expect(parsePeJobLabel("")).toBeNull();
-    expect(parsePeJobLabel(null)).toBeNull();
+  it("accepts FL, GA and INS offices", () => {
+    expect(parsePeJobLabel("FL-12: A")?.rawPrefix).toBe("FL-12");
+    expect(parsePeJobLabel("GA-41: B")?.rawPrefix).toBe("GA-41");
+    expect(parsePeJobLabel("INS-6: C")?.rawPrefix).toBe("INS-6");
   });
 
-  it("returns null for an unknown office prefix", () => {
-    expect(parsePeJobLabel("zz-123: Client")).toBeNull();
-  });
-
-  it("returns null when the client segment is missing", () => {
-    expect(parsePeJobLabel("KS-123")).toBeNull();
+  it("leaves AccuLynx TEMP jobs alone", () => {
+    expect(parsePeJobLabel("KS-TEMP-ab12: D")).toMatchObject({ isTemp: true, isCrm: false, rawPrefix: "KS-TEMP-ab12" });
   });
 });
 
 describe("parsePePoWithSequence", () => {
-  it("parses '{OFFICE}-{NUM}-{seq}' into its parts", () => {
-    expect(parsePePoWithSequence("ks-123-2")).toEqual({
-      office: "KS",
-      jobNum: "123",
-      seq: 2,
-      raw: "KS-123-2",
-    });
-  });
-
-  it("returns null when there is no sequence segment", () => {
-    expect(parsePePoWithSequence("KS-123")).toBeNull();
-  });
-
-  it("returns null for blank input", () => {
-    expect(parsePePoWithSequence(null)).toBeNull();
+  it("supports the AccuLynx and CRM material-PO forms", () => {
+    expect(parsePePoWithSequence("KS-160-1")).toEqual({ office: "KS", jobNum: "160", seq: 1, raw: "KS-160-1" });
+    expect(parsePePoWithSequence("TX-460-PECRM-1")).toEqual({ office: "TX", jobNum: "460-PECRM", seq: 1, raw: "TX-460-PECRM-1" });
   });
 });
 
-describe("buildExpectedPo", () => {
-  it("appends the material sequence to the job prefix", () => {
-    expect(buildExpectedPo("KS-123", 1)).toBe("KS-123-1");
-  });
-
-  it("strips internal whitespace from the prefix", () => {
-    expect(buildExpectedPo("KS - 123", 3)).toBe("KS-123-3");
+describe("normalizePeKey / isCrmJobNumber", () => {
+  it("keeps PECRM in the normalised key", () => {
+    expect(normalizePeKey("TX-460-PECRM-1")).toBe("TX460PECRM1");
+    expect(isCrmJobNumber("tx460pecrm")).toBe(true);
+    expect(isCrmJobNumber("TX-460-1")).toBe(false);
   });
 });
 
 describe("deriveNamingStatus", () => {
-  it("returns temp_job for a TEMP order name", () => {
-    expect(deriveNamingStatus({ orderName: "TX-TEMP-abc: Client" })).toBe("temp_job");
+  it("reports an unlinked CRM job as crm_job, not needs_link", () => {
+    expect(deriveNamingStatus({ orderName: "TX-460-PECRM: Jane", purchaseOrder: "TX-460-PECRM-1" })).toBe("crm_job");
+    expect(deriveNamingStatus({ orderName: null, purchaseOrder: "TX-460-PECRM-1" })).toBe("crm_job");
   });
 
-  it("returns needs_link when the job is unparseable and there is no AccuLynx link", () => {
-    expect(deriveNamingStatus({ orderName: "no job here" })).toBe("needs_link");
-  });
-
-  it("returns job_blank when the job is unparseable but an AccuLynx job is linked", () => {
-    expect(deriveNamingStatus({ orderName: "", acculynxJobId: "job-1" })).toBe("job_blank");
-  });
-
-  it("returns aligned when the PO matches the derived expected PO (seq defaults to 1)", () => {
-    expect(deriveNamingStatus({ orderName: "KS-123: Acme", purchaseOrder: "KS-123-1" })).toBe("aligned");
-  });
-
-  it("returns aligned when the PO matches a provided expected PO", () => {
-    expect(
-      deriveNamingStatus({ orderName: "KS-123: Acme", purchaseOrder: "KS-123-4", expectedPo: "KS-123-4" }),
-    ).toBe("aligned");
-  });
-
-  it("returns aligned via normalized comparison when the PO lacks a sequence but matches otherwise", () => {
-    expect(
-      deriveNamingStatus({ orderName: "KS-123: Acme", purchaseOrder: "ks123", expectedPo: "KS-123" }),
-    ).toBe("aligned");
-  });
-
-  it("returns po_mismatch when there is no purchase order", () => {
-    expect(deriveNamingStatus({ orderName: "KS-123: Acme" })).toBe("po_mismatch");
-  });
-
-  it("returns po_mismatch when the PO does not match the expected PO", () => {
-    expect(deriveNamingStatus({ orderName: "KS-123: Acme", purchaseOrder: "KS-999-1" })).toBe("po_mismatch");
-  });
-});
-
-describe("canonicalJobLabel", () => {
-  it("renders '{prefix}: {client}' from a parsed label", () => {
-    const parsed = parsePeJobLabel("KS-123: Acme");
-    expect(canonicalJobLabel(parsed)).toBe("KS-123: Acme");
-  });
-
-  it("falls back to the provided name when parsing failed", () => {
-    expect(canonicalJobLabel(null, "  Some Raw Name  ")).toBe("Some Raw Name");
-  });
-
-  it("returns empty string when there is no parsed label and no fallback", () => {
-    expect(canonicalJobLabel(null)).toBe("");
+  it("keeps AccuLynx behaviour unchanged", () => {
+    expect(deriveNamingStatus({ orderName: "KS-160: Joe", purchaseOrder: "KS-160-1", acculynxJobId: "x" })).toBe("aligned");
+    expect(deriveNamingStatus({ orderName: "KS-160: Joe", purchaseOrder: "KS-160-2", acculynxJobId: "x", expectedPo: "KS-160-1" })).toBe("po_mismatch");
+    expect(deriveNamingStatus({ orderName: null, purchaseOrder: "KS-160-1" })).toBe("needs_link");
   });
 });

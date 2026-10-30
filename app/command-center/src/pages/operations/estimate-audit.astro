@@ -5,7 +5,7 @@ import { loadEstimateAudit } from "@lib/estimate-audit";
 const data = await loadEstimateAudit();
 const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
 const runtimeTone = data.status === "live" ? "ready" : "watch";
-const runtimeLabel = data.status === "live" ? "Supabase live" : data.status === "sample" ? "Sample data" : "Supabase pending";
+const runtimeLabel = data.status === "live" ? "Supabase live" : "Supabase pending";
 const offices = data.offices.map((o) => o.office);
 const payload = JSON.stringify(data).replace(/</g, "\\u003c");
 ---

@@ -1,10 +1,12 @@
 // Invoice Audit — PE Office → Vendor/Branch → Invoice → Line drill-down.
 // Lazy-renders invoice lines + disposition on expand. Reads ?office=/?branch=
 // to land pre-filtered (scoped deep-link from the map popup / side card).
+import { priceListUrl } from "./price-list-url";
+import { initThemePref } from "./theme-pref";
 
 interface InvLine { lineId: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; negotiatedPrice: number | null; apiPrice: number | null; variancePct: number | null; varianceExt: number | null; recentPrice: number | null; orgInvPrice: number | null; thirdPrice: number | null; thirdPriceDate: string; benchmarkSource: "negotiated" | "api" | "recent" | "org_inv" | "none" | ""; benchmarkPrice: number | null; cascadeVariancePct: number | null; cascadeVarianceExt: number | null; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; audited: boolean; auditStatus: string; auditedBy: string; auditNote: string; auditSource: string; auditedAt: string; actorLabel: string; actorKind: "agent" | "human" | "system"; actorPersona: "Alex" | "Maya" | null; agreementId: number | null; agreementCurrent: boolean | null; agreementExpiry: string; }
 interface Category { key: string; label: string; sortOrder: number; }
-interface Invoice { invoiceNumber: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
+interface Invoice { invoiceNumber: string; vendor?: string; invoiceDate: string; orderDate: string; totalAmount: number; isCreditMemo: boolean; salesType: string; po: string; branchCode: string; branchName: string; office: string; lineCount: number; noPriceLines: number; flaggedLines: number; atRisk: number; worstPct: number; auditedLines: number; pendingLines: number; hasWork?: boolean; paid: boolean; paidAt: string; processedAt?: string; toBePaid?: boolean; transferred?: boolean; held?: boolean; approvedToPay?: boolean; awaitingPayment?: boolean; actionable?: boolean; dueNow?: boolean; paymentStatus?: string; closedOut?: boolean; closeoutReason?: string; hasPdf: boolean; jobNumber: string; clientName: string; jobCategory: string; canonicalPo?: string; namingStatus?: string; acculynxJobId?: string; needsAcculynxLink?: boolean; lines: InvLine[]; hasPriceList?: boolean; searchText?: string; linesLoaded?: boolean; }
 interface Branch { branchCode: string; branchName: string; office: string; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; invoices: Invoice[]; }
 interface Office { office: string; branchCount: number; invoiceCount: number; creditMemos: number; atRisk: number; noPrice: number; flagged: number; pending: number; toBePaid?: number; branches: Branch[]; }
 const root = document.querySelector(".iv") as HTMLElement | null;
@@ -49,6 +51,82 @@ if (root && dataEl && mount) {
     return b ? ` <span class="pill ${b.cls}" title="${esc(b.tip)}">${b.lab}</span>` : "";
   }
 
+  /* ---- KPI pill realtime refresh (PEC-197/198) ----
+     Re-fetches /api/accounting/kpi-pills after every mutating action (and on a 60s
+     visible-tab poll) and patches the 7-pill row in place — no full reload. Pill
+     markup contract: data-kpi-val/-sub hooks in invoice-audit.astro. */
+  async function refreshKpiPills() {
+    try {
+      const res = await fetch("/api/accounting/kpi-pills", { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) return;
+      const k = await res.json();
+      const m$ = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+      const num$ = (n: number) => (Number(n) || 0).toLocaleString("en-US");
+      const set = (sel: string, txt: string) => { const el = document.querySelector<HTMLElement>(sel); if (el) el.textContent = txt; };
+      set('[data-kpi-val="claims"]', num$(k.claimsUnreviewed));
+      set('[data-kpi-sub="claims"]', `of ${num$(k.claimsTotal)} claim lines · ${m$(k.atRisk)} at risk`);
+      set('[data-kpi-val="cm"]', m$((k.cmApprovedTotal || 0) + (k.cmDraftTotal || 0)));
+      set('[data-kpi-sub="cm"]', `${num$(k.cmApprovedCount)} approved (${m$(k.cmApprovedTotal)}) · ${num$(k.cmDraftCount)} draft (${m$(k.cmDraftTotal)})`);
+      const vend = document.querySelector<HTMLElement>("[data-kpi-vendors]");
+      if (vend && Array.isArray(k.cmByVendor)) {
+        vend.innerHTML = k.cmByVendor.map((v: any) => {
+          if (v.cmStatus === "coming_soon") return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="Coming Soon">${esc(v.acronym)}</span>`;
+          if (!v.count) return `<span class="iv-process-btn iv-secondary iv-vendor-off" title="No ${esc(v.label)} request is drafted or approved — nothing to send">${esc(v.acronym)}</span>`;
+          return `<a class="iv-process-btn iv-secondary" href="/accounting/credit-memos/weekly?vendor=${encodeURIComponent(v.slug)}" title="Open the ${esc(v.label)} credit memo email + downloads in Weekly CM">${esc(v.acronym)} →</a>`;
+        }).join("");
+      }
+      const pb = document.getElementById("iv-process") as HTMLButtonElement | null;
+      if (pb) {
+        const n = Number(k.auditPendingCount || 0);
+        pb.dataset.count = String(n);
+        pb.disabled = n === 0;
+        pb.classList.toggle("is-disabled", n === 0);
+        const span = pb.querySelector('[data-kpi-val="auditPending"]');
+        if (span) span.textContent = num$(n);
+        // Empty is the normal resting state — label it honestly, not "report empty".
+        pb.querySelector<HTMLElement>("[data-kpi-empty]")?.toggleAttribute("hidden", n !== 0);
+        pb.querySelector<HTMLElement>("[data-kpi-full]")?.toggleAttribute("hidden", n === 0);
+        pb.title = n === 0
+          ? "Nothing awaiting a stamp — invoices enter this queue only when a re-audit or a “Go back” reset produces new claim lines."
+          : "Stamp audited invoices Invoice Audit Complete (auto-fires when a vendor email is marked sent)";
+      }
+      const msBtn = document.querySelector<HTMLButtonElement>('[data-kpi-btn="marksent"]');
+      if (msBtn) {
+        const n = Number(k.cmApprovedCount || 0);
+        msBtn.disabled = n === 0;
+        msBtn.classList.toggle("is-disabled", n === 0);
+        msBtn.title = n === 0
+          ? "Nothing is approved yet — approve a request in Weekly CM before marking it sent."
+          : "Record the vendor email as sent — approved requests move to Chase it";
+      }
+      set('[data-kpi-val="awaiting"]', num$(k.awaitingCount));
+      const aw = document.querySelector<HTMLElement>('[data-kpi-sub="awaiting"]');
+      if (aw) aw.innerHTML = `${m$(k.awaitingTotal)} outstanding · <span class="${Number(k.awaitingOverdue) > 0 ? "iv-overdue" : ""}" data-kpi-overdue>${num$(k.awaitingOverdue)}</span> overdue (+14d)`;
+      const col = document.querySelector<HTMLElement>('[data-kpi-sub="collected"]');
+      if (col) col.innerHTML = `${num$(k.cmReceivedCount)} collected (${m$(k.cmReceivedTotal)}) · <span class="${Number(k.cmReceiptsPendingReview) > 0 ? "iv-overdue" : ""}">${num$(k.cmReceiptsPendingReview)}</span> received CMs need review`;
+      set('[data-kpi-val="dueNow"]', num$(k.dueNow));
+      set('[data-kpi-val="verify"]', num$(k.pendingVerification));
+      set('[data-kpi-val="qb"]', num$(k.qbPendingTotal));
+      const qbSub = document.querySelector<HTMLElement>('[data-kpi-sub="qb"]');
+      if (qbSub) {
+        qbSub.textContent = Array.isArray(k.qbPendingByVendor) && k.qbPendingByVendor.length
+          ? k.qbPendingByVendor.map((r: any) => `${r.slug} ${r.pending}`).join(" · ")
+          : "all ledgers exported";
+        // Target the button EXPLICITLY. This used to grab the first .iv-process-btn in
+        // the card, which silently swallowed the Due-Now "Filter" button once the pay
+        // steps were merged into one card.
+        const qbBtn = document.querySelector<HTMLElement>('[data-kpi-btn="qb"]');
+        if (qbBtn) {
+          qbBtn.outerHTML = Number(k.qbPendingTotal) > 0
+            ? `<a class="iv-process-btn iv-secondary" data-kpi-btn="qb" href="/accounting/qb-bank-export" title="Preview + download the per-vendor QB bank CSVs">Export</a>`
+            : `<span class="iv-process-btn iv-secondary iv-vendor-off" data-kpi-btn="qb" title="Every vendor ledger is already exported — nothing to export">Export</span>`;
+        }
+      }
+      set('[data-kpi-val="alex"]', num$(k.alexCandidates));
+      set('[data-kpi-sub="scope"]', `${num$(k.openInvoices)} open invoices · ${num$(k.paidInvoices)} paid/closed · ${num$(k.creditMemosOpen)} credit memos open`);
+    } catch {}
+  }
+
   /* ---- credit memo requests (v2 R2, docs/82): Approve-into-weekly-email flow ---- */
   const cmByInvoice = new Map<string, { status: string; expectedCredit: number; claimLines: number; reviewedLines: number }>();
   // Per-line claim review state (Chris 2026-08-05: the check-off lives on the audit
@@ -65,19 +143,9 @@ if (root && dataEl && mount) {
         cmByInvoice.set(r.invoiceNumber, { status: r.status, expectedCredit: r.expectedCredit, claimLines: r.claimLines ?? 0, reviewedLines: r.reviewedLines ?? 0 });
         for (const c of r.claims ?? []) if (c.lineId) claimByLineId.set(String(c.lineId), { reauditId: Number(c.id), reviewed: Boolean(c.reviewed) });
       }
-      // Keep the server-rendered "Credit Memo Requested" KPI card honest without a reload.
-      let apprTotal = 0, apprN = 0, draftTotal = 0, draftN = 0;
-      for (const r of payload.requests) {
-        if (r.status === "approved") { apprTotal += r.expectedCredit || 0; apprN += 1; }
-        else { draftTotal += r.expectedCredit || 0; draftN += 1; }
-      }
-      document.querySelectorAll<HTMLElement>(".iv-kpi").forEach((card) => {
-        if (card.querySelector(".iv-kpi-lab")?.textContent !== "Credit Memo Requested") return;
-        const val = card.querySelector(".iv-kpi-val");
-        const sub = card.querySelector(".iv-kpi-sub");
-        if (val) val.textContent = "$" + Math.round(apprTotal + draftTotal).toLocaleString("en-US");
-        if (sub) sub.textContent = `${apprN} approved ($${Math.round(apprTotal).toLocaleString("en-US")}) · ${draftN} draft`;
-      });
+      // PEC-197: the whole KPI row refreshes from the pills endpoint (replaces the
+      // old single-card patch — the pill set changed in PEC-198).
+      void refreshKpiPills();
       mount!.querySelectorAll<HTMLElement>(".iv-inv-body[data-inv]").forEach((node) => {
         const inv = invByNumber.get(node.dataset.inv || "");
         const det = node.closest("details.iv-inv") as HTMLElement | null;
@@ -92,10 +160,13 @@ if (root && dataEl && mount) {
   // or UOM mismatch = discrepancy (shown); everything else is valid (hidden).
   const isDiscrepancy = (l: InvLine) =>
     l.uomMismatch || l.negotiatedPrice == null || (l.qty > 0 && l.unitPrice > l.negotiatedPrice);
-  const lineCredit = (l: InvLine) =>
-    !l.uomMismatch && l.negotiatedPrice != null && l.qty > 0 && l.unitPrice > l.negotiatedPrice
-      ? (l.unitPrice - l.negotiatedPrice) * l.qty
-      : 0;
+  const lineCredit = (l: InvLine) => {
+    if (l.uomMismatch || l.negotiatedPrice == null || l.qty <= 0 || l.unitPrice <= l.negotiatedPrice) return 0;
+    const credit = (l.unitPrice - l.negotiatedPrice) * l.qty;
+    // Sub-nickel variance is In Tolerance (matches the claim engine's 0.05 floor) —
+    // it gets the reviewed-valid checkbox, never an unclickable "CM $0.00".
+    return credit >= 0.05 ? credit : 0;
+  };
   function auditCell(inv: Invoice, l: InvLine): string {
     if (l.audited) {
       const meta = [l.auditNote, l.agreementId ? `Agreement #${l.agreementId}${l.agreementCurrent === false ? " (expired " + l.agreementExpiry + ")" : ""}` : "", l.auditedAt].filter(Boolean).join(" · ");
@@ -181,8 +252,12 @@ if (root && dataEl && mount) {
       const idxs = groups.get(k)!;
       const lines = idxs.map((li) => inv.lines[li]);
       const subtotal = lines.reduce((s, l) => s + (l.extendedPrice || 0), 0);
-      const atRisk = lines.reduce((s, l) => s + (!l.audited && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
-      const pend = lines.filter((l) => !l.audited).length;
+      // At-risk = overcharge NOT yet decided — a claim-reviewed (disputed) line is in
+      // the CM request, not "at risk" (matches v_invoice_audit_invoice, migration 214).
+      const atRisk = lines.reduce((s, l) => s + (!l.audited && l.auditStatus !== "disputed" && (l.varianceExt || 0) > 0 ? l.varianceExt! : 0), 0);
+      // PEC-194: decided = passed OR disputed (claim-reviewed). Counting only `audited`
+      // left CM-checked lines stuck "to audit" in this header forever.
+      const pend = lines.filter((l) => !l.audited && l.auditStatus !== "disputed").length;
       const catDone = lines.length - pend;
       const catPct = lines.length ? Math.round((catDone / lines.length) * 100) : 0;
       const tags = [
@@ -283,6 +358,23 @@ if (root && dataEl && mount) {
   }
 
   let filtersReady = false;
+  // Re-render an invoice body WITHOUT losing which category sections are open
+  // (Chris 2026-08-05 QA: a 6-line review must not cost 12 clicks).
+  function reRenderInvoiceBody(invObj: Invoice) {
+    const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invObj.invoiceNumber)}"]`) as HTMLElement | null;
+    const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
+    if (body) {
+      const openCats = new Set(
+        Array.from(body.querySelectorAll<HTMLDetailsElement>("details.iv-cat")).filter((d) => d.open).map((d) => d.dataset.cat || ""),
+      );
+      body.innerHTML = invoiceBody(invObj);
+      body.querySelectorAll<HTMLDetailsElement>("details.iv-cat").forEach((d) => {
+        if (openCats.has(d.dataset.cat || "")) d.open = true;
+      });
+    }
+    if (det) refreshInvoiceTags(det, invObj);
+  }
+
   function syncInvoiceProgressToTree(inv: Invoice) {
     const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(inv.invoiceNumber)}"]`) as HTMLElement | null;
     const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
@@ -325,11 +417,15 @@ if (root && dataEl && mount) {
     return [
       inv.pendingLines > 0 ? `<span class="pill pill-brand">${inv.pendingLines}/${inv.lineCount} to audit</span>` : '<span class="pill pill-green">✓ Audited</span>',
       inv.isCreditMemo ? '<span class="pill pill-grey">Credit Memo</span>' : "",
-      inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
+      // mig 293: a human closeout outranks the AR feed — the invoice is complete and processed.
+      inv.closedOut ? `<span class="pill pill-grey" title="${esc(inv.closeoutReason || "Closed out — complete and processed; never re-audited")}">Processed — closed</span>`
+        : inv.paid ? `<span class="pill pill-green" title="Paid ${esc(inv.paidAt)}">Paid</span>` : '<span class="pill pill-yellow">Open</span>',
       inv.worstPct > 0.01 ? `<span class="pill ${worstCls(inv.worstPct)}">${inv.worstPct.toFixed(1)}% worst</span>` : "",
       inv.atRisk > 0 ? `<span class="pill pill-red">${money(inv.atRisk)} at risk</span>` : "",
       inv.namingStatus === "po_mismatch" ? `<span class="pill pill-yellow" title="Canonical PO ${esc(inv.canonicalPo || "")}">PO mismatch</span>` : "",
-      inv.namingStatus === "needs_link" || inv.needsAcculynxLink ? '<span class="pill pill-red">Needs AccuLynx link</span>' : "",
+      // mig 316: a CRM job number (TX-460-PECRM) never links to AccuLynx, so it is not an AccuLynx-link task.
+      inv.namingStatus === "crm_job" ? '<span class="pill pill-grey" title="CRM job number (-PECRM) — never linked to an AccuLynx job">CRM job</span>'
+        : inv.namingStatus === "needs_link" || inv.needsAcculynxLink ? '<span class="pill pill-red">Needs AccuLynx link</span>' : "",
       inv.namingStatus === "temp_job" ? '<span class="pill pill-grey">TEMP job</span>' : "",
       cmTag(inv.invoiceNumber),
     ].filter(Boolean).join("");
@@ -350,17 +446,18 @@ if (root && dataEl && mount) {
     // Invoice PDF: always an active link — the endpoint fetches it on demand from ABC
     // and stores it if no PDF is on file yet (so every invoice resolves to a document).
     const invoiceBtn = `<a class="iv-rowbtn" href="/api/invoice-audit/pdf/${encodeURIComponent(inv.invoiceNumber)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 Invoice</a>`;
-    // Price List: greyed + non-navigating when this branch has no negotiated price list
-    // (otherwise the link lands on a blank price-list screen).
+    // Price List: canonical vendor-scoped URL (PEC-193) — office rides along so the
+    // target resolves the same (vendor, office) agreement set this gate checked.
+    // No data → greyed with tooltip, pointer events kept alive (Chris 2026-08-09).
     const priceListBtn = hasPriceList
-      ? `<a class="iv-rowbtn" href="/accounting/price-list/branch?branch=${encodeURIComponent(inv.branchCode)}&invoice=${encodeURIComponent(inv.invoiceNumber)}&vendor=abc-supply" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
-      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list on file for this branch" onclick="event.stopPropagation()">📋 Price List</span>`;
+      ? `<a class="iv-rowbtn" href="${priceListUrl({ branch: inv.branchCode, vendor: inv.vendor || "abc-supply", invoice: inv.invoiceNumber, office: inv.office })}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>`
+      : `<span class="iv-rowbtn is-disabled" aria-disabled="true" title="No price list is on file for this branch and vendor" onclick="event.stopPropagation()">📋 Price List</span>`;
     // "Go back" reset (docs/59 Task 6 + 2026-06-28 polish): re-pend every line, reverse
     // not-to-be-paid holds, cancel any draft credit memo. Shown on ANY invoice that is open
     // (not paid) and not yet exported AND has had audit work — human OR agent, credit memos
     // included. cc.proexteriorsus.net is where a human fixes agent work, so the option must be
     // universal for open+unpaid worked invoices. Hidden only on paid/exported (server refuses those).
-    const resetBtn = (!inv.paid && !inv.awaitingPayment && inv.hasWork === true)
+    const resetBtn = (!inv.paid && !inv.awaitingPayment && !inv.closedOut && inv.hasWork === true)
       ? `<button type="button" class="iv-rowbtn iv-reset" data-reset="${esc(inv.invoiceNumber)}" title="Reset: re-pend all lines, clear claim-line review checks, and cancel the un-sent credit memo request (sent requests and communications are not affected)" onclick="event.stopPropagation()">↩ Go back</button>`
       : "";
     return `
@@ -462,6 +559,12 @@ if (root && dataEl && mount) {
   async function loadInvoiceLines(inv: Invoice): Promise<boolean> {
     if (inv.lines.length > 0) return true;
     if (inv.linesLoaded && inv.lineCount <= 0) return true;
+    // PEC-215 guard: never request detail for a blank invoice number. A CSV
+    // totals row ingested as an invoice used to reach this surface and fire
+    // /api/invoice-audit/invoice?invoiceNumber= → 404 on every page load. The
+    // row is quarantined (mig 232) and the ingest now fails closed, but keep
+    // the client honest so a malformed row can never re-emit that 404.
+    if (!String(inv.invoiceNumber ?? "").trim()) return false;
     let inflight = invoiceDetailInflight.get(inv.invoiceNumber);
     if (!inflight) {
       inflight = fetch(`/api/invoice-audit/invoice?invoiceNumber=${encodeURIComponent(inv.invoiceNumber)}`, { cache: "no-store", credentials: "same-origin", headers: { accept: "application/json" } })
@@ -598,8 +701,20 @@ if (root && dataEl && mount) {
       const reauditId = Number(box.dataset.reviewClaim);
       const { ok, data } = await postJson("/api/credit-memos/review-line", { lineId: reauditId, reviewed: box.checked });
       if (!ok) { toast("Review failed: " + (data?.error_description || data?.error || "error")); box.checked = !box.checked; box.disabled = false; return; }
-      const claim = claimByLineId.get([...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "");
+      const claimLineId = [...claimByLineId.keys()].find((k) => claimByLineId.get(k)?.reauditId === reauditId) || "";
+      const claim = claimByLineId.get(claimLineId);
       if (claim) claim.reviewed = box.checked;
+      // Reviewing IS the line's audit decision — drop/restore it in the to-audit counts.
+      // PEC-194: re-render the body (open sections preserved) so the category header's
+      // "N to audit" pill and bar move too, then re-roll the branch/office pills.
+      const claimInv = invByNumber.get((data as any)?.invoiceNumber || "");
+      const claimLine = claimInv?.lines.find((l) => l.lineId === claimLineId);
+      if (claimInv && claimLine) {
+        claimLine.auditStatus = box.checked ? "disputed" : "pending";
+        claimInv.pendingLines = Math.max(0, claimInv.pendingLines + (box.checked ? -1 : 1));
+        reRenderInvoiceBody(claimInv);
+        if (filtersReady) applyFilter();
+      }
       box.disabled = false;
       await loadCreditMemoRequests(); // r/N + Approve gating changed
       return;
@@ -614,10 +729,14 @@ if (root && dataEl && mount) {
       if (!ok) { toast("Add to credit memo failed: " + (data?.error_description || data?.error || "error")); box.checked = false; box.disabled = false; return; }
       await loadCreditMemoRequests(); // claim set + totals changed
       const invObj = invByNumber.get(invoiceNumber);
-      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
-      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
-      if (invObj && body) body.innerHTML = invoiceBody(invObj); // checkbox re-renders as a checked claim box
-      if (invObj && det) refreshInvoiceTags(det, invObj);
+      if (invObj) {
+        const addedLine = invObj.lines.find((l) => l.lineId === box.dataset.cmAdd);
+        if (addedLine) {
+          addedLine.auditStatus = "disputed";
+          invObj.pendingLines = Math.max(0, invObj.pendingLines - 1);
+        }
+        reRenderInvoiceBody(invObj); // checkbox re-renders as a checked claim box; open sections preserved
+      }
       toast(`Line added to credit memo — ${invoiceNumber} now claims ${money2(data.expectedCredit)} across ${data.lineCount} line(s)`);
       return;
     }
@@ -645,12 +764,10 @@ if (root && dataEl && mount) {
       line.auditNote = note;
       invObj.pendingLines = Math.max(0, invObj.pendingLines - 1);
       if ((line.varianceExt || 0) > 0) invObj.atRisk = Math.max(0, invObj.atRisk - (line.varianceExt || 0));
-      const body = mount!.querySelector(`.iv-inv-body[data-inv="${CSS.escape(invoiceNumber)}"]`) as HTMLElement | null;
-      const det = body?.closest("details.iv-inv") as HTMLDetailsElement | null;
-      if (body) body.innerHTML = invoiceBody(invObj);
-      if (det) refreshInvoiceTags(det, invObj);
+      reRenderInvoiceBody(invObj); // open sections preserved
       if (filtersReady) applyFilter();
     }
+    void refreshKpiPills(); // PEC-197
     toast(`Line marked reviewed (${invoiceNumber})`);
   });
 
@@ -740,10 +857,54 @@ if (root && dataEl && mount) {
       setBar(oEl, offRoll.audited, offRoll.auditable);
     });
   }
-  [search, officeSel, tolSel, date1El, date2El, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("input", applyFilter));
-  showAllBox?.addEventListener("change", () => { syncDateBounds(); applyFilter(); });
+  /* ---- empty state: never render a blank page ---- */
+  function paintEmptyState() {
+    const el = document.getElementById("iv-noresults");
+    if (!el) return;
+    const shown = Array.from(mount.querySelectorAll<HTMLElement>(".iv-office")).some((o) => o.style.display !== "none");
+    el.hidden = shown;
+    if (!shown) {
+      const scope = dueNowBox?.checked ? "due" : showAllBox?.checked ? "all" : "audit";
+      const filtered = !!(search?.value.trim() || officeSel?.value || tolSel?.value);
+      el.textContent = filtered
+        ? "No invoices match these filters. Clear the search, office or More-filters selection to widen it."
+        : scope === "audit"
+          ? "Nothing left to audit — every open invoice has had its lines audited. Switch to Due now or All to see them."
+          : scope === "due"
+            ? "No invoice is payment-due yet (invoice date + 60 days)."
+            : "No invoices to show.";
+    }
+  }
+  const applyFilterAndPaint = () => { applyFilter(); paintEmptyState(); };
+
+  [search, officeSel, tolSel, date1El, date2El, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("input", applyFilterAndPaint));
+  showAllBox?.addEventListener("change", () => { syncDateBounds(); applyFilterAndPaint(); });
+
+  /* ---- scope switch: one control over the three checkboxes it replaced ----
+     The checkboxes still exist (hidden) and stay the single source of truth for
+     applyFilter(), so the tree logic, the Due-Now card button and deep links are
+     untouched — this only drives them. */
+  const scopeBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".iv-scope [data-scope]"));
+  function paintScope() {
+    const active = dueNowBox?.checked ? "due" : showAllBox?.checked ? "all" : "audit";
+    scopeBtns.forEach((b) => b.classList.toggle("is-active", b.dataset.scope === active));
+  }
+  function setScope(scope: string) {
+    if (showAllBox) showAllBox.checked = scope === "all";
+    if (pendingBox) pendingBox.checked = scope === "audit";
+    if (dueNowBox) dueNowBox.checked = scope === "due";
+    paintScope();
+    syncDateBounds();
+    applyFilterAndPaint();
+  }
+  scopeBtns.forEach((b) => b.addEventListener("click", () => setScope(b.dataset.scope ?? "audit")));
+  // Keep the switch honest when something else moves the checkboxes (Due-Now button).
+  [showAllBox, pendingBox, dueNowBox].forEach((el) => el?.addEventListener("change", paintScope));
+
   syncDateBounds();
   applyFilter();
+  paintScope();
+  paintEmptyState();
   filtersReady = true;
 
   /* ---- scoped deep-link: ?office= / ?branch= ---- */
@@ -801,19 +962,8 @@ if (root && dataEl && mount) {
     }
   }
 
-  /* ---- theme toggle ---- */
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  function applyTheme(pref: string) {
-    root!.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-    root!.dataset.pref = pref;
-    root!.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-  }
-  let pref = "system";
-  try { pref = localStorage.getItem("ivTheme") || "system"; } catch {}
-  applyTheme(pref);
-  root.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) =>
-    b.addEventListener("click", () => { try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
-  mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+  /* ---- theme toggle (shared preference — see scripts/theme-pref.ts) ---- */
+  initThemePref(root, ".iv-theme button");
 
   /* ---- toast ---- */
   let timer: number | undefined;
@@ -876,6 +1026,7 @@ if (root && dataEl && mount) {
         payDirty = true;
         const row = btn.closest(".iv-pay-batch");
         if (row) row.remove();
+        void refreshKpiPills(); // PEC-197
         toast(`${data.invoiceNumber} marked Paid-Verified`);
         if (!body.querySelector("[data-verify]")) body.insertAdjacentHTML("beforeend", '<p class="iv-pay-empty">Nothing pending verification.</p>');
       }));
@@ -907,4 +1058,55 @@ if (root && dataEl && mount) {
   }
   openManageFromHash();
   window.addEventListener("hashchange", openManageFromHash);
+
+  /* ---- PEC-197/198 wiring ---- */
+  // Due Now — Pay pill: the Filter button toggles the toolbar's Due-now scope.
+  /* ---- Card 1 "Mark sent": approved requests -> Chase it ---- */
+  document.querySelector<HTMLButtonElement>('[data-kpi-btn="marksent"]')?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget as HTMLButtonElement;
+    const res = await fetch("/api/credit-memos/pending", { credentials: "same-origin", cache: "no-store" })
+      .then((r) => r.json()).catch(() => null);
+    const approved = (res?.requests ?? []).filter((r: any) => r.status === "approved");
+    if (!approved.length) { toast("Nothing approved to mark sent."); return; }
+    // Name every vendor in the confirm — this can span vendors, and you may only have
+    // emailed one of them.
+    const byVendor = new Map<string, { n: number; total: number }>();
+    for (const r of approved) {
+      const cur = byVendor.get(r.vendor) ?? { n: 0, total: 0 };
+      cur.n += 1; cur.total += Number(r.expectedCredit || 0);
+      byVendor.set(r.vendor, cur);
+    }
+    const lines = [...byVendor.entries()].map(([v, x]) => `  • ${v}: ${x.n} request(s), $${Math.round(x.total).toLocaleString("en-US")}`).join("\n");
+    if (!window.confirm(
+      `Mark these approved requests as SENT?\n\n${lines}\n\n` +
+      `This does not email anything. It records that you sent the email, moves them to Chase it, ` +
+      `and starts the 14-day follow-up clock.`)) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    const failed: string[] = [];
+    for (let i = 0; i < approved.length; i += 1) {
+      btn.textContent = `Sending ${i + 1}/${approved.length}…`;
+      const r = await fetch("/api/credit-memos/disposition", {
+        method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin",
+        body: JSON.stringify({ invoiceNumber: approved[i].invoiceNumber, decision: "mark-sent" }),
+      }).then((x) => x.json()).catch(() => null);
+      if (r?.record?.status !== "sent") failed.push(approved[i].invoiceNumber);
+    }
+    btn.textContent = label;
+    btn.disabled = false;
+    toast(failed.length ? `${approved.length - failed.length}/${approved.length} marked sent — failed: ${failed.join(", ")}`
+                        : `${approved.length} request(s) marked sent — now in Chase it.`);
+    await refreshKpiPills();
+    void loadCreditMemoRequests();
+  });
+
+  document.getElementById("iv-kpi-duenow")?.addEventListener("click", () => {
+    if (!dueNowBox) return;
+    // Setting .checked in code does not fire "change", so drive the scope switch
+    // explicitly — otherwise the toolbar would disagree with the tree.
+    const turningOn = !dueNowBox.checked;
+    document.querySelector<HTMLButtonElement>(`.iv-scope [data-scope="${turningOn ? "due" : "audit"}"]`)?.click();
+  });
+  // Gentle multi-user freshness: re-pull the pill numbers every 60s while visible.
+  window.setInterval(() => { if (!document.hidden) void refreshKpiPills(); }, 60_000);
 }

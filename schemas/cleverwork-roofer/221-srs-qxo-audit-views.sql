@@ -1,0 +1,29 @@
+-- 221 (+221b) — SRS/QXO lit up in Invoice Audit (docs/79 Phase 5 completion).
+-- Applied to prod 2026-08-06 as srs_qxo_audit_views_221 + srs_qxo_audit_invoice_view_221b.
+--
+-- v_invoice_audit_line and v_invoice_audit_invoice gain a UNION arm over the
+-- generic vendor_invoices/vendor_invoice_lines (mig 192). Generic pricing arm
+-- is vendor-siloed (pa.vendor_id = invoice.vendor_id, mig 208 doctrine) AND
+-- office-siloed (agreement's branch office must equal the invoice's branch
+-- office, mig 217 doctrine): exact raw_item_number or exact normalized
+-- description match on price_agreement_items; unit-match first, lowest wins.
+-- negotiated_agreement_id stays integer (ABC) — generic (uuid) agreements emit
+-- NULL there (claims context lookup remains ABC-only for now).
+-- invoice_line_audit gains vendor_slug (default 'abc-supply') — invoice-number
+-- collision guard across vendors. v_invoice_audit_invoice_vendor maps
+-- invoice_number → vendor_slug for UI/payment seams (views cannot grow columns
+-- in place). First live read: SRS 30 inv/242 lines → 12 flagged, $2,879.55 at
+-- risk vs the SRS Level-4 agreements; QXO 3 inv all No-Price (no agreements).
+-- Full applied text in Supabase migration history.
+SELECT 1; -- marker; see migration history for applied bodies
+
+-- 222 (2026-08-06, same night): Chris caught the drill-down bleed — the invoice
+-- tree hardcoded vendor=abc-supply into every Price List link, so an SRS
+-- invoice's button rendered ABC's office agreements as "the prices the audit
+-- compares against" (the ENGINE was correct; the reference surface lied).
+-- Fixes: tree passes the invoice's real vendor (lib stamps it from
+-- v_invoice_audit_invoice_vendor); invoiceVendor() payment seam maps real
+-- vendor names; migration generic_arm_strict_office_222 tightened the generic
+-- arm's office join from IS NOT DISTINCT FROM to strict equality (unknown
+-- office => No-Price, never NULL-to-NULL). Verified: SRS pricing unchanged
+-- (65 lines, $2,879.55); branch page with vendor=srs renders only SRS 0049345641.

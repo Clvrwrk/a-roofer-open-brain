@@ -1,0 +1,36 @@
+[Unit]
+Description=Open Brain daily site quality sweep (docs/92, PEC-218)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Repo clone + master.env live on the US agent host (178.156.203.23, PE-US-AGENTS).
+# master.env supplies AGENT_SERVICE_TOKEN (live /api probes), SLACK_BOT_TOKEN
+# (#pe-cc-dev-team alerting), LINEAR_API_KEY + LINEAR_TEAM_ID (auto-filed issues),
+# and SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (the DB tier — money-truth checks,
+# read-only, added 2026-08-20).
+# Each is optional; the sweep degrades loudly rather than silently skipping. If the
+# DB pair is missing you get a 'db: no SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY'
+# warning, NOT silent green — check for it after any master.env change.
+# Env is sourced by the wrapper, not by systemd: the repo .env has quoted and
+# multi-line values systemd's EnvironmentFile parser cannot read. The previous
+# `EnvironmentFile=-/opt/openbrain/master.env` pointed at a path that does not
+# exist on this host, and the leading `-` made that failure silent.
+WorkingDirectory=/opt/openbrain/a-roofers-open-brain
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/site-sweep.sh
+User=root
+# systemd starts oneshots with no HOME; the wrappers and the master.env loader need it (docs/109 D8).
+Environment=HOME=/root
+# Report the result to the runtime board on success AND failure (docs/109 D7/D12, mig 286).
+# SuccessExitStatus below means a reporting exit 1 is recorded as success with exit_code 1 (board: yellow).
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-site-sweep
+# Static analysis is seconds; live probes are network-bound. 15m is generous.
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+# A failing sweep must NOT wedge the timer — it reports and exits non-zero.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

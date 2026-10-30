@@ -1,0 +1,118 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import manifest from "../../../public/design-system/swag/manifest.json";
+
+// Per-item production specification. The render is the visual reference; this table is
+// what goes on the purchase order.
+const specs: Record<string, { method: string; colour: string; minLogo: string; artwork: string; notes: string }> = {
+  pen: { method: "Pad print, 2 colour", colour: "Pantone 2766 C + 186 C on white barrel; navy trim", minLogo: "25 mm wide (wordmark + PRO panel only; drop the rules)", artwork: "pro-exteriors-logo.svg → 2-colour vector; one-colour navy fallback", notes: "White barrel so the full lockup can print; a navy barrel takes the white one-colour version." },
+  marker: { method: "Pad print, 1 colour", colour: "White on Pantone 2766 C body", minLogo: "25 mm wide", artwork: "pro-exteriors-logo-white.svg (one-colour)", notes: "Chisel tip; the barrel's curvature limits imprint height to 12 mm." },
+  magnet: { method: "Full-colour digital on 30 mil magnet stock, gloss laminate", colour: "CMYK from Pantone bridge; proof against fan", minLogo: "60 mm wide", artwork: "logo_color.png at 300 dpi (or vector)", notes: "3.5 × 2 in with rounded corners; leave the phone strip editable per office." },
+  "hard-hat": { method: "Vinyl decal, full colour, or 2-colour screen", colour: "Pantone 2766 C + 186 C", minLogo: "75 mm wide front decal", artwork: "Vector; die-cut with 2 mm white border", notes: "ANSI Z89.1 class C/E white shells; decal front-centre; crew name on the rear in navy." },
+  polo: { method: "Embroidery", colour: "White thread (Madeira 1001 / Isacord 0015) on navy pique", minLogo: "75 mm wide; letter height ≥ 6 mm", artwork: "One-colour white; digitised DST from the vector", notes: "Left chest, 3.5 in wide; the rules are dropped in embroidery; no red thread on navy." },
+  tshirt: { method: "Screen print, 2 colour", colour: "Pantone 2766 C + 186 C on heather grey", minLogo: "250 mm wide chest print", artwork: "2-colour vector separations", notes: "Heather grey or white shirts only for the full-colour lockup; navy shirts take the one-colour white version." },
+  "yard-sign": { method: "Screen or digital on 4 mm corrugated plastic, 2-sided", colour: "Pantone 2766 C + 186 C (2-colour); white background", minLogo: "300 mm wide", artwork: "Vector; 0.5 in bleed; 1 in safe", notes: "18 × 24 in on an H-stake; phone number ≥ 3 in tall; the navy band at the bottom carries the phone in white." },
+  "truck-door": { method: "Cut vinyl (2 colour) or printed vinyl with lamination", colour: "3M 2080 or Oracal 751 navy + red matched to Pantone", minLogo: "500 mm wide", artwork: "Vector; cut paths; no fine rules under 6 mm", notes: "White vehicles carry the full colour; navy vehicles carry the white one-colour version; DOT numbers in navy 2 in tall beneath." },
+  mug: { method: "Sublimation (full colour) or 2-colour screen", colour: "Full colour on white ceramic; navy handle/interior", minLogo: "60 mm wide", artwork: "logo_color.png 300 dpi or vector", notes: "11 oz; logo faces the right-handed drinker; dishwasher-safe finish." },
+  notepad: { method: "Offset, 2 colour", colour: "Pantone 2766 C + 186 C on 60# white", minLogo: "38 mm wide header", artwork: "Vector; rules at 0.5 pt 40% K", notes: "5.5 × 8.5 in, 50 sheets, chipboard back; navy ruled lines at 7 mm." },
+  cap: { method: "Embroidery, 3D puff optional for PRO panel", colour: "White thread on navy", minLogo: "65 mm wide; letter height ≥ 6 mm", artwork: "One-colour white DST", notes: "Structured 6-panel; front panel only; nothing on the side panels." },
+  sticker: { method: "Die-cut vinyl, laminated", colour: "Full colour CMYK, proofed", minLogo: "75 mm wide", artwork: "Vector with 2 mm white border cut path", notes: "Outdoor-rated 3-year vinyl; the border keeps the roof line from vanishing on dark surfaces." },
+};
+
+const order = ["pen", "marker", "magnet", "notepad", "sticker", "mug", "hard-hat", "cap", "polo", "tshirt", "yard-sign", "truck-door"];
+const items = order.filter((k) => manifest[k as keyof typeof manifest]).map((k) => ({ slug: k, ...(manifest as Record<string, any>)[k], spec: specs[k] }));
+---
+
+<DesignSystemShell slug="swag" source="scripts/design-system-swag.mjs · app/command-center/public/design-system/swag/manifest.json">
+  <DsSection id="renders" title="Reference renders">
+    <p>
+      Twelve promotional items rendered from the official logo with OpenAI's GPT Image 2.5 on fal.ai. Each render is a
+      visual reference for a vendor conversation, not final artwork — the artwork file is named per item below. The logo
+      fidelity comes from passing <code>config/brand/assets/logo_color.png</code> as the reference image to the edit
+      endpoint rather than describing it. Alt text below was written from the render, not the prompt.
+    </p>
+    <div class="ds-grid-3">
+      {items.map((it) => (
+        <figure class="ds-figure">
+          <img src={`/design-system/swag/${it.slug}.jpg`} alt={`${it.title} reference render: ${it.spec.colour.split(";")[0].toLowerCase()}, logo ${it.spec.minLogo.split(" (")[0]}`} width="960" height="960" loading="lazy" style="background:var(--surface-alt)" />
+          <figcaption><strong>{it.title}</strong> — {it.spec.method}. <span style="color:var(--text-muted)">Rendered {String(it.renderedAt).slice(0, 10)}.</span></figcaption>
+        </figure>
+      ))}
+    </div>
+  </DsSection>
+
+  <DsSection id="imprint" title="Imprint methods & colour paths">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Method</th><th>Colour path</th><th>Logo version</th><th>Minimum size</th><th>Watch for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pad print</strong> (pens, markers)</td><td>Pantone spot, 1–2 colours</td><td>Full 2-colour on white; one-colour white on navy</td><td>25 mm wide; drop the rules under 30 mm</td><td>Roof mark fills in under 8 mm tall; barrel curvature limits height</td></tr>
+          <tr><td><strong>Screen print</strong> (shirts, signs, totes)</td><td>Pantone spot, one screen per colour</td><td>2-colour on white/grey; 1-colour white on navy</td><td>75 mm wide garments; 300 mm signs</td><td>Registration between navy and red: keep a 0.3 mm trap on the PRO panel</td></tr>
+          <tr><td><strong>Embroidery</strong> (polos, caps, jackets)</td><td>Thread matched to Pantone 2766 C / 186 C (swatch approval)</td><td>One-colour white on navy; navy + red on white/grey</td><td>75 mm wide; letters ≥ 6 mm</td><td>The four rules do not embroider; the red underline under PRO becomes a satin stitch ≥ 1.5 mm</td></tr>
+          <tr><td><strong>Cut vinyl</strong> (trucks, windows)</td><td>Stock colour matched to Pantone</td><td>2-colour; no fine rules under 6 mm</td><td>500 mm wide on a door</td><td>Weeding the counter of the R and O at small sizes</td></tr>
+          <tr><td><strong>Printed vinyl / digital</strong> (magnets, stickers, banners, signs)</td><td>CMYK from Pantone bridge with a proof</td><td>Full colour</td><td>60 mm magnets; 300 mm signs</td><td>Navy printing black: hold K down; laminate outdoors</td></tr>
+          <tr><td><strong>Sublimation</strong> (mugs, some apparel)</td><td>Full colour, white substrate only</td><td>Full colour</td><td>60 mm wide</td><td>Colour shift on ceramic: proof one unit</td></tr>
+          <tr><td><strong>Offset</strong> (notepads, cards, brochures)</td><td>Pantone spot for 1–3 colours; CMYK for photos</td><td>Full colour</td><td>32 mm wide</td><td>See Print chapter</td></tr>
+          <tr><td><strong>Laser / engrave</strong> (metal, wood)</td><td>Tone only</td><td>One-colour; roof mark alone under 20 mm</td><td>20 mm</td><td>Never as the only branding on an item; pair with a printed tag</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Logo versions, by substrate colour: <strong>white / light grey</strong> → full colour; <strong>navy / black / dark</strong> → one-colour white; <strong>red or gold substrates</strong> → not used. Gold appears only as a trim line or stitch, never as a fill behind the logo.</p>
+  </DsSection>
+
+  <DsSection id="item-specs" title="Per-item specifications">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Item</th><th>Method</th><th>Colour</th><th>Minimum logo</th><th>Artwork file</th><th>Notes</th></tr></thead>
+        <tbody>
+          {items.map((it) => (
+            <tr><td class="nowrap"><strong>{it.title}</strong></td><td>{it.spec.method}</td><td>{it.spec.colour}</td><td>{it.spec.minLogo}</td><td><code>{it.spec.artwork}</code></td><td>{it.spec.notes}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="swag-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="SW-01" title="Full-colour logo on white or light grey only; one-colour white on navy or dark; nothing on red or gold substrates." source="Logo L-01; config/brand/assets/README.md">
+        <p>Gold is a trim line at most.</p>
+      </DsRule>
+      <DsRule id="SW-02" title="Every order specifies Pantone 2766 C and 186 C (or the thread/vinyl match approved against them) and the logo version by name." source="Color C-07">
+        <p>A vendor's 'close enough' navy is not approved until swatched.</p>
+      </DsRule>
+      <DsRule id="SW-03" title="Minimum logo width by method: 25 mm pad print, 32 mm offset, 60 mm digital, 75 mm embroidery and screen print, 300 mm signs, 500 mm vehicles." source="this chapter; Logo L-02">
+        <p>Below the minimum use the roof mark alone or the wordmark without rules.</p>
+      </DsRule>
+      <DsRule id="SW-04" title="One logo per item, one placement, with clear space equal to the roof height; no taglines, no second marks, no vendor co-branding on the same face." source="Logo L-07; this chapter">
+        <p>A phone number or web address may sit outside the clear space.</p>
+      </DsRule>
+      <DsRule id="SW-05" title="Renders are references; the purchase order carries the artwork file, the Pantone numbers, the method and the size from the table above." source="this chapter">
+        <p>Never send a render as artwork.</p>
+      </DsRule>
+      <DsRule id="SW-06" title="Physical proof (one unit or a strike-off) before any run over 100 units or with a new vendor." source="Color C-07">
+        <p>Photograph the proof beside the Pantone fan and file it with the order.</p>
+      </DsRule>
+      <DsRule id="SW-07" title="Items are re-rendered with scripts/design-system-swag.mjs when the logo file changes; the manifest records model, prompt, reference and date." source="scripts/design-system-swag.mjs">
+        <p>Alt text is rewritten from the new render.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <DsSection id="provenance" title="Provenance">
+    <p>Every render's model, reference image, prompt and timestamp, from <code>manifest.json</code>. The prompt is the specification the vendor conversation starts from; the brand block at the head of each prompt is identical.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Item</th><th>Model</th><th>Reference</th><th>Rendered</th><th>Prompt (item-specific part)</th></tr></thead>
+        <tbody>
+          {items.map((it) => (
+            <tr><td class="nowrap"><strong>{it.title}</strong></td><td class="nowrap"><code>{it.model}</code></td><td class="nowrap"><code>{it.reference}</code></td><td class="nowrap">{String(it.renderedAt).slice(0, 16).replace("T", " ")}</td><td style="max-width:48ch">{String(it.prompt).split("Product photography style:")[1]?.split(". ").slice(1).join(". ") ?? it.prompt}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p>Rendering: <code>node scripts/design-system-swag.mjs</code> with <code>FAL_KEY</code> in the environment; endpoint <code>openai/gpt-image-2.5/flare/edit</code>, <code>image_size: square_hd</code>, <code>quality: high</code>; PNG output downsampled to 960px JPEG q82 (≤ 250 KB) before commit. The script skips items already on disk; <code>--force</code> re-renders.</p>
+  </DsSection>
+</DesignSystemShell>

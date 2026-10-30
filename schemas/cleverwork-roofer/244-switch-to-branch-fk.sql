@@ -1,0 +1,30 @@
+-- 244 — switch the ABC pricing + display paths from text branch matching to the FK.
+-- Applied to prod 2026-08-19.
+--
+-- Proven equivalent BEFORE switching: 1,089/1,089 ABC invoices resolve a vendor_branch_id,
+-- and the FK yields the identical office as the old text join on every one — 0 disagreements,
+-- 0 fk-only, 0 text-only.
+--
+-- After this, no query resolves a branch from a vendor's text label. A branch number that
+-- collides across vendors cannot select the wrong row, because nothing selects on the number.
+--
+--   v_invoice_pricing_office : JOIN vendor_branches ON vb.id = i.vendor_branch_id
+--                              (vendors slug check kept as defence in depth)
+--   v_credit_memo_match      : LEFT JOIN vendor_branches ON vb.id = m.vendor_branch_id
+--
+-- abc_display_branch() (migration 238) is retired from these views but kept for any caller
+-- that genuinely only has a number in hand.
+--
+-- VERIFICATION after apply:
+--   v_invoice_audit_invoice : 1,122 rows, sum(at_risk) $4,676.63 — both unchanged.
+--   ABC arm office/branch_name: 0 rows differ from the previous resolution.
+--   The whole-view fingerprint DID move, and the entire delta is the 3 QXO invoices gaining
+--   a real branch and office from migrations 240/242:
+--     UX97791 -> Denton Branch / Richardson, TX
+--     UZ11902 -> Salina Branch- Mw / Wichita, KS
+--     UY48909 -> Wichita Branch / Wichita, KS   (was "Branch WICHITA" / "Unassigned")
+--   They still price as no-price: QXO has no agreement at any office (docs/98).
+--
+-- The full statements are the ones applied in the migration ledger entry of the same name;
+-- both views are recreated in full there, identical to their 233/236/238/241 bodies with the
+-- branch lateral replaced by the FK join described above.

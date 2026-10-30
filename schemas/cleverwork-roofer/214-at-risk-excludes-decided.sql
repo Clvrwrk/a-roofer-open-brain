@@ -1,0 +1,12 @@
+-- 214 — $ At Risk excludes DECIDED lines. Applied to prod 2026-08-05.
+--
+-- Chris QA: after a full review sweep, "$ At Risk" equaled the Credit Memo
+-- Requested total exactly — v_invoice_audit_invoice.at_risk excluded only
+-- 'passed' lines, so claim-reviewed ('disputed') lines were double-counted as
+-- both "in a CM request" and "un-audited overcharge".
+-- at_risk now excludes passed AND disputed (applied via viewdef substitution,
+-- Supabase migration history: at_risk_excludes_decided_214). The tree's
+-- category at-risk chips apply the same rule client-side.
+-- The CM Requested card sub-line also now shows the draft dollars, so
+-- approved ($X) + draft ($Y) visibly equals the headline.
+SELECT 1; -- marker file; see migration history for the applied view body

@@ -74,5 +74,24 @@ fi
   else
     echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: invoice ingest FAILED (exit $?) ==="
   fi
+
+  # PDF backfill (Chris 2026-08-09): every invoice in the audit window gets its PDF —
+  # the app's on-demand fetch is a fallback, not the pipeline. Idempotent (skips stored).
+  echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: invoice pdf backfill start ==="
+  if node $SENTRY_IMPORT integrations/bridges/abc-supply/backfill-invoice-pdfs.mjs; then
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: pdf backfill done OK ==="
+  else
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: pdf backfill FAILED (exit $?) ==="
+  fi
+
+  # Alex No-Price triage (PEC-195, approved 2026-08-09): repeat-purchase No-Price items
+  # -> agreement_gap_queue (global product file candidates); everything else auto-clears
+  # as Alex. Runs AFTER the ingest so tonight's new lines are triaged before morning.
+  echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: alex no-price triage start ==="
+  if node $SENTRY_IMPORT scripts/alex-no-price-triage.mjs; then
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: alex triage done OK ==="
+  else
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S %z') :: alex triage FAILED (exit $?) ==="
+  fi
   echo
 } >>"$LOG_FILE" 2>&1

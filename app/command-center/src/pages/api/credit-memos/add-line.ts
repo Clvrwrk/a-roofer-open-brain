@@ -32,14 +32,26 @@ export const POST: APIRoute = async ({ locals, request }) => {
 
   // The line must be a real negotiated-variance discrepancy per the LIVE engine.
   const { data: lineRows, error: lineError } = await client
-    .from("v_invoice_audit_line")
-    .select("line_id, invoice_number, item_number, item_description, quantity, uom, unit_price, negotiated_price, variance_ext, uom_mismatch")
+    .from("mv_invoice_audit_line")
+    .select("line_id, invoice_number, item_number, item_description, quantity, uom, unit_price, negotiated_price, variance_ext, uom_mismatch, negotiated_agreement_id")
     .eq("line_id", lineId)
     .limit(1);
   if (lineError) return jsonApiResponse({ error: "line_lookup_failed", error_description: lineError.message }, { status: 500 });
   const line = (lineRows as any[] | null)?.[0];
   if (!line || line.invoice_number !== invoiceNumber) {
     return jsonApiResponse({ error: "not_found", error_description: "Invoice line not found." }, { status: 404 });
+  }
+  // Silo (docs/87): resolve the vendor once; every read/write below is scoped by it —
+  // invoice numbers are NOT globally unique across vendors.
+  const vendorSlug = await resolveInvoiceVendorSlug(client, invoiceNumber);
+  // Credit memo documents never join a claim set (Chris 2026-08-09): a credit is
+  // reconciled against its original invoice / CM request, never re-claimed. Without
+  // this, checking a line on a CM doc drafts a credit request ON a credit.
+  const isCreditDoc = vendorSlug === "abc-supply"
+    ? Boolean(((await client.from("abc_invoices").select("is_credit_memo").eq("invoice_number", invoiceNumber).maybeSingle()).data as any)?.is_credit_memo)
+    : ((await client.from("vendor_invoices").select("doc_type").eq("invoice_number", invoiceNumber).limit(2)).data as any[] | null)?.some((r) => r.doc_type === "credit") ?? false;
+  if (isCreditDoc) {
+    return jsonApiResponse({ error: "credit_doc", error_description: "This document is a credit memo — credits reconcile against the original invoice, they are never claimed." }, { status: 409 });
   }
   if (line.uom_mismatch || line.negotiated_price == null || Number(line.variance_ext ?? 0) < 0.05) {
     return jsonApiResponse(
@@ -53,6 +65,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("credit_memo_requests")
     .select("id, status")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("request_kind", "requested")
     .limit(1);
   const existingCm = (cmRows as any[] | null)?.[0] ?? null;
@@ -63,11 +76,39 @@ export const POST: APIRoute = async ({ locals, request }) => {
     );
   }
 
+  // Agreement + office context for the vendor email (Chris 2026-08-05 QA: every CM
+  // line must name the price agreement used to challenge the invoiced amount).
+  let officeId: string | null = null;
+  let officeName: string | null = null;
+  let agreementNumber: string | null = null;
+  let agreementEffective: string | null = null;
+  let agreementExpiry: string | null = null;
+  {
+    const { data: officeRows } = await client.from("mv_invoice_pricing_office").select("office_id").eq("invoice_number", invoiceNumber).limit(1);
+    officeId = (officeRows as any[] | null)?.[0]?.office_id ?? null;
+    if (officeId) {
+      const { data: oRows } = await client.from("office").select("name").eq("id", officeId).limit(1);
+      officeName = (oRows as any[] | null)?.[0]?.name ?? null;
+    }
+    if (line.negotiated_agreement_id != null) {
+      const { data: agRows } = await client
+        .from("abc_price_agreements")
+        .select("agreement_number, effective_date, expiry_date")
+        .eq("id", line.negotiated_agreement_id)
+        .limit(1);
+      const ag = (agRows as any[] | null)?.[0] ?? null;
+      agreementNumber = ag?.agreement_number ?? null;
+      agreementEffective = ag?.effective_date ?? null;
+      agreementExpiry = ag?.expiry_date ?? null;
+    }
+  }
+
   // Join the invoice's latest re-audit run (or start a UI-origin one).
   const { data: runRows } = await client
     .from("invoice_line_reaudit")
     .select("run_label, created_at")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .order("created_at", { ascending: false })
     .limit(1);
   const runLabel = (runRows as any[] | null)?.[0]?.run_label ?? "audit_ui";
@@ -81,6 +122,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("invoice_line_reaudit")
     .select("id")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("run_label", runLabel)
     .eq("line_id", lineId)
     .limit(1);
@@ -94,6 +136,12 @@ export const POST: APIRoute = async ({ locals, request }) => {
         invoiced_price: line.unit_price,
         office_price: line.negotiated_price,
         variance_ext: line.variance_ext,
+        office_id: officeId,
+        office_name: officeName,
+        agreement_id: line.negotiated_agreement_id ?? null,
+        agreement_number: agreementNumber,
+        agreement_effective: agreementEffective,
+        agreement_expiry: agreementExpiry,
         reviewed_by: actor.displayName,
         reviewed_at: nowIso,
       })
@@ -104,6 +152,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       .insert({
         run_label: runLabel,
         invoice_number: invoiceNumber,
+        vendor_slug: vendorSlug,
         line_id: lineId,
         item_number: line.item_number,
         item_description: line.item_description,
@@ -112,6 +161,12 @@ export const POST: APIRoute = async ({ locals, request }) => {
         invoiced_price: line.unit_price,
         office_price: line.negotiated_price,
         variance_ext: line.variance_ext,
+        office_id: officeId,
+        office_name: officeName,
+        agreement_id: line.negotiated_agreement_id ?? null,
+        agreement_number: agreementNumber,
+        agreement_effective: agreementEffective,
+        agreement_expiry: agreementExpiry,
         classification: "discrepancy",
         match_method: "audit_ui",
         reviewed_by: actor.displayName,
@@ -128,6 +183,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     .from("invoice_line_reaudit")
     .select("variance_ext")
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("run_label", runLabel)
     .eq("classification", "discrepancy");
   let expectedCredit = 0;
@@ -154,6 +210,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
   } else {
     await client.from("credit_memo_requests").insert({
       invoice_number: invoiceNumber,
+      vendor_slug: vendorSlug,
       request_kind: "requested",
       status: "draft",
       expected_credit: expectedCredit,
@@ -163,6 +220,30 @@ export const POST: APIRoute = async ({ locals, request }) => {
     });
   }
 
+  // Adding to the CM is also the audit decision on this line (append-only 'disputed')
+  // so it leaves the "to audit" count immediately.
+  try {
+    await client.from("invoice_line_audit").insert({
+      invoice_line_id: lineId,
+      invoice_number: invoiceNumber,
+      vendor_slug: vendorSlug,
+      item_number: line.item_number,
+      audit_status: "disputed",
+      decision: "discrepancy",
+      approved_by: actor.displayName,
+      approval_note: "Added to credit memo request (line reviewed)",
+      source: "manual",
+      decided_by: actor.displayName,
+    });
+  } catch { /* claim already recorded */ }
+
   invalidateInvoiceAuditSummaryCache();
   return jsonApiResponse({ ok: true, invoiceNumber, claimId, runLabel, expectedCredit, lineCount });
 };
+
+// Silo eval 2026-08-07: single source for an invoice's vendor slug. Falls back to
+// abc-supply only when the invoice is unknown to the vendor map (should not happen).
+async function resolveInvoiceVendorSlug(client: any, invoiceNumber: string): Promise<string> {
+  const { data } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(1);
+  return (data as any[] | null)?.[0]?.vendor_slug ?? "abc-supply";
+}

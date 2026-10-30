@@ -79,29 +79,17 @@ let monthRequests: any[] = [];
               </span>
             </summary>
 
+            <script type="application/json" class="pam-rows" set:html={JSON.stringify({
+              o: o.officeId, v: v.vendorId,
+              gap: v.gapItems.map((g) => [g.itemNumber, g.description, g.uom, g.purchaseCount, g.totalQty, g.lifetimeValue, g.minPaid, g.avgPaid, g.maxPaid, g.latestPaid, g.apiPrice, g.lastPurchased, g.proposedPrice]),
+              ren: v.renewalItems.map((r) => [r.itemNumber, r.description, r.uom, r.agreementNumber, r.negotiatedPrice, r.purchaseCount, r.avgPaid, r.latestPaid, r.variancePct, r.proposedPrice]),
+            })} />
+
             <h3 class="pam-h3">Gap Worksheet <span class="pam-note">repeat purchases with no negotiated price — highest lifetime spend first</span></h3>
             {v.gapItems.length === 0 ? <p class="pam-empty sm">No gap items — every repeat purchase is under agreement.</p> : (
               <div class="pam-tablewrap"><table class="pam-table">
                 <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th class="num">Buys</th><th class="num">Qty</th><th class="num">Lifetime $</th><th class="num">Min</th><th class="num">Avg</th><th class="num">Max</th><th class="num">Latest</th><th class="num">API</th><th>Last buy</th><th class="num">Proposed</th></tr></thead>
-                <tbody>
-                  {v.gapItems.map((g) => (
-                    <tr>
-                      <td class="mono">{g.itemNumber}</td>
-                      <td>{g.description}</td>
-                      <td>{g.uom}</td>
-                      <td class="num">{g.purchaseCount}</td>
-                      <td class="num">{g.totalQty.toLocaleString()}</td>
-                      <td class="num"><b>{money(g.lifetimeValue)}</b></td>
-                      <td class="num">{money(g.minPaid)}</td>
-                      <td class="num">{money(g.avgPaid)}</td>
-                      <td class="num">{money(g.maxPaid)}</td>
-                      <td class="num">{money(g.latestPaid)}</td>
-                      <td class="num">{money(g.apiPrice)}</td>
-                      <td>{g.lastPurchased || "—"}</td>
-                      <td class="num"><input class="pam-price" type="number" step="0.01" min="0" placeholder={g.latestPaid ? g.latestPaid.toFixed(2) : ""} value={g.proposedPrice ?? ""} data-propose data-office={o.officeId} data-vendor={v.vendorId} data-item={g.itemNumber} data-kind="gap" data-desc={g.description} data-uom={g.uom} /></td>
-                    </tr>
-                  ))}
-                </tbody>
+                <tbody data-rows="gap"></tbody>
               </table></div>
             )}
 
@@ -109,22 +97,7 @@ let monthRequests: any[] = [];
             {v.renewalItems.length === 0 ? <p class="pam-empty sm">No negotiated items on file for this vendor.</p> : (
               <div class="pam-tablewrap"><table class="pam-table">
                 <thead><tr><th>Item</th><th>Description</th><th>UOM</th><th>Agreement</th><th class="num">Negotiated</th><th class="num">Buys</th><th class="num">Avg paid</th><th class="num">Latest paid</th><th class="num">Var %</th><th class="num">Proposed</th></tr></thead>
-                <tbody>
-                  {v.renewalItems.map((r) => (
-                    <tr>
-                      <td class="mono">{r.itemNumber}</td>
-                      <td>{r.description}</td>
-                      <td>{r.uom}</td>
-                      <td class="mono sm">{r.agreementNumber}</td>
-                      <td class="num">{money(r.negotiatedPrice)}</td>
-                      <td class="num">{r.purchaseCount}</td>
-                      <td class="num">{money(r.avgPaid)}</td>
-                      <td class="num">{money(r.latestPaid)}</td>
-                      <td class={`num ${r.variancePct != null && r.variancePct > 0.5 ? "pam-var-hi" : ""}`}>{r.variancePct == null ? "—" : r.variancePct.toFixed(1) + "%"}</td>
-                      <td class="num"><input class="pam-price" type="number" step="0.01" min="0" placeholder={r.negotiatedPrice.toFixed(2)} value={r.proposedPrice ?? ""} data-propose data-office={o.officeId} data-vendor={v.vendorId} data-item={r.itemNumber} data-kind="renewal" data-desc={r.description} data-uom={r.uom} data-current={r.negotiatedPrice} /></td>
-                    </tr>
-                  ))}
-                </tbody>
+                <tbody data-rows="renewal"></tbody>
               </table></div>
             )}
           </details>
@@ -188,6 +161,60 @@ let monthRequests: any[] = [];
       window.clearTimeout(toastT);
       toastT = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
     }
+    // PEC-216 (rendering half): worksheet rows are NOT server-rendered. Each vendor
+    // block ships its rows as compact positional JSON and we build the <tr>s the
+    // first time that block is opened. Before this, all 1,213 rows / 13,618 cells
+    // shipped as HTML on every load — 95% of a 3.77 MB document — even though the
+    // <details> blocks start collapsed and most are never opened.
+    const money = (n: number | null | undefined) =>
+      n == null ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+    const num = (n: number | null | undefined) => (n == null ? "—" : Number(n).toLocaleString());
+
+    function priceInput(officeId: string, vendorId: string, item: string, kind: string, desc: string, uom: string, ph: number | null, val: number | null, current?: number | null) {
+      const cur = current == null ? "" : ` data-current="${esc(current)}"`;
+      return `<input class="pam-price" type="number" step="0.01" min="0" placeholder="${ph == null ? "" : Number(ph).toFixed(2)}" value="${val == null ? "" : esc(val)}" data-propose data-office="${esc(officeId)}" data-vendor="${esc(vendorId)}" data-item="${esc(item)}" data-kind="${kind}" data-desc="${esc(desc)}" data-uom="${esc(uom)}"${cur} />`;
+    }
+
+    function fillVendor(block: HTMLElement) {
+      if (block.dataset.pamFilled === "1") return;
+      const holder = block.querySelector<HTMLScriptElement>("script.pam-rows");
+      if (!holder) return;
+      let d: any;
+      try { d = JSON.parse(holder.textContent || "{}"); } catch { return; }
+      const gapBody = block.querySelector<HTMLElement>('tbody[data-rows="gap"]');
+      if (gapBody && Array.isArray(d.gap)) {
+        gapBody.innerHTML = d.gap.map((g: any[]) =>
+          `<tr><td class="mono">${esc(g[0])}</td><td>${esc(g[1])}</td><td>${esc(g[2])}</td>` +
+          `<td class="num">${num(g[3])}</td><td class="num">${num(g[4])}</td><td class="num"><b>${money(g[5])}</b></td>` +
+          `<td class="num">${money(g[6])}</td><td class="num">${money(g[7])}</td><td class="num">${money(g[8])}</td>` +
+          `<td class="num">${money(g[9])}</td><td class="num">${money(g[10])}</td><td>${esc(g[11] || "—")}</td>` +
+          `<td class="num">${priceInput(d.o, d.v, g[0], "gap", g[1], g[2], g[9], g[12])}</td></tr>`).join("");
+      }
+      const renBody = block.querySelector<HTMLElement>('tbody[data-rows="renewal"]');
+      if (renBody && Array.isArray(d.ren)) {
+        renBody.innerHTML = d.ren.map((r: any[]) =>
+          `<tr><td class="mono">${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="mono sm">${esc(r[3])}</td>` +
+          `<td class="num">${money(r[4])}</td><td class="num">${num(r[5])}</td><td class="num">${money(r[6])}</td><td class="num">${money(r[7])}</td>` +
+          `<td class="num${r[8] != null && r[8] > 0.5 ? " pam-var-hi" : ""}">${r[8] == null ? "—" : Number(r[8]).toFixed(1) + "%"}</td>` +
+          `<td class="num">${priceInput(d.o, d.v, r[0], "renewal", r[1], r[2], r[4], r[9], r[4])}</td></tr>`).join("");
+      }
+      block.dataset.pamFilled = "1";
+    }
+
+    // Fill on open; also fill any block that is already open at load.
+    document.querySelectorAll<HTMLElement>("details.pam-vendor").forEach((block) => {
+      block.addEventListener("toggle", () => { if ((block as HTMLDetailsElement).open) fillVendor(block); });
+      if ((block as HTMLDetailsElement).open) fillVendor(block);
+    });
+    // An office block opening reveals vendor blocks that may already be open.
+    document.querySelectorAll<HTMLElement>("details.pam-office").forEach((off) => {
+      off.addEventListener("toggle", () => {
+        if (!(off as HTMLDetailsElement).open) return;
+        off.querySelectorAll<HTMLElement>("details.pam-vendor").forEach((b) => { if ((b as HTMLDetailsElement).open) fillVendor(b); });
+      });
+    });
+
     document.querySelectorAll<HTMLButtonElement>("button[data-generate]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
@@ -202,8 +229,11 @@ let monthRequests: any[] = [];
         window.location.href = `/accounting/price-agreements/request?id=${data.requestId}`;
       });
     });
-    document.querySelectorAll<HTMLInputElement>("input[data-propose]").forEach((input) => {
-      input.addEventListener("change", async () => {
+    // Delegated: rows are injected after load, so binding at load time would miss them.
+    document.addEventListener("change", async (ev) => {
+      const input = (ev.target as HTMLElement | null)?.closest?.("input[data-propose]") as HTMLInputElement | null;
+      if (!input) return;
+      {
         input.classList.remove("saved", "err");
         const value = input.value.trim();
         const res = await fetch("/api/price-agreements/propose", {
@@ -225,7 +255,7 @@ let monthRequests: any[] = [];
         if (!res.ok) { input.classList.add("err"); toast("Save failed: " + (data?.error_description || data?.error || "error")); return; }
         input.classList.add("saved");
         toast(value === "" ? `${input.dataset.item} proposal cleared` : `${input.dataset.item} proposed at $${Number(value).toFixed(2)}`);
-      });
+      }
     });
   </script>
 </AppShell>

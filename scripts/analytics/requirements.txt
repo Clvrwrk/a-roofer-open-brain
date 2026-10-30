@@ -1,0 +1,4 @@
+# Python deps for scripts/analytics/build_pack.py (Thursday AR/WIP pack).
+# Install on the agent host: python3 -m pip install -r scripts/analytics/requirements.txt
+# openpyxl replaced Aspose.Cells / Aspose.PDF on 2026-09-12 (licence not renewed).
+openpyxl>=3.1,<4

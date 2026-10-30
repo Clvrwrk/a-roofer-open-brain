@@ -192,7 +192,6 @@ export interface AgreementGapSurface {
     missingFixedAgreements: number;
     expiredAgreements: number;
     futureAgreements: number;
-    unverifiedAgreements: number;
     varianceRows: number;
     absoluteVariance: number;
   };
@@ -332,9 +331,8 @@ function formatAgreement(candidate: Candidate | null, empty = "None found") {
   const label = compact(agreement.agreement_number ?? agreement.version_label, "Agreement");
   const start = compact(agreement.effective_date, "missing start");
   const end = isApiAgreement(agreement) ? "current API price" : compact(agreement.expiry_date, "missing end");
-  const verified = agreement.ceo_verified ? "CEO verified" : "not CEO verified";
   const price = formatMoney(toNumber(candidate.item.unit_price));
-  return `${label} / ${start} to ${end} / ${price} / ${verified}`;
+  return `${label} / ${start} to ${end} / ${price}`;
 }
 
 function formatAgreementSource(candidate: Candidate | null) {
@@ -485,7 +483,7 @@ function chooseSeverity(reasons: GapReason[]): GapSeverity {
   ) {
     return "critical";
   }
-  if (codes.has("expired_agreement") || codes.has("future_agreement") || codes.has("unverified_agreement")) return "blocked";
+  if (codes.has("expired_agreement") || codes.has("future_agreement")) return "blocked";
   return "review";
 }
 
@@ -500,7 +498,6 @@ function chooseHumanAction(reasons: GapReason[]) {
   if (codes.has("no_fixed_agreement")) return "Add a fixed agreement window for this branch/SKU.";
   if (codes.has("expired_agreement")) return "Renew the agreement or confirm backdated pricing.";
   if (codes.has("future_agreement")) return "Confirm whether the future agreement should cover this invoice.";
-  if (codes.has("unverified_agreement")) return "CEO-verify the referenced agreement before agents can rely on it.";
   if (codes.has("price_variance")) return "Approve the variance or correct the agreement price.";
   if (codes.has("uom_mismatch")) return "Confirm UOM conversion and normalize the agreement unit.";
   return "Review agreement guardrail.";
@@ -669,7 +666,6 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         missingFixedAgreements: 0,
         expiredAgreements: 0,
         futureAgreements: 0,
-        unverifiedAgreements: 0,
         varianceRows: 0,
         absoluteVariance: 0,
       },
@@ -837,10 +833,8 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         else reasons.push({ code: "no_fixed_agreement", label: "No fixed date window" });
       }
 
-      const fixedReference = activeAtInvoice ?? activeToday;
-      if (fixedReference && !fixedReference.agreement.ceo_verified) {
-        reasons.push({ code: "unverified_agreement", label: "Not CEO verified" });
-      }
+      // ceo_verified is no longer consulted (Chris, 2026-08-21 — migration 252). An
+      // agreement on file is approved and active, so its presence is never itself a gap.
 
       if (variance !== null && Math.abs(variance) > 0.005) {
         reasons.push({ code: "price_variance", label: "Price variance" });
@@ -932,7 +926,6 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         missingFixedAgreements: hasReason("no_fixed_agreement"),
         expiredAgreements: hasReason("expired_agreement"),
         futureAgreements: hasReason("future_agreement"),
-        unverifiedAgreements: hasReason("unverified_agreement"),
         varianceRows: hasReason("price_variance"),
         absoluteVariance: rows.reduce((sum, row) => sum + Math.abs(row.variance ?? 0), 0),
       },
@@ -956,7 +949,6 @@ async function loadAgreementGapSurfaceFresh(env: RuntimeEnv = getRuntimeEnv()): 
         missingFixedAgreements: 0,
         expiredAgreements: 0,
         futureAgreements: 0,
-        unverifiedAgreements: 0,
         varianceRows: 0,
         absoluteVariance: 0,
       },

@@ -114,12 +114,93 @@ Anything a roofer would plausibly change lives in `config/roofer.config.yaml` (c
 
 No external skill, plugin, MCP server, agent wrapper, memory tool, or installer repo may be installed, copied into the brain, enabled globally, or recommended as a standard workflow until it passes the third-party agent tool gate. Required evidence: A3 traceability, license/provenance review, egress review, installer/permission review, SkillSpector static scan where applicable, local-MCP compliance, rollback path, and human approval. This does not create an exception to the MCP rule: MCPs remain containerized on Hetzner only, with no local stdio MCP servers and no local Node MCPs. Current decisions live in [`docs/54-third-party-agent-tool-gate-2026-06-25.md`](docs/54-third-party-agent-tool-gate-2026-06-25.md).
 
+## 10b. Price-agreement silos (invoice audit)
+
+A negotiated price may meet an invoice line **only** if it passes all four gates. Each is independent; failing any one means no comparison happens.
+
+- **Vendor.** Branch numbers collide across vendors (QXO's numerics overlap ABC's: 113, 249, 304, 412). Never join pricing to a branch by bare branch number — every such join also asserts the vendor (migration 208).
+- **Office.** Agreements are office-specific and are never shared between PE offices. The office is resolved from the **invoice's own branch** (`vendor_branches.pricing_territory_office_id`), never from ship-to text and never from the agreement (migration 217). Before this existed, 188 lines were priced out-of-office and $3,212.04 of erroneous claims reached 46 approved credit-memo requests.
+- **Time.** `effective_date <= invoice_date`, plus **item-aware** version supersession: among agreements sharing `(office_id, agreement_number)`, the winner is the latest `effective_date` still on or before the invoice date **that actually prices that item**. A newer version supersedes an older one only for the items it carries — a shorter new price list does **not** repeal the prices it omits, so an item the new list drops keeps its last known negotiated price (migration 277). This is the evergreen rule applied per item: **all agreements remain in effect until the vendor provides a new agreement** (Chris, 2026-08-25; active for ABC, SRS and QXO). Getting this wrong is silent — the line does not error, it falls out as No-Price, so the money simply stops being audited. **A price list stays in effect until a new price list supersedes it** — `expiry_date` is documentary, not a gate (Chris, 2026-08-24). That choice is now recorded per agreement in `renewal_mode` (`evergreen` default | `expires`), the gate is wired on all four arms and fires only on `expires`, and `priced_by_expired_agreement` discloses on the audit line when a price came off a lapsed book (migration 270).
+- **UOM.** The audit **refuses rather than converts**: `negotiated_price` is emitted only when the units match, otherwise NULL with `uom_mismatch = true`. Where a sheet genuinely prices in a different unit, record `order_uom` + `uom_conversion_factor` on the item rather than loosening the gate. See §10c and [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+
+Two consequences that have each already cost real money:
+
+- **Fuzzy matching is always a fallback.** Exact item number → exact/prefix description → colour-key equality → **dimension-guarded** trigram, and only when no exact match exists in the office's governing book. Both vendors now carry the colour arm (migration 268). ABC keeps a trigram tail because 43% of its priced lines depend on it, but it is gated: the book row's numeric tokens must be a subset of the invoice line's, because ABC's failure mode is **dimension blindness, not colour blindness** — ungated, it priced `GAF 12" Cobra Snow Country` off `cobra 9 snow country` at +129%. Both trigram and the colour key strip bare digits as noise.
+- **The final tie-break picks the LOWEST price**, which maximises computed variance. Before adding or backdating a book into an office that already has one, **simulate the change and diff which lines move**; confirm nothing is re-homed off an existing agreement onto a cheaper one.
+
+Also: **read the audit through `mv_invoice_audit_line`, never `v_invoice_audit_line`.** The view resolves the governing price with a correlated LATERAL per line and costs ~8.8s, over the 8s `statement_timeout` that `service_role` inherits from `authenticator` — every PostgREST read of it fails, and the surfaces render empty rather than erroring (PEC-241/243, migrations 272–273). The matview refreshes every 15 minutes, so a price-list change is not visible to the audit until the next tick; force it with `REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_invoice_audit_line`.
+
+Also: **credit memos never enter the standard price audit**, and **returns invert the variance sign** — every query presenting a claim filters `extended_price > 0`. Any aggregate shown to a human must be office-scoped; an aggregate that crosses a silo is a reporting bug even when the write path is safe.
+
+### Vendor parity of the audit (read before adding or changing a vendor arm)
+
+The audit runs one eval per vendor, and they may differ **only** where the vendor's own process differs. Every legitimate difference is listed here; anything else is a defect, not a variation.
+
+**Legitimate, documented differences** (docs/81 decisions 13 and open item 1):
+
+| | ABC Supply | SRS | QXO |
+|---|---|---|---|
+| Agreements on file | office-inherited books | Level 4 price sheet → Richardson TX | **none, ever** |
+| Consequence | full audit | full audit | every line valid as billed; No-Price triage is the correct terminal state |
+| Invoice source | ABC API (nightly) | CSV upload | CSV upload |
+| PDF + OCR line-sum verification | yes | no PDF source exists | no PDF source exists |
+
+**Everything else must behave identically across vendors.** The four gates, the UOM refusal, the lowest-price tie-break, the fuzzy fallback order, the No-Price threshold (`purchases_ytd >= 2` → `agreement_gap_queue`), and the credit-memo claim bar are vendor-agnostic rules. Do not special-case a vendor to make a number look right.
+
+Both vendor arms are now at parity (migration 279) — the two divergences that existed are closed:
+
+1. **Version supersession now runs on every arm.** `price_agreements` (SRS/QXO) previously had no supersession at all: its lateral ordered by `negotiated_price` with no `effective_date` term, so two active versions of one agreement number both stayed eligible and the **cheaper** sheet won regardless of age. It now mirrors ABC's item-aware rule, scoped by vendor + office + agreement number, with a NULL agreement number keyed on `'PA-'||id` so an unnumbered sheet can only supersede itself. Proved in a rolled-back transaction: a v2 that reprices one item **dearer** wins that item (recency beats the lowest-price tie-break *within* an agreement number), while an item v2 omits keeps its v1 price.
+2. **Evergreen is one predicate on all four arms.** Every arm now excludes an agreement only when it is explicitly `renewal_mode = 'expires'` **and** has lapsed, written with `COALESCE` so a NULL can never make the predicate NULL and silently drop the row. Note the divergence was never reachable: `renewal_mode` is **`NOT NULL DEFAULT 'evergreen'`** on both `abc_price_agreements` and `price_agreements`, so the fail-open/fail-closed split was code hygiene, not a live bug.
+
+**A negative total is a credit memo, never a payable.** Whatever the vendor flag says — 5 documents carried a negative total without being flagged (4 ABC, 1 QXO, incl. QXO `UX97791` at −$3,723.59) and leaked into the QB export. A negative-total document routes to credit-memo reconciliation against its original invoice, or a **CM TBD** line where the original is not yet identified: `v_credit_memo_tbd` (migration 280), cross-vendor. Derive this from the amount; never write the flag onto the mirror, because the nightly vendor sync overwrites it.
+
+**The QB bank export is one file per vendor.** ABC, SRS and QXO each keep a **separate QB bank register**, so a mixed-vendor export would post one vendor's invoices into another's register. `scripts/build-inv-processed-weekly.mjs` writes `INV-PROCESSED-[vendor]-[date].csv` per vendor and refuses to emit a mixed file or a non-positive row. This supersedes docs/81 decisions 2 and 14 and restores the docs/63 contract (Chris, 2026-08-25).
+
+**When adding a vendor arm, port all four gates plus item-aware supersession.** A new arm that reaches an agreement by a different table is still bound by the same rules; verify with a rolled-back transaction that a newer version wins the items it prices and an omitted item keeps its prior price.
+
+Full contract: [`docs/105-price-agreement-silo-rules.md`](docs/105-price-agreement-silo-rules.md).
+
+## 10c. UOM & pricing normalization (the unit every comparison happens in)
+
+§10b decides *which* agreement price may meet a line. This decides *what unit* the comparison happens in. Read it before touching any price comparison.
+
+**ABC ships every line in two units at once** — 99 BD and 33 SQ at 3 BD/SQ are the same shipment. Agreements are quoted in the **pricing** unit (`priceQty.uom`, e.g. SQ). The legacy `quantity`/`uom` columns were ingested inconsistently — usually from `priceQty`, but ~8.5% of lines from `shippedQty` — so one shingle SKU stored $46.50 (per bundle) on some invoices and $132 (per square) on others, and `effective_unit_price` inherited the inconsistency because it is derived from them. Order audits did no UOM handling at all, producing live variances of −80% to −100% that were pure artifacts.
+
+- **One canonical effective price:** `extendedPriceAmount ÷ priceQty.value`, materialised as `abc_invoice_lines.price_per_uom`. Derived from `raw`, so it is immune to how any ingest writer fills the legacy columns.
+- **Orders convert through `v_item_uom_map`** (`item_number → ship_uom, price_uom, units_per_price_uom`), because orders carry no `priceQty`: `effective price = unit_price × units_per_price_uom`.
+- **Never compare on** `quantity`, `uom`, `unit_price`, `effective_unit_price`, or `raw.pricePerUnitAmount`. They are per-stocking-unit or inconsistent.
+- **Never fabricate a variance across mismatched units.** Compare only when `price_uom` equals the agreement's unit; otherwise the variance is NULL and the line carries `uom_mismatch` — surfaced as a "Review (UOM)" badge, not a fake number. This is the same refusal §10b lists as its fourth gate.
+- **Any new pricing surface reads `price_per_uom` / `v_item_uom_map`**, never the legacy columns.
+
+Where a price sheet genuinely quotes in a different unit from the invoice, record `order_uom` + `uom_conversion_factor` on the agreement item rather than loosening the gate — e.g. Malarkey Vista, sheet in BD, invoice in SQ, manufacturer-stated 3 BD/SQ (migration 266).
+
+Migrations **119–122** (2026-06-19). Full contract: [`docs/46-uom-pricing-normalization.md`](docs/46-uom-pricing-normalization.md).
+
+## 10d. Self-healing loop (every surface, by default)
+
+Every app, service and work surface ships inside the self-healing loop: Sentry (release = build commit, PII scrubbed, handled errors captured with route and error code) -> scheduled triage into a deduped Linear bug log with evidence -> reproduce-first fix proposal as a draft PR where a verify chain exists -> human merge -> verify-and-close (deploy confirmed via `/healthz` `buildCommit`, soak, then resolve Sentry + Linear Done `verified`, or reopen `regressed` with evidence). Nothing auto-merges or auto-deploys; the fixing agent holds no credentials. A surface is not done until it has a Sentry project, a `/healthz` with `buildCommit`, and the vendored kit (`scripts/self-heal/` + `.github/workflows/self-heal.yml`, canonical source CRM_PWA `scripts/triage/`). Inngest and PostHog are deferred (doc 54). Standard: [`docs/127-self-healing-loop.md`](docs/127-self-healing-loop.md); A3: [`proposals/a3-self-healing-loop-all-surfaces.md`](proposals/a3-self-healing-loop-all-surfaces.md).
+
 ## 11. Design system (one source of truth for every visual asset)
 
 - Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
 - The **live brand tokens** live in `config/brand/DESIGN.md` (brand identity is per-client → customization surface, §9). It is the source of truth: tokens are normative, prose is rationale. When an asset disagrees with the brand file, the brand file wins.
 - The **contract** is `standards/design/v1.md` — QC owns it, Auditor enforces it. Brand file must lint with **zero errors** (`scripts/lint-design.sh`) before any change ships. Assets use **only** tokens from the brand file — no hard-coded hex, off-palette fonts, one-off radii, or bypass CSS custom properties. A value needed repeatedly is promoted to a token, not search-and-replaced.
 - **Role discipline is the brand.** Each brand color keeps its single role (CTA color on interactions only; never decorative). Monospace tokens appear on Property Card surfaces only. Typeface phase migrations happen only when the brand file's tokens change (the token update is the trigger).
+- **The living design system is `cc.proexteriorsus.net/design-system`** (source `app/command-center/src/pages/design-system/`, docs/112). It parses the production tokens from `global.css` at build time, renders every component in both modes, catalogues every motion, and carries the UX decisions log with permanent rule ids (`C-`, `CMP-`, `UX-`, `MD-`, `MO-`, `D-`, `M-`, `A-`, `W-`, `P-`, `SW-`, `WEB-`, `G-`). Build any new surface from its agent handbook (`/design-system/agents`) and cite the rule ids in the PR; a change to a token, component or decision updates the matching chapter in the same PR. Machine feed: `/design-system/tokens.json`.
+
+## 11a. Long-list disclosure (app-wide)
+
+- Any work surface that can render an unbounded list opens showing **10 rows**, with the rest behind a `Show all N …` control. Revealing them keeps the pane **exactly 10 rows tall** so the list scrolls internally and the page does not grow.
+- The pane is the **same height collapsed and expanded**. Collapsed it holds its 10 rows so no scrollbar appears and the wheel unambiguously belongs to the page; the wheel only changes owner as the direct result of a click.
+- Pane height is **measured** (`header + rowHeight × 10 + scrollbar gutter`), never hardcoded. Reveal state persists per surface in `localStorage`. Filters apply **before** paging.
+- Full contract, including the sticky-header rules a bounded pane forces (`overflow-x: auto` never with `overflow-y: visible`; measured multi-row header offsets; frozen-column selectors scoped to `thead tr:not(.fw-grouprow)` / `tbody`; column-group `colspan` recomputed on expand): [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure.
+
+## 11b. Attachment intake (app-wide) — UX-11
+
+- Every surface that holds files, photos, videos or documents shows a **placeholder** (type icon + what belongs there) when empty, never a blank.
+- The slot is a **drag-and-drop** target on a computer; **one click** on the placeholder or Add opens the device's own chooser (file picker; on a phone the Photo library · Take photo · Choose file sheet).
+- A surface with a **camera** button keeps it and gains **Photo library** beside it. Never put `capture` on the only file input: it locks phones to the camera.
+- One shared component per app, one upload path for chooser and drop. Full contract: [`standards/design/v1.md`](standards/design/v1.md) § Attachment intake.
 
 ## 12. Workspace front desk and GSD loop
 

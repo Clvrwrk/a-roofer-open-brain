@@ -25,10 +25,20 @@ export const POST: APIRoute = async ({ locals, request }) => {
   if (!invoiceNumber) return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber is required." }, { status: 400 });
 
   const nowIso = new Date().toISOString();
+  // Silo eval 2026-08-07: the ledger is (vendor_slug, invoice_number)-keyed —
+  // resolve the invoice's vendor so a colliding number can never verify both.
+  const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(2);
+  const vSlugs = ((vRow as any[] | null) ?? []).map((x) => String(x.vendor_slug));
+  // Fail closed on a cross-vendor number collision — never guess ABC (docs/87).
+  if (vSlugs.length > 1) {
+    return jsonApiResponse({ error: "ambiguous_vendor", error_description: `Invoice ${invoiceNumber} exists for ${vSlugs.join(" and ")} — vendor disambiguation required.` }, { status: 409 });
+  }
+  const vSlug = vSlugs[0] ?? "abc-supply";
   const { data, error } = await client
     .from("invoice_payment_processed")
     .update({ status: "paid_verified", updated_at: nowIso, verified_at: nowIso, verified_by: actor.displayName })
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vSlug)
     .eq("status", "paid_pending_verification")
     .select("invoice_number");
   if (error) return jsonApiResponse({ error: "invoice_payment_processed", error_description: error.message }, { status: 409 });

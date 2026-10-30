@@ -1,11 +1,299 @@
 ---
 import AppShell from "../../../layouts/AppShell.astro";
-import AuditQueue from "../../../components/audit/AuditQueue.astro";
-import { loadCreditMemoQueue } from "@lib/audit-queues";
+import { loadCreditMemoTree } from "@lib/credit-memo-tree";
 
-const creditMemosPayload = await loadCreditMemoQueue();
+// Credit memos received from ABC, nested PE Office → Vendor Branch → Credit Memo, the
+// same shape as the Invoice Audit and every other work surface. Each memo carries its
+// own PDF, the original invoice it credits (matching protocol, migration 236), and the
+// job the money belongs to. Server-rendered: 261 memos is a small set, so nesting needs
+// no client bundle.
+const data = await loadCreditMemoTree();
+const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+const money2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const generatedAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.generatedAt));
+
+// Confidence is the whole point of the matching protocol: a weak tier must never read
+// like a confirmed match. Label and colour say which is which.
+const confMeta: Record<string, { label: string; cls: string; title: string }> = {
+  exact:     { label: "Exact",     cls: "ok",   title: "The memo names its original invoice (originalInvoiceReference)." },
+  confident: { label: "Confident", cls: "ok",   title: "Same job PO + same ABC account + shares at least one line item, dated on or before the memo." },
+  probable:  { label: "Probable",  cls: "warn", title: "Same job PO + same ABC account, but no shared line item. Check before relying on it." },
+  weak:      { label: "Weak",      cls: "warn", title: "Same ABC account + shares a line item within 60 days. A hint, not a finding — verify against the memo PDF." },
+  none:      { label: "No match",  cls: "bad",  title: "No original invoice could be resolved. Often correct: rebates, manufacturer credits and multi-job memos do not credit one invoice." },
+};
+const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evidence: "Needs review", rejected: "Rejected", received: "Received", closed: "Closed" };
+const t = data.totals;
 ---
 
-<AppShell title="Credit Memo Requests" eyebrow="Accounting · Invoice Audit" activePage="accounting">
-  <AuditQueue payload={creditMemosPayload} searchPlaceholder="Search memo, invoice, reason…" />
+<AppShell title="Credit Memos" eyebrow="Accounting · Invoice Audit" activePage="accounting">
+  <section class="cmt" data-theme="light">
+    <div class="cmt-toolbar">
+      <input class="cmt-input" id="cmt-search" type="search" placeholder="Search memo, invoice, PO, job, branch…" autocomplete="off" />
+      <select class="cmt-select" id="cmt-office">
+        <option value="">All PE offices</option>
+        {data.offices.map((o) => <option value={o.office}>{o.office}</option>)}
+      </select>
+      <select class="cmt-select" id="cmt-conf">
+        <option value="">All match confidence</option>
+        <option value="exact">Exact only</option>
+        <option value="confident">Exact + Confident</option>
+        <option value="review">Needs review (probable · weak · none)</option>
+      </select>
+      <span class="cmt-spacer"></span>
+      <span class="runtime-pill" data-tone={data.status === "live" ? "ready" : "watch"}><span class="signal-dot" aria-hidden="true"></span>{data.status === "live" ? "Supabase live" : "Supabase pending"}</span>
+      <span class="cmt-count">{generatedAt}</span>
+    </div>
+
+    <p class="cmt-scope">
+      Credit memos ABC issued to us, nested <strong>PE office → vendor branch → memo</strong>.
+      Every memo links its own PDF, the original invoice it credits, and the job (Customer PO#).
+      Original invoices are resolved by a four-tier protocol — <strong>{t.matched} of {t.memos} matched</strong>;
+      the confidence badge says how, and never dresses a guess as a certainty.
+    </p>
+
+    <div class="cmt-kpis">
+      <div class="cmt-kpi">
+        <span class="cmt-kpi-lab">Credit memos</span>
+        <span class="cmt-kpi-val">{t.memos.toLocaleString()}</span>
+        <span class="cmt-kpi-sub">{money(t.creditTotal)} credited across {data.offices.length} offices</span>
+      </div>
+      <div class="cmt-kpi">
+        <span class="cmt-kpi-lab">Original invoice matched</span>
+        <span class="cmt-kpi-val">{t.matched.toLocaleString()}</span>
+        <span class="cmt-kpi-sub">{t.byConfidence.exact} exact · {t.byConfidence.confident} confident</span>
+      </div>
+      <div class="cmt-kpi">
+        <span class="cmt-kpi-lab">Needs a human look</span>
+        <span class="cmt-kpi-val">{(t.byConfidence.probable + t.byConfidence.weak + t.byConfidence.none).toLocaleString()}</span>
+        <span class="cmt-kpi-sub">{t.byConfidence.probable} probable · {t.byConfidence.weak} weak · {t.byConfidence.none} no match</span>
+      </div>
+      <div class="cmt-kpi">
+        <span class="cmt-kpi-lab">Job identified</span>
+        <span class="cmt-kpi-val">{t.withJob.toLocaleString()}</span>
+        <span class="cmt-kpi-sub">Customer PO# → AccuLynx job</span>
+      </div>
+    </div>
+
+    {data.offices.length === 0 && <p class="cmt-empty">No credit memos found in the live pipeline.</p>}
+
+    <div id="cmt-tree">
+      {data.offices.map((office) => (
+        <details class="cmt-office" data-office={office.office} open={data.offices.length <= 2}>
+          <summary>
+            <span class="cmt-chev" aria-hidden="true">›</span>
+            <span class="cmt-office-name">{office.office}</span>
+            <span class="cmt-mini">
+              <div><strong>{office.branches.length}</strong><span>branches</span></div>
+              <div><strong>{office.memoCount}</strong><span>memos</span></div>
+              <div><strong>{money(office.creditTotal)}</strong><span>credited</span></div>
+              <div><strong class={office.unmatched > 0 ? "cmt-flag" : ""}>{office.unmatched}</strong><span>unmatched</span></div>
+            </span>
+          </summary>
+          <div class="cmt-office-body">
+            {office.branches.map((branch) => (
+              <details class="cmt-branch">
+                <summary>
+                  <span class="cmt-chev" aria-hidden="true">›</span>
+                  <span class="cmt-branch-name">{branch.branchName}</span>
+                  <span class="cmt-branch-no">{branch.branchNumber}</span>
+                  <span class="cmt-branch-tags">
+                    <span class="cmt-pill grey">{branch.memos.length} memos</span>
+                    <span class="cmt-pill grey">{money(branch.creditTotal)}</span>
+                    {branch.unmatched > 0 && <span class="cmt-pill warn">{branch.unmatched} unmatched</span>}
+                  </span>
+                </summary>
+                <div class="cmt-branch-body">
+                  <div class="cmt-tablewrap">
+                    <table class="cmt-table">
+                      <thead>
+                        <tr>
+                          <th>Credit memo</th>
+                          <th>Date</th>
+                          <th class="num">Credit</th>
+                          <th>Original invoice</th>
+                          <th>Match</th>
+                          <th>Job · Customer PO#</th>
+                          <th>Documents</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {branch.memos.map((m) => {
+                          const conf = confMeta[m.confidence] ?? confMeta.none;
+                          const search = [m.invoiceNumber, m.originalInvoiceNumber, m.poNumber, m.jobNumber, m.clientName, branch.branchName, m.reason].filter(Boolean).join(" ").toLowerCase();
+                          return (
+                            <tr class="cmt-row" data-search={search} data-conf={m.confidence}>
+                              <td>
+                                <a class="cmt-link" href={`/accounting/credit-memos/${encodeURIComponent(m.invoiceNumber)}`}>{m.invoiceNumber}</a>
+                                {m.reason && <span class="cmt-sub">{m.reason}</span>}
+                                {m.disposition && <span class="cmt-pill sm ok">{dispLabel[m.disposition] ?? m.disposition}</span>}
+                              </td>
+                              <td class="cmt-nowrap">{m.date}</td>
+                              <td class="num">{money2(m.creditAmount)}</td>
+                              <td>
+                                {m.originalInvoiceNumber
+                                  ? <>
+                                      <a class="cmt-link" href={m.originalInvoiceHref}>{m.originalInvoiceNumber}</a>
+                                      <span class="cmt-sub">{m.originalInvoiceDate}{m.originalInvoiceAmount != null ? ` · ${money2(m.originalInvoiceAmount)}` : ""}</span>
+                                    </>
+                                  : <span class="cmt-muted" title={conf.title}>none resolved</span>}
+                              </td>
+                              <td><span class={`cmt-pill sm ${conf.cls}`} title={conf.title}>{conf.label}</span></td>
+                              <td>
+                                {m.jobHref
+                                  ? <a class="cmt-link" href={m.jobHref} target="_blank" rel="noopener">{m.jobNumber || "AccuLynx job"} ↗</a>
+                                  : m.jobNumber
+                                    ? <span title="No AccuLynx job id on file, so there is nothing to deep-link to yet.">{m.jobNumber}</span>
+                                    : <span class="cmt-muted">—</span>}
+                                <span class="cmt-sub">
+                                  {m.poNumber ? `PO ${m.poNumber}` : "no PO on the memo"}
+                                  {m.jobSource === "original_invoice" ? " · job via original invoice" : ""}
+                                  {m.clientName ? ` · ${m.clientName}` : ""}
+                                </span>
+                              </td>
+                              <td class="cmt-nowrap">
+                                <a class="cmt-btn" href={m.memoPdfUrl} target="_blank" rel="noopener">📄 Memo</a>
+                                {m.originalInvoicePdfUrl
+                                  ? <a class="cmt-btn" href={m.originalInvoicePdfUrl} target="_blank" rel="noopener">📄 Invoice</a>
+                                  : <span class="cmt-btn is-off" title="No original invoice resolved, so there is no invoice PDF to open.">📄 Invoice</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        </details>
+      ))}
+    </div>
+    <p class="cmt-none" id="cmt-none" hidden>No credit memos match these filters.</p>
+  </section>
 </AppShell>
+
+<style is:global>
+  .cmt{
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f7f8fb; --ink:#1c2733; --muted:#6b7886; --line:#e3e8ef;
+    --brand:#5b46d8; --brand-bg:#efecfd; --green:#137a4d; --green-bg:#e3f5ec; --yellow:#946400; --yellow-bg:#fbf0d4;
+    --red:#a51f1f; --red-bg:#fbe2e2; --grey:#5a6573; --grey-bg:#eceff4;
+    --cmt-bleed:28px;
+    background:var(--bg); color:var(--ink);
+    margin:calc(-1 * var(--space-4, 16px)) calc(-1 * var(--cmt-bleed)) calc(-1 * var(--space-6, 24px));
+    padding:18px var(--cmt-bleed) 30px; min-height:70vh;
+    font-family:var(--font-sans, Inter, system-ui, sans-serif); font-size:13px;
+    overflow-x:clip;
+  }
+  .cmt-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .cmt-input,.cmt-select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit}
+  .cmt-input{min-width:280px}
+  .cmt-spacer{flex:1}
+  .cmt-count{font-size:12px;color:var(--muted)}
+  .cmt-scope{font-size:12px;color:var(--muted);margin:0 0 12px;max-width:96ch}
+  .cmt-empty,.cmt-none{color:var(--muted);font-size:13px;padding:14px 4px}
+
+  .cmt-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .cmt-kpi{display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .cmt-kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .cmt-kpi-val{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .cmt-kpi-sub{font-size:11px;color:var(--muted)}
+
+  .cmt-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;line-height:1.5;background:var(--grey-bg);color:var(--grey)}
+  .cmt-pill.sm{padding:1px 8px;font-size:10.5px}
+  .cmt-pill.ok{background:var(--green-bg);color:var(--green)}
+  .cmt-pill.warn{background:var(--yellow-bg);color:var(--yellow)}
+  .cmt-pill.bad{background:var(--red-bg);color:var(--red)}
+  .cmt-flag{color:var(--yellow)}
+
+  .cmt-office{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+  .cmt-office>summary{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;list-style:none}
+  .cmt-office>summary::-webkit-details-marker{display:none}
+  .cmt-chev{color:var(--muted);transition:transform .15s;font-size:15px}
+  details[open]>summary .cmt-chev{transform:rotate(90deg)}
+  .cmt-office-name{font-weight:750;font-size:15px;flex:1}
+  .cmt-mini{display:flex;gap:16px}
+  .cmt-mini div{text-align:center}
+  .cmt-mini strong{display:block;font-size:15px;font-weight:750;font-variant-numeric:tabular-nums}
+  .cmt-mini span{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .cmt-office-body{padding:4px 12px 12px;border-top:1px solid var(--line)}
+
+  .cmt-branch{border:1px solid var(--line);border-radius:11px;margin:10px 0;background:var(--panel2)}
+  .cmt-branch>summary{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .cmt-branch>summary::-webkit-details-marker{display:none}
+  .cmt-branch-name{font-weight:700;font-size:13.5px}
+  .cmt-branch-no{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted)}
+  .cmt-branch-tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .cmt-branch-body{padding:4px 10px 10px}
+
+  .cmt-tablewrap{overflow-x:auto;max-width:100%}
+  .cmt-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .cmt-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+  .cmt-table td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;vertical-align:top}
+  .cmt-table tbody tr:last-child td{border-bottom:none}
+  .cmt-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cmt-nowrap{white-space:nowrap}
+  .cmt-link{color:var(--brand);text-decoration:none;font-weight:650;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .cmt-link:hover{text-decoration:underline}
+  .cmt-sub{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+  .cmt-muted{color:var(--muted)}
+  .cmt-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:650;color:var(--brand);text-decoration:none;background:var(--panel);white-space:nowrap;margin-right:5px}
+  .cmt-btn:hover{border-color:var(--brand);background:var(--brand-bg)}
+  .cmt-btn.is-off{color:var(--muted);background:var(--panel2);opacity:.55;cursor:not-allowed}
+  @media (max-width:1100px){ .cmt-kpis{grid-template-columns:repeat(2,1fr)} }
+</style>
+
+<script>
+  // Filtering is pure show/hide over server-rendered rows — no payload, no re-render.
+  const search = document.getElementById("cmt-search") as HTMLInputElement | null;
+  const officeSel = document.getElementById("cmt-office") as HTMLSelectElement | null;
+  const confSel = document.getElementById("cmt-conf") as HTMLSelectElement | null;
+  const none = document.getElementById("cmt-none");
+  const REVIEW = new Set(["probable", "weak", "none"]);
+
+  function confOk(mode: string, conf: string) {
+    if (!mode) return true;
+    if (mode === "exact") return conf === "exact";
+    if (mode === "confident") return conf === "exact" || conf === "confident";
+    return REVIEW.has(conf);
+  }
+
+  function apply() {
+    const q = (search?.value ?? "").trim().toLowerCase();
+    const office = officeSel?.value ?? "";
+    const mode = confSel?.value ?? "";
+    let anyVisible = false;
+
+    document.querySelectorAll<HTMLElement>(".cmt-office").forEach((oEl) => {
+      const officeOk = !office || oEl.dataset.office === office;
+      let officeHas = false;
+      oEl.querySelectorAll<HTMLElement>(".cmt-branch").forEach((bEl) => {
+        let branchHas = false;
+        bEl.querySelectorAll<HTMLElement>(".cmt-row").forEach((rEl) => {
+          const ok = officeOk
+            && confOk(mode, rEl.dataset.conf ?? "")
+            && (!q || (rEl.dataset.search ?? "").includes(q));
+          rEl.style.display = ok ? "" : "none";
+          if (ok) branchHas = true;
+        });
+        bEl.style.display = branchHas ? "" : "none";
+        if (branchHas) {
+          officeHas = true;
+          // A filtered search should reveal its hits, not make the user open every branch.
+          if (q || mode) (bEl as HTMLDetailsElement).open = true;
+        }
+      });
+      oEl.style.display = officeHas ? "" : "none";
+      if (officeHas) {
+        anyVisible = true;
+        if (q || mode) (oEl as HTMLDetailsElement).open = true;
+      }
+    });
+
+    if (none) none.hidden = anyVisible;
+  }
+
+  search?.addEventListener("input", apply);
+  officeSel?.addEventListener("change", apply);
+  confSel?.addEventListener("change", apply);
+</script>

@@ -16,7 +16,7 @@ inputs:
   - name: invoice_lines
     type: record[]
     required: true
-    description: Extracted invoice line items with SKU, description, quantity, UOM, unit price, and extended price.
+    description: Canonical invoice lines with SKU, description, priceQty quantity/UOM, price_per_uom, and extended price.
   - name: negotiated_price_agreements
     type: record[]
     required: true
@@ -63,11 +63,15 @@ emails outside Pro Exteriors.
    - If the match is unapproved, call `product-catalog-manager` and stop external-send readiness.
 3. Retrieve the active negotiated price agreement for the vendor, price zone, and invoice date.
 4. Verify UOM.
-   - If invoice UOM and agreement UOM differ, use an approved conversion factor.
+   - Treat ABC `priceQty.uom` as the invoice pricing UOM.
+   - Read invoice prices from `abc_invoice_lines.price_per_uom` (or the canonical audit view sourced from it).
+   - Resolve approved conversions through `v_item_uom_map`.
+   - Never compare raw `quantity`, `uom`, `unit_price`, or `pricePerUnitAmount` fields.
+   - If invoice pricing UOM and agreement UOM differ, use an approved conversion factor.
    - If conversion is missing or ambiguous, mark the line `needs_review`.
 5. Recalculate every line:
    ```text
-   expected_credit = (invoice_unit_price - negotiated_unit_price) * approved_quantity
+   expected_credit = (invoice_price_per_pricing_uom - negotiated_price_per_same_uom) * priceQty.quantity
    ```
 6. Include only overcharge lines in the credit memo packet.
 7. Draft exactly one credit memo request email per invoice.
@@ -90,8 +94,8 @@ Expected Credit Memo Total: $[total]
 
 Discrepancy Lines
 1. [SKU] [description]
-   Qty/UOM: [qty] [invoice_uom]
-   Invoice price: $[invoice_unit_price]
+   Pricing Qty/UOM: [price_qty] [price_uom]
+   Invoice price per pricing UOM: $[price_per_uom]
    Negotiated price: $[negotiated_unit_price]
    Expected credit: $[line_credit]
    Match status: [approved | needs review]

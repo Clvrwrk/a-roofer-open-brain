@@ -52,6 +52,7 @@ require_static_path "$verifier" file 644
 
 COMPOSIO_API_KEY=""
 OPENROUTER_API_KEY=""
+MAYA_COMMAND_CENTER_TOKEN=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -n "$line" && "$line" != *$'\r'* ]] || exit 1
   case "$line" in
@@ -63,12 +64,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       [[ -z "$OPENROUTER_API_KEY" ]] || exit 1
       OPENROUTER_API_KEY="${line#OPENROUTER_API_KEY=}"
       ;;
+    MAYA_COMMAND_CENTER_TOKEN=*)
+      [[ -z "$MAYA_COMMAND_CENTER_TOKEN" ]] || exit 1
+      MAYA_COMMAND_CENTER_TOKEN="${line#MAYA_COMMAND_CENTER_TOKEN=}"
+      ;;
     *) exit 1 ;;
   esac
 done < "$env_file"
 
 : "${COMPOSIO_API_KEY:?missing Composio credential}"
 : "${OPENROUTER_API_KEY:?missing inference credential}"
+: "${MAYA_COMMAND_CENTER_TOKEN:?missing Command Center credential}"
 exec /usr/bin/env -i \
   HOME="$agent_home" \
   HERMES_HOME="/opt/pe-cc-agents/maya-hermes-home" \
@@ -76,4 +82,5 @@ exec /usr/bin/env -i \
   NODE_ENV="production" \
   COMPOSIO_API_KEY="$COMPOSIO_API_KEY" \
   OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  MAYA_COMMAND_CENTER_TOKEN="$MAYA_COMMAND_CENTER_TOKEN" \
   /usr/bin/node /opt/pe-cc-agents/maya-slack-listener/listener.mjs

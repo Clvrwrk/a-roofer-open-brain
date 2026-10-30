@@ -38,136 +38,6 @@ def get_container(email_prefix):
 
 CRON_JOBS = [
 
-    # ── MAYA CHEN ─────────────────────────────────────────────────────────────
-    {
-        "name": "maya-gmail-poll",
-        "schedule": "every 2m",  # Hermes minimum; cadence says 60s
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web", "file"],
-        "skills": ["google-workspace", "nepq-agent-communication"],
-        "prompt": """You are Maya Chen, Pro Exteriors document intake agent.
-
-Poll Gmail for all 7 aliases using in:anywhere search. For each unread message:
-1. Classify by the To/alias address (invoices→invoice, ap→ap_urgent, creditmemos→credit_memo, priceagreement→price_agreement, ar→ar_remittance, hr→hr_escalate, payroll→payroll_escalate)
-2. Extract: vendor name, invoice number, date, total amount, due date
-3. Note if SPAM label present — flag but still log
-4. HR/Payroll: escalate immediately without extracting content
-5. Post brief notification to #ob-agents-internal (C0BD8U44HL3)
-6. Call POST https://cc.proexteriorsus.net/api/agent/intake with structured data
-
-If nothing new: stay silent. Do not post "nothing to report."
-
-NEPQ principle: Only surface what needs human attention. Silent when all clear.""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "always_on",
-    },
-    {
-        "name": "maya-morning-audit",
-        "schedule": "0 7 * * 1-5",
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web", "file"],
-        "skills": ["nepq-agent-communication"],
-        "prompt": """You are Maya Chen. Run the morning inbox audit.
-
-Check Command Center work queue (GET https://cc.proexteriorsus.net/api/agent/work-queue) for:
-- Count of unprocessed invoice work items by category
-- Any invoice work items older than 30 days (early-pay discount risk)
-- Any HR/Payroll items from prior day
-
-Post NEPQ-structured summary to #ob-agents-internal (C0BD8U44HL3):
-📥 Maya's Morning Audit | {today's date}
-WHAT I SEE:
-• Invoices pending: {n}
-• AP urgent: {n}
-• Credit memos: {n}
-NEEDS YOUR ATTENTION: {list or "All clear ✅"}
-
-Keep it under 5 bullets. 90-second read.""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "daily",
-    },
-    {
-        "name": "maya-daily-summary",
-        "schedule": "0 17 * * 1-5",
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web"],
-        "skills": ["nepq-agent-communication"],
-        "prompt": """You are Maya Chen. Post the end-of-day NEPQ summary.
-
-Pull today's work items from Command Center. Post to #ob-agents-internal (C0BD8U44HL3):
-
-📊 Maya's End-of-Day | {today's date}
-WHAT HAPPENED TODAY:
-• Documents processed: {n by type}
-• Work items created: {n}
-WHAT IT MEANS:
-• {1-2 sentences on any notable patterns}
-NEEDS YOUR ATTENTION:
-• {specific items needing human action, or "Nothing today ✅"}
-
-NEPQ rule: Do not list everything you did. Only surface what matters to Chris.""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "daily",
-    },
-    {
-        "name": "maya-vendor-aging",
-        "schedule": "0 8 * * 1",
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web"],
-        "skills": ["nepq-agent-communication"],
-        "prompt": """You are Maya Chen. Run the weekly vendor aging report.
-
-Pull all open invoice work items from Command Center. Group by vendor. Age:
-- 0-30 days: current
-- 31-60 days: watch
-- 61-90 days: at risk
-- 90+ days: escalate
-
-CFMA standard: AP aging reviewed weekly. DSO target <45 days.
-
-Post aging summary to #ob-agents-internal (C0BD8U44HL3).
-Flag any vendor with invoices >60 days unresolved.""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "weekly",
-    },
-    {
-        "name": "maya-doc-quality-audit",
-        "schedule": "0 9 * * 5",
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web"],
-        "skills": ["nepq-agent-communication"],
-        "prompt": """You are Maya Chen. Run the weekly document quality audit.
-
-Review this week's work items for extraction quality patterns:
-- Which vendors had low-confidence extractions?
-- Which document types caused failures?
-- Any recurring format issues?
-
-Post findings to #ob-agents-internal (C0BD8U44HL3) and tag Sam Torres (QA) if >2 failure patterns found.
-
-Include: WHAT I FOUND → WHAT IT MEANS → RECOMMENDATION""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "weekly",
-    },
-    {
-        "name": "maya-vendor-onboarding-review",
-        "schedule": "0 9 1 * *",
-        "agent": "maya.chen@cc.proexteriorsus.net",
-        "toolsets": ["web"],
-        "skills": ["nepq-agent-communication"],
-        "prompt": """You are Maya Chen. Run the monthly vendor onboarding review.
-
-Check work items from this month for first-time vendors:
-- List vendors seen for the first time
-- Check if they have price agreements on file (flag to Alex Rivers if not)
-- Note document volume trends vs prior month
-
-Post summary to #ob-agents-internal (C0BD8U44HL3).
-Flag new vendors without agreements to #ob-agents-internal (C0BD8U44HL3).""",
-        "channel": "C0BD8U44HL3",
-        "cadence_type": "monthly",
-    },
-
     # ── ALEX RIVERS ───────────────────────────────────────────────────────────
     {
         "name": "alex-morning-abc-sync",
@@ -621,6 +491,11 @@ OneClickCode 2024: Neighborhood-specific landing pages are top local SEO driver 
     },
 ]
 
-print(f"Total cron jobs to deploy: {len(CRON_JOBS)}")
-for job in CRON_JOBS:
+ACTIVE_CRON_JOBS = [
+    job for job in CRON_JOBS
+    if job["agent"] != "maya.chen@cc.proexteriorsus.net"
+]
+print("Maya cron jobs skipped: the Orgo CAT-first runtime is her sole production schedule owner.")
+print(f"Total cron jobs to deploy: {len(ACTIVE_CRON_JOBS)}")
+for job in ACTIVE_CRON_JOBS:
     print(f"  [{job['cadence_type'].upper():8}] {job['schedule']:20} {job['name']}")

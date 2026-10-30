@@ -57,7 +57,7 @@ function formatBranchAddress(br: any): string {
 // versions at refDate (newest per agreement_number; evergreen). Migration 205: reads the
 // all-vendor v_office_vendor_agreements, scoped to the branch's own vendor, so SRS (and
 // any future vendor) branches inherit exactly like ABC ones.
-async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string, vendorId = ""): Promise<{ officeName: string; agreements: { key: string; source: string; number: string; effective: string; expiry: string }[] } | null> {
+async function loadOfficeInheritedList(client: any, branchNumber: string, refDate: string, vendorId = "", officeNameFallback = ""): Promise<{ officeName: string; agreements: { key: string; source: string; number: string; effective: string; expiry: string }[] } | null> {
   const norm = branchNumber.replace(/^0+/, "");
   let vbQuery = client
     .from("vendor_branches")
@@ -69,14 +69,31 @@ async function loadOfficeInheritedList(client: any, branchNumber: string, refDat
   if (vendorId) vbQuery = vbQuery.eq("vendor_id", vendorId);
   const { data: vbRows } = await vbQuery;
   const vb = ((vbRows as any[] | null) ?? []).find((v) => String(v.branch_number ?? "").replace(/^0+/, "") === norm);
-  if (!vb) return null;
-  const { data: officeRows } = await client.from("office").select("name").eq("id", vb.pricing_territory_office_id).limit(1);
-  const officeName = (officeRows as any[] | null)?.[0]?.name ?? "";
+  let officeId: string = vb?.pricing_territory_office_id ?? "";
+  let officeName = "";
+  let oavVendorId: string = vb?.vendor_id ?? vendorId;
+  if (vb) {
+    const { data: officeRows } = await client.from("office").select("name").eq("id", vb.pricing_territory_office_id).limit(1);
+    officeName = (officeRows as any[] | null)?.[0]?.name ?? "";
+  } else if (officeNameFallback && vendorId) {
+    // PEC-193: vendor_branches has no pricing-territory mapping for this branch (a
+    // third of ABC branches). The audit surface already knows the PE office — its
+    // button gate lit on (vendor, office) coverage — so resolve by the office NAME it
+    // passed and show the same agreement set. Vendor id stays required (silo: never
+    // guess across vendors; fail closed without it).
+    const { data: officeRows } = await client.from("office").select("id,name").eq("name", officeNameFallback).limit(1);
+    const off = (officeRows as any[] | null)?.[0];
+    if (!off) return null;
+    officeId = off.id;
+    officeName = off.name ?? officeNameFallback;
+  } else {
+    return null;
+  }
   const { data: oavRows } = await client
     .from("v_office_vendor_agreements")
     .select("source, agreement_key, agreement_number, effective_date, expiry_date")
-    .eq("office_id", vb.pricing_territory_office_id)
-    .eq("vendor_id", vb.vendor_id);
+    .eq("office_id", officeId)
+    .eq("vendor_id", oavVendorId);
   const versions = ((oavRows as any[] | null) ?? []).filter((a) => !a.effective_date || d10(a.effective_date) <= refDate);
   // newest in-force version per agreement chain (evergreen — expiry never disqualifies)
   const newest = new Map<string, any>();
@@ -94,7 +111,7 @@ async function loadOfficeInheritedList(client: any, branchNumber: string, refDat
   return agreements.length ? { officeName, agreements } : null;
 }
 
-export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", vendorSlug = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
+export async function loadBranchPriceList(branchNumber: string, invoiceNumber = "", vendorSlug = "", officeName = "", env: RuntimeEnv = getRuntimeEnv()): Promise<BranchPriceList> {
   const base: BranchPriceList = { status: "unconfigured", branchNumber, branchName: "", branchAddress: "", scopedInvoice: "", scopedInvoiceDate: "", scopedAgreementNumber: "", inheritedOffice: "", items: [], activeItems: 0, expiredItems: 0, agreements: [], categories: [] };
   const { client } = createServerSupabaseClient(env);
   if (!client || !branchNumber) return base;
@@ -153,7 +170,7 @@ export async function loadBranchPriceList(branchNumber: string, invoiceNumber = 
     // R3 fallback: no direct list — inherit the PE office's in-force agreements
     // (2-hour window, docs/81 §4; same set the audit engine prices against).
     const refDate = scopedInvoiceDate || new Date().toISOString().slice(0, 10);
-    const inherited = await loadOfficeInheritedList(client, branchNumber, refDate, vendorId);
+    const inherited = await loadOfficeInheritedList(client, branchNumber, refDate, vendorId, officeName);
     if (inherited) {
       // Items come from the source each agreement lives in: abc_price_list_items for
       // ABC (int keys) vs price_agreement_items for generic vendors like SRS (uuids).

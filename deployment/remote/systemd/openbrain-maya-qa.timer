@@ -1,0 +1,12 @@
+[Unit]
+Description=Maya nightly QA at 04:30 America/Chicago
+
+[Timer]
+# 04:30 CT — after the ABC sync (03:30) so the app has the night's data, and before
+# the 06:00 site sweep, so a QA failure is already in Slack when the sweep lands.
+OnCalendar=*-*-* 04:30:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

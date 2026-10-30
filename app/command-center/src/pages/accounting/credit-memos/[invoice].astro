@@ -14,6 +14,19 @@ const dispLabel: Record<string, string> = { approved: "Approved", needs_more_evi
 const isReq = cm?.kind === "requested";
 const headText = !cm ? "" : isReq ? (dispLabel[cm.disposition?.status ?? "draft"] ?? "Requested") : (headLabel[cm.matchStatus] ?? cm.matchStatus);
 const headCls = !cm ? "grey" : isReq ? "warn" : (headPill[cm.matchStatus] ?? "grey");
+
+// Evidence panel (PEC-221). A claim is only sendable if a human can open both source
+// documents and read the chain that ties them to one PE office. Worst check state drives
+// the panel's headline so a lapsed or re-derived citation cannot hide behind a green wall.
+const prov = cm?.provenance ?? null;
+const checkMark: Record<string, string> = { pass: "✓", warn: "!", fail: "✕", unknown: "?" };
+const rank: Record<string, number> = { pass: 0, unknown: 1, warn: 2, fail: 3 };
+const worst = prov ? prov.checks.reduce((w, c) => (rank[c.state] > rank[w] ? c.state : w), "pass" as string) : "unknown";
+const worstLabel = worst === "pass" ? "Evidence complete" : worst === "unknown" ? "Evidence incomplete" : worst === "warn" ? "Send with caution" : "Do not send";
+const agr = prov?.agreement ?? null;
+const agrTitle = agr && agr.source !== "none"
+  ? [agr.number ?? `Agreement ${agr.id}`, agr.versionLabel].filter(Boolean).join(" · ")
+  : "No agreement cited";
 ---
 
 <AppShell title={cm ? `Credit Memo ${cm.invoiceNumber}` : "Credit Memo Not Found"} eyebrow="Accounting · Credit Memos" activePage="accounting">
@@ -37,6 +50,59 @@ const headCls = !cm ? "grey" : isReq ? "warn" : (headPill[cm.matchStatus] ?? "gr
           <span class="cm-sub">{isReq ? `${cm.lineCount} lines · expected credit` : `${cm.matchedLines}/${cm.lineCount} lines match`}</span>
         </div>
       </header>
+
+      {prov && (
+        <section class="cm-eviq" data-worst={worst}>
+          <header class="cm-eviq-head">
+            <h2>Evidence</h2>
+            <span class={`cm-pill sm ${worst === "pass" ? "ok" : worst === "fail" ? "bad" : worst === "warn" ? "warn" : "grey"}`}>{worstLabel}</span>
+          </header>
+
+          {/* The two source documents, side by side — the invoice we were charged on and
+              the price book we are claiming against. */}
+          <div class="cm-docs">
+            <article class="cm-doc">
+              <span class="cm-doc-kind">Charged on</span>
+              <span class="cm-doc-name">Invoice {cm.invoiceNumber}</span>
+              <span class="cm-doc-meta">
+                {prov.invoiceDate || "date not recorded"} · {prov.branchName || "branch not recorded"}
+                {prov.branchCode ? ` (${prov.branchCode})` : ""} · {prov.vendorSlug}
+              </span>
+              {prov.invoicePdfUrl
+                ? <a class="cm-doc-link" href={prov.invoicePdfUrl} target="_blank" rel="noopener">Open invoice PDF →</a>
+                : <span class="cm-doc-link is-off" title="No PDF is stored for this invoice yet.">No invoice PDF stored</span>}
+            </article>
+
+            <article class="cm-doc">
+              <span class="cm-doc-kind">Priced against</span>
+              <span class="cm-doc-name">{agrTitle}</span>
+              <span class="cm-doc-meta">
+                {agr && agr.source !== "none"
+                  ? <>{agr.effective ?? "?"} → {agr.expiry ?? "open-ended"} · {agr.officeName ?? "office not recorded"}{agr.sourceFile ? ` · ${agr.sourceFile}` : ""}</>
+                  : "Nothing to price this claim against."}
+              </span>
+              {agr?.pdfUrl
+                ? <a class="cm-doc-link" href={agr.pdfUrl} target="_blank" rel="noopener">Open agreement PDF →</a>
+                : agr && agr.source !== "none"
+                  ? <span class="cm-doc-link is-off" title={agr.sourceFile ? `Named in the record as ${agr.sourceFile}, but no copy is stored.` : "No copy of this agreement is stored."}>No agreement PDF stored</span>
+                  : <span class="cm-doc-link is-off">—</span>}
+            </article>
+          </div>
+
+          {/* The chain. Each row answers one question a vendor could push back on. */}
+          <ul class="cm-checks">
+            {prov.checks.map((c) => (
+              <li class={`cm-check is-${c.state}`}>
+                <span class="cm-check-mark" aria-hidden="true">{checkMark[c.state]}</span>
+                <span class="cm-check-body">
+                  <b>{c.label}</b>
+                  <span>{c.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <table class="cm-table">
         <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">{isReq ? "Invoice Price" : "CM Price"}</th><th class="num">{isReq ? "Negotiated" : "Original Price"}</th><th>{isReq ? "Variance" : "Match"}</th></tr></thead>
@@ -102,6 +168,36 @@ const headCls = !cm ? "grey" : isReq ? "warn" : (headPill[cm.matchStatus] ?? "gr
   .cm-pill.ok{background:var(--green-bg);color:var(--green)} .cm-pill.bad{background:var(--red-bg);color:var(--red)}
   .cm-pill.warn{background:var(--yellow-bg);color:var(--yellow)} .cm-pill.grey{background:var(--grey-bg);color:var(--grey)}
   .cm-pill.sm{padding:1px 8px;font-size:10.5px;font-weight:600}
+  /* ── Evidence panel (PEC-221) ─────────────────────────────────────────────
+     Two source documents, then the chain that ties them to one PE office. The
+     left border carries the worst check state so the panel's verdict is legible
+     before any text is read. */
+  .cm-eviq{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+  .cm-eviq[data-worst="warn"]{border-left-color:var(--yellow)}
+  .cm-eviq[data-worst="fail"]{border-left-color:var(--red)}
+  .cm-eviq[data-worst="unknown"]{border-left-color:var(--grey)}
+  .cm-eviq-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .cm-eviq-head h2{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .cm-docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:14px}
+  .cm-doc{display:flex;flex-direction:column;gap:3px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .cm-doc-kind{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  .cm-doc-name{font-size:13.5px;font-weight:700}
+  .cm-doc-meta{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .cm-doc-link{margin-top:6px;align-self:flex-start;font-size:11.5px;font-weight:700;color:var(--brand);text-decoration:none;border:1px solid var(--brand);border-radius:7px;padding:4px 10px;background:var(--panel)}
+  .cm-doc-link:hover{background:#efecfd}
+  .cm-doc-link.is-off{color:var(--muted);border-color:var(--line);background:var(--panel2);cursor:not-allowed}
+  .cm-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+  .cm-check{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.5}
+  .cm-check-mark{flex:none;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;margin-top:1px;background:var(--grey-bg);color:var(--grey)}
+  .cm-check.is-pass .cm-check-mark{background:var(--green-bg);color:var(--green)}
+  .cm-check.is-warn .cm-check-mark{background:var(--yellow-bg);color:var(--yellow)}
+  .cm-check.is-fail .cm-check-mark{background:var(--red-bg);color:var(--red)}
+  .cm-check-body{display:flex;flex-direction:column}
+  .cm-check-body b{font-weight:700;font-size:12.5px}
+  .cm-check-body span{color:var(--muted)}
+  .cm-check.is-fail .cm-check-body b{color:var(--red)}
+  .cm-check.is-warn .cm-check-body b{color:var(--yellow)}
+
   .cm-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:16px}
   .cm-table thead th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);background:var(--panel2)}
   .cm-table td{padding:8px 11px;border-bottom:1px solid var(--line)}

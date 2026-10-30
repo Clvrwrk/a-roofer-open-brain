@@ -57,6 +57,7 @@ delete the rest in the Slack UI (the registry's `canonicalAppId` is the record o
 
 | Channel | ID | Use |
 |---|---|---|
+| #pe-cc-dev-team | _ID pending — bot not yet invited_ | **ALL app/code/Linear-issue traffic** incl. fix-approval gates (Chris 2026-08-07; A3 maya-diagnose-repair) |
 | #accounting-invoice-processing | `C0BDRFACQ4S` | invoice-audit deliverables |
 | #accounting-vendor-intake | `C0BCUF29G1H` | invoice/AP intake, discrepancies |
 | #accounting-credit-memos | `C0BD4EW4RU4` | credit-memo drafts |

@@ -22,6 +22,17 @@ async function harness({ runHermesImpl, executeImpl }) {
   const composio = {
     tools: {
       async execute(...args) {
+        const [slug, body] = args;
+        if (slug === "LINEAR_LIST_LINEAR_ISSUES") {
+          return { successful: true, data: { issues: [], page_info: { hasNextPage: false } } };
+        }
+        if (slug === "LINEAR_CREATE_LINEAR_ISSUE") {
+          return body.arguments.team_id === APPROVED.linearSourceTeamId
+            ? { successful: true, data: { id: "11111111-1111-4111-8111-111111111111", identifier: "CAT-901" } }
+            : { successful: true, data: { id: "22222222-2222-4222-8222-222222222222", identifier: "PEC-901" } };
+        }
+        if (slug === "LINEAR_UPDATE_ISSUE") return { successful: true, data: { id: body.arguments.issueId } };
+        if (slug === "LINEAR_CREATE_LINEAR_COMMENT") return { successful: true, data: { id: "comment-1" } };
         executeCount += 1;
         return await executeImpl(...args);
       },
@@ -29,7 +40,7 @@ async function harness({ runHermesImpl, executeImpl }) {
   };
   const decision = {
     eventKey: `team:channel:${Date.now()}:${Math.random()}`,
-    event: { data: { user: "U0B8SGJJZLJ", channel: "C0BD7L43PC2" } },
+    event: { data: { user: "U0B8SGJJZLJ", channel: "C0BD7L43PC2", ts: "1785160000.000001" } },
     messageText: "Maya, controlled status?",
     threadTs: "1785160000.000001",
   };
@@ -40,6 +51,7 @@ async function harness({ runHermesImpl, executeImpl }) {
     composio,
     attemptSignal: signal,
     runHermes: runHermesImpl,
+    recordIntake: async () => ({ workKey: "accounting:intake:slack:test", providerReference: "cc-work-1" }),
     onEvent: () => {},
   });
   return {
@@ -83,14 +95,15 @@ test("Hermes turns a blocker into an honest in-thread owner escalation", () => {
   assert.match(prompt, /never claim that you sent Christopher a separate message or DM/u);
 });
 
-test("Maya retains the fleet-to-WEX relationship and mandatory email CC", async () => {
+test("Maya retains the fleet-to-WEX relationship and both mandatory email CCs", async () => {
   const soul = await readFile(new URL("../SOUL.md", import.meta.url), "utf8");
 
   assert.match(soul, /Vehicle Master List is the canonical fleet record/u);
   assert.match(soul, /WEX is the fuel-card system attached to each vehicle record/u);
   assert.match(soul, /VIN, unit number, or\s+license plate/u);
   assert.match(soul, /admin@cc\.proexteriorsus\.net/u);
-  assert.match(soul, /email missing that CC must not be sent/u);
+  assert.match(soul, /chussey@aia4\.io/u);
+  assert.match(soul, /email\s+missing either CC must not be sent or drafted/u);
 });
 
 test("Maya asks Christopher in Slack with a complete context-and-routing escalation", async () => {

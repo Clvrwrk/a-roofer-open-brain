@@ -1,3 +1,4 @@
+import {observeEdgeHandler} from "../_shared/edge-observer.ts";
 // acculynx-read-sweep — Edge Function entrypoint (Phase 1, plan 01-02 Task 2)
 //
 // SANDBOX-ONLY spec-driven sweep of the 86 documented AccuLynx GET operations. Reads the
@@ -118,7 +119,7 @@ function harvest(op: string, body: unknown, seeds: Record<string, string[]>) {
   }
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(observeEdgeHandler("acculynx-read-sweep",async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   // HARD GATE: enforce sandbox-only in code before any network call.
   try {
@@ -281,7 +282,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     verdicts,
     runtime_ms: Date.now() - started,
   });
-});
+},sb));
 
 function mkProbe(
   row: ChecklistRow,

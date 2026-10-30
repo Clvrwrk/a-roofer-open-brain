@@ -1,5 +1,7 @@
 # SECURITY.md
 
+**Architecture clarification 2026-10-23:** the current Command Center and ingestion workers connect to Supabase server-side. The `server/` knowledge MCP is an uncommissioned scaffold with no verified active consumer and remains undeployed (PEC-761). The original MCP-only dashboard statements below describe the earlier design and do not establish present deployment or browser exposure. Service-role credentials must remain server-side; operational least privilege and the current sync controls are documented in docs/delivery/PEC-755/.
+
 Security posture for a roofing client's brain. The full pre-go-live gate is [`docs/06-security-checklist.md`](docs/06-security-checklist.md) (adapted from Cole Medin's Dynamous security walkthrough — referenced, not redistributed).
 
 ## Principles

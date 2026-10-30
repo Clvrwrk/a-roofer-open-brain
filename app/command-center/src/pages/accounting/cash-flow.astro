@@ -1,0 +1,231 @@
+---
+// 13-Week Cash Flow (13WCF) work surface — Accounting (mig 281).
+//
+// Design language mirrors the Friday WIP/AR board (PEC-234 — the design source
+// of truth for work surfaces): full-bleed `.cfx` grid, toolbar, KPI pills, the
+// cash-map week strip, group panels, zebra tables, shared cc.theme preference.
+//
+// Receipts link LIVE to the WIP/AR board: date a job on Friday WIP/AR and it
+// leaves the undated pool here on the next load. Drivers (wcf_assumptions) are
+// editable inline; every change is audit-logged. The workbook export carries
+// exactly what this page shows, as-of stamped.
+import AppShell from "../../layouts/AppShell.astro";
+import { loadCashFlowBoard } from "@lib/cash-flow";
+import "../../styles/cash-surface.css";
+
+const board = await loadCashFlowBoard();
+const available = board.status === "live" && !board.error;
+Astro.response.headers.set("Cache-Control", "no-store");
+const money = (v: number) =>
+  (v < 0 ? "(" : "") + "$" + Math.round(Math.abs(v)).toLocaleString("en-US") + (v < 0 ? ")" : "");
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+const wk = (isoDate: string) => {
+  const d = new Date(isoDate + "T00:00:00Z");
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+};
+const asOf = board.generatedAt.slice(0, 10);
+// Weeks-of-cash context (audited 2026-08-26): ending cash ÷ average weekly
+// TOTAL disbursements across the 13 forecast weeks. Months shown alongside
+// (1 month = 4.345 weeks) so the two scales can never be confused.
+const avgWeeklyDisb = board.weeks.length
+  ? board.weeks.reduce((s, w) => s + w.totalDisbursements, 0) / board.weeks.length
+  : 0;
+const months = (weeks: number | null) => weeks === null ? "—" : (weeks / 4.345).toFixed(1);
+const wk1 = board.weeks[0];
+const wkLast = board.weeks[board.weeks.length - 1];
+const pctKeys = new Set(["undated_collection_pct"]);
+const fmtAssumption = (key: string, v: number) => (pctKeys.has(key) ? String(v) : String(Math.round(v)));
+---
+
+<AppShell title="13-Week Cash Flow" eyebrow="Accounting" activePage="accounting">
+  <section class="cfx" id="cfx" data-availability={available ? "ready" : "unavailable"} data-theme="light" data-pref="system">
+    <div class="cfx-toolbar">
+      <h2 class="cfx-title">13-Week Cash Flow</h2>
+      <span class="cfx-sub">receipts live from the <a href="/accounting/friday-wip">WIP/AR board</a> · drivers audited · basis_version 0 (CPA rulings pending)</span>
+      <span class="cfx-spacer"></span>
+      <a class="cfx-btn" href="/executive/cash-runway">Executive view</a>
+      {available && <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download title="PE_13WCF_asof-date.xlsx — exactly what this page shows, at this moment">Download workbook</a>}
+      <span class="cfx-count">{available ? `as of ${asOf}` : "Data unavailable"}</span>
+      <div class="cfx-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    {!available ? <section class="cfx-group" aria-labelledby="cash-unavailable-title">
+      <div class="cfx-unavailable-content"><h3 id="cash-unavailable-title">Financial data unavailable</h3>
+      <p>We could not load the inputs needed for this forecast. Cash balances, projections and floor status cannot be assessed.</p>
+      <a class="cfx-btn" href="/accounting/cash-flow">Try again</a></div>
+    </section> : <>
+
+    <div class="cfx-kpis">
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Cash today</span><span class="cfx-kpi-val">{money(board.beginningCash)}</span><span class="cfx-kpi-sub">{board.bankAccounts.length} bank accounts, QBO mirror</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1?.weeksOfCash != null ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Ending cash, week 13</span><span class="cfx-kpi-val">{wkLast ? money(wkLast.endingCash) : "—"}</span><span class="cfx-kpi-sub">net {wkLast ? money(board.weeks.reduce((s, w) => s + w.net, 0)) : "—"} over the quarter</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">13-week low vs floor</span><span class="cfx-kpi-val">{money(board.minEndingCash)}</span><span class="cfx-kpi-sub">{board.minEndingWeek ? `wk of ${wk(board.minEndingWeek)} · ` : ""}floor {money(board.minCashFloor)}{board.floorBreached ? " — BREACHED" : ""}</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.datedShare < 0.5 }]}><span class="cfx-kpi-lab">AR dated by value</span><span class="cfx-kpi-val">{pct(board.datedShare)}</span><span class="cfx-kpi-sub">{money(board.undatedCash)} undated across {board.undatedJobs} jobs</span></div>
+    </div>
+
+    <div class="cfx-cashmap">
+      <span class="cfx-cashmap-title">Ending cash by week — the 3-week cash map on the WIP board, extended to the full quarter</span>
+      <div class="cfx-cashmap-cells">
+        {board.weeks.map((w) => (
+          <div class="cfx-week" class:list={[{ "cfx-week-warn": w.belowFloor }]}>
+            <span class="cfx-week-lab">wk {wk(w.weekStart)}</span>
+            <span class="cfx-week-val" class:list={[{ "cfx-week-neg": w.endingCash < 0 }]}>{money(w.endingCash)}</span>
+            <span class="cfx-week-sub">net {money(w.net)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="cfx-group">
+      <div class="cfx-group-head">
+        <span class="cfx-group-name">Forecast sheet</span>
+        <span class="cfx-group-count">beginning cash + receipts − disbursements, per week</span>
+        <span class="cfx-group-money">dated receipts are live from wip_ar_master</span>
+      </div>
+      <div class="cfx-tablewrap">
+        <table class="cfx-table cfx-frozen">
+          <thead>
+            <tr><th>Week beginning</th>{board.weeks.map((w) => <th class="num">{wk(w.weekStart)}</th>)}</tr>
+          </thead>
+          <tbody>
+            <tr class="cfx-bold"><td>Beginning cash</td>{board.weeks.map((w) => <td class="num">{money(w.beginningCash)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Receipts</td></tr>
+            <tr><td class="ind">Dated AR (WIP board)</td>{board.weeks.map((w) => <td class="num cfx-live">{money(w.datedReceipts)}</td>)}</tr>
+            <tr><td class="ind">Undated pool @ weekly %</td>{board.weeks.map((w) => <td class="num">{money(w.undatedReceipts)}</td>)}</tr>
+            <tr><td class="ind">New billings</td>{board.weeks.map((w) => <td class="num">{money(w.newBillings)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total receipts</td>{board.weeks.map((w) => <td class="num">{money(w.totalReceipts)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Disbursements — direct job costs (COGS) + commissions</td></tr>
+            <tr><td class="ind">Materials</td>{board.weeks.map((w) => <td class="num">{money(w.materials)}</td>)}</tr>
+            <tr><td class="ind">Subcontractors</td>{board.weeks.map((w) => <td class="num">{money(w.subs)}</td>)}</tr>
+            <tr><td class="ind">Commissions (1099)</td>{board.weeks.map((w) => <td class="num">{money(w.commissions)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total direct (COGS)</td>{board.weeks.map((w) => <td class="num">{money(w.totalDirect)}</td>)}</tr>
+            <tr class="cfx-secrow"><td colspan={14}>Disbursements — overhead</td></tr>
+            <tr><td class="ind">W-2 payroll + taxes</td>{board.weeks.map((w) => <td class="num">{money(w.payroll)}</td>)}</tr>
+            <tr><td class="ind">Fixed overhead (register)</td>{board.weeks.map((w) => <td class="num">{money(w.fixedOverhead)}</td>)}</tr>
+            <tr><td class="ind">One-time / past-due AP</td>{board.weeks.map((w) => <td class="num">{money(w.oneTime)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total overhead</td>{board.weeks.map((w) => <td class="num">{money(w.totalOverhead)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Total disbursements</td>{board.weeks.map((w) => <td class="num">{money(w.totalDisbursements)}</td>)}</tr>
+            <tr class="cfx-bold"><td>Net cash flow</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-neg": w.net < 0 }]}>{money(w.net)}</td>)}</tr>
+            <tr class="cfx-endrow"><td>Ending cash</td>{board.weeks.map((w) => <td class="num" class:list={[{ "cfx-breach": w.belowFloor }]}>{money(w.endingCash)}</td>)}</tr>
+            <tr><td class="ind">Weeks of cash on hand</td>{board.weeks.map((w) => <td class="num" title={`≈ ${months(w.weeksOfCash)} months`}>{(w.weeksOfCash === null ? "—" : w.weeksOfCash.toFixed(1))}</td>)}</tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cfx-cols">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Assumptions</span>
+          <span class="cfx-group-count">editable — every change is audit-logged; Enter or click away to save</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
+            <thead><tr><th>Driver</th><th class="num">Value</th><th>Last edit</th></tr></thead>
+            <tbody>
+              {board.assumptions.map((a) => (
+                <tr>
+                  <td title={a.note ?? ""} style="white-space:normal">{a.label}</td>
+                  <td class="num">
+                    <input class="cfx-input" type="text" inputmode="decimal" data-key={a.key} value={fmtAssumption(a.key, a.value)} />
+                    {pctKeys.has(a.key) && <span class="cfx-unit">fraction</span>}
+                  </td>
+                  <td class="cfx-who">{a.updatedBy ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Undated AR — date these on the WIP board</span>
+          <span class="cfx-group-count">{board.undatedJobs} jobs</span>
+          <span class="cfx-group-money">{money(board.undatedCash)}</span>
+        </div>
+        <div class="cfx-pane" id="undated-pane" data-pane-key="wcf-undated">
+          <table class="cfx-table">
+            <thead><tr><th>Job #</th><th>Client</th><th>Location</th><th class="num">Outstanding</th></tr></thead>
+            <tbody>
+              {board.undatedTopJobs.map((j) => (
+                <tr>
+                  <td><a href="/accounting/friday-wip">{j.jobNumber || "—"}</a></td>
+                  <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">{j.client}</td>
+                  <td>{j.location}</td>
+                  <td class="num">{money(j.outstanding)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {board.undatedTopJobs.length > 10 && (
+          <button class="cfx-showmore" id="undated-toggle" type="button">Show all {board.undatedTopJobs.length} …</button>
+        )}
+        {board.pastExpectedCash > 0 && (
+          <p class="cfx-warn-note" style="padding:0 14px 10px">{money(board.pastExpectedCash)} of dated AR is past its expected date — folded into week 1; chase or re-date.</p>
+        )}
+      </div>
+    </div>
+    </>}
+  </section>
+</AppShell>
+
+<script>
+  import { initThemePref } from "../../scripts/theme-pref";
+  const root = document.getElementById("cfx")!;
+  initThemePref(root, ".cfx-theme button");
+
+  // Assumption inline edits → POST /api/accounting/cash-flow/assumption.
+  for (const input of document.querySelectorAll<HTMLInputElement>(".cfx-input[data-key]")) {
+    const original = input.value;
+    const save = async () => {
+      if (input.value === original) return;
+      input.disabled = true;
+      const res = await fetch("/api/accounting/cash-flow/assumption", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: input.dataset.key, value: input.value }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error_description ?? "Could not save — check the value.");
+        input.disabled = false;
+        input.value = original;
+      }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); });
+    input.addEventListener("blur", save);
+  }
+
+  // Long-list disclosure (PEC-234 rule): the pane opens at 10 rows; expanding
+  // keeps the SAME measured height and scrolls internally; state persists.
+  const pane = document.getElementById("undated-pane");
+  const toggle = document.getElementById("undated-toggle");
+  if (pane && toggle) {
+    const rows = pane.querySelectorAll("tbody tr");
+    const head = pane.querySelector("thead");
+    if (rows.length > 10) {
+      const headH = head instanceof HTMLElement ? head.offsetHeight : 0;
+      const row10 = rows[9] as HTMLElement;
+      const paneH = row10.offsetTop + row10.offsetHeight; // measured, never hardcoded
+      pane.style.height = `${paneH + headH}px`;
+      const key = pane.dataset.paneKey ?? "cfx-pane";
+      const apply = (expanded: boolean) => {
+        pane.style.overflowY = expanded ? "auto" : "hidden";
+        toggle.textContent = expanded ? "Show first 10" : `Show all ${rows.length} …`;
+        try { localStorage.setItem(key, expanded ? "1" : "0"); } catch { /* private mode */ }
+      };
+      let expanded = false;
+      try { expanded = localStorage.getItem(key) === "1"; } catch { /* private mode */ }
+      apply(expanded);
+      toggle.addEventListener("click", () => { expanded = !expanded; apply(expanded); if (!expanded) pane.scrollTop = 0; });
+    }
+  }
+</script>

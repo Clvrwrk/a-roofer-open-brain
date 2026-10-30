@@ -110,7 +110,7 @@ describe("loadInvoiceAuditSummary", () => {
         ],
         roof_system_category: [],
         abc_invoices: [{ invoice_number: "DONE-1", ar_status: "open", date_paid: null }],
-        v_invoice_audit_line: lineRows,
+        mv_invoice_audit_line: lineRows,
         v_invoice_line_audit_current: lineRows.map((line) => ({
           invoice_line_id: line.line_id,
           audit_status: "passed",
@@ -151,7 +151,7 @@ describe("loadInvoiceAuditSummary", () => {
       }],
       roof_system_category: [],
       abc_invoices: [{ invoice_number: invoiceNumber, ar_status: "open", date_paid: null }],
-      v_invoice_audit_line: lineRows,
+      mv_invoice_audit_line: lineRows,
       v_invoice_line_audit_current: lineRows.map((line) => ({ invoice_line_id: line.line_id, audit_status: "passed" })),
       invoice_payment_processed: [{ invoice_number: invoiceNumber, processed_at: "2026-06-26T10:00:00Z", status: ledgerStatus }],
     });
@@ -287,7 +287,7 @@ describe("loadInvoiceAuditSummary", () => {
         ],
         roof_system_category: [],
         abc_invoices: [{ invoice_number: "HELD-1", ar_status: "open", date_paid: null }],
-        v_invoice_audit_line: lineRows,
+        mv_invoice_audit_line: lineRows,
         v_invoice_line_audit_current: [
           { invoice_line_id: "h-1", audit_status: "passed" },
           { invoice_line_id: "h-2", audit_status: "disputed", decision: "credit-flag" },
@@ -301,7 +301,10 @@ describe("loadInvoiceAuditSummary", () => {
     expect(inv?.held).toBe(true);
     expect(inv?.approvedToPay).toBe(false);
     expect(inv?.disposition).toBe("Hold — credit memo");
-    expect(inv?.toBePaid).toBe(false);            // a disputed (held) line keeps it out of to-be-paid
+    // v2 (2026-08-05): a decided (disputed) line no longer counts as pending, so a
+    // fully-dispositioned held invoice IS to-be-paid — matching the docs/63 Change 1b
+    // contract; the payment exclusion lives in approvedToPay/isInvoicePayable below.
+    expect(inv?.toBePaid).toBe(true);
     expect(isInvoicePayable(inv!)).toBe(false);   // excluded from the Payment CSV
     // …but a fully-DECIDED held invoice (1 passed + 1 disputed) still loads to the register.
     expect(inv?.workedLines).toBe(2);
@@ -325,7 +328,7 @@ describe("loadInvoiceAuditSummary", () => {
           { invoice_number: "PAY-OK-1", ar_status: "open", date_paid: null },
         ],
         service_warranty_audit_queue: [{ invoice_number: "SWHOLD-1", status: "transferred" }],
-        v_invoice_audit_line: [...lineRows, { invoice_number: "PAY-OK-1", line_id: "ok-1", is_auditable: true }],
+        mv_invoice_audit_line: [...lineRows, { invoice_number: "PAY-OK-1", line_id: "ok-1", is_auditable: true }],
         v_invoice_line_audit_current: [
           { invoice_line_id: "sw-1", audit_status: "disputed", decision: "credit-flag" },
           { invoice_line_id: "ok-1", audit_status: "passed" },
@@ -436,5 +439,52 @@ describe("attributeAuditActor (docs/59 Task 5)", () => {
     const { attributeAuditActor } = await import("./invoice-audit");
     expect(attributeAuditActor("", "")).toEqual({ label: "System", kind: "system", persona: null });
     expect(attributeAuditActor(null, null)).toEqual({ label: "System", kind: "system", persona: null });
+  });
+});
+
+// mig 293: a human closeout outranks every workflow state in the register label.
+import { deriveDisposition as deriveDispositionForCloseout } from "./invoice-audit";
+describe("deriveDisposition — human closeout (mig 293)", () => {
+  const base = { isCreditMemo: false, transferred: false, held: false, paid: false, toBePaid: false };
+  it("labels a closed-out invoice Processed — closed", () => {
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true })).toBe("Processed — closed");
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true, toBePaid: true })).toBe("Processed — closed");
+    expect(deriveDispositionForCloseout({ ...base, closedOut: true, held: true })).toBe("Processed — closed");
+  });
+  it("still calls a credit memo a credit memo, and leaves every other state alone", () => {
+    expect(deriveDispositionForCloseout({ ...base, isCreditMemo: true, closedOut: true })).toBe("Credit memo");
+    expect(deriveDispositionForCloseout({ ...base })).toBe("In review");
+    expect(deriveDispositionForCloseout({ ...base, toBePaid: true })).toBe("Approved");
+  });
+});
+
+
+describe("supplier settlement readback", () => {
+  beforeEach(() => { vi.resetModules(); mockCreateServerSupabaseClient.mockReset(); });
+  it("reads SRS closure and dates from its own statement", async () => {
+    const row = (invoice_number: string) => ({ invoice_number, invoice_date: "2026-08-01", total_amount: 100, office: "Wichita", line_count: 1, no_price_lines: 0, flagged_lines: 0 });
+    mockCreateServerSupabaseClient.mockReturnValue({ client: makeClient({
+      v_invoice_audit_invoice: [row("MEMO"), row("HISTORY"), row("OPEN")],
+      v_invoice_audit_invoice_vendor: ["MEMO", "HISTORY", "OPEN"].map(invoice_number => ({ invoice_number, vendor_slug: "srs" })),
+      abc_invoices: [{ invoice_number: "OPEN", ar_status: "paid", date_paid: "2026-09-01" }],
+      vendor_invoices: [
+        { invoice_number: "MEMO", ar_status: "closed", date_paid: "2026-10-22", vendors: { slug: "srs" } },
+        { invoice_number: "HISTORY", ar_status: "closed", date_paid: null, vendors: { slug: "srs" } },
+        { invoice_number: "OPEN", ar_status: "open", date_paid: null, vendors: { slug: "srs" } },
+      ],
+    }) });
+    const { loadInvoiceAuditSummary } = await import("./invoice-audit");
+    const data = await loadInvoiceAuditSummary(undefined, { force: true });
+    const invoices = data.offices.flatMap(o => o.branches.flatMap(b => b.invoices));
+    expect(invoices.find(i => i.invoiceNumber === "MEMO")).toMatchObject({ paid: true, paidAt: "2026-10-22", toBePaid: false });
+    expect(invoices.find(i => i.invoiceNumber === "HISTORY")).toMatchObject({ paid: true, paidAt: "", toBePaid: false });
+    expect(invoices.find(i => i.invoiceNumber === "OPEN")).toMatchObject({ paid: false, paidAt: "" });
+  });
+  it("blocks another payment batch for pending and verified receipts", async () => {
+    const { derivePaymentState } = await import("./invoice-audit");
+    for (const status of ["paid_pending_verification", "paid_verified"]) {
+      expect(derivePaymentState({ status, processed_at: "2026-10-22" })).toMatchObject({ processedAt: "2026-10-22", awaitingPayment: false });
+    }
+    expect(derivePaymentState({ status: "returned", processed_at: "2026-10-22" }).processedAt).toBe("");
   });
 });

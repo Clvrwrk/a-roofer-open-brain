@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 const worker = String.raw`
-const VERSION = "cc-page-cache-v20260703a";
+const VERSION = "cc-page-cache-v20260819a";
 const PAGE_ROUTES = [
   "/",
   "/accounting/invoice-audit",
@@ -11,7 +11,6 @@ const PAGE_ROUTES = [
   "/operations/order-audit",
   "/operations/estimate-audit",
   "/executive/pipeline",
-  "/accounting/vendor-regions",
   "/accounting",
   "/operations",
   "/sales",

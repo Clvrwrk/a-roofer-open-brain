@@ -1,0 +1,198 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+import DsToken from "../../components/design-system/DsToken.astro";
+import { contrast, darkOverrides, token, tokens } from "@lib/design-system/tokens";
+
+const mapped = tokens
+  .filter((t) => darkOverrides[t.name])
+  .map((t) => ({ name: t.name, light: t.resolved, dark: darkOverrides[t.name] }));
+
+const unchanged = ["--color-primary", "--color-primary-container", "--color-tertiary", "--color-tertiary-container", "--color-secondary", "--color-on-primary", "--color-on-tertiary", "--color-on-accent"];
+
+const perComponent = [
+  ["Side rail", "Navy gradient, white ink, accent active marker", "Unchanged. The rail is already the dark surface; it does not get darker.", "A rail that changes with the theme loses its role as the fixed authority surface."],
+  ["Top bar", "White, border-bottom", "surface #161d27, border #27313e, title ink follows --text", "Navy headings vanish on dark; heading ink follows --ds-heading which is navy in light and surface ink in dark."],
+  ["Page background", "surface-inset #f9fafb", "#0f141b", "Never pure black: #0f141b keeps a blue cast that sits with the navy rail."],
+  ["Cards / panels", "white, 1px border", "#161d27, 1px #27313e", "Depth still comes from borders. No glow, no lighter-means-higher stacking beyond the two panel tones."],
+  ["Elevated panel / popout", "white + shadow", "#1c2530 + shadow rgba(0,0,0,.45)", "One step lighter than the panel, plus a darker shadow, is how a floating layer separates."],
+  ["Primary button", "flag red / white", "Unchanged", "The CTA keeps its ink so muscle memory holds."],
+  ["Navy secondary button", "navy / white", "Unchanged fill; on a navy-ish ground it still reads because the ground is not navy", "If a future dark ground were navy, this would demote to ghost."],
+  ["Ghost button", "white, navy text, border", "panel fill, --text ink, --border", "Navy text on dark fails; ghost follows surface ink."],
+  ["Destructive button", "error-surface / error-text", "#3d1a1a / #ffb4b4", "Same family, lifted."],
+  ["Inputs", "inset fill, border → navy on focus", "panel fill, border → gold on focus", "Navy focus is invisible in dark; gold is the dark-mode focus and active colour (MD-04)."],
+  ["Segmented / scope control", "active = navy fill, white text", "active = gold fill, navy text", "Same reason as focus."],
+  ["Status pills", "soft fill, deep text", "deep fill, soft text (colours swap roles)", "Green-soft/green-container becomes green-container-as-ink on a dark green fill. Every pair is in the contrast matrix."],
+  ["Tables", "white header, zebra #f0f1f8, hover amber tint", "#161d27 header, zebra #1a2230, hover #3a3115", "Zebra lifts instead of darkens."],
+  ["Table end-row rule", "2px navy top border", "2px gold", "Navy rule vanishes."],
+  ["KPI values", "ink", "ink", "Negative stays --red (#ff8585)."],
+  ["Links", "smart blue #0066cc", "#7cb7ff", "Lifted for AA on #161d27 (7.3:1)."],
+  ["Eyebrows on white", "on-surface-secondary", "#c3ccd8", "Never gold on a light surface; in dark, gold eyebrows are allowed on the panel because they pass (9.6:1)."],
+  ["Progress bars / meters", "blue → navy fill on surface-alt track", "blue → gold fill on #1a2230 track", "A navy fill on a dark track has no contrast."],
+  ["Charts", "brand palette on white", "same palette; grid lines #27313e; labels --text; navy series lifts to #7cb7ff", "The Chart.js instance re-reads tokens on theme change (D-08)."],
+  ["Runtime lights", "success / warning / error / muted dots + words", "lifted variants", "Words never change."],
+  ["Logo", "full colour on white chip", "Unchanged", "The chip is the mark's presentation on any dark surface."],
+  ["Vendor badges", "white disc + ring", "Unchanged", "The disc is the point."],
+  ["Map", "Google default tiles", "Google dark style; markers unchanged", "Tile style is the only map change."],
+  ["Shadows", "rgba(17,19,63,.08–.14)", "rgba(0,0,0,.45–.55)", "Navy-tinted shadows disappear on dark; neutral black ones show."],
+  ["Focus ring", "navy 2px", "gold 2px", "MD-04."],
+  ["Toast", "navy fill, white text", "#1c2530 fill, --text, gold left rule", ""],
+  ["Disabled", "opacity .45 + grayscale", "opacity .45 + grayscale", "Same; keep pointer events for the tooltip."],
+];
+---
+
+<DesignSystemShell slug="modes" source="app/command-center/src/scripts/theme-pref.ts">
+  <DsSection id="mechanism" title="Mechanism">
+    <p>
+      One preference, three values, one key. <code>cc.theme</code> in <code>localStorage</code> holds <code>system</code>,
+      <code>light</code> or <code>dark</code>. Each surface calls <code>initThemePref(root, "[data-set-theme]")</code>; the
+      helper resolves <code>system</code> against <code>prefers-color-scheme</code>, writes <code>data-theme="light|dark"</code>
+      and <code>data-pref</code> on the surface root, toggles the trio's active state, and follows the OS only while the
+      preference is <code>system</code>. Legacy per-surface keys are migrated forward once.
+    </p>
+    <div class="ds-pre"><code>&lt;section class="fw" id="fw" data-theme="light" data-pref="system"&gt;
+  …
+  &lt;div class="fw-theme" role="group" aria-label="Theme"&gt;
+    &lt;button type="button" data-set-theme="system" class="is-active"&gt;System&lt;/button&gt;
+    &lt;button type="button" data-set-theme="light"&gt;Light&lt;/button&gt;
+    &lt;button type="button" data-set-theme="dark"&gt;Dark&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/section&gt;
+
+&lt;script&gt;
+  import &#123; initThemePref &#125; from "../../scripts/theme-pref";
+  initThemePref(document.getElementById("fw")!, "[data-set-theme]");
+&lt;/script&gt;</code></div>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Fact</th><th>Value</th><th>Recorded</th></tr></thead>
+        <tbody>
+          <tr><td>Scope</td><td>Dark mode is a per-surface toggle scoped to the surface root, not a global app theme. The shell (rail, top bar) is light-only today.</td><td>Chris, V3 ruling 2026-06-17; <code>:root &#123; color-scheme: light &#125;</code></td></tr>
+          <tr><td>Where the trio lives</td><td>In the surface toolbar's right-hand cluster, after the runtime pill and count.</td><td>docs/100 toolbar rework</td></tr>
+          <tr><td>Promotion to the shell</td><td>Proposed, deliberately not executed: a six-surface change that belongs in its own pass. This design system's own shell demonstrates what that would look like (topbar trio, root <code>data-theme</code>).</td><td>docs/100:102-108</td></tr>
+          <tr><td>Outliers</td><td>Two surfaces use a raw <code>prefers-color-scheme</code> media query instead of the toggle: <code>price-agreement/review</code> and <code>price-list/branch</code>. They are to be brought onto <code>cc.theme</code>.</td><td>this site, 2026-09-14</td></tr>
+          <tr><td>Storage failure</td><td>Private mode falls through to <code>system</code>; nothing throws.</td><td>theme-pref.ts</td></tr>
+          <tr><td>No flash</td><td>A surface renders <code>data-theme="light"</code> server-side and the script corrects before first paint is noticed; a future shell-level theme restores the class inline before paint, exactly as the rail collapse does.</td><td>AppShell.astro rail-collapsed pattern</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="mapping" title="Token mapping">
+    <p>
+      The dark palette keeps the same token names and changes only the values below. This page's shell uses this exact
+      mapping, so switching the theme in the top bar shows every specimen on this site in the mapping. Contrast for each
+      pair is measured in the <a href="/design-system/color#contrast">colour chapter</a>.
+    </p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th class="num">Dark on #161d27</th></tr></thead>
+        <tbody>
+          {mapped.map((m) => (
+            <tr>
+              <td class="nowrap"><DsToken name={m.name} /></td>
+              <td class="nowrap"><span style={`display:inline-block;width:14px;height:14px;border-radius:999px;background:${m.light};border:1px solid rgba(0,0,0,.15);vertical-align:-2px;margin-right:6px`}></span><code>{m.light}</code></td>
+              <td class="nowrap"><span style={`display:inline-block;width:14px;height:14px;border-radius:999px;background:${m.dark};border:1px solid rgba(255,255,255,.15);vertical-align:-2px;margin-right:6px`}></span><code>{m.dark}</code></td>
+              <td class="num">{/^#/.test(m.dark) ? contrast(m.dark, "#161d27").toFixed(2) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <h3>Unchanged in dark</h3>
+    <div class="ds-spec-body" style="padding:0;gap:8px">
+      {unchanged.map((n) => <DsToken name={n} />)}
+    </div>
+    <p>The brand inks that mean something — navy authority, flag-red action, hunter-green status — keep their values. What changes is the ground they sit on and the ink beside them.</p>
+    <h3>Board palettes</h3>
+    <p>Boards carry their own light/dark working palette on the surface root (<code>.fw</code>, <code>.cfx</code>, <code>.iv</code>). The canonical pair is listed in <a href="/design-system/color#surface-palettes">Color → Audit-surface palettes</a>; a new board copies it.</p>
+  </DsSection>
+
+  <DsSection id="per-component" title="Per-component behaviour">
+    <p>What each component does when the theme flips. "Unchanged" is a decision, not an omission.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Component</th><th>Light</th><th>Dark</th><th>Why</th></tr></thead>
+        <tbody>
+          {perComponent.map(([c, l, d, w]) => <tr><td class="nowrap"><strong>{c}</strong></td><td>{l}</td><td>{d}</td><td>{w}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+    <DsSpec label="Live: the same controls in the current theme" code="switch the theme in the top bar" layout="stack">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <button class="button button-primary button-small">Approve</button>
+        <button class="button button-secondary button-small">Run audit</button>
+        <button class="button button-ghost button-small">Reset</button>
+        <button class="button button-danger button-small">Reject</button>
+        <span class="health-badge health-ready">Ready</span>
+        <span class="health-badge health-watch">Watch</span>
+        <span class="health-badge health-blocked">Blocked</span>
+        <a href="#per-component">Inline link</a>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <input class="ds-search" style="max-width:220px;background:var(--surface);color:var(--text);border-color:var(--border)" placeholder="Search invoice, item, branch…" />
+        <div class="ds-theme"><button type="button" class="is-active">To audit</button><button type="button">Due now</button><button type="button">All</button></div>
+      </div>
+    </DsSpec>
+  </DsSection>
+
+  <DsSection id="elevation-dark" title="Elevation in dark">
+    <p>Light mode separates surfaces with borders and keeps shadow for the selection lift and floating layers. Dark mode keeps the same model and adds one lever: a floating layer is one panel-tone lighter.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Level</th><th>Light</th><th>Dark</th></tr></thead>
+        <tbody>
+          <tr><td>Flat (default)</td><td>#ffffff on #f9fafb, 1px #e5e7eb</td><td>#161d27 on #0f141b, 1px #27313e</td></tr>
+          <tr><td>Selection lift</td><td>0 12px 32px rgba(17,19,63,.10)</td><td>0 12px 32px rgba(0,0,0,.45) + border #3a4657</td></tr>
+          <tr><td>Float (popout, dropdown, toast)</td><td>0 20px 60px rgba(17,19,63,.14)</td><td>#1c2530 fill + 0 20px 60px rgba(0,0,0,.55)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Never more than two panel tones. A third "even lighter" surface is the start of the grey-on-grey soup dark modes drown in.</p>
+  </DsSection>
+
+  <DsSection id="media-dark" title="Logos, images & charts in dark">
+    <ul>
+      <li><strong>Logo:</strong> the full-colour lockup stays on its white chip. No inverted logo in the app.</li>
+      <li><strong>Vendor badges:</strong> unchanged; the white disc is the point.</li>
+      <li><strong>Photos:</strong> unchanged, but a 1px <code>--border</code> frame prevents a bright photo from floating; never dim a photo with opacity.</li>
+      <li><strong>Charts:</strong> grid lines and axis labels re-read tokens; the navy series lifts to smart blue; flag red stays; series fills at 100% opacity. Re-render on theme change — a chart drawn in light and left in dark is unreadable.</li>
+      <li><strong>Swag and print renders:</strong> shown on a neutral <code>--surface-alt</code> mat in both modes.</li>
+      <li><strong>Map tiles:</strong> the Google dark style; markers, rings and clusters unchanged.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="mode-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="MD-01" title="Every surface ships light and dark from the one cc.theme preference through initThemePref." source="theme-pref.ts; docs/40 §1">
+        <p>Never a private key, never a raw media query alone. Only a <code>system</code> preference follows the OS.</p>
+      </DsRule>
+      <DsRule id="MD-02" title="Dark keeps the token names and changes only the values in the mapping table." source="this chapter">
+        <p>A component that needs a dark-only token is a component that is wrong in light too.</p>
+      </DsRule>
+      <DsRule id="MD-03" title="Never pure black, never pure white in dark: ground #0f141b, panel #161d27, ink #e6edf5." source="this chapter; .fw / .iv / .cfx dark blocks">
+        <p>Two panel tones maximum.</p>
+      </DsRule>
+      <DsRule id="MD-04" title="Navy is not a dark-mode active or focus colour; gold is." source="cash-surface.css (.cfx[data-theme=dark] .cfx-input:focus; end-row rule)">
+        <p>Active segment, focus ring, input focus border, table end-row rule and meter fill all move from navy to gold in dark.</p>
+      </DsRule>
+      <DsRule id="MD-05" title="Status pairs swap roles in dark (deep fill, soft ink) and every pair is in the measured contrast matrix." source="Color → Contrast matrix">
+        <p>Do not invent a pill colour on a dark surface; take the pair from the table.</p>
+      </DsRule>
+      <DsRule id="MD-06" title="The primary CTA, the logo chip, vendor badges and the rail are unchanged by the theme." source="this chapter">
+        <p>Things that carry meaning keep their appearance.</p>
+      </DsRule>
+      <DsRule id="MD-07" title="Charts re-render on theme change and re-read tokens; a chart is never left in the other mode's colours." source="this chapter; dashboards D-08">
+        <p>Listen for the surface's <code>data-theme</code> change.</p>
+      </DsRule>
+      <DsRule id="MD-08" title="Shadows in dark are neutral black at higher alpha; floating layers are one tone lighter." source="this chapter">
+        <p>Navy-tinted shadows vanish on a dark ground.</p>
+      </DsRule>
+      <DsRule id="MD-09" title="Theme is tested in both modes before ship; the screenshot in the PR shows both." source="agent handbook checklist">
+        <p>Switch the trio to Dark and to Light; do not rely on the OS setting.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

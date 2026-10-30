@@ -1,0 +1,20 @@
+---
+// A numbered, linkable rule. Ids are stable handles (e.g. "C-04") that other
+// chapters, docs, PRs and agents cite. Never renumber a published rule; retire it
+// with a note instead.
+interface Props {
+  id: string;
+  title: string;
+  source?: string; // where the rule is recorded (doc path, migration, file:line)
+}
+const { id, title, source } = Astro.props;
+---
+
+<div class="ds-rule" id={`rule-${id}`}>
+  <b>{id}</b>
+  <div>
+    <p>{title}</p>
+    <slot />
+    {source && <small>Recorded: {source}</small>}
+  </div>
+</div>

@@ -8,6 +8,8 @@
 // "reviewed" checkbox on each line; bars roll up order → branch → office (shared primitive).
 
 import { initProgressTree } from "./progress-checklist";
+import { priceListUrl } from "./price-list-url";
+import { initThemePref } from "./theme-pref";
 
 interface OrdLine { lineId: string; lineKey: string; itemNumber: string; itemDescription: string; qty: number; uom: string; unitPrice: number; extendedPrice: number; apiPrice: number | null; apiUom: string; negotiatedPrice: number | null; variancePct: number | null; varianceExt: number | null; covered: boolean; uomMismatch: boolean; negotiatedUom: string; categoryKey: string; }
 interface Category { key: string; label: string; sortOrder: number; }
@@ -123,7 +125,7 @@ if (root && dataEl && mount) {
         <summary>
           <span class="iv-chev" aria-hidden="true">›</span>
           <span><span class="iv-inv-no">${esc(ord.orderNumber)}</span> <span class="iv-inv-sub">${dates}${ord.po ? " · PO " + esc(ord.po) : ""}${job}</span></span>
-          <a class="iv-pricelist" href="/accounting/price-list/branch?branch=${encodeURIComponent(ord.branchCode)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
+          <a class="iv-pricelist" href="${priceListUrl({ branch: ord.branchCode, vendor: "abc-supply", office: ord.office })}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📋 Price List</a>
           <span class="iv-inv-tags">${orderTags(ord)}</span>
           ${reviewBar()}
         </summary>
@@ -271,17 +273,6 @@ if (root && dataEl && mount) {
     if (target) (target as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  /* ---- theme toggle ---- */
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  function applyTheme(pref: string) {
-    root!.dataset.theme = pref === "system" ? (mq.matches ? "dark" : "light") : pref;
-    root!.dataset.pref = pref;
-    root!.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) => b.classList.toggle("is-active", b.dataset.setTheme === pref));
-  }
-  let pref = "system";
-  try { pref = localStorage.getItem("ivTheme") || "system"; } catch {}
-  applyTheme(pref);
-  root.querySelectorAll<HTMLButtonElement>(".iv-theme button").forEach((b) =>
-    b.addEventListener("click", () => { try { localStorage.setItem("ivTheme", b.dataset.setTheme!); } catch {} applyTheme(b.dataset.setTheme!); }));
-  mq.addEventListener("change", () => { if (root!.dataset.pref === "system") applyTheme("system"); });
+  /* ---- theme toggle (shared preference — see scripts/theme-pref.ts) ---- */
+  initThemePref(root, ".iv-theme button");
 }

@@ -16,10 +16,11 @@
 //   node fill-open-invoice-api-prices.mjs --dry     # fetch from ABC, report, NO DB writes
 //   node fill-open-invoice-api-prices.mjs           # fetch + upsert observations for catalog items
 
+import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ENV_PATH = resolve(ROOT, ".env");
 
 // ---- env (manual parse; last value wins so ABC_SUPPLY_ENV=Production overrides a stray Sandbox) ----

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -12,7 +13,7 @@ const HASH_IGNORE_KEYS = new Set(["abc_fetched_at", "abc_last_seen_at", "abc_fir
 // Must stay in sync with raw_volatile in public.abc_log_change().
 const RAW_VOLATILE_KEYS = new Set(["lastModifiedDate"]);
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ENV_PATH = resolve(ROOT, ".env");
 
 const DEFAULTS = {

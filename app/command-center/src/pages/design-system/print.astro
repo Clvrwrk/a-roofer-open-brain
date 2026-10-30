@@ -1,0 +1,165 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+
+const sizes = [
+  ["Business card", "3.5 × 2 in (89 × 51 mm)", "0.125 in", "0.1875 in", "Navy front with white one-colour logo; white back with full colour"],
+  ["Letterhead / estimate", "8.5 × 11 in (Letter)", "none", "0.5 in", "Logo 38 mm top-left; body 11pt; table numerals 9.5pt"],
+  ["One-pager / sell sheet", "8.5 × 11 in", "0.125 in", "0.375 in", "One promise, proof, three benefits, one action"],
+  ["Trifold", "8.5 × 11 in folded to 3.67 in panels", "0.125 in", "0.25 in from folds", "Cover is the rightmost outside panel"],
+  ["Door hanger", "4.25 × 11 in, 1.25 in hole", "0.125 in", "0.25 in", "Headline reads from the sidewalk: 60pt+"],
+  ["Postcard", "6 × 4 in / 6 × 9 in", "0.125 in", "0.25 in", "Address panel right half of back per USPS"],
+  ["Yard sign", "18 × 24 in", "0.5 in", "1 in", "Logo ≥ 12 in wide; phone 3 in tall; two-colour"],
+  ["Banner", "72 × 24 in / 96 × 36 in", "1 in", "2 in", "Hemmed and grommeted; 60pt+ = 0.8 in cap height minimum"],
+  ["Infographic (print)", "11 × 17 in (Tabloid)", "0.125 in", "0.5 in", "One story, one chart per panel"],
+  ["Infographic (social)", "1080 × 1350 px (4:5) · 1080 × 1080 · 1200 × 630", "—", "72 px", "Text ≥ 24 px; logo bottom-right with clear space"],
+];
+---
+
+<DesignSystemShell slug="print" source="config/brand/assets/README.md · Color → Pantone & print management">
+  <DsSection id="sizes" title="Sizes & bleed">
+    <p>Author at 300 dpi (print) or 96 px/in (screen proofs). Every piece has a trim size, a bleed and a safe margin; nothing that must be read sits outside the safe margin, and every background that touches the edge extends to the bleed.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Piece</th><th>Trim</th><th>Bleed</th><th>Safe margin</th><th>Note</th></tr></thead>
+        <tbody>{sizes.map((s) => <tr><td class="nowrap"><strong>{s[0]}</strong></td><td>{s[1]}</td><td class="nowrap">{s[2]}</td><td class="nowrap">{s[3]}</td><td>{s[4]}</td></tr>)}</tbody>
+      </table>
+    </div>
+    <DsSpec label="Letter one-pager: trim, bleed, safe area and the content rail" layout="block">
+      <div style="position:relative;width:272px;height:352px;margin:0 auto;background:var(--surface-alt);border:1px dashed var(--error)">
+        <div style="position:absolute;inset:4px;background:#fff;border:1px solid var(--border-strong)"></div>
+        <div style="position:absolute;inset:16px;border:1px dashed var(--info)"></div>
+        <div style="position:absolute;left:16px;top:16px;width:70px;height:24px;background:#fff;display:grid;place-items:center"><img src="/pro-exteriors-logo.svg" alt="" width="64" height="22" /></div>
+        <div style="position:absolute;left:16px;right:16px;top:56px;height:34px;background:var(--primary);border-radius:2px"></div>
+        <div style="position:absolute;left:16px;right:16px;top:100px;display:grid;gap:6px">{[100, 92, 96, 60].map((w) => <div style={`height:6px;width:${w}%;background:var(--border-strong);border-radius:2px`}></div>)}</div>
+        <div style="position:absolute;left:16px;right:16px;bottom:16px;height:26px;background:var(--tertiary);border-radius:2px;display:grid;place-items:center;color:#fff;font-size:9px;font-weight:800">CALL (303) 555-0142</div>
+        <span style="position:absolute;top:-14px;left:0;font-size:9px;color:var(--error);font-weight:700">bleed 0.125 in</span>
+        <span style="position:absolute;top:2px;left:20px;font-size:9px;color:var(--info);font-weight:700">safe 0.375 in</span>
+      </div>
+    </DsSpec>
+  </DsSection>
+
+  <DsSection id="ink" title="Ink & color management">
+    <ul>
+      <li><strong>Specify Pantone</strong> (2766 C navy, 186 C flag red, 1235 C gold as trim only) on every purchase order; the vendor separates. CMYK builds are advisory (Color → Pantone & print management).</li>
+      <li><strong>Body text is 100K.</strong> Never rich black or navy for body copy; never four-colour text under 10pt.</li>
+      <li><strong>Large dark floods</strong> are the navy spot, or rich black C60 M50 Y40 K100. Total ink ≤ 300%.</li>
+      <li><strong>Reversed text</strong> (white on navy) is 800 weight and ≥ 10pt so it does not fill in; never reverse 400-weight text under 12pt.</li>
+      <li><strong>Grey scale check:</strong> print a greyscale proof; every distinction must survive (status by word, not colour).</li>
+      <li><strong>Hairlines</strong> ≥ 0.25pt; table rules 0.5pt at 40% K.</li>
+      <li><strong>Photos:</strong> CMYK at 300 dpi, 20% dot minimum in highlights so roofs keep texture; no image under 150 dpi at print size.</li>
+      <li><strong>Proof:</strong> a physical proof against the Pantone fan for any run over 100 units or any first run with a new vendor (C-07).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="print-type" title="Type in print">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Role</th><th>Size</th><th>Weight</th><th>Leading</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Poster / sign headline</td><td>60pt+</td><td>800</td><td>0.95</td><td>≤ 6 words, −0.02em; reads across a room</td></tr>
+          <tr><td>Brochure headline</td><td>24–32pt</td><td>800</td><td>1.05</td><td>One per panel</td></tr>
+          <tr><td>Subhead</td><td>14–18pt</td><td>700</td><td>1.2</td><td>Sentence case</td></tr>
+          <tr><td>Body</td><td>10.5–12pt</td><td>400</td><td>1.4</td><td>12pt floor for homeowners; 10.5 only on dense line tables</td></tr>
+          <tr><td>Table numerals</td><td>9–10pt</td><td>400/700</td><td>1.3</td><td>Tabular, right-aligned</td></tr>
+          <tr><td>Caption / legal</td><td>8–9pt</td><td>400</td><td>1.3</td><td>100K; never reversed</td></tr>
+          <tr><td>Eyebrow</td><td>8–9pt caps</td><td>700</td><td>—</td><td>+0.1em tracking; gold only on navy</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Measure: 45–75 characters per line; two columns on Letter, three on Tabloid. Inter embedded; if the printer cannot embed, outline the text in the PDF.</p>
+  </DsSection>
+
+  <DsSection id="one-pager" title="One-pager anatomy">
+    <p>A one-pager is read in under thirty seconds, top to bottom, by someone who has not decided to care yet. Order and proportion:</p>
+    <ol>
+      <li><strong>Logo</strong> top-left at 38 mm with clear space; nothing else in the top band.</li>
+      <li><strong>The promise</strong> — one sentence, 24–32pt, navy: what we do for whom. ("Storm-damage roofing, handled with your insurer, done in a day.")</li>
+      <li><strong>Proof</strong> — three facts with numbers, from our records, in a row: years, roofs, rating. Bracketed placeholders until the real figure is confirmed.</li>
+      <li><strong>Three benefits</strong> as short subhead + two lines each, answering the reader's doubts (cost, disruption, trust). No feature lists.</li>
+      <li><strong>One action</strong> in a flag-red band at the bottom: phone number, and a QR to the landing page. The only flag red on the sheet besides the logo.</li>
+      <li><strong>Footer</strong> — licence number, address, web address, 8pt 100K.</li>
+    </ol>
+    <p>Whitespace is not empty; it is what makes the promise readable. Cut copy until the hierarchy is unmissable.</p>
+  </DsSection>
+
+  <DsSection id="trifold" title="Trifold anatomy">
+    <DsSpec label="Outside (left to right): inside flap · back · front cover — the cover is the RIGHTMOST panel" layout="block">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:100%;max-width:520px;font-size:11px">
+        {[["Inside flap", "Services list · licence · guarantee", "var(--surface)"], ["Back", "Map · address · phone · web · QR", "var(--surface)"], ["Front cover", "Logo · one promise · one photo", "var(--primary)"]].map(([t, c, bg]) => <div style={`border:1px solid var(--border-strong);border-radius:4px;padding:10px;min-height:150px;background:${bg};color:${bg.includes("primary") ? "#fff" : "var(--text)"};display:grid;gap:4px;align-content:start`}><strong>{t}</strong><span style="opacity:.8">{c}</span></div>)}
+      </div>
+    </DsSpec>
+    <DsSpec label="Inside: one three-panel spread that reads as a sequence" layout="block">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:100%;max-width:520px;font-size:11px">
+        {[["1 · The problem", "Hail, wind, age — what the homeowner sees"], ["2 · What we do", "Inspection → insurance → install, in three beats"], ["3 · Why us + action", "Proof, warranty, the one call to make"]].map(([t, c]) => <div style="border:1px solid var(--border-strong);border-radius:4px;padding:10px;min-height:150px;background:var(--surface);display:grid;gap:4px;align-content:start"><strong>{t}</strong><span style="color:var(--text-muted)">{c}</span></div>)}
+      </div>
+    </DsSpec>
+    <ul>
+      <li>Panel widths: 3.6875 / 3.6875 / 3.625 in (the inside flap is narrower so it folds in).</li>
+      <li>Nothing within 0.25 in of a fold; no text crossing a fold; a photo may cross the inside spread's folds deliberately.</li>
+      <li>The cover carries the logo, one promise and one photo; the back carries logistics; the inside delivers the promise in three beats.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="infographic" title="Infographics">
+    <ul>
+      <li><strong>One story per infographic.</strong> A title that states the finding ("Hail claims peak in June; roofs booked in May are done before it"), then three to five panels, each one chart or one number with one sentence.</li>
+      <li><strong>Tufte applies:</strong> the same data-ink rules as the dashboards; bar, line and dot plots only; no icons standing in for quantities; no 3D; no gradients.</li>
+      <li><strong>Palette:</strong> navy for the primary series, smart blue for the secondary, gold for the one highlight, flag red only for the single number that demands action. Greys for context.</li>
+      <li><strong>Type:</strong> title 28–32pt, panel headline 16–18pt, body 11–12pt, source line 8pt. Social sizes: title ≥ 48 px, body ≥ 24 px at 1080 wide.</li>
+      <li><strong>Sources</strong> at the bottom in 8pt with the date of the data; a figure without a source does not ship.</li>
+      <li><strong>Logo</strong> bottom-right with clear space; never as a watermark.</li>
+      <li><strong>Alt text</strong> for the social version is the finding plus a pointer to where the data lives.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="estimate-doc" title="Estimate & invoice documents">
+    <p>Generated PDFs (agreement packages, invoices, estimate exports) are print documents first. They follow the letterhead sheet and the table rules.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Region</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td>Header</td><td>Logo 38 mm top-left; document title 18pt 700 navy top-right; document number, date and page x of y in 9pt beneath.</td></tr>
+          <tr><td>Parties</td><td>Two columns: Prepared for / Prepared by, 10.5pt, labels 8pt caps.</td></tr>
+          <tr><td>Line table</td><td>Columns: item · description · qty · UOM · unit price · extended. Numerals 9.5pt tabular right; description 10pt; 0.5pt rules at 40% K; category section rows in 8pt caps with a 1pt navy rule above.</td></tr>
+          <tr><td>Totals</td><td>Right-aligned block, subtotal / tax / total, total 12pt 800 with a 1pt rule above.</td></tr>
+          <tr><td>Terms</td><td>9pt, 100K, never reversed; licence and insurance numbers in the footer.</td></tr>
+          <tr><td>Signature</td><td>Two lines with printed name and date, ≥ 0.6 in tall.</td></tr>
+          <tr><td>Colour</td><td>Navy for headings and rules, 100K body, flag red nowhere except the logo; status stamps (PAID, VOID) in error red at 30% opacity, rotated 15°.</td></tr>
+          <tr><td>File</td><td>PDF/A-2, Inter embedded, ≤ 2 MB, filename <code>PE-&lt;type&gt;-&lt;number&gt;-&lt;YYYY-MM-DD&gt;.pdf</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="print-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="P-01" title="Every piece has a trim, a bleed and a safe margin from the table above; text stays inside the safe margin, backgrounds run to the bleed." source="this chapter">
+        <p>Author at 300 dpi.</p>
+      </DsRule>
+      <DsRule id="P-02" title="Pantone on the order; 100K body; navy spot or rich black for floods; total ink ≤ 300%." source="Color C-07; this chapter">
+        <p>Physical proof over 100 units.</p>
+      </DsRule>
+      <DsRule id="P-03" title="12pt body floor for anything a homeowner reads; 8pt floor for legal; reversed text 800 weight and ≥ 10pt." source="this chapter">
+        <p>Poster headlines 60pt+, six words or fewer.</p>
+      </DsRule>
+      <DsRule id="P-04" title="One promise, proof, three benefits, one action — in that order — on every marketing sheet; one flag-red action per piece." source="this chapter; DSN-012">
+        <p>Whitespace is the hierarchy.</p>
+      </DsRule>
+      <DsRule id="P-05" title="A trifold's cover is the rightmost outside panel; nothing within 0.25 in of a fold." source="this chapter">
+        <p>The inside is one sequence of three beats.</p>
+      </DsRule>
+      <DsRule id="P-06" title="Infographics follow the dashboard data rules: one story, real sources with dates, brand palette semantically, no chartjunk." source="Dashboards D-01, D-02, D-06">
+        <p>A figure without a source does not ship.</p>
+      </DsRule>
+      <DsRule id="P-07" title="Generated documents are PDF/A-2 with Inter embedded, the letterhead header, the line-table spec and the stated filename pattern." source="this chapter; pdf-lib generators">
+        <p>Flag red appears only in the logo.</p>
+      </DsRule>
+      <DsRule id="P-08" title="Greyscale proof before any run: every distinction must survive without colour." source="Accessibility A-03; this chapter">
+        <p>Status is a word in print too.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

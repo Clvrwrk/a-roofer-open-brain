@@ -1,8 +1,8 @@
 [Unit]
-Description=Thursday QBO mirror refresh at 20:00 America/Chicago (Friday AR prep; PEC-102)
+Description=Nightly QBO mirror refresh at 20:00 America/Chicago (Friday WIP/AR daily freshness; PEC-102, docs/85 round 3 — unit name kept for continuity)
 
 [Timer]
-OnCalendar=Thu *-*-* 20:00:00 America/Chicago
+OnCalendar=*-*-* 20:00:00 America/Chicago
 AccuracySec=5min
 Persistent=true
 

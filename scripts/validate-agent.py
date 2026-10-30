@@ -210,8 +210,15 @@ def run_validation(agent_id: str, profile: dict, env: dict, verbose: bool = True
         route_info = routing.get(alias, {})
         channels = profile["slack"].get("channels", [{}])
         ch_id = channels[0].get("id","") if channels else ""
+        validation_id = f"validate-{agent_id}-{uuid.uuid4().hex[:8]}"
         payload = {
-            "messageId": f"validate-{agent_id}-{uuid.uuid4().hex[:8]}",
+            "messageId": validation_id,
+            "externalEventId": validation_id,
+            "sourceChannel": "webhook",
+            "sourceThreadId": validation_id,
+            "orchestrationKey": validation_id,
+            "catSourceIssue": "CAT-20",
+            "downstreamIssue": "",
             "alias": alias,
             "classification": route_info.get("classification", "invoice"),
             "subject": f"{profile['identity']['display_name']} E2E Validation Test",

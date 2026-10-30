@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly AR/WIP pack at 03:20 America/Chicago (after the 03:00 CT wip_ar_master refresh, mig 322; :20 stays off the :00/:15 pg_cron pile-up — PEC-415; unit name kept for continuity)
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

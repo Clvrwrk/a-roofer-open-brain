@@ -1,0 +1,163 @@
+---
+// Executive · Cash Runway (mig 281) — the Owner's Sunday-night answer.
+// Same live 13WCF board as /accounting/cash-flow, in the WIP/AR design
+// language (PEC-234): full-bleed `.cfx`, KPI pills, week strip, group panels,
+// shared cc.theme. The curve is a server-rendered SVG in brand navy/gold.
+import AppShell from "../../layouts/AppShell.astro";
+import { loadCashFlowBoard } from "@lib/cash-flow";
+import "../../styles/cash-surface.css";
+
+const board = await loadCashFlowBoard();
+const available = board.status === "live" && !board.error;
+Astro.response.headers.set("Cache-Control", "no-store");
+const money = (v: number) =>
+  (v < 0 ? "(" : "") + "$" + Math.round(Math.abs(v)).toLocaleString("en-US") + (v < 0 ? ")" : "");
+const moneyK = (v: number) => `$${Math.round(v / 1000).toLocaleString("en-US")}K`;
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+const wk = (isoDate: string) => {
+  const d = new Date(isoDate + "T00:00:00Z");
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+};
+const asOf = board.generatedAt.slice(0, 10);
+// Weeks-of-cash (audited 2026-08-26): ending cash ÷ average weekly TOTAL
+// disbursements; months alongside at 4.345 weeks/month.
+const avgWeeklyDisb = board.weeks.length
+  ? board.weeks.reduce((s, w) => s + w.totalDisbursements, 0) / board.weeks.length
+  : 0;
+const months = (weeks: number | null) => weeks === null ? "—" : (weeks / 4.345).toFixed(1);
+const wk1 = board.weeks[0];
+
+// ---- SVG curve geometry (brand navy line, red floor) ------------------------
+const W = 1180;
+const H = 250;
+const PAD = { l: 64, r: 16, t: 14, b: 28 };
+const points = board.weeks.map((w, i) => ({ i, x: 0, y: 0, v: w.endingCash, wk: w.weekStart, breach: w.belowFloor }));
+const values = [board.beginningCash, ...points.map((p) => p.v), board.minCashFloor];
+const vMax = Math.max(...values) * 1.08 || 1;
+const vMin = Math.min(0, Math.min(...values) * 1.05);
+const xAt = (i: number) => PAD.l + (i / Math.max(points.length - 1, 1)) * (W - PAD.l - PAD.r);
+const yAt = (v: number) => PAD.t + (1 - (v - vMin) / (vMax - vMin)) * (H - PAD.t - PAD.b);
+for (const p of points) { p.x = xAt(p.i); p.y = yAt(p.v); }
+const linePath = points.map((p, idx) => `${idx === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+const areaPath = points.length
+  ? `${linePath} L${points[points.length - 1].x.toFixed(1)},${yAt(Math.max(vMin, 0)).toFixed(1)} L${points[0].x.toFixed(1)},${yAt(Math.max(vMin, 0)).toFixed(1)} Z`
+  : "";
+const floorY = yAt(board.minCashFloor);
+const gridVals = [0.25, 0.5, 0.75, 1].map((f) => vMin + f * (vMax - vMin));
+---
+
+<AppShell title="Cash Runway" eyebrow="Executive" activePage="executive">
+  <section class="cfx" id="cfx" data-availability={available ? "ready" : "unavailable"} data-theme="light" data-pref="system">
+    <div class="cfx-toolbar">
+      <h2 class="cfx-title">Cash Runway</h2>
+      <span class="cfx-sub">13-week forecast · receipts live from the <a href="/accounting/friday-wip">WIP/AR board</a> · drivers on the <a href="/accounting/cash-flow">accounting surface</a></span>
+      <span class="cfx-spacer"></span>
+      {available && <a class="cfx-btn cfx-btn-primary" href="/api/accounting/cash-flow.xlsx" download>Download workbook</a>}
+      <span class="cfx-count">{available ? `as of ${asOf}` : "Data unavailable"}</span>
+      <div class="cfx-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    {!available ? <section class="cfx-group" aria-labelledby="cash-unavailable-title">
+      <div class="cfx-unavailable-content"><h3 id="cash-unavailable-title">Financial data unavailable</h3>
+      <p>We could not load the inputs needed for this forecast. Cash balances, projections and floor status cannot be assessed.</p>
+      <a class="cfx-btn" href="/executive/cash-runway">Try again</a></div>
+    </section> : <>
+
+    <div class="cfx-kpis">
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Cash today</span><span class="cfx-kpi-val">{money(board.beginningCash)}</span><span class="cfx-kpi-sub">{board.bankAccounts.map((b) => b.name).join(" · ")}</span></div>
+      <div class="cfx-kpi"><span class="cfx-kpi-lab">Weeks of cash on hand</span><span class="cfx-kpi-val">{wk1?.weeksOfCash != null ? `${wk1.weeksOfCash.toFixed(1)} wks` : "—"}</span><span class="cfx-kpi-sub">≈ {wk1 ? months(wk1.weeksOfCash) : "—"} months · cash ÷ avg weekly spend ({money(avgWeeklyDisb)}/wk)</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">13-week low</span><span class="cfx-kpi-val">{money(board.minEndingCash)}</span><span class="cfx-kpi-sub">{board.minEndingWeek ? `wk of ${wk(board.minEndingWeek)} · ` : ""}floor {money(board.minCashFloor)}</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-bad": board.floorBreached }]}><span class="cfx-kpi-lab">Floor status</span><span class="cfx-kpi-val">{board.floorBreached ? "BELOW FLOOR" : "Above floor"}</span><span class="cfx-kpi-sub">Owner's minimum, editable on the accounting surface</span></div>
+      <div class="cfx-kpi" class:list={[{ "cfx-kpi-warn": board.datedShare < 0.5 }]}><span class="cfx-kpi-lab">Forecast confidence</span><span class="cfx-kpi-val">{pct(board.datedShare)} dated</span><span class="cfx-kpi-sub">{money(board.undatedCash)} across {board.undatedJobs} jobs still assumption-spread</span></div>
+    </div>
+
+    <div class="cfx-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="13-week ending cash curve with minimum cash floor" preserveAspectRatio="xMidYMid meet">
+        {gridVals.map((v) => (
+          <>
+            <line x1={PAD.l} y1={yAt(v)} x2={W - PAD.r} y2={yAt(v)} stroke="var(--line)" stroke-width="1" />
+            <text x={PAD.l - 8} y={yAt(v) + 4} text-anchor="end" font-size="10.5" fill="var(--muted)">{moneyK(v)}</text>
+          </>
+        ))}
+        <path d={areaPath} fill="var(--navy)" opacity="0.07"></path>
+        <line x1={PAD.l} y1={floorY} x2={W - PAD.r} y2={floorY} stroke="var(--red)" stroke-width="1.5" stroke-dasharray="6 4" />
+        <text x={W - PAD.r} y={floorY - 6} text-anchor="end" font-size="10.5" fill="var(--red)">floor {moneyK(board.minCashFloor)}</text>
+        <path d={linePath} fill="none" stroke="var(--navy)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" style="stroke: var(--chart-line, var(--navy))"></path>
+        {points.map((p) => (
+          <>
+            <circle cx={p.x} cy={p.y} r={p.i === points.length - 1 ? 4.5 : 3} fill={p.breach ? "var(--red)" : "var(--gold)"} stroke="var(--navy)" stroke-width="1" />
+            <text x={p.x} y={H - 8} text-anchor="middle" font-size="10" fill="var(--muted)">{wk(p.wk)}</text>
+          </>
+        ))}
+      </svg>
+    </div>
+
+    <div class="cfx-cashmap">
+      <span class="cfx-cashmap-title">Ending cash by week — the WIP board's cash map, extended to the quarter</span>
+      <div class="cfx-cashmap-cells">
+        {board.weeks.map((w) => (
+          <div class="cfx-week" class:list={[{ "cfx-week-warn": w.belowFloor }]}>
+            <span class="cfx-week-lab">wk {wk(w.weekStart)}</span>
+            <span class="cfx-week-val" class:list={[{ "cfx-week-neg": w.endingCash < 0 }]}>{money(w.endingCash)}</span>
+            <span class="cfx-week-sub">{(w.weeksOfCash === null ? "—" : w.weeksOfCash.toFixed(1))} wks (≈{months(w.weeksOfCash)} mo)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="cfx-cols">
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Where the cash comes from · goes</span>
+          <span class="cfx-group-count">13-week totals</span>
+        </div>
+        <div class="cfx-tablewrap">
+          <table class="cfx-table">
+            <tbody>
+              <tr class="cfx-secrow"><td colspan="2">Receipts</td></tr>
+              <tr><td>Dated AR (live from WIP board)</td><td class="num cfx-live">{money(board.weeks.reduce((s, w) => s + w.datedReceipts, 0))}</td></tr>
+              <tr><td>Undated AR pool (assumption spread)</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.undatedReceipts, 0))}</td></tr>
+              <tr><td>New billings converting</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.newBillings, 0))}</td></tr>
+              <tr class="cfx-secrow"><td colspan="2">Disbursements — direct job costs (COGS)</td></tr>
+              <tr><td>Materials · subcontractors · commissions</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.totalDirect, 0))}</td></tr>
+              <tr class="cfx-secrow"><td colspan="2">Disbursements — overhead</td></tr>
+              <tr><td>W-2 payroll + employer taxes</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.payroll, 0))}</td></tr>
+              <tr><td>Fixed overhead (<a href="/executive/fixed-costs">register</a>) + one-time</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.fixedOverhead + w.oneTime, 0))}</td></tr>
+              <tr class="cfx-bold"><td>Total overhead</td><td class="num">{money(board.weeks.reduce((s, w) => s + w.totalOverhead, 0))}</td></tr>
+              <tr class="cfx-endrow"><td>Net over 13 weeks</td><td class="num" class:list={[{ "cfx-neg": board.weeks.reduce((s, w) => s + w.net, 0) < 0 }]}>{money(board.weeks.reduce((s, w) => s + w.net, 0))}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="cfx-group">
+        <div class="cfx-group-head">
+          <span class="cfx-group-name">Raising forecast confidence</span>
+          <span class="cfx-group-money">{pct(board.datedShare)} of AR value dated</span>
+        </div>
+        <div style="padding: 4px 14px 12px">
+          <p class="cfx-note">
+            Only receipts with a real expected date are forecast in their true week; the remaining
+            {" "}{money(board.undatedCash)} across {board.undatedJobs} jobs is spread by assumption.
+            Every job dated on the <a href="/accounting/friday-wip">WIP/AR board</a> moves real dollars
+            into real weeks and raises this number.
+            {board.undatedInsuranceCash > 0 ? ` Insurance-flagged undated: ${money(board.undatedInsuranceCash)}.` : ""}
+          </p>
+          {board.pastExpectedCash > 0 && (
+            <p class="cfx-warn-note" style="margin-top:8px">{money(board.pastExpectedCash)} of dated AR is past its expected date (folded into week 1) — chase or re-date.</p>
+          )}
+        </div>
+      </div>
+    </div>
+    </>}
+  </section>
+</AppShell>
+
+<script>
+  import { initThemePref } from "../../scripts/theme-pref";
+  initThemePref(document.getElementById("cfx")!, ".cfx-theme button");
+</script>

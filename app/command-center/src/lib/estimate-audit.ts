@@ -89,7 +89,7 @@ export interface EstimateOffice {
 }
 
 export interface EstimateAuditData {
-  status: "live" | "sample" | "unconfigured";
+  status: "live" | "unconfigured";
   generatedAt: string;
   offices: EstimateOffice[];
   categories: { key: string; label: string; sortOrder: number }[];

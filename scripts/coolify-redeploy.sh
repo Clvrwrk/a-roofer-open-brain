@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BASE="https://coolify.proexteriorsus.net/api/v1"
-UUID="og0rmt02rff8qti9nlfk3nr7"
+UUID="lu5txzhyoza7uuz0scwpobv7"
 HEALTHZ="https://cc.proexteriorsus.net/healthz"
 
 key() {

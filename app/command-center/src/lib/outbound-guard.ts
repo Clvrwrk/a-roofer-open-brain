@@ -12,8 +12,10 @@
 import { getRuntimeEnv } from "@lib/runtime-env";
 
 // Internal company + operator domains. Subdomains count as internal too
-// (e.g. cc.proexteriorsus.net, agentmail.proexteriorsus.net).
-const DEFAULT_INTERNAL_DOMAINS = ["proexteriorsus.com", "proexteriorsus.net", "cleverwork.io"];
+// (e.g. cc.proexteriorsus.net, agentmail.proexteriorsus.net). aia4.io is the
+// owner's (Chris Hussey) domain — already the mandatory-CC domain for Maya's
+// sends (PEC-113) — added 2026-08-06 for the Friday WIP/AR distribution.
+const DEFAULT_INTERNAL_DOMAINS = ["proexteriorsus.com", "proexteriorsus.net", "cleverwork.io", "aia4.io"];
 
 function internalDomains(): string[] {
   const raw = getRuntimeEnv().INTERNAL_EMAIL_DOMAINS ?? "";

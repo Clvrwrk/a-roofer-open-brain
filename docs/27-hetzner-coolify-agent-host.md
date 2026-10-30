@@ -108,7 +108,7 @@ Just `git push origin main`; Coolify builds `app/command-center/Dockerfile` and 
 - **Coolify dashboard/API**: `https://coolify.proexteriorsus.net` (public, HTTPS) or
   `http://5.78.124.10:8000` (admin port, firewalled to our IPs). API key in `.env`
   `COOLIFY_PE_OPEN_BRAIN_API_KEY`.
-- **App**: `command-center`, resource uuid `og0rmt02rff8qti9nlfk3nr7`, deploys from `main`,
+- **App**: `command-center`, resource uuid `lu5txzhyoza7uuz0scwpobv7`, deploys from `main`,
   fqdn `https://cc.proexteriorsus.net`.
 - **Webhook** (GitHub repo `Clvrwrk/a-roofer-open-brain`): push events →
   `https://coolify.proexteriorsus.net/webhooks/source/github/events/manual`, secret =
@@ -121,7 +121,7 @@ Just `git push origin main`; Coolify builds `app/command-center/Dockerfile` and 
 
 ```bash
 KEY=$(grep -E '^#? *COOLIFY_PE_OPEN_BRAIN_API_KEY=' .env | sed -E 's/^#? *[^=]+=//' | tr -d "\"'" | xargs)
-BASE=http://5.78.124.10:8000; UUID=og0rmt02rff8qti9nlfk3nr7
+BASE=http://5.78.124.10:8000; UUID=lu5txzhyoza7uuz0scwpobv7
 # list apps:    curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/applications"
 # deploy:       curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/deploy?uuid=$UUID"
 # watch status: curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/deployments/<deployment_uuid>"

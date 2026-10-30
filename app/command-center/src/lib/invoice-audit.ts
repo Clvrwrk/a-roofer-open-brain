@@ -116,6 +116,7 @@ export interface Invoice {
   salesType: string;
   po: string;
   branchCode: string;
+  vendor: string;
   branchName: string;
   office: string;
   lineCount: number;
@@ -139,9 +140,11 @@ export interface Invoice {
   disposition: string; // summary label for the QuickBooks register row (Transferred to Service / Hold — credit memo / Approved / …)
   workedLines: number; // lines with a decision (passed OR disputed) — drives "fully processed" for the register
   registerExportedAt: string; // when loaded to the QuickBooks register (load-once, mig 164); "" if not yet
+  closedOut: boolean; // a human closed this invoice out (invoice_audit_closeout, mig 293): processed, never re-audited
+  closeoutReason: string; // the human's reason, shown wherever the disposition is
   transferred: boolean; // routed OUT to the Service/Warranty Audit (Commercial ship-to, mig 162) — never actionable here
   transferReason: string; // e.g. "Service/Warranty (Commercial ship-to)"
-  paymentStatus: "" | "exported" | "paid" | "returned" | "void";
+  paymentStatus: "" | "exported" | "paid" | "paid_pending_verification" | "paid_verified" | "returned" | "void";
   hasPdf: boolean;
   jobNumber: string;
   clientName: string;
@@ -220,8 +223,11 @@ export function normalizeInvoiceRef(value: string | null | undefined): string {
 }
 
 // Summary disposition label for the QuickBooks register row (docs/63 Change 1b).
-export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid">): string {
+export function deriveDisposition(inv: Pick<Invoice, "isCreditMemo" | "transferred" | "held" | "paid" | "toBePaid"> & Partial<Pick<Invoice, "closedOut">>): string {
   if (inv.isCreditMemo) return "Credit memo";
+  // A human closeout (mig 293) outranks every workflow state: the invoice is complete and
+  // processed and never comes back into the audit, whatever the ledger or AR feed says.
+  if (inv.closedOut) return "Processed — closed";
   if (inv.transferred) return "Transferred to Service";
   if (inv.held) return "Hold — credit memo";
   if (inv.paid) return "Paid";
@@ -340,18 +346,41 @@ export function buildScopeAndTotals(
 }
 
 // Two-phase payment state derived from the invoice_payment_processed ledger.
-// Only 'exported'/'paid' rows block the To-Be-Paid queue (set processedAt);
+// Exported and confirmed/pending payment rows block To-Be-Paid (set processedAt);
 // 'returned'/'void' make the invoice eligible again. 'exported' (and only
 // 'exported') is Awaiting Payment — sent for payment but not yet confirmed paid.
 type PaymentLedgerRow = { processed_at?: string | null; status?: string | null } | null | undefined;
 export function derivePaymentState(led: PaymentLedgerRow): Pick<Invoice, "paymentStatus" | "processedAt" | "awaitingPayment"> {
   const status = ((led?.status ?? "") as Invoice["paymentStatus"]);
-  const blocks = status === "exported" || status === "paid";
+  const blocks = ["exported", "paid", "paid_pending_verification", "paid_verified"].includes(status);
   return {
     paymentStatus: status,
     processedAt: blocks ? (led?.processed_at ?? "") : "",
     awaitingPayment: status === "exported",
   };
+}
+
+// Supplier statements report closure; payment dates come only from dated evidence.
+// Keep this readback independent of the gate that authorizes a NEW payment.
+export function deriveInvoiceSettlement(ar: { ar_status?: string | null; date_paid?: string | null } | undefined, doc?: { payment_status?: string | null; paid_at?: string | null }): Pick<Invoice, "paid" | "paidAt"> {
+  if (ar?.ar_status != null) return {
+    paid: ar.ar_status === "paid" || ar.ar_status === "closed",
+    paidAt: ar.date_paid ? String(ar.date_paid).slice(0, 10) : "",
+  };
+  return { paid: doc?.payment_status === "paid", paidAt: doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "" };
+}
+const arKey = (vendor: string, invoice: string) => `${vendor}:${invoice}`;
+async function loadInvoiceArRows(client: any, invoiceNumber?: string): Promise<any[]> {
+  const query = (table: string, columns: string) => () => {
+    const q = client.from(table).select(columns);
+    return invoiceNumber ? q.eq("invoice_number", invoiceNumber) : q;
+  };
+  const [abc, suppliers] = await Promise.all([
+    fetchAllForInvoiceAudit(query("abc_invoices", "invoice_number,ar_status,date_paid")),
+    fetchAllForInvoiceAudit(query("vendor_invoices", "invoice_number,ar_status,date_paid,vendors!inner(slug)")),
+  ]);
+  return [...abc.map(r => ({ ...r, vendor_slug: "abc-supply" })),
+    ...suppliers.map(r => ({ ...r, vendor_slug: r.vendors?.slug })).filter(r => r.vendor_slug)];
 }
 
 async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise<InvoiceAuditData> {
@@ -388,9 +417,9 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     }
   };
 
-  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, apiPriceRows, processedRows] = await Promise.all([
+  const [invRows, lineRows, auditRows, docRows, acculynxRows, catRows, arRows, vendorRows, apiPriceRows, processedRows, closeoutRows] = await Promise.all([
     fetchAll(() => client.from("v_invoice_audit_invoice").select("*")),
-    fetchAll(() => client.from("v_invoice_audit_line").select("*")),
+    fetchAll(() => client.from("mv_invoice_audit_line").select("*")),
     fetchAll(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date")),
     fetchAll(() => client.from("invoice_documents").select("invoice_number,payment_status,paid_at,storage_path")),
     fetchAll(() =>
@@ -401,10 +430,13 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     fetchAll(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // ABC open/closed report is the source of truth for open vs paid (docs/47-48). The
     // invoice_documents gate is a secondary internal signal we reconcile to this.
-    fetchAll(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    loadInvoiceArRows(client),
+    fetchAll(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
     // Current ABC API price per item per branch (monthly seed, migration 134).
     fetchAll(() => client.from("v_branch_item_api_price").select("item_number,branch_number_norm,api_price,api_uom")),
     fetchOptional(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
+    // Human closeouts (mig 293): processed, never re-audited. Optional so an older brain without the table still loads.
+    fetchOptional(() => client.from("invoice_audit_closeout").select("invoice_number,reason")),
   ]);
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   if (invRows.length === 0) return empty;
@@ -435,12 +467,13 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
 
   // ABC AR report: ar_status drives open/paid (source of truth); date_paid is the report due date proxy.
   const arByInvoice = new Map<string, any>();
-  for (const a of arRows) arByInvoice.set(a.invoice_number, a);
+  for (const a of arRows) arByInvoice.set(arKey(a.vendor_slug ?? "abc-supply", a.invoice_number), a);
 
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
   const processedByInvoice = new Map<string, any>();
   for (const p of processedRows) if (!processedByInvoice.has(p.invoice_number)) processedByInvoice.set(p.invoice_number, p);
+  const closeoutByInvoice = new Map<string, string>((closeoutRows ?? []).map((c: any) => [String(c.invoice_number), String(c.reason ?? "")]));
 
   const linesByInvoice = new Map<string, InvLine[]>();
   for (const l of lineRows) {
@@ -495,8 +528,10 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
   }
 
   const cutoff = scopeCutoffDate();
+  const vendorByInvoice = new Map<string, string>(vendorRows.map((r: any) => [String(r.invoice_number), String(r.vendor_slug)]));
   const invoices: Invoice[] = invRows.map((i) => ({
     invoiceNumber: i.invoice_number,
+    vendor: vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply",
     invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
     orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
     totalAmount: num(i.total_amount),
@@ -517,14 +552,7 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     hasWork: false,
     // Open vs paid = ABC AR report (ar_status). Falls back to the internal gate only when an
     // invoice has no AR-report coverage (e.g. brand-new, pre-reconcile).
-    paid: arByInvoice.has(i.invoice_number)
-      ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
-      : docByInvoice.get(i.invoice_number)?.payment_status === "paid",
-    paidAt: arByInvoice.get(i.invoice_number)?.date_paid
-      ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
-      : docByInvoice.get(i.invoice_number)?.paid_at
-        ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
-        : "",
+    ...deriveInvoiceSettlement(arByInvoice.get(arKey(vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply", i.invoice_number)), docByInvoice.get(i.invoice_number)),
     ...derivePaymentState(processedByInvoice.get(i.invoice_number)),
     toBePaid: false,
     actionable: false,
@@ -535,6 +563,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     disposition: "",
     workedLines: 0,
     registerExportedAt: "",
+    closedOut: closeoutByInvoice.has(i.invoice_number),
+    closeoutReason: closeoutByInvoice.get(i.invoice_number) ?? "",
     transferred: transferredSet.has(i.invoice_number),
     transferReason: transferredSet.has(i.invoice_number) ? "Service/Warranty (Commercial ship-to)" : "",
     hasPdf: !!docByInvoice.get(i.invoice_number)?.storage_path,
@@ -544,15 +574,27 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
     namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
     acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
-    needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
+    needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched) && acculynxByInvoice.get(i.invoice_number)?.naming_status !== "crm_job",
     lines: (linesByInvoice.get(i.invoice_number) ?? []).sort((a, b) => (Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0))),
   })).map((inv) => {
     inv.auditedLines = inv.lines.filter((l) => l.audited).length;
-    // Only auditable lines (resolvable qty + price) can be "pending review" — a line
-    // with no qty/price must never surface to audit (Item 6 guard).
-    inv.pendingLines = inv.lines.filter((l) => l.auditable && !l.audited).length;
+    // v2 "to audit" (Chris 2026-08-05 QA): only DISCREPANCY lines (over agreement /
+    // No-Price / UOM) can be pending — valid lines are hidden by the audit view and
+    // must never be counted where the human cannot see them. A claim-reviewed line
+    // (auditStatus 'disputed') is decided work, not pending.
+    inv.pendingLines = inv.lines.filter(
+      (l) =>
+        l.auditable &&
+        !l.audited &&
+        l.auditStatus !== "disputed" &&
+        (l.uomMismatch || l.negotiatedPrice == null || (l.qty > 0 && l.unitPrice > l.negotiatedPrice)),
+    ).length;
     // Transferred (Commercial) invoices are auto-approved → no pending review (docs/63 Change 2).
     if (inv.transferred) inv.pendingLines = 0;
+    // Credit memo documents are NEVER audited as invoices (Chris 2026-08-09): credits
+    // reconcile against the original invoice / CM request (receipt flow), so a CM doc
+    // carries no "to audit" count regardless of its line classifications.
+    if (inv.isCreditMemo) inv.pendingLines = 0;
     // "Has work" = any line passed OR disputed (matches what reset re-pends) → drives Go back.
     inv.hasWork = inv.lines.some((l) => l.auditStatus === "passed" || l.auditStatus === "disputed");
     inv.workedLines = inv.lines.filter((l) => l.auditStatus === "passed" || l.auditStatus === "disputed").length;
@@ -736,9 +778,16 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
     const lineId = String(line.line_id ?? "");
     if (!invoiceNumber || !lineId) continue;
     const progress = progressByInvoice.get(invoiceNumber) ?? { audited: 0, pending: 0, worked: 0, held: false };
+    // v2 (Chris 2026-08-05 QA): pending counts only VISIBLE discrepancy lines the
+    // human can act on — a decided line (passed or claim-reviewed/disputed) is done,
+    // and hidden valid lines never count.
+    const isDiscrepancy =
+      line.uom_mismatch === true ||
+      line.negotiated_price == null ||
+      (num(line.quantity) > 0 && num(line.unit_price) > num(line.negotiated_price));
     if (passedLineIds.has(lineId)) {
       progress.audited++;
-    } else if (line.is_auditable !== false) {
+    } else if (line.is_auditable !== false && isDiscrepancy && !workedLineIds.has(lineId)) {
       progress.pending++;
     }
     if (workedLineIds.has(lineId)) progress.worked++;
@@ -748,12 +797,12 @@ function buildLineProgressByInvoice(lineRows: any[], auditRows: any[]) {
   return progressByInvoice;
 }
 
-function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
+function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], catRows: any[], arRows: any[], lineRows: any[] = [], auditRows: any[] = [], processedRows: any[] = [], transferredSet: Set<string> = new Set(), mode: AuditMode = "invoice", registerExportedByInvoice: Map<string, string> = new Map(), vendorByInvoice: Map<string, string> = new Map(), closeoutByInvoice: Map<string, string> = new Map()): InvoiceAuditData {
   const categories = catRows.map((c) => ({ key: c.key, label: c.label, sortOrder: num(c.sort_order) }));
   const docByInvoice = new Map<string, any>();
   for (const d of docRows) if (!docByInvoice.has(d.invoice_number)) docByInvoice.set(d.invoice_number, d);
   const arByInvoice = new Map<string, any>();
-  for (const a of arRows) arByInvoice.set(a.invoice_number, a);
+  for (const a of arRows) arByInvoice.set(arKey(a.vendor_slug ?? "abc-supply", a.invoice_number), a);
   const acculynxByInvoice = new Map<string, any>();
   for (const a of acculynxRows) acculynxByInvoice.set(a.invoice_number, a);
   const progressByInvoice = buildLineProgressByInvoice(lineRows, auditRows);
@@ -766,15 +815,19 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
     const fallbackAuditedLines = num(i.audited_lines ?? i.passed_lines ?? 0);
     const fallbackPendingLines = Math.max(0, num(i.pending_lines ?? i.flagged_lines) + num(i.no_price_lines) - fallbackAuditedLines);
     const auditedLines = progress?.audited ?? fallbackAuditedLines;
-    const pendingLines = progress?.pending ?? fallbackPendingLines;
+    // Credit memo docs never carry a to-audit count (Chris 2026-08-09) — credits
+    // reconcile against the original invoice / CM request, not the price audit.
+    const pendingLines = i.is_credit_memo ? 0 : (progress?.pending ?? fallbackPendingLines);
     const hasWork = (progress?.worked ?? auditedLines) > 0;
     const workedLines = progress?.worked ?? auditedLines; // lines decided (passed OR disputed) — docs/63 Change 1b
     const held = progress?.held ?? false; // do-not-pay hold (credit-flag line) — docs/63 Change 1b
-    const paid = arByInvoice.has(i.invoice_number)
-      ? arByInvoice.get(i.invoice_number)?.ar_status === "paid"
-      : docByInvoice.get(i.invoice_number)?.payment_status === "paid";
+    const rowVendor = vendorByInvoice.get(String(i.invoice_number)) ?? "abc-supply";
+    // abc_invoices AR status only ever describes ABC's ledger — never let a
+    // colliding SRS/QXO number inherit ABC's paid state (silo eval 2026-08-07).
+    const settlement = deriveInvoiceSettlement(arByInvoice.get(arKey(rowVendor, i.invoice_number)), docByInvoice.get(i.invoice_number));
     const paymentState = derivePaymentState(processedByInvoice.get(i.invoice_number));
     const invoice: Invoice & { hasPriceList: boolean; searchText: string } = {
+      vendor: rowVendor,
       invoiceNumber: i.invoice_number,
       invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
       orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
@@ -799,12 +852,9 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       disposition: "",
       workedLines,
       registerExportedAt: registerExportedByInvoice.get(i.invoice_number) ?? "",
-      paid,
-      paidAt: arByInvoice.get(i.invoice_number)?.date_paid
-        ? String(arByInvoice.get(i.invoice_number).date_paid).slice(0, 10)
-        : docByInvoice.get(i.invoice_number)?.paid_at
-          ? String(docByInvoice.get(i.invoice_number).paid_at).slice(0, 10)
-          : "",
+      closedOut: closeoutByInvoice.has(i.invoice_number),
+      closeoutReason: closeoutByInvoice.get(i.invoice_number) ?? "",
+      ...settlement,
       ...paymentState,
       toBePaid: false,
       actionable: false,
@@ -818,7 +868,7 @@ function summarizeInvoiceRows(rows: any[], docRows: any[], acculynxRows: any[], 
       canonicalPo: acculynxByInvoice.get(i.invoice_number)?.canonical_po ?? "",
       namingStatus: acculynxByInvoice.get(i.invoice_number)?.naming_status ?? "needs_link",
       acculynxJobId: acculynxByInvoice.get(i.invoice_number)?.acculynx_job_id ?? "",
-      needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched),
+      needsAcculynxLink: !(acculynxByInvoice.get(i.invoice_number)?.matched) && acculynxByInvoice.get(i.invoice_number)?.naming_status !== "crm_job",
       lines: [],
       hasPriceList: true,
       searchText: [i.invoice_number, i.purchase_order_number, i.branch_number, i.ship_to_number, i.branch_name, cleanOffice(i.office), acculynxByInvoice.get(i.invoice_number)?.pe_job_number, acculynxByInvoice.get(i.invoice_number)?.client_name, acculynxByInvoice.get(i.invoice_number)?.job_category_name, acculynxByInvoice.get(i.invoice_number)?.canonical_po, acculynxByInvoice.get(i.invoice_number)?.naming_status]
@@ -947,43 +997,54 @@ async function loadFreshInvoiceAuditSummary(env: RuntimeEnv = getRuntimeEnv(), m
     "credit_memo_amount",
     "worst_pct",
   ].join(",");
-  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows] = await Promise.all([
+  const [invRows, catRows, arRows, lineRows, auditRows, processedRows, swqRows, registerRows, vendorRowsSummary, closeoutRowsSummary] = await Promise.all([
     fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice").select(invoiceColumns)),
     fetchAllForInvoiceAudit(() => client.from("roof_system_category").select("key,label,sort_order").order("sort_order")),
     // Keep the static-first summary honest without loading invoice lines: this slim AR
     // lookup is what powers the default "Open invoices" filter.
-    fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid")),
+    loadInvoiceArRows(client),
     // Progress bars need real audit rollups, but not full line detail. Fetch only the
     // invoice/line identity and auditable flag, then join to current audit status in memory.
-    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("invoice_number,line_id,is_auditable")),
+    fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("invoice_number,line_id,is_auditable,uom_mismatch,negotiated_price,unit_price,quantity")),
     fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,decision")),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status")),
     // Service/Warranty queue (mig 162) — scopes invoice-mode (exclude) vs S/W-mode (only).
     fetchOptionalForInvoiceAudit(() => client.from("service_warranty_audit_queue").select("invoice_number,status")),
     // Register export ledger (mig 164) — load-once stamp so an invoice isn't re-loaded to QuickBooks.
     fetchOptionalForInvoiceAudit(() => client.from("invoice_register_export").select("invoice_number,register_exported_at")),
+    fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug")),
+    // Human closeouts (mig 293): processed, never re-audited.
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_audit_closeout").select("invoice_number,reason")),
   ]);
   if (invRows.length === 0) return empty;
   const transferredSet = new Set<string>((swqRows ?? []).map((r) => String(r.invoice_number)));
   const registerExportedByInvoice = new Map<string, string>(
     (registerRows ?? []).map((r) => [String(r.invoice_number), r.register_exported_at ? String(r.register_exported_at) : "1"]),
   );
-  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice);
+  const vendorByInvoiceSummary = new Map<string, string>((vendorRowsSummary ?? []).map((r: any) => [String(r.invoice_number), String(r.vendor_slug)]));
+  const closeoutByInvoiceSummary = new Map<string, string>((closeoutRowsSummary ?? []).map((c: any) => [String(c.invoice_number), String(c.reason ?? "")]));
+  const summary = summarizeInvoiceRows(invRows, [], [], catRows, arRows, lineRows, auditRows, processedRows, transferredSet, mode, registerExportedByInvoice, vendorByInvoiceSummary, closeoutByInvoiceSummary);
   // R3 honest gate (docs/82): hasPriceList was hardcoded true, so the 📋 Price List button
   // never greyed. True value = the invoice's PE office holds at least one agreement
   // (office-inherited pricing, migration 201) — offices without agreements grey the button.
   try {
-    const [{ data: oav }, { data: officeRows }] = await Promise.all([
-      client.from("mv_office_agreement_versions").select("office_id"),
+    // Coverage is per (vendor, office) — an SRS invoice's button lights only if SRS
+    // holds an agreement in that office (silo eval 2026-08-07; was ABC-only matview).
+    const [{ data: oav }, { data: officeRows }, { data: vendorRows2 }] = await Promise.all([
+      client.from("v_office_vendor_agreements").select("office_id,vendor_id"),
       client.from("office").select("id,name"),
+      client.from("vendors").select("id,slug"),
     ]);
-    const officeIdsWithAgreements = new Set(((oav as any[] | null) ?? []).map((r) => r.office_id));
-    const officeNamesWithAgreements = new Set(
-      (((officeRows as any[] | null) ?? []).filter((o) => officeIdsWithAgreements.has(o.id))).map((o) => String(o.name)),
+    const officeNameById = new Map((((officeRows as any[] | null) ?? [])).map((o) => [o.id, String(o.name)]));
+    const slugByVendorId = new Map((((vendorRows2 as any[] | null) ?? [])).map((v) => [v.id, String(v.slug)]));
+    const coveredPairs = new Set(
+      (((oav as any[] | null) ?? []))
+        .map((r) => `${slugByVendorId.get(r.vendor_id) ?? "?"}@${officeNameById.get(r.office_id) ?? "?"}`),
     );
     for (const office of summary.offices) {
-      const covered = officeNamesWithAgreements.has(office.office);
-      for (const branch of office.branches) for (const invoice of branch.invoices) (invoice as any).hasPriceList = covered;
+      for (const branch of office.branches)
+        for (const invoice of branch.invoices)
+          (invoice as any).hasPriceList = coveredPairs.has(`${(invoice as any).vendor ?? "abc-supply"}@${office.office}`);
     }
   } catch {
     // leave hasPriceList as summarized on any failure — button stays enabled
@@ -1036,13 +1097,19 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
   const { client } = createServerSupabaseClient(env);
   if (!client) return null;
 
-  const invoiceResult = await client.from("v_invoice_audit_invoice").select("*").eq("invoice_number", wanted).maybeSingle();
-  const i = invoiceResult.data as any | null;
+  // The view is vendor-UNIONed (mig 221): a cross-vendor invoice-number collision
+  // returns 2 rows, and maybeSingle() would 500 both. Fetch up to 2 and disambiguate.
+  const invoiceResult = await client.from("v_invoice_audit_invoice").select("*").eq("invoice_number", wanted).limit(2);
+  const invoiceRows = (invoiceResult.data as any[] | null) ?? [];
+  const { data: vendorRowsDetail } = await client.from("v_invoice_audit_invoice_vendor").select("invoice_number,vendor_slug").eq("invoice_number", wanted).limit(2);
+  const detailVendors = ((vendorRowsDetail as any[] | null) ?? []).map((r) => String(r.vendor_slug));
+  const detailVendor = detailVendors.length === 1 ? detailVendors[0] : detailVendors.includes("abc-supply") ? "abc-supply" : (detailVendors[0] ?? "abc-supply");
+  const i = invoiceRows[0] ?? null;
   if (!i) return null;
 
-  const lineRows = await fetchAllForInvoiceAudit(() => client.from("v_invoice_audit_line").select("*").eq("invoice_number", wanted));
+  const lineRows = await fetchAllForInvoiceAudit(() => client.from("mv_invoice_audit_line").select("*").eq("invoice_number", wanted));
   const lineIds = lineRows.map((line) => line.line_id).filter(Boolean);
-  const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows] = await Promise.all([
+  const [auditRows, docRows, acculynxRows, arRows, processedRows, cascadeRows, closeoutRows] = await Promise.all([
     lineIds.length
       ? fetchAllForInvoiceAudit(() => client.from("v_invoice_line_audit_current").select("invoice_line_id,audit_status,approved_by,approval_note,source,decided_at,price_agreement_id,agreement_current,agreement_expiry_date").in("invoice_line_id", lineIds))
       : Promise.resolve([]),
@@ -1053,19 +1120,22 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
         .select("invoice_number,pe_job_number,client_name,job_category_name,acculynx_job_id,canonical_po,naming_status,matched")
         .eq("invoice_number", wanted),
     ),
-    fetchAllForInvoiceAudit(() => client.from("abc_invoices").select("invoice_number,ar_status,date_paid").eq("invoice_number", wanted)),
+    loadInvoiceArRows(client, wanted),
     fetchOptionalForInvoiceAudit(() => client.from("invoice_payment_processed").select("invoice_number,processed_at,status").eq("invoice_number", wanted)),
     // Benchmark cascade per line (docs/59 Task 3). Optional so a missing view never breaks detail.
     fetchOptionalForInvoiceAudit(() => client.from("v_invoice_audit_line_cascade").select("line_id,api_price,recent_price,org_inv_price,third_price,third_price_date,benchmark_source,benchmark_price,variance_pct,variance_ext").eq("invoice_number", wanted)),
+    // Human closeout (mig 293): processed, never re-audited.
+    fetchOptionalForInvoiceAudit(() => client.from("invoice_audit_closeout").select("invoice_number,reason").eq("invoice_number", wanted)),
   ]);
   const auditByLine = new Map<string, any>();
   for (const a of auditRows) auditByLine.set(a.invoice_line_id, a);
   const cascadeByLine = new Map<string, any>();
   for (const c of cascadeRows) cascadeByLine.set(c.line_id, c);
   const doc = docRows[0] ?? null;
-  const ar = arRows[0] ?? null;
+  const ar = arRows.find((row: any) => row.vendor_slug === detailVendor);
   const ax = acculynxRows[0] ?? null;
   const processed = processedRows[0] ?? null;
+  const closeout = (closeoutRows ?? [])[0] ?? null;
 
   const lines: InvLine[] = lineRows.map((l) => {
     const a = auditByLine.get(l.line_id);
@@ -1115,8 +1185,9 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     };
   }).sort((a, b) => Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0));
 
-  const paid = ar ? ar.ar_status === "paid" : doc?.payment_status === "paid";
+  const settlement = deriveInvoiceSettlement(ar, doc);
   const invoice: Invoice = {
+    vendor: detailVendor,
     invoiceNumber: i.invoice_number,
     invoiceDate: i.invoice_date ? String(i.invoice_date).slice(0, 10) : "",
     orderDate: i.order_date ? String(i.order_date).slice(0, 10) : "",
@@ -1134,10 +1205,15 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     creditMemoRequested: num(i.credit_memo_amount),
     worstPct: num(i.worst_pct),
     auditedLines: lines.filter((line) => line.audited).length,
-    pendingLines: lines.filter((line) => line.auditable && !line.audited).length,
+    pendingLines: lines.filter(
+      (line) =>
+        line.auditable &&
+        !line.audited &&
+        line.auditStatus !== "disputed" &&
+        (line.uomMismatch || line.negotiatedPrice == null || (line.qty > 0 && line.unitPrice > line.negotiatedPrice)),
+    ).length,
     hasWork: lines.some((line) => line.auditStatus === "passed" || line.auditStatus === "disputed"),
-    paid,
-    paidAt: ar?.date_paid ? String(ar.date_paid).slice(0, 10) : doc?.paid_at ? String(doc.paid_at).slice(0, 10) : "",
+    ...settlement,
     ...derivePaymentState(processed),
     toBePaid: false,
     actionable: false,
@@ -1147,6 +1223,8 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     disposition: "",
     workedLines: lines.filter((line) => line.auditStatus === "passed" || line.auditStatus === "disputed").length,
     registerExportedAt: "",
+    closedOut: !!closeout,
+    closeoutReason: closeout?.reason ? String(closeout.reason) : "",
     hasPdf: !!doc?.storage_path,
     jobNumber: ax?.pe_job_number ?? "",
     clientName: ax?.client_name ?? "",
@@ -1154,7 +1232,7 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
     canonicalPo: ax?.canonical_po ?? "",
     namingStatus: ax?.naming_status ?? "needs_link",
     acculynxJobId: ax?.acculynx_job_id ?? "",
-    needsAcculynxLink: !ax?.matched,
+    needsAcculynxLink: !ax?.matched && ax?.naming_status !== "crm_job",
     lines,
   };
   invoice.toBePaid = isInvoiceToBePaid(invoice);
@@ -1170,6 +1248,10 @@ export async function loadInvoiceAuditInvoiceDetail(invoiceNumber: string, env: 
 const DECISION_LABEL: Record<string, string> = {
   "credit-flag": "Hold + credit memo (Casey)",
   "credit-noflag": "Credit memo (no flag)",
+  "credit-received": "Credit memo received — claim settled, released for payment",
+  // Predates migration 246 and was never written: no writer, no reader, zero rows in
+  // prod, and it was not in the credit_memo_amount predicate. Kept so any historical
+  // row would still render a label; 'credit-received' is the live terminal decision.
   "credit-resolved": "Credit memo received — released for payment",
   "accept-svc": "Service fee — auto-approved (weekly review)",
   "gate-negotiated": "Negotiated line + variance — human review required",

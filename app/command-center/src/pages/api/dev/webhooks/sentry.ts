@@ -37,6 +37,13 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const action = String(body.action ?? body.event ?? "unknown");
+
+  // Self-healing loop (docs/127-self-healing-loop.md): once scheduled triage owns the Linear bug log
+  // (deduped, enriched, verified after deploy), this webhook stops filing its own thin issues.
+  if (env.SELF_HEAL_TRIAGE_OWNS_LINEAR?.trim() === "true") {
+    return jsonApiResponse({ status: "deferred_to_self_heal_triage", action }, { status: 202 });
+  }
+
   const data = (body.data as Record<string, unknown> | undefined) ?? {};
   const issue = (data.issue as { title?: string; permalink?: string; level?: string } | undefined) ?? {};
 

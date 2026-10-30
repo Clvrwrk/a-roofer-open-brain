@@ -95,15 +95,6 @@ const VIEWER_PERMISSIONS: CommandCenterPermission[] = ["command_center.read", "w
 
 export const NAMED_AGENT_IDENTITIES: NamedAgentIdentity[] = [
   {
-    id: "maya-chen",
-    displayName: "Maya Chen",
-    email: "maya.chen@cc.proexteriorsus.net",
-    mapsTo: ["@ob-accounting", "Capture"],
-    desktopEnabled: true,
-    departmentAccess: ["accounting", "system"],
-    role: "document-intake",
-  },
-  {
     id: "alex-rivers",
     displayName: "Alex Rivers",
     email: "alex.rivers@cc.proexteriorsus.net",
@@ -353,6 +344,14 @@ function namedAgentToActor(agent: NamedAgentIdentity): CommandCenterActor {
   };
 }
 
+function namedAgentServiceActor(agent: NamedAgentIdentity): CommandCenterActor {
+  return {
+    ...namedAgentToActor(agent),
+    source: "service_token",
+    roles: ["named-agent", agent.role, "runtime"],
+  };
+}
+
 function humanActor(
   email: string,
   displayName: string,
@@ -448,10 +447,14 @@ function isOpenAccessEnabled(env: RuntimeEnv) {
   return !["false", "0", "off", "no"].includes(raw);
 }
 
-function getBearerToken(request: Request) {
+export function getServiceBearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+export function hashServiceToken(value: string) {
+  return hashToken(value);
 }
 
 export function getServiceTokenHashEnvKey(agentId: string) {
@@ -463,6 +466,8 @@ export function getAgentAccessRuntimeConfig(env: RuntimeEnv = getRuntimeEnv()) {
     (entry) => entry.agentId && entry.token,
   ).length;
   const configuredHashedTokens = SERVICE_AGENT_IDENTITIES.filter(
+    (agent) => env[getServiceTokenHashEnvKey(agent.id)],
+  ).length + NAMED_AGENT_IDENTITIES.filter(
     (agent) => env[getServiceTokenHashEnvKey(agent.id)],
   ).length;
 
@@ -483,6 +488,8 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
     if (safeEqual(hashToken(token), hashToken(entry.token))) {
       const agent = SERVICE_AGENT_IDENTITIES.find((candidate) => candidate.id === entry.agentId);
       if (agent) return serviceAgentToActor(agent);
+      const namedAgent = NAMED_AGENT_IDENTITIES.find((candidate) => candidate.id === entry.agentId);
+      if (namedAgent) return namedAgentServiceActor(namedAgent);
     }
   }
 
@@ -493,13 +500,24 @@ export function resolveServiceActorFromToken(token: string | null, env: RuntimeE
       return serviceAgentToActor(agent);
     }
   }
+  for (const agent of NAMED_AGENT_IDENTITIES) {
+    const configuredHash = env[getServiceTokenHashEnvKey(agent.id)]?.trim();
+    if (configuredHash && safeEqual(tokenHash, configuredHash)) {
+      return namedAgentServiceActor(agent);
+    }
+  }
 
   return null;
 }
 
 /** Bearer-token resolution for service agents (no header-based identity trust). */
 export function resolveServiceActorFromBearer(request: Request, env: RuntimeEnv = getRuntimeEnv()) {
-  return resolveServiceActorFromToken(getBearerToken(request), env);
+  return resolveServiceActorFromToken(getServiceBearerToken(request), env);
+}
+
+export function resolveNamedAgentServiceActor(agentId: string) {
+  const agent = NAMED_AGENT_IDENTITIES.find((candidate) => candidate.id === agentId);
+  return agent ? namedAgentServiceActor(agent) : null;
 }
 
 export interface WorkOsSessionIdentity {
@@ -523,7 +541,7 @@ export function resolveActorFromSessionUser(
   env: RuntimeEnv = getRuntimeEnv(),
 ): CommandCenterActor | null {
   const email = cleanEmail(user.email);
-  if (!email) return null;
+  if (!email || email === "maya.chen@cc.proexteriorsus.net") return null;
 
   const namedAgent = NAMED_AGENT_IDENTITIES.find((agent) => agent.email === email);
   if (namedAgent) return namedAgentToActor(namedAgent);

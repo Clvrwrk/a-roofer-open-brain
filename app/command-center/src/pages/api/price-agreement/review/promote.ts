@@ -8,9 +8,16 @@ export const prerender = false;
 // Promote the confirmed/high-confidence rows of a staged price-list PDF into a live agreement
 // (abc_price_agreements + abc_price_list_items + branch match), link the stored PDF, mark the rows
 // promoted, and refresh the version-comparison. Only runs once a human has reviewed the matches.
-const META: Record<string, { agreement_number: string; branch: string; effective: string; expiry: string | null; pdf: string }> = {
-  "denver-branch49-pricelist-2024": { agreement_number: "PE-DENVER-49", branch: "49", effective: "2024-09-01", expiry: null, pdf: "denver-branch49-pricelist-2024.pdf" },
-  "dallas-pricelist-apr2025": { agreement_number: "PE-DALLAS-41", branch: "41", effective: "2025-04-21", expiry: null, pdf: "dallas-pricelist-apr2025.pdf" },
+//
+// VENDOR SILO (PEC-196): this write path lands in ABC-ONLY tables. Every META entry
+// therefore carries its vendor and the endpoint refuses anything but abc-supply —
+// price_list_pdf_staging has no vendor column yet, so a non-ABC PDF promoted here
+// would become an ABC agreement (the worst mis-file in the 2026-08-09 inventory).
+// The multi-vendor promote path (staging vendor column + generic price_agreements
+// writes, Surface-2 dual-source pattern) is the PEC-196 rebuild — fail closed until.
+const META: Record<string, { vendor: string; agreement_number: string; branch: string; effective: string; expiry: string | null; pdf: string }> = {
+  "denver-branch49-pricelist-2024": { vendor: "abc-supply", agreement_number: "PE-DENVER-49", branch: "49", effective: "2024-09-01", expiry: null, pdf: "denver-branch49-pricelist-2024.pdf" },
+  "dallas-pricelist-apr2025": { vendor: "abc-supply", agreement_number: "PE-DALLAS-41", branch: "41", effective: "2025-04-21", expiry: null, pdf: "dallas-pricelist-apr2025.pdf" },
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -20,6 +27,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const sourceDoc = String(body?.sourceDoc ?? "").trim();
   const meta = META[sourceDoc];
   if (!meta) return jsonApiResponse({ error: "invalid_request", error_description: "unknown sourceDoc" }, { status: 400 });
+  if (meta.vendor !== "abc-supply") {
+    return jsonApiResponse({ error: "vendor_not_supported", error_description: `Promotion writes ABC-only tables; ${meta.vendor} documents need the PEC-196 generic promote path.` }, { status: 409 });
+  }
 
   const { client } = createServerSupabaseClient();
   if (!client) return jsonApiResponse({ error: "supabase_unconfigured" }, { status: 503 });
@@ -43,7 +53,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   } else {
     const { data: ins, error: aerr } = await client.from("abc_price_agreements").insert({
       agreement_number: meta.agreement_number, effective_date: meta.effective, expiry_date: meta.expiry,
-      source_file: meta.pdf, pdf_storage_bucket: "agreements", pdf_storage_path: meta.pdf, ceo_verified: false,
+      // ceo_verified true on arrival: adding an agreement IS the approval (Chris,
+      // 2026-08-21 — migration 252 retired the gate). Stamping false here used to make
+      // every freshly promoted book start life flagged on the gaps and evidence panels.
+      source_file: meta.pdf, pdf_storage_bucket: "agreements", pdf_storage_path: meta.pdf, ceo_verified: true,
     }).select("id").single();
     if (aerr || !ins) return jsonApiResponse({ error: "agreement_insert_failed", error_description: aerr?.message }, { status: 500 });
     agreementId = (ins as any).id;
@@ -70,5 +83,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await client.from("price_list_pdf_staging").update({ match_status: "promoted" }).eq("source_doc", sourceDoc).in("match_status", ["confirmed", "high"]);
   await client.rpc("refresh_agreement_version_review");
 
-  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo });
+  // Saving a price list changes what every invoice line prices against, and the
+  // audit reads mv_invoice_audit_line (PEC-241/243). Ask for a rebuild rather
+  // than doing one here: REFRESH takes ~10s and this request runs under an 8s
+  // statement_timeout, so a direct refresh would 500 AFTER the list had already
+  // landed. Serviced within a minute by pg_cron (migration 274).
+  const { error: rerr } = await client.rpc("request_matview_refresh", {
+    p_matview: "mv_invoice_audit_line",
+    p_reason: `price list promoted: ${meta.agreement_number} branch ${meta.branch} (${items.length} items)`,
+    p_by: "price-agreement/review/promote",
+  });
+  if (rerr) console.error("[promote] audit refresh request failed:", rerr.message);
+
+  return jsonApiResponse({ ok: true, agreementId, items: items.length, branch: meta.branch, shipTo, auditRefreshQueued: !rerr });
 };

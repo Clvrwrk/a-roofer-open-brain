@@ -1,0 +1,23 @@
+---
+// Specimen frame: production markup rendered on a labelled surface so the reader
+// sees the component as it ships, in whichever mode the page is in.
+interface Props {
+  label: string;
+  code?: string; // class / selector shown in the header
+  surface?: "surface" | "inset" | "navy";
+  layout?: "row" | "block" | "stack";
+  note?: string;
+}
+const { label, code, surface = "surface", layout = "row", note } = Astro.props;
+---
+
+<figure class="ds-spec">
+  <figcaption class="ds-spec-head">
+    <span>{label}</span>
+    {code && <code>{code}</code>}
+  </figcaption>
+  <div class:list={["ds-spec-body", surface === "inset" && "is-inset", surface === "navy" && "is-navy", layout === "block" && "is-block", layout === "stack" && "is-stack"]}>
+    <slot />
+  </div>
+  {note && <div class="ds-spec-foot">{note}</div>}
+</figure>

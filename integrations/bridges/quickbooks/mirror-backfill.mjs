@@ -15,7 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -32,6 +32,52 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../../..");
+
+// Intuit rotates the refresh token on refresh; the successor must outlive this
+// process or the next run fails invalid_grant (PEC-175, twice). Persist it to
+// master.env (atomic tmp+rename, 0600) and to process.env so mid-run refreshes
+// use the successor. 1Password "QBO - PROD TOKENS" stays the re-auth source of
+// record and drifts from the host copy after first rotation by design.
+// Log rotation events only — never token values.
+async function refreshAccessTokenPersisting() {
+  const before = process.env.QUICKBOOKS_REFRESH_TOKEN;
+  const r = await refreshAccessToken();
+  persistRotatedRefreshToken(before, r.refreshToken);
+  return r;
+}
+
+function persistRotatedRefreshToken(oldToken, newToken) {
+  if (!newToken || newToken === oldToken) return;
+  process.env.QUICKBOOKS_REFRESH_TOKEN = newToken;
+  if (process.env.QUICKBOOKS_PROD_REFRESH_TOKEN) process.env.QUICKBOOKS_PROD_REFRESH_TOKEN = newToken;
+  const envPath = resolve(homedir(), ".config/cleverwork/master.env");
+  try {
+    if (!existsSync(envPath)) {
+      console.log("qbo_refresh_token=rotated persist=skipped (no master.env)");
+      return;
+    }
+    let touched = false;
+    const out = readFileSync(envPath, "utf8")
+      .split("\n")
+      .map((line) => {
+        const m = line.match(/^(QUICKBOOKS(?:_PROD)?_REFRESH_TOKEN)=/);
+        if (!m) return line;
+        touched = true;
+        return `${m[1]}=${newToken}`;
+      })
+      .join("\n");
+    if (!touched) {
+      console.log("qbo_refresh_token=rotated persist=skipped (no refresh-token key in master.env)");
+      return;
+    }
+    const tmpPath = `${envPath}.tmp-${process.pid}`;
+    writeFileSync(tmpPath, out, { mode: 0o600 });
+    renameSync(tmpPath, envPath);
+    console.log("qbo_refresh_token=rotated persist=master.env");
+  } catch (err) {
+    console.log(`qbo_refresh_token=rotated persist=FAILED (${err.message})`);
+  }
+}
 
 const ENTITY_SPECS = [
   {
@@ -232,7 +278,7 @@ async function main() {
 
   console.log(`qbo-mirror start mode=${mode} dryRun=${dryRun} entities=${selected.join(",")}`);
 
-  const { accessToken } = await refreshAccessToken();
+  const { accessToken } = await refreshAccessTokenPersisting();
   let token = accessToken;
 
   // Company gate
@@ -281,7 +327,7 @@ async function main() {
         result = await syncQueryEntity(
           () => token,
           async () => {
-            const r = await refreshAccessToken();
+            const r = await refreshAccessTokenPersisting();
             token = r.accessToken;
             return token;
           },

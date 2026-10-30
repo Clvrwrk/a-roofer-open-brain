@@ -38,10 +38,13 @@ against `acculynx_get_checklist`.
 > |---|---|---|---|---|
 > | `/jobs` | `pageStartIndex` | **record offset** (`=25` → records 26+; `=460` → 10 tail records) | `items.length` | `offset >= count` |
 > | `/contacts`, `/estimates` | `pageStartIndex` | **page number** (`=1` → records 50–99; beyond-end → last-page repeat) | `1` | short/empty page |
+> | `/users` | `pageStartIndex` | **record offset** (colorado, 97 users: `=1` → records 2–51; `=50` → 51–97; `=97` → **416**) | `items.length` | `offset >= count` or 416 |
 >
 > Both units were confirmed by direct probes (georgia key). The live sync encodes this:
-> `resources/jobs.ts` increments by `items.length`; `resources/contacts.ts` /
-> `estimates.ts` increment by 1. Re-probe any `recordStartIndex`-listed op before
+> `resources/jobs.ts` and `resources/users.ts` increment by `items.length`;
+> `resources/contacts.ts` / `estimates.ts` increment by 1. (`/users` was paged by page
+> number until 2026-10-02: harmless under 50 users, but colorado's 97 made ~48
+> overlapping calls a run, spent its whole budget, and froze its sync from 09-24.) Re-probe any `recordStartIndex`-listed op before
 > trusting deep pagination — the labels here are not reliable.
 
 # Structural notes

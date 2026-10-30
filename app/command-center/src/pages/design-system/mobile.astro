@@ -1,0 +1,159 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+---
+
+<DesignSystemShell slug="mobile" source="app/command-center/src/styles/global.css (media queries) · docs/111 (CRM PWA companion)">
+  <DsSection id="philosophy" title="Philosophy">
+    <p>
+      The Command Center is a desktop work surface: dense boards worked at a desk, in a meeting, with a mouse wheel. It
+      degrades gracefully to a tablet and stays usable on a phone, but it is not where a crew lead lives. The
+      <strong>mobile-first companion</strong> (the CRM PWA, docs/111) is a separate app for the least technical staff,
+      radically simpler, built from this system's tokens with the Command Center as the source of truth.
+    </p>
+    <p>
+      So there are two mobile stories in this system, and a builder must know which one they are in:
+    </p>
+    <div class="ds-grid-2">
+      <div class="ds-card"><p class="eyebrow">Story 1 · Command Center on a phone</p><h3>Readable, navigable, never broken</h3><p>Rail hides, grids stack, panels go static, tables scroll inside their wrapper with the identity column frozen. Nothing is redesigned; nothing overflows the viewport.</p></div>
+      <div class="ds-card"><p class="eyebrow">Story 2 · A surface built for 100% mobile</p><h3>One column, one task, thumb reach</h3><p>Designed from the phone up using the same tokens, components and rules, with the mobile ramp and the card-row pattern below. Desktop is the enlargement, not the other way around.</p></div>
+    </div>
+  </DsSection>
+
+  <DsSection id="breakpoint-behaviour" title="Behaviour at each breakpoint">
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Width</th><th>Rail</th><th>Grids</th><th>Panels</th><th>Tables</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">≥ 1281</td><td>280px, expanded</td><td>4-up</td><td>Two-column list-detail; detail sticky</td><td>Full; column groups collapsed by default</td><td>Desktop ramp</td></tr>
+          <tr><td class="nowrap">1180–1280</td><td>280px</td><td>4-up</td><td>Same; design-system TOC hides</td><td>Same</td><td>Same</td></tr>
+          <tr><td class="nowrap">821–1180</td><td>240px</td><td>2-up</td><td>One column; detail panel static, ordered after the list</td><td>Scroll inside wrapper; frozen identity column</td><td>Same</td></tr>
+          <tr><td class="nowrap">≤ 820</td><td>Hidden (frame is one column); rail toggle still works</td><td>2-up → 1-up on boards</td><td>Heading rows stack; action rows full width</td><td>Scroll inside wrapper; card-rows on mobile-first surfaces</td><td>Mobile ramp; inputs 16px</td></tr>
+          <tr><td class="nowrap">≤ 600</td><td>Hidden</td><td>1-up</td><td>Single column</td><td>Card-rows</td><td>Mobile ramp</td></tr>
+          <tr><td class="nowrap">320</td><td colspan="5">Floor. <code>html &#123; min-width: 320px &#125;</code>. Below this the page scrolls horizontally rather than collapsing further.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ds-callout">
+      <b>Known gap, recorded</b>
+      <p>The shell hides the rail at ≤ 820 but does not yet show a drawer to open it; the top-bar toggle only re-shows the rail in-flow. A mobile-first surface must provide its own navigation (bottom bar or drawer). This is tracked with the "promote theme to the shell" toolbar pass.</p>
+    </div>
+  </DsSection>
+
+  <DsSection id="touch" title="Touch targets & reach">
+    <DsSpec label="Thumb zones on a 390 × 844 phone" layout="block">
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+        <div style="position:relative;width:195px;height:422px;border:6px solid var(--border-strong);border-radius:28px;background:var(--surface);overflow:hidden">
+          <div style="position:absolute;inset:0 0 40% 0;background:color-mix(in srgb, var(--error) 12%, transparent);display:grid;place-items:center;color:var(--error);font-size:11px;font-weight:700;text-align:center;padding:12px">Stretch<br /><small style="font-weight:600">titles, status, reading</small></div>
+          <div style="position:absolute;left:0;right:0;top:60%;height:20%;background:color-mix(in srgb, var(--warning) 14%, transparent);display:grid;place-items:center;color:var(--warning);font-size:11px;font-weight:700">Reach<br /><small style="font-weight:600">filters, secondary</small></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;height:20%;background:color-mix(in srgb, var(--success) 14%, transparent);display:grid;place-items:center;color:var(--success);font-size:11px;font-weight:700">Easy<br /><small style="font-weight:600">primary action, nav</small></div>
+        </div>
+        <ul style="max-width:420px">
+          <li><strong>44 × 44 CSS px minimum</strong> for every target, 48 for the primary; 8px minimum between adjacent targets.</li>
+          <li><strong>The primary action lives in the easy zone</strong>: a sticky bottom bar (56px, safe-area padded) holds the one primary and at most two ghosts.</li>
+          <li><strong>Navigation at the bottom</strong> on a mobile-first surface (tab bar, ≤ 5 items, 24px icon + 11px label); the department rail is a desktop object.</li>
+          <li><strong>Destructive actions</strong> never sit in the easy zone next to the primary; they go behind a confirm.</li>
+          <li><strong>Swipe is never the only way</strong> to do anything; every gesture has a visible control.</li>
+          <li><strong>Safe areas:</strong> <code>padding-bottom: env(safe-area-inset-bottom)</code> on the bottom bar; no content under the notch.</li>
+        </ul>
+      </div>
+    </DsSpec>
+  </DsSection>
+
+  <DsSection id="tables-mobile" title="Tables on a phone">
+    <p>Two strategies, chosen by the surface. The Command Center uses the first; a mobile-first surface uses the second.</p>
+    <div class="ds-grid-2">
+      <DsSpec label="Strategy A · Scroll inside, freeze identity (Command Center)" code=".cfx-frozen at ≤ 820" layout="block">
+        <div style="overflow:auto;border:1px solid var(--border);border-radius:8px;width:100%;max-width:340px;font-size:12.5px">
+          <table style="border-collapse:separate;border-spacing:0;min-width:620px">
+            <thead><tr><th style="position:sticky;left:0;background:var(--surface);text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border);min-width:120px;box-shadow:6px 0 8px -6px rgba(0,0,0,.28)">Job</th><th style="text-align:right;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border)">Contract</th><th style="text-align:right;padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border)">Balance</th><th style="padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border)">Expected</th><th style="padding:6px 8px;font-size:11px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border)">Action</th></tr></thead>
+            <tbody>
+              {[["J-10412 Anderson", "$18,420.00", "$4,200.00", "Sep 19", "Collect"], ["J-10398 Maple St.", "$27,900.00", "$27,900.00", "Sep 26", "Invoice"]].map((r) => <tr><td style="position:sticky;left:0;background:var(--surface);padding:4px 8px;border-bottom:1px solid var(--border);white-space:nowrap;box-shadow:6px 0 8px -6px rgba(0,0,0,.28)">{r[0]}</td><td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums">{r[1]}</td><td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums">{r[2]}</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">{r[3]}</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">{r[4]}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+        <small style="color:var(--text-muted)">Swipe the table; the job stays. Money columns first after the identity column.</small>
+      </DsSpec>
+      <DsSpec label="Strategy B · Card-rows (mobile-first surfaces)" code="one row → one card; label/value pairs; primary value large" layout="block">
+        <div style="display:grid;gap:8px;width:100%;max-width:340px">
+          {[["J-10412 · Anderson re-roof", "$4,200.00", "of $18,420.00", "Sep 19", "Collect"], ["J-10398 · Maple St. hail", "$27,900.00", "of $27,900.00", "Sep 26", "Invoice"]].map((r) => (
+            <div style="display:grid;grid-template-columns:1fr auto;gap:4px 12px;border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--surface)"><strong style="font-size:15px">{r[0]}</strong><span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--color-on-accent-soft);align-self:start">{r[4]}</span><span style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums">{r[1]} <small style="font-size:12px;font-weight:400;color:var(--text-muted)">{r[2]}</small></span><span style="font-size:12px;color:var(--text-muted);align-self:end">expected {r[3]}</span></div>
+          ))}
+        </div>
+        <small style="color:var(--text-muted)">The balance is the decision; it is the big number. Everything else is label-sized.</small>
+      </DsSpec>
+    </div>
+    <ul>
+      <li>Ten-row disclosure still applies: a card list opens at ten cards with a full-width "Show all N ▾ (M more)".</li>
+      <li>Sort and filter controls collapse into one "Filter" ghost button that opens a bottom sheet; the active filter is named beneath it.</li>
+      <li>Never hide a money column on mobile; hide context columns (rep, notes) behind the card's tap-to-expand.</li>
+      <li>Pinch-zoom is never disabled (<code>viewport</code> stays <code>width=device-width, initial-scale=1</code>).</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="mobile-first" title="Building a mobile-first surface">
+    <p>The recipe for a surface whose primary device is a phone, using this system without inventing a second one.</p>
+    <ol>
+      <li><strong>Start with the five first-principles questions</strong> (Overview). On a phone the answer to "what decision" is usually one decision per screen.</li>
+      <li><strong>Frame:</strong> one column, 16px gutters, content rail max 640px centred on tablets; sticky top bar 56px with eyebrow + title and one ghost action; sticky bottom bar 56px + safe area with the one primary.</li>
+      <li><strong>Type:</strong> the mobile ramp (Typography → Mobile & print ramps). Body 15px, inputs 16px, KPI 20px, title 22px.</li>
+      <li><strong>Components:</strong> the same pills, KPI cards (2-up), card-rows, disclosure groups, scope control (full width, equal segments), theme trio in a settings sheet rather than the toolbar.</li>
+      <li><strong>Navigation:</strong> a bottom tab bar of at most five destinations, or a single back arrow on a task screen. No department rail.</li>
+      <li><strong>Forms:</strong> one field per row, label above, 44px controls, native pickers, the keyboard type set per field (<code>inputmode="decimal"</code> for money), reformat on blur.</li>
+      <li><strong>Feedback:</strong> toast at the top (the bottom holds the primary), 2.2s, <code>role="status"</code>.</li>
+      <li><strong>Modes:</strong> both, from <code>cc.theme</code>; test both.</li>
+      <li><strong>Offline:</strong> render the last complete state from the service-worker cache and say "as of 10:41 · offline" in the count slot; never a blank shell.</li>
+      <li><strong>Desktop:</strong> the enlargement — the same column at 640px centred, or the Command Center's own surface if one exists. Never two different information architectures for one task.</li>
+    </ol>
+    <DsSpec label="Mobile-first frame at 390px" layout="block">
+      <div style="width:195px;height:422px;border:6px solid var(--border-strong);border-radius:28px;background:var(--surface-inset);overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;font-size:10px">
+        <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 8px 6px"><div class="eyebrow" style="font-size:8px">Accounting</div><div style="font-size:12px;font-weight:700;color:var(--ds-heading)">Friday AR</div></div>
+        <div style="padding:8px;display:grid;gap:6px;align-content:start"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px"><div style="font-size:7px;text-transform:uppercase;color:var(--text-muted)">To collect</div><div style="font-size:12px;font-weight:800">$66.9K</div></div><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px"><div style="font-size:7px;text-transform:uppercase;color:var(--text-muted)">Overdue</div><div style="font-size:12px;font-weight:800;color:var(--error)">$18.4K</div></div></div><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:9px"><strong>J-10412 · Anderson</strong><div style="font-size:11px;font-weight:800">$4,200.00</div></div><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:9px"><strong>J-10398 · Maple St.</strong><div style="font-size:11px;font-weight:800">$27,900.00</div></div></div>
+        <div style="background:var(--surface);border-top:1px solid var(--border);padding:6px 8px 10px;display:flex;gap:6px"><span style="flex:1;background:var(--tertiary);color:#fff;border-radius:6px;padding:6px;text-align:center;font-weight:800">Set expected dates</span><span style="border:1px solid var(--border);border-radius:6px;padding:6px 8px">Filter</span></div>
+      </div>
+    </DsSpec>
+  </DsSection>
+
+  <DsSection id="pwa" title="Offline & install">
+    <ul>
+      <li>The shell registers a service worker that precaches the main routes and snapshots the last complete render of each page (it refuses to snapshot a page still loading or showing an error).</li>
+      <li>The worker is an accelerator only; the app never blocks on it. Removing a route bumps the worker's <code>VERSION</code> so a cached page cannot 404.</li>
+      <li>Install prompt: not surfaced in the Command Center; the CRM companion is the installable PWA (icons 192 and 512 from the roof mark, navy background, <code>display: standalone</code>).</li>
+      <li>Offline state is named in the count slot ("as of 10:41 · offline"); actions that write are disabled with the tooltip alive.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="mobile-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="M-01" title="Know which story you are in: the Command Center degrades gracefully; a mobile-first surface is designed from the phone up with the same tokens and rules." source="docs/111; context/memory/2026-09-11.md">
+        <p>Never two information architectures for one task.</p>
+      </DsRule>
+      <DsRule id="M-02" title="44px targets, 48px primary, 8px between; the primary action lives in the bottom bar within thumb reach." source="Design.md 'Comfortable hit areas'; this chapter">
+        <p>Destructive actions are never beside the primary.</p>
+      </DsRule>
+      <DsRule id="M-03" title="Inputs are 16px on a phone; body is never under 14px; the mobile ramp applies at ≤ 820." source="Typography T-02">
+        <p>Prevents iOS zoom and keeps money legible.</p>
+      </DsRule>
+      <DsRule id="M-04" title="Tables scroll inside their wrapper with the identity column frozen (Command Center) or become card-rows with the decision value large (mobile-first)." source="this chapter; cash-surface.css .cfx-frozen">
+        <p>Money columns are never hidden on a phone.</p>
+      </DsRule>
+      <DsRule id="M-05" title="Nothing overflows the viewport; the page never scrolls horizontally; min-width is 320." source="global.css html; S-06">
+        <p>A wide thing scrolls itself.</p>
+      </DsRule>
+      <DsRule id="M-06" title="No fake device chrome, no disabled pinch-zoom, every gesture has a visible control." source="this chapter">
+        <p>The OS draws the status bar and keyboard.</p>
+      </DsRule>
+      <DsRule id="M-07" title="Navigation on a mobile-first surface is a bottom tab bar (≤ 5) or a back arrow; the department rail is desktop-only." source="this chapter; CRM parity P0 (sub-bar over nav)">
+        <p>A sub-bar never outranks navigation in the stacking order.</p>
+      </DsRule>
+      <DsRule id="M-08" title="Offline shows the last complete state with its time; never a blank shell." source="AppShell.astro cache worker">
+        <p>Writes disable with the tooltip alive.</p>
+      </DsRule>
+      <DsRule id="M-09" title="Test at 390 × 844 and 768 × 1024 in both modes before ship; the PR screenshot set includes one phone frame." source="agent handbook checklist">
+        <p>The browser's device toolbar is enough; a real phone is better.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+</DesignSystemShell>

@@ -6,8 +6,10 @@ import { createServerSupabaseClient } from "@lib/supabase.server";
 
 export const prerender = false;
 
+// PostgreSQL UUIDs include the deterministic MD5-based vendor line IDs.
+// Ownership is checked against the audit engine below; RFC version bits are not a gate.
 const isUuid = (v: unknown) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v ?? ""));
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v ?? ""));
 
 interface ClassifyLine {
   invoiceLineId: string;
@@ -67,7 +69,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const validLineIds = lines.filter((l) => l.classification === "valid").map((l) => l.invoiceLineId);
   if (isAgent && validLineIds.length) {
     const { data: auditRows, error: auditError } = await client
-      .from("v_invoice_audit_line")
+      .from("mv_invoice_audit_line")
       .select("line_id, negotiated_price, variance_ext, uom_mismatch")
       .in("line_id", validLineIds);
     if (auditError) {
@@ -89,12 +91,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const who = actor.displayName || actor.id || "agent";
+  // Silo eval 2026-08-07: stamp the ledger's vendor discriminator (mig 221) and
+  // refuse lines that do not belong to the named invoice — a caller must not be
+  // able to file vendor A's lines under vendor B's invoice number.
+  const { data: vendorRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(1);
+  const vendorSlug = (vendorRow as any[] | null)?.[0]?.vendor_slug ?? "abc-supply";
+  const lineIdsToCheck = lines.map((l) => l.invoiceLineId).filter(Boolean);
+  const { data: lineOwners } = await client.from("mv_invoice_audit_line").select("line_id,invoice_number").in("line_id", lineIdsToCheck);
+  const ownerByLine = new Map(((lineOwners as any[] | null) ?? []).map((r) => [String(r.line_id), String(r.invoice_number)]));
+  const foreign = lines.filter((l) => ownerByLine.get(String(l.invoiceLineId)) !== invoiceNumber);
+  if (foreign.length) {
+    return jsonApiResponse(
+      { error: "line_invoice_mismatch", error_description: `Line(s) ${foreign.map((l) => l.invoiceLineId).join(", ")} do not belong to invoice ${invoiceNumber}.` },
+      { status: 409 },
+    );
+  }
   const { data, error } = await client
     .from("invoice_line_audit")
     .insert(
       lines.map((l) => ({
         invoice_line_id: l.invoiceLineId,
         invoice_number: invoiceNumber,
+        vendor_slug: vendorSlug,
         item_number: l.itemNumber,
         audit_status: l.classification === "valid" ? "passed" : "disputed",
         decision: l.classification,

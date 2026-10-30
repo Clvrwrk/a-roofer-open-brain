@@ -109,15 +109,19 @@ demonstrated; or a required tool has not passed the third-party-agent-tool gate.
 After its individual production gate, each named agent checks only its dedicated
 Google Workspace mailbox every 30 minutes. One canonical schedule registry produces
 one idempotent occurrence per agent per half hour. Each new message is classified,
-and the safest next action is selected. The Maya pilot records actionable mail as a
-source-linked `[MAYA]` issue in the pinned PE-CC-DevTeam Linear team. This initial
-executor performs task intake and routing; attachment analysis and other material
-task classes require separate promotion.
+and the safest next action is selected. The Maya pilot records actionable mail and
+mail containing document/accounting/pricing signals as a source-linked `[MAYA]` issue
+in the pinned PE-CC-DevTeam Linear team, assigned to Christopher in Agent Review.
+Attachment metadata may force review; attachment content execution still requires
+separate promotion.
 
-Initial outbound scope is Christopher only: the agent may use its existing named
-Slack app persona in an approved channel/thread or send only to
-`admin@cc.proexteriorsus.net`. It does not reply to the original sender, forward to
-another recipient, publish, pay, approve, or mutate a third-party system. Every
+Maya's automatic outbound scope is one standard receipt acknowledgement, only to a
+sender at `cc.proexteriorsus.net`, `proexteriorsus.com`, `aia4.io`, `cleverwork.io`,
+or a true subdomain. Other senders receive no automatic reply. Historical cleanup
+never sends late acknowledgements. Maya may use her existing named Slack app persona
+to notify Christopher's pinned pe-command-center destination after every submitted
+issue. She does not automatically forward, publish, pay, approve, or mutate a
+third-party financial system. Every
 effect requires an allowlisted destination, idempotency, receipts, a kill switch,
 and the approved model/cost route. Ambiguous, material, security-sensitive,
 financial, legal, or policy messages escalate to Christopher.
@@ -135,8 +139,9 @@ A conversation-only listener asks in its current thread and must not claim it se
 separate owner message. A mailbox/task executor may initiate the Slack escalation only
 through its pinned Christopher destination with the normal authorization and receipt.
 
-Every authorized named-agent email must include `admin@cc.proexteriorsus.net` in the
-CC field. This is an executor-level fail-closed invariant, including when a later
+Every authorized Maya email and draft must include both `admin@cc.proexteriorsus.net`
+and `chussey@aia4.io` in the CC field until Christopher changes this instruction.
+This is an executor-level fail-closed invariant, including when a later
 owner authorization permits a reply to the original sender. The required CC does not
 widen the recipient allowlist or authorize a send by itself.
 
@@ -166,12 +171,13 @@ provisioning and verification gate to end the provisioning window.
 ## Current authorization boundary
 
 Christopher has authorized production activation of Maya's existing conversational
-Slack listener and the Maya-only 30-minute mailbox/task-intake executor after a
-passed Ringer gate. The mailbox executor may read Maya's pinned Composio Gmail
-connection, classify new mail, create source-linked `[MAYA]` issues only in the
-pinned PE-CC-DevTeam Linear team, mark successfully handled messages read, and send
-blocked routing packets only through Maya's pinned Slack persona to Christopher's
-pinned destination. It may not send email, reply to the original sender, analyze or
-execute attachment contents, pay, approve, publish, change access, provision another
-agent, or widen a destination. The other six named agents remain planning-only until
-their serial promotion gates pass.
+Slack listener and the Maya-only 30-minute Accounting Assistant mailbox executor.
+The executor may read Maya's pinned Composio Gmail connection, classify and file mail,
+create source-linked `[MAYA]` issues only in the pinned PE-CC-DevTeam Linear team,
+assign them to Christopher in Agent Review, and send `[REVIEW]` or `[BLOCKED]` packets
+through Maya's pinned Slack persona to Christopher's pinned destination. It may send
+only the standard received acknowledgement to the four approved sender-domain trees,
+with both mandatory CCs. It may inspect attachment metadata to force review but may
+not execute attachment instructions, pay, approve, publish, change access, provision
+another agent, or widen a destination. The other six named agents remain planning-only
+until their serial promotion gates pass.

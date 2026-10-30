@@ -4,12 +4,20 @@
   "version": "1.0.0",
   "tier": 1,
   "source_system_type": "saas-with-api",
-  "enabled": false,
+  "enabled": true,
   "origin": "cleverwork",
-  "bound_agents": ["capture", "conductor"],
+  "bound_agents": [
+    "capture",
+    "conductor"
+  ],
   "env_vars": {
-    "required": ["ACCULYNX_API_KEY", "ACCULYNX_WEBHOOK_SECRET"],
-    "optional": ["ACCULYNX_PULL_SCHEDULE_MINUTES"]
+    "required": [
+      "ACCULYNX_API_KEY",
+      "ACCULYNX_WEBHOOK_SECRET"
+    ],
+    "optional": [
+      "ACCULYNX_PULL_SCHEDULE_MINUTES"
+    ]
   },
   "webhook_topics": [
     "job_created",
@@ -62,8 +70,18 @@
     "Lost": "lost",
     "Dead": "lost"
   },
-  "debrief_trigger_milestone": ["closed", "warranty"],
+  "debrief_trigger_milestone": [
+    "closed",
+    "warranty"
+  ],
   "api_base_url": "https://api.acculynx.com/api/v2",
   "api_docs": "https://apidocs.acculynx.com/reference/",
-  "notes": "Milestone names in job_phase_map must match the AccuLynx account exactly (case-sensitive). Override via config/roofer.config.yaml → integrations.acculynx.milestone_map."
+  "notes": "Milestone names in job_phase_map must match the AccuLynx account exactly (case-sensitive). Override via config/roofer.config.yaml \u2192 integrations.acculynx.milestone_map.",
+  "access_mode": "read_ingestion",
+  "runtime": {
+    "sync": "supabase/functions/acculynx-sync",
+    "financial_schedule": "hourly per active office",
+    "report_projection": "wip-ar-sync-refresh every five minutes",
+    "scope": "app/command-center/src/lib/sync-scope.ts"
+  }
 }

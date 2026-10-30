@@ -22,6 +22,7 @@
 | `/api/agent/work-queue` | GET | Bearer, WorkOS | no | Department-scoped |
 | `/api/agent/work-queue/[id]/decision` | POST | Bearer, WorkOS | yes | Human approval gates |
 | `/api/agent/intake` | POST | Bearer, named, local | yes | Roofing ops; not dev plane |
+| `/api/agent/linear-orchestration` | POST | Bearer (`maya-chen`/`ob-accounting`), local | yes | Server-pinned CAT source → PE-CC accounting child; no caller-selected Linear routing |
 | `/api/agentmail/webhook` | POST | Public (Svix sig) | yes | Verified signature required |
 | `/api/price-agreement/submit/[token]` | POST | Magic | yes | Vendor submission |
 | `/api/invoice-audit/*` | GET/POST | WorkOS, Bearer | mixed | Financial paths — RBAC |

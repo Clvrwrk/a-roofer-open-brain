@@ -7,7 +7,8 @@
 // Hard rules honored:
 //   - Rule 2: apiKey resolved only at runtime via Deno.env.get(env_secret_name);
 //             the NAME is warned on skip, the VALUE is never logged (T-02-05)
-//   - Rule 1: all diff detection uses markNotSeen (.update only, never .delete) (T-02-06)
+//   - Rule 1: all diff detection uses markNotSeen (.update only, never .delete) (T-02-06); it runs only after a
+//             complete sweep, and unarchiveSeen restores rows seen again (migration 325, 2026-10-05)
 //   - T-02-04: apiKey passed as explicit param to every resource fn (no module-level key)
 //   - T-02-07: serial account loop — 30 req/s IP limit enforced (no concurrent fan-out)
 //
@@ -18,20 +19,24 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { loadProductionAccounts, resolveKey } from "./lib/accounts.ts";
 import { readWatermark, advanceWatermark } from "./lib/watermark.ts";
-import { markNotSeen } from "./lib/diff.ts";
+import { newSweepOutcome, settleSweep } from "./lib/diff.ts";
 import { postSlackAlert, captureSentryError } from "./lib/alerts.ts";
 import { syncJobs } from "./resources/jobs.ts";
 import { syncContacts } from "./resources/contacts.ts";
-import { syncEstimates } from "./resources/estimates.ts";
+import { syncEstimates, enrichEstimateDetails } from "./resources/estimates.ts";
 import { syncUsersForAccount } from "./resources/users.ts";
+import { syncWipFinancials } from "./resources/wip-financials.ts";
 import { syncJobWalk } from "./resources/job-walk.ts";
-import { pageAll, syncCrmPipeline } from "./resources/crm-pipeline.ts";
+import { startSyncAudit, auditStatus } from "./lib/audit.ts";
+import { authorizeDispatch } from "./lib/dispatch-auth.ts";
+import { syncCrmPipeline } from "./resources/crm-pipeline.ts";
 
 // deno-lint-ignore-file no-explicit-any
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RUNTIME_BUDGET_MS = 110_000; // leave 10s of the 120s edge function limit
+const CRM_RESERVE_MS = 3_000; // walk-only runs keep this much of each slice for the crm_pipeline write
 const BATCH_PACE_MS = 150; // inter-request pacing for legacy resolveLeads loop
 
 const sb = createClient(SB_URL, SB_SRK, { auth: { persistSession: false } });
@@ -61,7 +66,8 @@ function parseLeadSource(name?: string | null): { parent: string | null; sub: st
 
 function parseJobName(jobName?: string | null): { prefix: string | null; rest: string | null } {
   if (!jobName) return { prefix: null, rest: null };
-  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+):\s*(.*)$/);
+  // CRM job numbers keep their -PECRM suffix in the prefix (mig 316, docs/118).
+  let m = jobName.match(/^([A-Z]{2,3}-[0-9]+(?:-PECRM)?):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };
   m = jobName.match(/^([0-9]+):\s*(.*)$/);
   if (m) return { prefix: m[1], rest: m[2].trim() || null };
@@ -529,6 +535,41 @@ async function legacySyncJobs(
 // ---------------------------------------------------------------------------
 
 /**
+ * The money pass for one account: walk the jobs acculynx_job_walk_candidates() returns
+ * (mig 321), board jobs first, until the deadline. Writes result.jobWalk as
+ * "ok (walked X of N)" and returns the rep map and the ids actually walked.
+ */
+async function runJobWalk(
+  acct: { account_key: string; market: string | null },
+  apiKey: string,
+  deadline: number,
+  batchId: string,
+  result: { jobWalk: string },
+): Promise<{ repNameByJobId: Map<string, string>; walked: string[] }> {
+  const walked: string[] = [];
+  let repNameByJobId = new Map<string, string>();
+  try {
+    const { data: candidates, error: candErr } = await sb.rpc("acculynx_job_walk_candidates", {
+      p_account_key: acct.account_key,
+      p_limit: 200,
+    });
+    if (candErr) throw new Error(`job walk candidates: ${candErr.message}`);
+    const rows = (candidates ?? []) as { job_id: string; modified_date: string | null }[];
+    const modifiedDateByJobId = new Map<string, string>();
+    for (const r of rows) if (r.modified_date) modifiedDateByJobId.set(r.job_id, r.modified_date);
+    repNameByJobId = await syncJobWalk(
+      sb, acct, apiKey, deadline, null, rows.map((r) => r.job_id), fetch, batchId, modifiedDateByJobId,
+      { preselected: true, walked },
+    );
+    result.jobWalk = `ok (walked ${walked.length} of ${rows.length})`;
+  } catch (e) {
+    result.jobWalk = `error: ${(e as Error).message}`;
+    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
+  }
+  return { repNameByJobId, walked };
+}
+
+/**
  * Run Phase 2 resource syncs for a single account.
  * SERIAL across resources — 30 req/s IP limit enforced (T-02-07).
  * apiKey is explicit — never a module-level shared key (T-02-04).
@@ -541,8 +582,32 @@ async function runAccountSync(
   apiKey: string,
   deadline: number,
   batchId: string,
+  jobWalkOnly = false,
+  financialsOnly = false,
 ): Promise<{ users: string; jobs: string; contacts: string; estimates: string; jobWalk: string; crmPipeline: string }> {
   const result = { users: "skipped", jobs: "skipped", contacts: "skipped", estimates: "skipped", jobWalk: "skipped", crmPipeline: "skipped" };
+
+  if (financialsOnly) {
+    const pass = await syncWipFinancials(sb, acct, apiKey, deadline - CRM_RESERVE_MS, batchId);
+    result.jobWalk = pass.errors ? `error: financial_refresh_failed (${pass.errors})` : `ok (financials ${pass.walked.length} of ${pass.candidates})`;
+    const crm = await syncCrmPipeline(sb, acct, deadline, new Map(), batchId, pass.walked);
+    result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
+    return result;
+  }
+  if (jobWalkOnly) {
+    // The walk stops CRM_RESERVE_MS early so the scoped crm_pipeline write below always
+    // runs: on 2026-10-02 20:13 UTC the walk used every slice to the millisecond and the
+    // write was skipped in 7 of 8 accounts, leaving walked jobs' milestones off the board
+    // (walked_at is stamped, so they would not have been picked again).
+    const { repNameByJobId, walked } = await runJobWalk(acct, apiKey, deadline - CRM_RESERVE_MS, batchId, result);
+    try {
+      const crm = await syncCrmPipeline(sb, acct, deadline, repNameByJobId, batchId, walked);
+      result.crmPipeline = crm.error ? `error: ${crm.error}` : `ok (${crm.upserted})`;
+    } catch (e) {
+      result.crmPipeline = `error: ${(e as Error).message}`;
+    }
+    return result;
+  }
 
   // --- Users (per-tenant; 2026-07-06 cross-location rep fix) ---
   // Sync this account's own users FIRST so the job-walk's rep resolver (loadUserNameMap
@@ -586,14 +651,31 @@ async function runAccountSync(
 
   if (Date.now() >= deadline) return result;
 
+  // --- Job Walk (header + sub-resources + invoice two-level + full-representatives) ---
+  // Runs BEFORE the contacts/estimates sweeps (2026-10-02): those page through the whole
+  // account every run and used to spend this account's ~14 s slice before the money
+  // pass ever started, so payments and new invoices took days to reach the WIP board.
+  //
+  // Candidate-driven (mig 321): acculynx_job_walk_candidates() returns only the jobs
+  // that need a re-read — never walked, modified since the last walk, or on the WIP/AR
+  // board and not walked in 3 days — board jobs first. This replaced walking every job
+  // in created order behind a resume cursor with an unindexed acculynx_raw LIKE probe
+  // per job. repNameByJobId feeds syncCrmPipeline below.
+  const { repNameByJobId } = await runJobWalk(acct, apiKey, deadline, batchId, result);
+
+  if (Date.now() >= deadline) return result;
+
   // --- Contacts (full sweep) ---
   const contactsSweepStart = new Date().toISOString();
   try {
     const contactsWm = await readWatermark(sb, acct.account_key, "contacts");
-    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm);
+    const contactsSweep = newSweepOutcome();
+    const contactApiCount = await syncContacts(sb, acct, apiKey, deadline, contactsWm, fetch, contactsSweep);
 
-    // Mark rows not seen in this sweep
-    await markNotSeen(sb, "acculynx_contacts", acct.account_key, contactsSweepStart);
+    // Restore rows this pass saw again, then archive the unseen ones only after a whole, error-free sweep
+    // (migration 325: partial passes cut by the deadline had archived nearly every contact).
+    const contactsSettled = await settleSweep(sb, "acculynx_contacts", acct.account_key, contactsSweepStart, contactsSweep);
+    if (contactsSettled.restored) console.log(`[contacts] ${acct.account_key}: ${contactsSettled.restored} rows un-archived (seen again)`);
 
     // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
@@ -603,7 +685,7 @@ async function runAccountSync(
       last_sync_at: new Date().toISOString(),
       ...(contactApiCount !== null ? { last_api_count: contactApiCount } : {}),
     });
-    result.contacts = "ok";
+    result.contacts = contactsSweep.complete ? "ok" : `ok (partial: ${contactsSweep.seen} rows, archive skipped)`;
   } catch (e) {
     result.contacts = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/contacts: ${(e as Error).message}`);
@@ -615,9 +697,16 @@ async function runAccountSync(
   const estimatesSweepStart = new Date().toISOString();
   try {
     const estimatesWm = await readWatermark(sb, acct.account_key, "estimates");
-    const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm);
+    const estimatesSweep = newSweepOutcome();
+    const estimateApiCount = await syncEstimates(sb, acct, apiKey, deadline, estimatesWm, fetch, estimatesSweep);
 
-    await markNotSeen(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart);
+    // Restore rows this pass saw again, then archive the unseen ones only after a whole, error-free sweep
+    // (migration 325: 422 of 455 estimates were archived by deadline-cut passes and never restored).
+    const estimatesSettled = await settleSweep(sb, "acculynx_estimates", acct.account_key, estimatesSweepStart, estimatesSweep);
+    if (estimatesSettled.restored) console.log(`[estimates] ${acct.account_key}: ${estimatesSettled.restored} rows un-archived (seen again)`);
+    // Detail pass (migration 319): title, number, dates and totals come only from GET /estimates/{id}.
+    const estimateDetails = await enrichEstimateDetails(sb, acct, apiKey, deadline);
+    if (estimateDetails) console.log(`[estimates] ${acct.account_key}: ${estimateDetails} detail rows refreshed`);
 
     // Persist API count so v_acculynx_reconciliation can compute delta_pct
     await advanceWatermark(sb, {
@@ -627,50 +716,10 @@ async function runAccountSync(
       last_sync_at: new Date().toISOString(),
       ...(estimateApiCount !== null ? { last_api_count: estimateApiCount } : {}),
     });
-    result.estimates = "ok";
+    result.estimates = estimatesSweep.complete ? "ok" : `ok (partial: ${estimatesSweep.seen} rows, archive skipped)`;
   } catch (e) {
     result.estimates = `error: ${(e as Error).message}`;
     console.warn(`[sync] ${acct.account_key}/estimates: ${(e as Error).message}`);
-  }
-
-  if (Date.now() >= deadline) return result;
-
-  // --- Job Walk (sub-resources + invoice two-level + full-representatives) ---
-  // repNameByJobId (Task 2a's Map<jobId, repName>) feeds syncCrmPipeline below so
-  // crm_pipeline.primary_salesperson picks up the full-representatives company rep
-  // this run resolved — even when this run's job-walk skipped most jobs under D-16,
-  // the map simply carries whichever jobs WERE walked this pass.
-  let repNameByJobId = new Map<string, string>();
-  try {
-    const jobWalkWm = await readWatermark(sb, acct.account_key, "job_walk");
-
-    // Load ordered job IDs + modified_date for this account (sorted by created_date ASC
-    // for deterministic resumption). modified_date feeds the D-16 change-driven skip.
-    // Paginated past the PostgREST 1000-row cap (third instance of the same live incident,
-    // 2026-07-03): unpaginated, the walk only ever saw each account's OLDEST 1000 jobs —
-    // colorado (1844) and texas (2301) had their tails silently never walked at all.
-    const jobIdsPaged = await pageAll<{ id: string; modified_date: string | null }>((from, to) =>
-      sb
-        .from("acculynx_jobs")
-        .select("id, modified_date")
-        .eq("account_key", acct.account_key)
-        .order("created_date", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to)
-    );
-    if (jobIdsPaged.error) throw new Error(`job IDs load: ${jobIdsPaged.error}`);
-    const jobRows = jobIdsPaged.rows;
-
-    const jobIds = (jobRows ?? []).map((r: { id: string }) => r.id);
-    const modifiedDateByJobId = new Map<string, string>();
-    for (const r of (jobRows ?? []) as { id: string; modified_date: string | null }[]) {
-      if (r.modified_date) modifiedDateByJobId.set(r.id, r.modified_date);
-    }
-    repNameByJobId = await syncJobWalk(sb, acct, apiKey, deadline, jobWalkWm, jobIds, fetch, batchId, modifiedDateByJobId);
-    result.jobWalk = "ok";
-  } catch (e) {
-    result.jobWalk = `error: ${(e as Error).message}`;
-    console.warn(`[sync] ${acct.account_key}/job-walk: ${(e as Error).message}`);
   }
 
   if (Date.now() >= deadline) return result;
@@ -700,16 +749,24 @@ async function runAccountSync(
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
+  const authorized = await authorizeDispatch(req, sb);
+  if (authorized instanceof Response) return authorized;
   const started = Date.now();
   const runStartIso = new Date(started).toISOString();
   const deadline = started + RUNTIME_BUDGET_MS;
 
-  const body = await req.json().catch(() => ({}));
+  const body = authorized.body;
   const resources: string[] = body.resources ?? ["users", "jobs"];
   const fullSync: boolean = body.fullSync ?? false;
   const resolveLeads: boolean =
     body.resolveLeads === true || resources.includes("resolveLeads");
   const multiAccount: boolean = body.multiAccount ?? false;
+  // jobWalkOnly (2026-10-02): the :30 pg_cron run does ONLY the money pass — job walk
+  // plus a crm_pipeline rebuild of the jobs it walked — so payments and invoices get a
+  // full budget of their own instead of whatever the users/jobs/contacts/estimates
+  // steps leave. Uses its own rotation cursor so it never shifts the :00 run's order.
+  const jobWalkOnly: boolean = body.jobWalkOnly === true;
+  const financialsOnly: boolean = body.financialsOnly === true;
   // accountFilter: optional array of account_key strings to restrict the fan-out.
   // When set, only the named production account(s) are synced, giving each the full
   // ~110s budget instead of sharing it across all enabled accounts (fixes wichita budget
@@ -722,18 +779,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const batchId = `sync-${runStartIso.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
 
-  await sb.from("crm_sync_log").insert({
-    sync_batch_id: batchId,
-    sync_type: multiAccount
-      ? "multi_account"
-      : (fullSync ? "full_sync" : resources.join(",") || "api_incremental"),
-    started_at: runStartIso,
-    status: "running",
-    api_endpoint: "acculynx-sync",
-  });
+  if (!await startSyncAudit(sb,batchId,runStartIso)) return json({error:"audit_log_unavailable",dispatch_run_id:authorized.runId,status:"failed"},503);
 
   const result: any = {
     batch_id: batchId,
+    dispatch_run_id: authorized.runId,
     resources: {},
     fullSync,
     resolveLeads,
@@ -767,7 +817,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // this run starts at the NEXT account in registry order and wraps around.
         // Only applies to the no-arg (accountFilter absent) default fan-out — an
         // explicit accountFilter subset always overrides rotation.
-        const rotationWm = await readWatermark(sb, "__rotation__", "fanout_start");
+        const rotationWm = await readWatermark(sb, jobWalkOnly ? "__rotation_walk__" : "__rotation__", "fanout_start");
         const lastStart = rotationWm?.last_walked_job_id ?? null;
         let rotateIdx = 0;
         if (lastStart) {
@@ -810,7 +860,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const perAccountShareMs = Math.max(0, Math.floor(msRemaining / Math.max(1, remainingAccounts)));
         const perAccountDeadline = Math.min(deadline, Date.now() + perAccountShareMs);
 
-        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId);
+        result.accounts[acct.account_key] = await runAccountSync(acct, apiKey, perAccountDeadline, batchId, jobWalkOnly, financialsOnly);
         remainingAccounts--;
       }
 
@@ -820,7 +870,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // (no explicit accountFilter) and at least one account was in scope.
       if (!accountFilter && accounts.length > 0) {
         await advanceWatermark(sb, {
-          account_key: "__rotation__",
+          account_key: jobWalkOnly ? "__rotation_walk__" : "__rotation__",
           resource_type: "fanout_start",
           last_walked_job_id: accounts[0].account_key,
           last_sync_at: new Date().toISOString(),
@@ -829,7 +879,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // v10 legacy resources (users, jobs, resolveLeads) — preserved for backward compat
-    if (!multiAccount || resources.includes("users")) {
+    if (!multiAccount || (!financialsOnly && resources.includes("users"))) {
       if (resources.includes("users")) {
         try {
           result.resources.users = await legacySyncUsers(batchId, deadline);
@@ -864,12 +914,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
+    // Account resource errors must affect the run outcome, not hide inside HTTP 200.
+    for (const [account, resources] of Object.entries(result.accounts ?? {})) {
+      if (typeof resources === "string") {
+        errorCount++;
+        errorDetails.push({account,resource:"account",message:"account_not_synced"});
+        continue;
+      }
+      for (const [resource, outcome] of Object.entries(resources as Record<string, unknown>)) {
+        if (typeof outcome === "string" && /^(error:|skipped.*key)/i.test(outcome)) {
+          errorCount++;
+          errorDetails.push({account,resource,message:"resource_failed"});
+        }
+      }
+    }
+    const {count: walkErrors, error: errorRead} = await sb.from("acculynx_job_walk_errors")
+      .select("id", {count:"exact", head:true}).eq("sync_batch_id", batchId);
+    if (errorRead || (walkErrors ?? 0)>0) {
+      errorCount += walkErrors || 1;
+      errorDetails.push({resource:"job_walk",message:"incomplete_observations"});
+    }
     result.runtime_ms = Date.now() - started;
     result.status = errorCount > 0 ? "partial_success" : "completed";
 
     await sb.from("crm_sync_log").update({
       completed_at: new Date().toISOString(),
-      status: result.status,
+      status: auditStatus(result.status),
       rows_fetched: totalFetched,
       error_count: errorCount,
       error_details: errorDetails.length ? errorDetails : null,
@@ -911,7 +981,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const dsn = Deno.env.get("ACCULYNX_SENTRY_DSN");
     if (dsn) await captureSentryError(dsn, err as Error, { batch_id: batchId });
 
-    return json({ error: msg, batch_id: batchId }, 500);
+    return json({ error: "sync_failed", batch_id: batchId, dispatch_run_id: authorized.runId, status: "failed" }, 500);
   }
 });
 

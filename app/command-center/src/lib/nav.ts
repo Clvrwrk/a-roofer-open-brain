@@ -35,6 +35,9 @@ export const navDepartments: NavDepartment[] = [
     icon: "accounting",
     items: [
       { label: "Invoice Audit", href: "/accounting/invoice-audit", status: "built" },
+      { label: "Friday WIP/AR", href: "/accounting/friday-wip", status: "built", note: "Live AR meeting board · Thursday pack · Maya email (docs/85)" },
+      { label: "13-Week Cash Flow", href: "/accounting/cash-flow", status: "built", note: "13WCF — receipts live from WIP/AR expected dates; editable drivers; Friday huddle instrument (mig 281)" },
+      { label: "QB Bank Export", href: "/accounting/qb-bank-export", status: "built", note: "Per-vendor bank-ledger CSVs (invoices · CM-TBD · credit memos) — human loads into QB (mig 226)" },
       { label: "Fleet Audit", status: "soon" },
       { label: "Tools Audit", status: "soon", note: "Software, subscriptions" },
       { label: "Business Expense Audit", status: "soon", note: "Insurance, CPA, advisors, compliance" },
@@ -42,13 +45,11 @@ export const navDepartments: NavDepartment[] = [
       { label: "Price Agreements", href: "/accounting/price-agreements", status: "built", note: "Coverage · Gap Worksheet (bought 2+ times, no negotiated price) · Renewal Worksheet (docs/83)" },
       { label: "Price List Review", href: "/accounting/price-agreement/review", status: "built", note: "Confirm item-id matches for family-level PDFs (Denver/Dallas), then promote to agreements" },
       { label: "Agreement Builder", href: "/accounting/price-agreement/builder", status: "built", note: "Per-branch negotiable worksheet (A+B), prefilled from prior agreements" },
+      { label: "Categorize Price Lines", href: "/accounting/price-agreement/categorize", status: "built", note: "Bind every vendor price line to the PE product file; category is inherited from the product, never typed twice (docs/103)" },
       // Retired from go-live nav 2026-06-19 (pages kept, just unlinked) — see docs/49.
       // Price Foundation: one-time data-quality migration tool, review queue empty (obsolete).
       // Negotiated Catalog / Price List Coverage: superseded by Agreement Builder + Price Agreement Audit
       // for the go-live audit flow; revisit folding Coverage into Agreement Builder post-launch.
-      // { label: "Price List Coverage", href: "/accounting/vendor-regions", status: "built" },
-      // { label: "Negotiated Catalog", href: "/accounting/price-list/catalog", status: "built" },
-      // { label: "Price Foundation", href: "/data-quality/price-foundation", status: "built" },
     ],
   },
   {
@@ -59,6 +60,7 @@ export const navDepartments: NavDepartment[] = [
       { label: "Overview", href: "/operations", status: "built", note: "HR & Compliance live here" },
       { label: "Estimate Audit", href: "/operations/estimate-audit", status: "built" },
       { label: "Order Audit", href: "/operations/order-audit", status: "built", note: "ABC orders ↔ AcuLynx job + negotiated coverage" },
+      { label: "Property Review", href: "/operations/property-review", status: "built", note: "Link AccuLynx jobs to their property, or send them back for a fix" },
       { label: "Proposal Audit", status: "soon", note: "Shares the Estimate Audit tree" },
       { label: "Scheduling", status: "soon" },
       { label: "1099 Employee Mgmt", status: "soon", note: "Tax forms, insurance, 1099" },
@@ -92,7 +94,11 @@ export const navDepartments: NavDepartment[] = [
     id: "executive",
     label: "Executive",
     icon: "executive",
-    items: [{ label: "Pipeline Review", href: "/executive/pipeline", status: "built" }],
+    items: [
+      { label: "Pipeline Review", href: "/executive/pipeline", status: "built" },
+      { label: "Cash Runway", href: "/executive/cash-runway", status: "built", note: "13-week cash curve with the Owner's minimum-cash floor (mig 281)" },
+      { label: "Fixed Costs", href: "/executive/fixed-costs", status: "built", note: "Fixed-Cost Register: pools, budget vs actual, allocation preview — provisional until CPA rulings (mig 281)" },
+    ],
   },
   {
     id: "ai-agents",
@@ -101,6 +107,7 @@ export const navDepartments: NavDepartment[] = [
     items: [
       { label: "Work Queue", status: "soon", note: "Returns here — recaptured from the old home" },
       { label: "Agent Monitor", href: "/agents", status: "built" },
+      { label: "Design System", href: "/design-system", status: "built", note: "Living design system — tokens, components, modes, motion, decisions log; the reference every new surface is built from" },
       { label: "Project Management", status: "soon" },
       { label: "Builds", status: "soon", note: "When/why/how we deploy & manage new agents" },
       { label: "Agent SOPs", status: "soon", note: "Tasking, thinking, planning, conductor, research, audit" },
@@ -113,7 +120,7 @@ export const navDepartments: NavDepartment[] = [
 /**
  * Returns the id of the department that owns the current pathname (so the
  * rail can auto-expand it), or null. Uses longest-prefix matching on built
- * leaf hrefs so deep routes (e.g. /accounting/price-list/catalog) resolve.
+ * leaf hrefs so deep routes (e.g. /accounting/price-agreement/builder) resolve.
  */
 export function activeDepartmentId(pathname: string): string | null {
   let best: { id: string; len: number } | null = null;

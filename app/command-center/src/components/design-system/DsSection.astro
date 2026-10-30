@@ -1,0 +1,14 @@
+---
+// One h2 section of a design-system chapter. `id` must match the entry in
+// src/lib/design-system/nav.ts so the rail, TOC and search all land here.
+interface Props {
+  id: string;
+  title: string;
+}
+const { id, title } = Astro.props;
+---
+
+<section class="ds-section" id={id}>
+  <h2>{title} <a class="ds-anchor" href={`#${id}`} aria-label={`Link to ${title}`}>#</a></h2>
+  <slot />
+</section>

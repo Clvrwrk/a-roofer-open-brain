@@ -1,0 +1,286 @@
+---
+import DesignSystemShell from "../../layouts/DesignSystemShell.astro";
+import DsSection from "../../components/design-system/DsSection.astro";
+import DsRule from "../../components/design-system/DsRule.astro";
+import DsSpec from "../../components/design-system/DsSpec.astro";
+
+const catalog = [
+  { id: "chevron", name: "Chevron rotate", where: "Every details/summary chevron (rail departments, tree levels)", spec: "transform: rotate(90deg) on [open]; transition transform 150ms ease", css: ".dept[open] .dept-chevron { transform: rotate(90deg) }", purpose: "Confirms the disclosure changed state." },
+  { id: "hover-lift", name: "Selection lift", where: ".queue-item:hover / .is-selected", spec: "box-shadow 0 12px 32px rgba(17,19,63,.10) + left rule → accent; transition 150–200ms", css: "transition: box-shadow .2s, border-color .2s", purpose: "The one hover motion on a list; tells the hand it is on a target." },
+  { id: "progress", name: "Progress fill", where: ".cc-progress-fill, meters", spec: "transition: width 350ms ease", css: "transition: width .35s ease", purpose: "A number that changed is seen changing." },
+  { id: "flash-saved", name: "Save flash", where: ".fw-edit.fw-saved / .fw-failed (inline board inputs)", spec: "border + fill → green for 1600ms then removed; red stays until the next edit", css: ".fw-saved { border-color:#12b76a; background:#ecfdf3 }", purpose: "Persisted (survives the nightly rebuild) vs rejected, without a toast per cell." },
+  { id: "row-flash", name: "Row flash", where: ".epl-jobs-table tr.epl-job-flash (executive pipeline)", spec: "background #fde68a held 25% then fades to transparent over 2.4s ease-out, once", css: "@keyframes epl-job-flash { 0%,25% { background:#fde68a } 100% { background:transparent } }", purpose: "Points the eye to the row a deep link landed on, then gets out of the way." },
+  { id: "tracer", name: "Overdue tracer", where: ".fw-edit.is-overdue (WIP expected-date cell)", spec: "conic-gradient tracer travelling the border, 1 turn / 3.6s linear infinite, low alpha navy; honours reduced motion", css: "@keyframes fw-tracer { to { --fw-ang: 1turn } }", purpose: "A quiet flag on a dense sheet rather than an alarm." },
+  { id: "blink", name: "Copy-then-act blink", where: ".blink-cta (public/agreement flow next-step button)", spec: "accent ↔ flag red, 0.7s steps(1, end) infinite until clicked", css: "animation: blink-cta .7s steps(1,end) infinite", purpose: "Signals a required action after a copy; the one sanctioned looping motion in Design.md." },
+  { id: "toast", name: "Toast", where: "One fixed bottom-centre node per surface", spec: "translateY(12px)→0 + opacity 0→1 over 150ms; auto-hide at 2.2s with the reverse", css: "transition: transform .15s, opacity .2s", purpose: "Arrives, states what happened and whether it persisted, leaves." },
+  { id: "rail", name: "Rail collapse", where: "body.rail-collapsed .app-frame", spec: "No transition: the grid snaps. Restored before first paint from localStorage", css: "grid-template-columns: minmax(0,1fr)", purpose: "A structural change should be instant; animating 280px of chrome costs 300ms every time." },
+  { id: "dropdown", name: "Dropdown / popout", where: ".iv-more-body, #fw-guess", spec: "opacity 0→1 over 120ms; no slide", css: "transition: opacity .12s", purpose: "Appears; does not travel." },
+  { id: "focus", name: "Focus ring", where: "Every interactive control", spec: "outline-color 200ms — the ring appears instantly, its colour eases", css: "transition: outline-color .2s", purpose: "Keyboard users see where they are without a flash." },
+  { id: "confetti", name: "Completion burst", where: "Agreement Builder at 100% reviewed", spec: "Canvas confetti ~1.2s, once, only on reaching 100%", css: "burstConfetti() in agreement-builder-tree.ts", purpose: "The single celebration; a long review deserves one." },
+  { id: "logo", name: "Logo roof draw-in (public pages only)", where: "Public first paint / hero", spec: "Roof path stroke-dashoffset 1→0 over 350ms ease-out, then wordmark opacity 0→1 over 200ms; once per session", css: "@keyframes ds-roof { to { stroke-dashoffset: 0 } }", purpose: "The brand's one flourish. Never inside the Command Center." },
+];
+---
+
+<DesignSystemShell slug="motion" source="app/command-center/src/pages/accounting/friday-wip.astro (fw-tracer) · executive/pipeline.astro (epl-job-flash)">
+  <style is:inline>
+    /* Every keyframe below is copied from production or from Design.md; the demo classes only add a replay hook. */
+    @property --fw-ang { syntax: "<angle>"; initial-value: 0turn; inherits: false; }
+    @keyframes fw-tracer { to { --fw-ang: 1turn; } }
+    .mo-tracer {
+      color: var(--error); font-weight: 700; border: 1px solid transparent; border-radius: 6px; padding: 3px 7px; font-size: 12.5px; font-variant-numeric: tabular-nums;
+      background-image: linear-gradient(var(--surface), var(--surface)), conic-gradient(from var(--fw-ang), transparent 0turn, transparent 0.58turn, color-mix(in srgb, var(--primary) 62%, transparent) 0.76turn, transparent 0.9turn);
+      background-origin: border-box; background-clip: padding-box, border-box; animation: fw-tracer 3.6s linear infinite;
+    }
+    @keyframes epl-job-flash { 0%, 25% { background-color: #fde68a; } 100% { background-color: transparent; } }
+    .mo-row.is-on { animation: epl-job-flash 2.4s ease-out; }
+    @keyframes blink-cta {
+      0%, 49% { background: var(--color-accent); color: var(--color-on-accent); box-shadow: 0 0 0 3px rgba(234,162,33,.35); }
+      50%, 100% { background: var(--color-tertiary); color: var(--color-on-tertiary); box-shadow: 0 0 0 3px rgba(194,35,38,.45); }
+    }
+    .mo-blink { animation: blink-cta .7s steps(1, end) infinite; border-color: transparent !important; }
+    .mo-chevron { display: inline-block; transition: transform .15s ease; }
+    .mo-chevron.is-on { transform: rotate(90deg); }
+    .mo-lift { display: grid; gap: 4px; width: 100%; max-width: 420px; text-align: left; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; background: var(--surface); color: var(--text); padding: 12px 14px; font: inherit; cursor: pointer; transition: box-shadow .2s, border-color .2s; }
+    .mo-lift:hover, .mo-lift.is-on { border-left-color: var(--accent); box-shadow: 0 12px 32px rgba(17,19,63,.10); }
+    .ds-frame[data-theme="dark"] .mo-lift:hover, .ds-frame[data-theme="dark"] .mo-lift.is-on { box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+    .mo-track { height: 8px; width: 240px; border-radius: 99px; background: var(--surface-alt); overflow: hidden; }
+    .mo-fill { height: 100%; width: 20%; border-radius: 99px; background: linear-gradient(90deg, var(--info), var(--primary)); transition: width .35s ease; }
+    .mo-fill.is-on { width: 86%; }
+    .mo-input { width: 96px; text-align: right; border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; font: inherit; font-size: 12.5px; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; transition: border-color .15s, background .15s; }
+    .mo-input.is-saved { border-color: #12b76a; background: #ecfdf3; color: #111827; }
+    .mo-input.is-failed { border-color: #f04438; background: #fef3f2; color: #111827; }
+    .mo-toast { position: relative; display: inline-block; border-radius: 8px; padding: 8px 12px; background: var(--primary); color: #fff; font-size: 13px; transform: translateY(12px); opacity: 0; transition: transform .15s, opacity .2s; }
+    .mo-toast.is-on { transform: translateY(0); opacity: 1; }
+    .ds-frame[data-theme="dark"] .mo-toast { background: var(--color-surface-elevated); color: var(--text); border-left: 3px solid var(--accent); }
+    .mo-pop { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; box-shadow: var(--shadow-float); opacity: 0; transition: opacity .12s; font-size: 13px; }
+    .mo-pop.is-on { opacity: 1; }
+    .mo-focus { transition: outline-color .2s; outline: 2px solid transparent; outline-offset: 2px; }
+    .mo-focus.is-on, .mo-focus:focus-visible { outline-color: var(--ds-focus); }
+    .mo-rail { display: grid; grid-template-columns: 80px 1fr; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; height: 90px; width: 100%; max-width: 420px; }
+    .mo-rail.is-on { grid-template-columns: 0 1fr; }
+    .mo-rail > div:first-child { background: var(--primary); }
+    .mo-rail > div:last-child { background: var(--surface-inset); }
+    @keyframes ds-roof { to { stroke-dashoffset: 0; } }
+    @keyframes ds-fade { to { opacity: 1; } }
+    .mo-logo .roof { stroke-dasharray: 700; stroke-dashoffset: 700; }
+    .mo-logo.is-on .roof { animation: ds-roof .35s ease-out forwards; }
+    .mo-logo .word { opacity: 0; }
+    .mo-logo.is-on .word { animation: ds-fade .2s ease-out .35s forwards; }
+    .mo-confetti { position: relative; overflow: hidden; height: 90px; width: 100%; max-width: 420px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .mo-confetti i { position: absolute; top: -10px; width: 6px; height: 10px; border-radius: 1px; opacity: 0; }
+    @keyframes ds-confetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(110px) rotate(540deg); opacity: 0; } }
+    .mo-confetti.is-on i { animation: ds-confetti 1.2s ease-in forwards; }
+    .mo-replay { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; padding: 6px 10px; cursor: pointer; }
+    @media (prefers-reduced-motion: reduce) { .mo-tracer, .mo-blink, .mo-row, .mo-logo .roof, .mo-logo .word, .mo-confetti i { animation: none !important; } .mo-logo .roof { stroke-dashoffset: 0; } .mo-logo .word { opacity: 1; } }
+  </style>
+
+  <DsSection id="principles" title="Principles">
+    <p>
+      Motion in a work surface answers one question: <em>what just changed, and where?</em> It is never decoration, never
+      a brand flourish, never a delay. Design.md sanctions a single looping animation (the copy-then-act blink) and calls
+      everything else minimal and purposeful. The catalogue below is the complete list of motion the app makes; a new
+      motion is a rule change.
+    </p>
+    <ul>
+      <li><strong>Feedback, not theatre.</strong> Every motion follows an action the user took or a state the system changed.</li>
+      <li><strong>Short.</strong> 120–200ms for feedback, 350ms for a value settling, 2.4s at most for a decaying highlight. Nothing loops except the two flags (blink, tracer), and both stop when the condition clears.</li>
+      <li><strong>Structural changes snap.</strong> The rail collapse and layout reflows do not animate; chrome that slides costs attention every time.</li>
+      <li><strong>Nothing moves under the pointer.</strong> Hover reveals; it does not translate.</li>
+      <li><strong>Reduced motion is honoured</strong> everywhere with one media query; a surface that forgets it fails review.</li>
+    </ul>
+  </DsSection>
+
+  <DsSection id="tokens" title="Duration & easing tokens">
+    <p>Production uses literal durations today; these are the values in use, named so a new surface picks one. They are also published in <a href="/design-system/tokens.json">tokens.json</a> and are the values to promote into <code>:root</code> when the next motion lands.</p>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Token</th><th>Value</th><th>Use</th><th>In production as</th></tr></thead>
+        <tbody>
+          <tr><td><code>--motion-fast</code></td><td>120ms</td><td>Popout / dropdown appear</td><td><code>transition: .12s</code></td></tr>
+          <tr><td><code>--motion-base</code></td><td>150ms</td><td>Chevron, toast entry, transform feedback</td><td><code>transition: transform .15s</code></td></tr>
+          <tr><td><code>--motion-slow</code></td><td>200ms</td><td>Lift shadow, focus colour, opacity</td><td><code>transition: .2s</code></td></tr>
+          <tr><td><code>--motion-reveal</code></td><td>350ms</td><td>Progress width, logo draw-in</td><td><code>transition: width .35s ease</code></td></tr>
+          <tr><td><code>--motion-decay</code></td><td>2400ms</td><td>Row flash decay</td><td><code>animation: 2.4s ease-out</code></td></tr>
+          <tr><td><code>--motion-loop</code></td><td>700ms steps / 3600ms linear</td><td>Blink / tracer</td><td><code>.7s steps(1,end)</code> · <code>3.6s linear</code></td></tr>
+          <tr><td><code>--ease-standard</code></td><td>ease</td><td>Default</td><td>ease</td></tr>
+          <tr><td><code>--ease-out</code></td><td>cubic-bezier(.2, 0, 0, 1)</td><td>Things arriving (toast, draw-in)</td><td>ease-out</td></tr>
+          <tr><td><code>--ease-step</code></td><td>steps(1, end)</td><td>The blink: a flag, not a fade</td><td>steps(1, end)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="catalog" title="The catalogue (live)">
+    <p>Each entry plays in the frame. "Replay" re-triggers a one-shot; the two loops run continuously unless your OS asks for reduced motion.</p>
+    <div class="ds-grid-2">
+      <DsSpec label="1 · Chevron rotate" code="150ms ease" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><span style="font-weight:700"><span class="mo-chevron" data-demo="chevron" aria-hidden="true">›</span> Denver · 63 jobs</span><button class="mo-replay" type="button" data-replay="chevron">Toggle</button></div>
+      </DsSpec>
+      <DsSpec label="2 · Selection lift" code="200ms · shadow + accent rule" layout="stack">
+        <button class="mo-lift" type="button" data-demo="hover-lift"><span style="display:flex;justify-content:space-between"><strong>Invoice INV-4821</strong><span class="health-badge health-ready">Ready</span></span><span style="font-size:13px;color:var(--text-muted)">Hover or press to lift</span></button>
+      </DsSpec>
+      <DsSpec label="3 · Progress fill" code="width 350ms ease" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><div class="mo-track"><div class="mo-fill" data-demo="progress"></div></div><button class="mo-replay" type="button" data-replay="progress">Replay</button></div>
+      </DsSpec>
+      <DsSpec label="4 · Save flash" code="green 1.6s then clears · red stays" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><input class="mo-input" data-demo="flash-saved" value="4,200.00" readonly /><button class="mo-replay" type="button" data-replay="flash-saved">Saved</button><button class="mo-replay" type="button" data-replay="flash-failed">Rejected</button></div>
+      </DsSpec>
+      <DsSpec label="5 · Row flash" code="2.4s ease-out, once, on deep-link landing" layout="stack">
+        <div style="display:grid;gap:0;width:100%;font-size:12.5px"><div style="padding:4px 8px;border-bottom:1px solid var(--border)">J-10398 · Maple St. hail</div><div class="mo-row" data-demo="row-flash" style="padding:4px 8px;border-bottom:1px solid var(--border)">J-10412 · Anderson re-roof ← landed here</div><div style="padding:4px 8px">J-10377 · Willow Ct. gutters</div></div><button class="mo-replay" type="button" data-replay="row-flash" style="justify-self:start">Replay</button>
+      </DsSpec>
+      <DsSpec label="6 · Overdue tracer (loop)" code="1 turn / 3.6s linear · honours reduced motion" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><span style="font-size:12.5px;color:var(--text-muted)">Expected</span><span class="mo-tracer">Sep 02</span><span style="font-size:12px;color:var(--text-muted)">a planned date that has passed</span></div>
+      </DsSpec>
+      <DsSpec label="7 · Copy-then-act blink (loop)" code="0.7s steps(1,end) until clicked" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><button class="button button-small mo-blink" type="button" data-demo="blink">Open email client</button><span style="font-size:12px;color:var(--text-muted)">stops on click</span></div>
+      </DsSpec>
+      <DsSpec label="8 · Toast" code="in 150ms / out 200ms · role=status" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><span class="mo-toast" role="status" data-demo="toast">recalculated locally — not saved</span><button class="mo-replay" type="button" data-replay="toast">Show</button></div>
+      </DsSpec>
+      <DsSpec label="9 · Rail collapse (no motion)" code="grid snaps; restored before first paint" layout="stack">
+        <div style="display:grid;gap:8px"><div class="mo-rail" data-demo="rail"><div></div><div></div></div><button class="mo-replay" type="button" data-replay="rail" style="justify-self:start">Toggle</button></div>
+      </DsSpec>
+      <DsSpec label="10 · Dropdown / popout" code="opacity 120ms, no travel" layout="stack">
+        <div style="display:grid;gap:8px"><div class="mo-pop" data-demo="dropdown">Invoice date <span style="color:var(--text-muted)">2026-06-01 → 2026-09-14</span> · Tolerance <span style="color:var(--text-muted)">Moderate +</span></div><button class="mo-replay" type="button" data-replay="dropdown" style="justify-self:start">Toggle</button></div>
+      </DsSpec>
+      <DsSpec label="11 · Focus ring" code="outline-color 200ms; navy (gold in dark)" layout="stack">
+        <div style="display:flex;gap:12px;align-items:center"><button class="button button-ghost button-small mo-focus" type="button" data-demo="focus">Tab to me</button><button class="mo-replay" type="button" data-replay="focus">Show ring</button></div>
+      </DsSpec>
+      <DsSpec label="12 · Completion burst" code="once, at 100% reviewed" layout="stack">
+        <div style="display:grid;gap:8px"><div class="mo-confetti" data-demo="confetti">{Array.from({ length: 24 }).map((_, i) => <i style={`left:${(i * 37) % 100}%;background:${["#11133f", "#c22326", "#eaa221", "#3b6b4c", "#0066cc"][i % 5]};animation-delay:${(i % 6) * 60}ms`}></i>)}</div><button class="mo-replay" type="button" data-replay="confetti" style="justify-self:start">Replay</button></div>
+      </DsSpec>
+    </div>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>#</th><th>Motion</th><th>Where</th><th>Spec</th><th>Purpose</th></tr></thead>
+        <tbody>
+          {catalog.map((m, i) => <tr id={`mo-${m.id}`}><td>{i + 1}</td><td class="nowrap"><strong>{m.name}</strong></td><td>{m.where}</td><td><code>{m.css}</code><br /><small style="color:var(--text-muted)">{m.spec}</small></td><td>{m.purpose}</td></tr>)}
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="logo-graphic" title="Logo & graphic motion">
+    <p>The logo has one motion, for public pages: the roof draws in, then the wordmark fades up. It runs once per session on first paint and never in the Command Center. Graphics (charts, meters, maps) animate only as their data changes — a bar grows to its value in 350ms on first render; a re-filter re-draws without animation so numbers can be compared without waiting.</p>
+    <DsSpec label="13 · Roof draw-in (public pages only)" code="stroke-dashoffset 350ms ease-out → wordmark opacity 200ms" layout="stack">
+      <div style="display:grid;gap:8px">
+        <svg class="mo-logo" data-demo="logo" viewBox="0 0 620 210" width="310" height="105" role="img" aria-label="Logo draw-in demonstration using stand-in geometry" style="display:block">
+          <path class="roof" d="M150 92 L300 40 L322 40 L360 53 L360 99" fill="none" stroke="#11133f" stroke-width="10" stroke-linejoin="round" stroke-linecap="round" />
+          <g class="word"><rect x="356" y="52" width="124" height="48" fill="#fff" stroke="#11133f" stroke-width="3" /><text x="366" y="88" font-family="Inter, Arial Black, sans-serif" font-weight="800" font-style="italic" font-size="38" fill="#11133f">PRO</text><text x="46" y="170" font-family="Inter, Arial Black, sans-serif" font-weight="800" font-style="italic" font-size="74" fill="#c22326" letter-spacing="1">EXTERIORS</text><text x="520" y="192" font-family="Inter, Arial Black, sans-serif" font-weight="800" font-style="italic" font-size="24" fill="#11133f">LLC</text></g>
+        </svg>
+        <button class="mo-replay" type="button" data-replay="logo" style="justify-self:start">Replay</button>
+        <small style="color:var(--text-muted)">Demonstrated with the stand-in vector geometry; the official artwork is a traced raster and cannot be stroked. This is the reason to request a clean vector from the client.</small>
+      </div>
+    </DsSpec>
+    <div class="ds-table-wrap">
+      <table class="ds-table">
+        <thead><tr><th>Graphic</th><th>On first render</th><th>On data change</th><th>On theme change</th></tr></thead>
+        <tbody>
+          <tr><td>Bar chart (Chart.js)</td><td>Bars grow 350ms ease-out (Chart.js default reduced to 350)</td><td>No animation — redraw so values can be compared</td><td>Redraw, no animation</td></tr>
+          <tr><td>Progress / meter</td><td>Width 350ms</td><td>Width 350ms</td><td>None</td></tr>
+          <tr><td>Map markers</td><td>Appear as tiles load; no drop or bounce</td><td>Ring recolours instantly</td><td>Tiles restyle; markers unchanged</td></tr>
+          <tr><td>Cash map cells</td><td>None</td><td>Value updates instantly; cell tone updates instantly</td><td>None</td></tr>
+          <tr><td>Logo</td><td>Draw-in on public pages only</td><td>—</td><td>None</td></tr>
+          <tr><td>Icons</td><td>None</td><td>None (colour follows state instantly)</td><td>None</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </DsSection>
+
+  <DsSection id="reduced-motion" title="Reduced motion">
+    <p>One media query, on every surface that animates. Loops stop, one-shots resolve to their end state, transitions become instant. The information carried by the motion must survive without it: the overdue cell is still red and bold; the blink button is still flag red; the flashed row is still scrolled into view.</p>
+    <div class="ds-pre"><code>@media (prefers-reduced-motion: reduce) &#123;
+  .fw .fw-edit.is-overdue &#123; animation: none; &#125;         /* the tracer stops; red + bold remain */
+  .blink-cta &#123; animation: none; background: var(--color-tertiary); color: var(--color-on-tertiary); &#125;
+  * &#123; transition-duration: .001ms !important; &#125;        /* feedback becomes instant, not absent */
+&#125;</code></div>
+    <p>Applied today on Friday WIP/AR and this site. Any surface with a keyframe must carry it (MO-06).</p>
+  </DsSection>
+
+  <DsSection id="motion-rules" title="Rules">
+    <div class="ds-rules">
+      <DsRule id="MO-01" title="Motion follows an action or a state change; nothing animates on its own except the two flags, and both stop when the condition clears." source="Design.md 'Motion is minimal and purposeful'; friday-wip.astro:361-377">
+        <p>Blink stops on click; tracer stops when the date is set.</p>
+      </DsRule>
+      <DsRule id="MO-02" title="Durations: 120ms appear, 150ms feedback, 200ms lift/opacity, 350ms value settle, 2.4s decay. No new duration without a rule change." source="global.css transitions; this chapter">
+        <p>Use the named tokens; promote them to <code>:root</code> with the next motion.</p>
+      </DsRule>
+      <DsRule id="MO-03" title="Structural chrome snaps: rail collapse, layout reflow, tab switch, filter application." source="AppShell.astro rail-collapsed; docs/40 filtering is show/hide">
+        <p>Animating 280px of chrome costs attention every time.</p>
+      </DsRule>
+      <DsRule id="MO-04" title="Hover reveals; it never translates or scales. The only hover motion is the selection lift (shadow + rule colour)." source="Design.md Elevation">
+        <p>No card that grows, no button that moves.</p>
+      </DsRule>
+      <DsRule id="MO-05" title="Data graphics animate only on first render (350ms); a re-filter or theme change redraws instantly." source="this chapter; executive-pipeline.ts">
+        <p>Comparing numbers must not wait for a tween.</p>
+      </DsRule>
+      <DsRule id="MO-06" title="Every surface with a keyframe carries the prefers-reduced-motion query, and the information survives without motion." source="friday-wip.astro:387; design-system.css">
+        <p>Colour and weight carry the state; motion only points at it.</p>
+      </DsRule>
+      <DsRule id="MO-07" title="The logo animates once, on public first paint, as the roof draw-in; never in the Command Center, never on loop, never on hover." source="Logo chapter L-08">
+        <p>Loading states in the app are words.</p>
+      </DsRule>
+      <DsRule id="MO-08" title="One celebration exists (completion confetti) and it fires only on reaching 100%." source="agreement-builder-tree.ts:154">
+        <p>Not on save, not on approve, not on every group.</p>
+      </DsRule>
+      <DsRule id="MO-09" title="Toast and popout are the only elements that enter; everything else is present or absent." source="invoice-audit.astro:194; friday-wip.astro:107">
+        <p>Enter with opacity (and 12px of travel for the toast); leave the same way.</p>
+      </DsRule>
+    </div>
+  </DsSection>
+
+  <script>
+    const q = (sel: string) => document.querySelector<HTMLElement>(sel);
+    const demo = (id: string) => q(`[data-demo="${id}"]`);
+    const pulse = (el: HTMLElement | null, cls = "is-on", ms = 0) => {
+      if (!el) return;
+      el.classList.remove(cls);
+      void el.offsetWidth; // restart the animation
+      el.classList.add(cls);
+      if (ms) setTimeout(() => el.classList.remove(cls), ms);
+    };
+    document.addEventListener("click", (ev) => {
+      const b = (ev.target as HTMLElement).closest<HTMLElement>("[data-replay]");
+      if (!b) return;
+      const id = b.dataset.replay!;
+      switch (id) {
+        case "chevron":
+        case "rail":
+        case "dropdown":
+          demo(id)?.classList.toggle("is-on");
+          break;
+        case "progress": {
+          const el = demo("progress");
+          if (!el) break;
+          el.classList.remove("is-on");
+          setTimeout(() => el.classList.add("is-on"), 60);
+          break;
+        }
+        case "flash-saved": {
+          const el = demo("flash-saved");
+          el?.classList.remove("is-failed");
+          pulse(el, "is-saved", 1600);
+          break;
+        }
+        case "flash-failed": {
+          const el = demo("flash-saved");
+          el?.classList.remove("is-saved");
+          el?.classList.add("is-failed");
+          break;
+        }
+        case "toast":
+          pulse(demo("toast"), "is-on", 2200);
+          break;
+        case "focus":
+          pulse(demo("focus"), "is-on", 1500);
+          break;
+        default:
+          pulse(demo(id));
+      }
+    });
+    // The blink stops on click, as in production.
+    demo("blink")?.addEventListener("click", (e) => (e.currentTarget as HTMLElement).classList.remove("mo-blink"));
+    // Play the one-shots once on load so the reader sees them without clicking.
+    setTimeout(() => { pulse(demo("row-flash")); pulse(demo("logo")); demo("progress")?.classList.add("is-on"); }, 400);
+  </script>
+</DesignSystemShell>

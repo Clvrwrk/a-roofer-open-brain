@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { classifyRoofingOpsRequest, requiresChrisApproval } from "./roofing-agent-scope";
 
 describe("classifyRoofingOpsRequest", () => {
-  it("routes invoice uploads to Maya", () => {
+  it("routes invoice intake to Ops after Maya retirement", () => {
     const result = classifyRoofingOpsRequest({ text: "Uploaded an invoice PDF from ABC — can someone intake this?" });
-    expect(result.candidates.map((candidate) => candidate.agent)).toContain("maya");
+    expect(result.candidates.map((candidate) => candidate.agent)).toContain("ops");
   });
 
   it("routes ABC SKU and UOM variance questions to Alex", () => {
@@ -51,7 +51,7 @@ describe("classifyRoofingOpsRequest", () => {
   it("requires Ops Conductor when multiple agents overlap", () => {
     const result = classifyRoofingOpsRequest({ text: "This invoice price agreement dispute needs a vendor draft." });
     expect(result.requiresOpsResolution).toBe(true);
-    expect(result.candidates.map((candidate) => candidate.agent)).toEqual(expect.arrayContaining(["maya", "alex", "casey"]));
+    expect(result.candidates.map((candidate) => candidate.agent)).toEqual(expect.arrayContaining(["ops", "alex", "casey"]));
   });
 
   it("does not route generic out-of-domain requests", () => {

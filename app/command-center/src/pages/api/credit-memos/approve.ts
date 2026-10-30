@@ -26,6 +26,11 @@ export const POST: APIRoute = async ({ locals, request }) => {
   const approve = body.approve !== false;
   if (!invoiceNumber) return jsonApiResponse({ error: "invalid_request", error_description: "invoiceNumber is required." }, { status: 400 });
 
+  // Silo (docs/87): resolve the invoice's vendor once and scope every read/write —
+  // invoice numbers are NOT globally unique across vendors.
+  const { data: vRow } = await client.from("v_invoice_audit_invoice_vendor").select("vendor_slug").eq("invoice_number", invoiceNumber).limit(1);
+  const vendorSlug = (vRow as any[] | null)?.[0]?.vendor_slug ?? "abc-supply";
+
   // Hard gate (Chris 2026-08-05): every claim line of the invoice's latest re-audit run
   // must carry a human review acknowledgment before approval.
   if (approve) {
@@ -33,6 +38,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       .from("invoice_line_reaudit")
       .select("run_label, variance_ext, reviewed_at, created_at")
       .eq("invoice_number", invoiceNumber)
+      .eq("vendor_slug", vendorSlug)
       .eq("classification", "discrepancy")
       .order("created_at", { ascending: false })
       .limit(500);
@@ -63,6 +69,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
       ? { status: "approved", approved_by: actor.displayName, approved_at: nowIso, updated_at: nowIso }
       : { status: "draft", approved_by: null, approved_at: null, updated_at: nowIso })
     .eq("invoice_number", invoiceNumber)
+    .eq("vendor_slug", vendorSlug)
     .eq("request_kind", "requested")
     .eq("status", approve ? "draft" : "approved")
     .select("invoice_number, status");

@@ -1,0 +1,209 @@
+---
+import AppShell from "../../../layouts/AppShell.astro";
+import { loadCategorizeBoard } from "@lib/product-categorize";
+
+// Categorization worksurface (docs/103). Every vendor price-list line should
+// point at a product in the PE product file; its category is then inherited
+// from that product's taxonomy rather than typed twice.
+//
+// Exact manufacturer-SKU matches are already applied by
+// refresh_product_match_candidates(). What lands here is what needs judgement.
+const board = await loadCategorizeBoard();
+const s = board.stats;
+const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+const runtimeTone = board.status === "live" ? "ready" : "watch";
+const TIER_LABEL: Record<string, string> = {
+  manufacturer_sku: "SKU",
+  colour_key: "colour variant",
+  description: "description",
+};
+---
+
+<AppShell title="Categorize price lines" eyebrow="Accounting" activePage="accounting">
+  <section class="pc" id="pc" data-theme="light" data-pref="system">
+    <div class="pc-toolbar">
+      <h2 class="pc-title">Categorize price lines</h2>
+      <span class="pc-sub">Bind every line to the PE product file — category follows the product</span>
+      <span class="pc-spacer"></span>
+      <label class="pc-filter">Show
+        <select id="pc-filter" class="pc-select">
+          <option value="">Everything pending</option>
+          <option value="one">Only unambiguous (1 candidate)</option>
+          <option value="money">Only lines with invoiced spend</option>
+        </select>
+      </label>
+      <span class="runtime-pill" data-tone={runtimeTone}><span class="signal-dot" aria-hidden="true"></span>{board.status === "live" ? "Supabase live" : "Supabase pending"}</span>
+      <div class="pc-theme" role="group" aria-label="Theme">
+        <button type="button" data-set-theme="system" class="is-active">System</button>
+        <button type="button" data-set-theme="light">Light</button>
+        <button type="button" data-set-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    {board.error && <p class="pc-error">{board.error}</p>}
+
+    <div class="pc-kpis">
+      <div class="pc-kpi"><span class="pc-kpi-lab">ABC price lines bound</span><span class="pc-kpi-val">{s.abcBound} / {s.abcTotal}</span><span class="pc-kpi-sub">{pct(s.abcBound, s.abcTotal)}% carry a product</span></div>
+      <div class="pc-kpi"><span class="pc-kpi-lab">Agreement items bound</span><span class="pc-kpi-val">{s.agreementBound} / {s.agreementTotal}</span><span class="pc-kpi-sub">{pct(s.agreementBound, s.agreementTotal)}% carry a product</span></div>
+      <div class="pc-kpi"><span class="pc-kpi-lab">Lines awaiting review</span><span class="pc-kpi-val">{s.pendingLines}</span><span class="pc-kpi-sub">{s.pendingCandidates} proposed bindings</span></div>
+      <div class="pc-kpi"><span class="pc-kpi-lab">Unambiguous</span><span class="pc-kpi-val">{s.unambiguousLines}</span><span class="pc-kpi-sub">one candidate — quickest wins</span></div>
+      <div class="pc-kpi"><span class="pc-kpi-lab">Invoiced spend at stake</span><span class="pc-kpi-val">{money(s.evidenceAtStake)}</span><span class="pc-kpi-sub">behind the lines in this queue</span></div>
+    </div>
+
+    {board.lines.length === 0 && !board.error && (
+      <p class="pc-empty">Nothing pending — every price line carries a product.</p>
+    )}
+
+    <div class="pc-lines">
+      {board.lines.map((l) => (
+        <article class="pc-line" data-source={l.sourceTable} data-id={l.sourceId} data-count={l.candidates.length} data-amount={l.evidenceAmount ?? 0}>
+          <header class="pc-line-head">
+            <span class="pc-vendor">{l.vendorSlug}</span>
+            {l.itemNumber && <code class="pc-item">{l.itemNumber}</code>}
+            <span class="pc-desc" title={l.description}>{l.description}</span>
+            <span class="pc-evidence">
+              {l.evidenceAmount ? `${money(l.evidenceAmount)} invoiced · ${l.evidenceLines} lines` : "no invoiced spend yet"}
+            </span>
+          </header>
+          <div class="pc-cands">
+            {l.candidates.map((c) => (
+              <div class="pc-cand" data-cand={c.id}>
+                <span class={"pc-tier pc-tier-" + c.matchTier}>{TIER_LABEL[c.matchTier] ?? c.matchTier}{c.similarity != null && c.matchTier === "description" ? ` ${c.similarity}` : ""}</span>
+                <span class="pc-prod" title={c.productName}>{c.productName}</span>
+                <span class="pc-tax">{[c.majorGroup, c.category, c.productType].filter(Boolean).join(" › ") || "no taxonomy on this product"}</span>
+                <span class="pc-actions">
+                  <button type="button" class="pc-btn pc-approve" data-cand={c.id}>Bind</button>
+                  <button type="button" class="pc-btn pc-reject" data-cand={c.id}>Not this</button>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p class="pc-status" data-status></p>
+        </article>
+      ))}
+    </div>
+
+    <p class="pc-foot">
+      Exact manufacturer-SKU matches resolving to a single product are bound automatically by
+      <code>refresh_product_match_candidates()</code>; this queue is what needs a human. Binding a
+      line rejects the other candidates for it — a line is one product. Category is never typed
+      here: it is read through the product, so it cannot drift from what the line actually is.
+    </p>
+  </section>
+
+  <style is:global>
+    .pc {
+      --bg: #f4f6f9; --panel: #ffffff; --ink: #1c2733; --muted: #6b7886; --line: #e3e8ef;
+      --navy: #11133f; --gold: #eaa221; --green: #137a4d; --green-bg: #e3f5ec;
+      --red: #a51f1f; --teal: #0f766e; --zebra: #f0f1f8;
+      display: grid; gap: 14px; background: var(--bg); color: var(--ink);
+      margin: calc(-1 * var(--space-4, 16px)) -28px calc(-1 * var(--space-6, 24px));
+      padding: 18px 28px 30px; min-height: 70vh;
+      font-family: var(--font-sans, Inter, system-ui, sans-serif);
+    }
+    .pc[data-theme="dark"] {
+      --bg: #0f141b; --panel: #161d27; --ink: #e6edf5; --muted: #8b98a8; --line: #27313e;
+      --gold: #f2cf6b; --green: #7ee2ad; --green-bg: #123626; --red: #ff8585; --zebra: #1a2230;
+    }
+    .pc .pc-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pc .pc-title { margin: 0; font-size: 18px; }
+    .pc .pc-sub { color: var(--muted); font-size: 12.5px; }
+    .pc .pc-spacer { flex: 1; }
+    .pc .pc-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+    .pc .pc-select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; background: var(--panel); color: var(--ink); }
+    .pc .pc-theme { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+    .pc .pc-theme button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; font-family: inherit; }
+    .pc .pc-theme button.is-active { background: var(--navy); color: #fff; }
+    .pc .pc-error { color: var(--red); font-size: 13px; }
+    .pc .pc-empty { color: var(--muted); font-size: 13.5px; padding: 20px; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
+    .pc .pc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .pc .pc-kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; background: var(--panel); }
+    .pc .pc-kpi-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .pc .pc-kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .pc .pc-kpi-sub { font-size: 11.5px; color: var(--muted); }
+    .pc .pc-lines { display: grid; gap: 10px; }
+    .pc .pc-line { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 10px 12px; display: grid; gap: 8px; border-left: 3px solid var(--gold); }
+    .pc .pc-line.is-done { opacity: 0.55; border-left-color: var(--green); }
+    .pc .pc-line-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .pc .pc-vendor { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .pc .pc-item { font-size: 12px; background: var(--zebra); padding: 1px 6px; border-radius: 5px; }
+    .pc .pc-desc { font-weight: 600; font-size: 13px; flex: 1; min-width: 240px; }
+    .pc .pc-evidence { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .pc .pc-cands { display: grid; gap: 5px; }
+    .pc .pc-cand { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 5px 8px; background: var(--zebra); border-radius: 8px; }
+    .pc .pc-cand.is-gone { display: none; }
+    .pc .pc-tier { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+    .pc .pc-tier-colour_key { border-color: var(--gold); color: var(--gold); }
+    .pc .pc-tier-manufacturer_sku { border-color: var(--green); color: var(--green); }
+    .pc .pc-prod { font-size: 12.5px; flex: 1; min-width: 200px; }
+    .pc .pc-tax { font-size: 11.5px; color: var(--muted); }
+    .pc .pc-actions { display: inline-flex; gap: 6px; margin-left: auto; }
+    .pc .pc-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+    .pc .pc-approve { border-color: var(--teal); color: var(--teal); font-weight: 600; }
+    .pc .pc-approve:hover { background: var(--green-bg); }
+    .pc .pc-btn[disabled] { opacity: 0.5; cursor: wait; }
+    .pc .pc-status { margin: 0; font-size: 12px; color: var(--muted); min-height: 0; }
+    .pc .pc-status[data-tone="ok"] { color: var(--green); }
+    .pc .pc-status[data-tone="err"] { color: var(--red); }
+    .pc .pc-foot { color: var(--muted); font-size: 12px; }
+    .pc [hidden] { display: none !important; }
+  </style>
+
+  <script>
+    import { initThemePref } from "../../../scripts/theme-pref";
+    const root = document.getElementById("pc")!;
+    initThemePref(root, ".pc-theme button");
+
+    const decide = async (btn: HTMLButtonElement, action: "approve" | "reject") => {
+      const line = btn.closest<HTMLElement>(".pc-line");
+      const cand = btn.closest<HTMLElement>(".pc-cand");
+      const status = line?.querySelector<HTMLElement>("[data-status]");
+      if (!line || !cand) return;
+      line.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = true));
+      if (status) { status.removeAttribute("data-tone"); status.textContent = "Saving…"; }
+      try {
+        const resp = await fetch("/api/accounting/product-match/decide", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ candidateId: btn.dataset.cand, action }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          if (status) { status.setAttribute("data-tone", "err"); status.textContent = result.error_description ?? result.error ?? `Failed (${resp.status})`; }
+          line.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = false));
+          return;
+        }
+        if (action === "approve") {
+          // The whole line is settled — one line, one product.
+          line.classList.add("is-done");
+          if (status) { status.setAttribute("data-tone", "ok"); status.textContent = "Bound ✓ — category now follows this product"; }
+        } else {
+          cand.classList.add("is-gone");
+          const left = line.querySelectorAll(".pc-cand:not(.is-gone)").length;
+          if (status) { status.textContent = left ? `${left} candidate${left === 1 ? "" : "s"} left` : "No candidates left — needs a manual bind"; }
+          line.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = false));
+        }
+      } catch (err) {
+        if (status) { status.setAttribute("data-tone", "err"); status.textContent = String(err); }
+        line.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = false));
+      }
+    };
+
+    document.querySelectorAll<HTMLButtonElement>(".pc-approve").forEach((b) =>
+      b.addEventListener("click", () => decide(b, "approve")));
+    document.querySelectorAll<HTMLButtonElement>(".pc-reject").forEach((b) =>
+      b.addEventListener("click", () => decide(b, "reject")));
+
+    // Triage filters — work the unambiguous ones, or the ones with money behind them.
+    const filter = document.getElementById("pc-filter") as HTMLSelectElement | null;
+    filter?.addEventListener("change", () => {
+      const mode = filter.value;
+      document.querySelectorAll<HTMLElement>(".pc-line").forEach((line) => {
+        const one = line.dataset.count === "1";
+        const money = Number(line.dataset.amount ?? "0") > 0;
+        line.hidden = (mode === "one" && !one) || (mode === "money" && !money);
+      });
+    });
+  </script>
+</AppShell>

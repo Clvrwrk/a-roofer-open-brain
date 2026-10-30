@@ -8,18 +8,48 @@ provider results for the next reasoning step. Maya responds when any human in an
 channel accessible to her Slack app begins a message with `Maya` or an exact `@Maya`
 mention.
 
-The same single Supervisor-owned runtime also owns Maya's canonical mailbox cadence.
-It checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
-bootstraps at activation time so historical mail is not replayed, and deduplicates by
-Gmail message ID. For each new message, Maya may search/read Gmail, retrieve an
-attachment, reply/send/draft email, file or recoverably trash mail, search/create/
-update/comment in PE-CC-Dev Linear, and read or communicate through accessible Slack
-channels. A successfully handled message is marked read; unknown provider outcomes
-remain ambiguous and are never retried automatically.
+The same single Supervisor-owned runtime also owns Maya's canonical mailbox cadence,
+daily-through-annual loop materialization, and explicit Linear work claimant. It
+checks only Maya's pinned Composio Gmail connection on UTC half-hour boundaries,
+bootstraps at activation time, and deduplicates by day-scoped content, Gmail thread,
+and Gmail message keys. The scheduled mailbox path is deterministic: it classifies
+untrusted mail; asks the authenticated Command Center server to create or resolve one
+CODEX AGENT TEAM source and one linked PE-CC-DevTeam accounting child using its
+server-only Linear credential; assigns both to Christopher in Agent
+Review; records the CAT/PEC lineage idempotently in Command Center/Supabase before
+analysis; sends the pinned admin Slack route a `[REVIEW]` or
+`[BLOCKED]` notice; sends one standard received acknowledgement explicitly to an approved
+internal-domain sender immediately after the CAT/PEC pair and Command Center intake are
+confirmed; and then applies the reviewed Gmail filing plan. Deeper analysis failures do
+not suppress an already provider-confirmed receipt.
+Unknown provider outcomes remain ambiguous and are never retried automatically. Known
+Google and Slack account-security notices are deterministically normalized into
+owner-authorization checks, preventing the classifier from inventing account
+deactivation or recovery work. Slack notices use the server-confirmed human `CAT-*`
+identifier and suppress any malformed or internal UUID reference.
+The scan excludes Gmail Sent mail and Maya's own sender address, and the acknowledgement
+gate independently refuses Maya's own address. These layered guards prevent receipt
+messages from becoming recursive accounting issues or replies.
 
-PEC-113 removes the old intake-only, draft-only, no-attachment, create-only Linear,
-and fixed-owner-only Slack limitations. The release still enforces Maya attribution,
-mandatory email CC to `admin@cc.proexteriorsus.net`, exact account/team identity,
+The named-agent bearer cannot choose a Linear team, project, parent, state, or assignee.
+`/api/agent/linear-orchestration` pins those fields server-side, searches every stable
+Gmail content/thread/message key before creating, repairs a missing child parent, and
+returns only a provider-confirmed CAT/PEC pair. Raw Linear authority stays off Maya's
+Orgo machine, and mailbox intake does not depend on Maya's narrower Composio Linear
+workspace visibility.
+
+`mailbox-cleanup.mjs` and `run-mailbox-cleanup.sh` provide a bounded one-shot pass over
+the existing inbox. Cleanup deliberately disables sender acknowledgements so old mail
+does not receive a late receipt. It uses the same per-message receipts and Linear source
+markers as the scheduled executor.
+
+Direct Slack requests are CAT-first too. Recurring loops create one CAT source and one
+Agent Todo child per period. The claimant polls every five minutes and claims only
+CAT-linked `[MAYA]` children explicitly placed in Agent Todo. Linear-work mode may
+read Gmail, Slack, Linear, and scoped Command Center accounting views, and may add
+Linear evidence; external sends and financial mutations are removed from that mode.
+Results finish in Agent Review. The release enforces Maya attribution, mandatory
+email CC to both `admin@cc.proexteriorsus.net` and `chussey@aia4.io`, exact account/team identity,
 credential secrecy, hashed effect receipts, and an operator kill switch. Permanent
 deletion, payment execution, credential disclosure, and access-control administration
 are not exposed because they are not required for normal Maya work.
@@ -32,17 +62,29 @@ Security invariants:
 - the listener release and Hermes configuration are root-owned under `/opt`; the
   launcher verifies their complete ownership/mode/symlink trust chain, the pinned
   system executables, and Maya's writable runtime/state/secret paths before strictly
-  reading the two allowed credentials;
+  reading the three allowed scoped credentials;
 - all human authors and all accessible channel, private-channel, and multi-person
   channel types are accepted when the message addresses Maya;
 - bot/self messages, subtypes, duplicates, and malformed scope fail closed;
-- identity, deduplication, owner email CC, and the Maya prefix are code; normal
+- identity, deduplication, both oversight email CCs, approved acknowledgement domains,
+  deterministic Gmail filing, and the Maya prefix are code; normal
   Slack destinations may be selected from channels accessible to Maya;
 - an interrupted or failed send is `ambiguous` and is never retried automatically;
 - receipts contain only hashes and provider IDs, never messages, prompts, replies,
   tokens, headers, or credentials;
 - Gmail, Linear, and Slack effects are pinned to Maya's reviewed Composio user and
-  connected accounts; new Linear issues are always pinned to PE-CC-DevTeam;
+  connected accounts; every new work graph is pinned to a CODEX AGENT TEAM source,
+  a linked PE-CC-DevTeam child, Christopher, and reviewed workflow states;
+- Maya's named Command Center token grants accounting reads and evidence only; it
+  carries no approval or financial-write authority. The raw token exists only in
+  Orgo's owner-only `MAYA_COMMAND_CENTER_TOKEN` secret; Supabase stores only its
+  SHA-256 digest in the server-only named-agent token registry;
+- price work uses ABC `priceQty.uom`, `abc_invoice_lines.price_per_uom`, and
+  `v_item_uom_map`; WIP/AR keeps billed receivables separate from unbilled work, and
+  QuickBooks production remains read-only;
+- Signal and every new third-party channel stay disabled until the third-party-agent-
+  tool gate, signed ingress, identity/replay/dedupe review, kill switch, rollback, and
+  human approval are complete;
 - the mailbox cursor and per-message receipts are private local state; first start
   records the activation cursor without replaying historical email, then exactly one
   in-process timer schedules the next UTC half-hour occurrence;
@@ -72,7 +114,7 @@ Security invariants:
 
 The service is installed disabled under Orgo's existing Supervisor process manager.
 `autostart` and automatic start retries remain disabled. Activation requires a passed
-Ringer review, the exact enabled Composio trigger, the owner-only two-credential
+Ringer review, the exact enabled Composio trigger, the owner-only three-credential
 environment file with mode 0600, and Hermes configuration validation. Once started,
 the listener remains online and serializes overlapping messages instead of dropping
 them. Only the Supervisor definition is shipped; there is no systemd fallback.

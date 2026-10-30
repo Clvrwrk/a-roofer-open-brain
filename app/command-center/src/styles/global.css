@@ -75,6 +75,11 @@
   --success: var(--color-success);
   --warning: var(--color-warning);
   --error: var(--color-error);
+  /* Consumed by .button-danger, .priority-critical and the credit-memo panel since the first
+     build but never declared, so the destructive button rendered with no fill. Caught while
+     documenting the button hierarchy on /design-system (2026-09-14). */
+  --error-surface: var(--color-error-surface);
+  --error-text: var(--color-error-text);
   --radius: var(--radius-md);
   --shadow: 0 12px 32px rgba(17, 19, 63, 0.08);
   font-family: var(--font-sans);
@@ -94,7 +99,8 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  font-size: 15px;
+  /* Design.md typography: body 14px / 1.5 (was 15px — drift caught 2026-09-11, CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11). */
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -116,6 +122,46 @@ a {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+/* Sidebar collapse (rail-toggle in AppShell): full-width work surface for
+   wide boards like Friday WIP/AR. Class lives on <body>; persists via
+   localStorage "cc-rail-collapsed". */
+body.rail-collapsed .app-frame {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.rail-collapsed .side-rail {
+  display: none;
+}
+
+.top-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rail-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail-toggle:hover {
+  border-color: #98a2b3;
 }
 
 .side-rail {

@@ -36,11 +36,21 @@
 // Task 2a's full-representatives fetch + jobId->repName Map contract is unchanged by this
 // scheduling layer — it wraps the walk, it does not alter what the walk does per job.
 //
+// Preselected mode (2026-10-02, mig 321 — what the hourly sync uses): the caller passes
+// only the jobs acculynx_job_walk_candidates() says need a re-read, so the resume cursor
+// and the per-job shouldWalkJob() probe are skipped. Each job's own record is re-read
+// first (GET /jobs/{id}) and its milestone/modified fields written to acculynx_jobs:
+// the ModifiedDate-filtered /jobs list never returned some jobs whose own record shows a
+// change (six closed in July/August stayed "Invoiced" on the WIP board for months).
+// acculynx_jobs.walked_at is stamped with the job's walk START time after each job, so
+// a change that lands mid-walk is still newer than the marker and is picked up next run.
+//
 // GUID path params are URL-encoded (ASVS V5 / T-02-08).
 // apiKey is an explicit parameter — never a module-level constant (T-02-04 / Pitfall 3).
 
 // deno-lint-ignore-file no-explicit-any
 
+import { restoreContactParents } from "./contact-parents.ts";
 import { advanceWatermark } from "../lib/watermark.ts";
 import {
   mapInvoiceHeader,
@@ -58,10 +68,37 @@ const MAX_RETRIES = 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * A financial snapshot must explicitly carry its two core amounts. Missing
+ * values map to null, so accepting an error envelope or incomplete snapshot
+ * would erase trusted balances and give them a fresh observation timestamp.
+ * Zero and explicit null are valid; optional totals may be absent or null.
+ */
+export function isJobFinancialsBody(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const financials = body as Record<string, unknown>;
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(financials, key);
+  if (!hasOwn("approvedJobValue") || !hasOwn("balanceDue")) return false;
+  return [
+    "approvedJobValue",
+    "balanceDue",
+    "worksheetTotal",
+    "changeOrderTotal",
+    "insuranceClaimTotal",
+    "upgradeTotal",
+    "discountTotal",
+    "supplementTotal",
+    "workNotDoingTotal",
+  ].every((key) =>
+    !hasOwn(key) || financials[key] === null ||
+    (typeof financials[key] === "number" && Number.isFinite(financials[key]))
+  );
+}
+
+/**
  * Fetch a URL with 429 retry + exponential backoff.
  * apiKey is an explicit parameter to prevent cross-account key bleed (T-02-04).
  */
-async function acculynxGet(
+export async function acculynxGet(
   url: string,
   apiKey: string,
   fetchFn: typeof fetch,
@@ -94,7 +131,7 @@ async function acculynxGet(
  * http_status, page_index, payload). Non-fatal: a raw-archive failure is logged but does
  * not block the typed upsert — the archive is best-effort provenance, not a hard gate.
  */
-async function archiveRaw(
+export async function archiveRaw(
   sb: any,
   syncBatchId: string | undefined,
   resourceType: string,
@@ -215,7 +252,7 @@ async function resolveRepNameWithFetch(
 }
 
 /**
- * Record a typed-upsert failure as a counted, queryable row instead of console.warn-only.
+ * Record a response validation or typed-upsert failure as a counted, queryable row.
  * Feeds check_acculynx_alerts() condition (e) — migration 186.
  */
 async function recordWalkError(
@@ -238,6 +275,22 @@ async function recordWalkError(
   if (error) {
     console.warn(`[job-walk] failed to record job_walk_error (${resourceType}) for ${jobId}: ${error.message}`);
   }
+}
+
+/**
+ * The acculynx_jobs columns refreshed from GET /jobs/{id}: milestone and modified
+ * fields only, and only those the body actually carries (an absent field is never
+ * written as null). Returns null when the body carries none of them.
+ */
+export function headerFieldsFromDetail(body: Record<string, unknown>, seenAt: string): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  if (typeof body.currentMilestone === "string" && body.currentMilestone) out.current_milestone = body.currentMilestone;
+  if (typeof body.milestoneDate === "string" && body.milestoneDate) out.milestone_date = body.milestoneDate;
+  if (typeof body.modifiedDate === "string" && body.modifiedDate) out.modified_date = body.modifiedDate;
+  if (Object.keys(out).length === 0) return null;
+  out.synced_at = seenAt;
+  out.last_seen_by_api = seenAt;
+  return out;
 }
 
 /**
@@ -297,6 +350,13 @@ async function shouldWalkJob(
   return { walk: false, reason: "unchanged" };
 }
 
+export interface JobWalkOptions {
+  /** jobIds were chosen by acculynx_job_walk_candidates(): walk every one, in order. */
+  preselected?: boolean;
+  /** When given, receives the id of every job actually walked this run (not skipped). */
+  walked?: string[];
+}
+
 /**
  * Walk known job IDs to sync sub-resources (invoices, financials, insurance,
  * milestone-history, job-contacts) for a single account.
@@ -333,6 +393,7 @@ export async function syncJobWalk(
   fetchFn: typeof fetch = fetch,
   syncBatchId?: string,
   modifiedDateByJobId: Map<string, string> = new Map(),
+  options: JobWalkOptions = {},
 ): Promise<Map<string, string>> {
   const now = new Date().toISOString();
   const lastWalked = watermark?.last_walked_job_id ?? null;
@@ -341,11 +402,20 @@ export async function syncJobWalk(
   const userMap = await loadUserNameMap(sb);
 
   // Resume from where we left off: skip jobs already walked.
+  const preselected = options.preselected === true;
   let startIdx = 0;
-  if (lastWalked) {
+  if (lastWalked && !preselected) {
     const idx = jobIds.indexOf(lastWalked);
     if (idx >= 0) startIdx = idx + 1; // start AFTER the last processed job
   }
+  // Wrap-around (2026-08-07, MC-68 incident): once the cursor reached the END of an
+  // account's list, startIdx === jobIds.length and this loop never executed again —
+  // existing jobs were NEVER re-walked, freezing invoices/financials at their
+  // initial-sweep values (payments applied in AccuLynx stayed invisible for weeks).
+  // When a sweep is complete, start the next sweep from the top; D-16 still skips
+  // every unchanged job, so a wrapped pass only re-pulls jobs whose modified_date
+  // moved past their newest archive.
+  if (startIdx >= jobIds.length && jobIds.length > 0) startIdx = 0;
 
   for (let i = startIdx; i < jobIds.length; i++) {
     if (Date.now() >= deadline) break;
@@ -355,7 +425,9 @@ export async function syncJobWalk(
     // D-15/D-16 pull scheduling: skip an unchanged, already-fully-pulled job rather
     // than blanket re-pulling every job every run. A first-sight job (no prior
     // acculynx_raw rows) always proceeds to the full walk below (D-15).
-    const { walk } = await shouldWalkJob(sb, jobId, modifiedDateByJobId.get(jobId));
+    const { walk } = preselected
+      ? { walk: true }
+      : await shouldWalkJob(sb, jobId, modifiedDateByJobId.get(jobId));
     if (!walk) {
       // Still advance the watermark past a skipped job so resumption doesn't
       // re-evaluate it every run within the same sweep.
@@ -370,6 +442,27 @@ export async function syncJobWalk(
 
     const encodedJobId = encodeURIComponent(jobId);
     const ctx = { ...ctxBase, job_id: jobId };
+    const walkStartedAt = new Date().toISOString();
+    let moneyComplete = true;
+
+    // 0. The job's own record (preselected mode). Only the milestone and modified
+    //    fields are written: the detail body is not the list shape mapJob() expects,
+    //    and a full-row write from it could blank list-only columns.
+    if (preselected) {
+      await sleep(PACE_MS);
+      const jobEndpoint = `/jobs/${encodedJobId}`;
+      const { status: jobStatus, body: jobBody } = await acculynxGet(`${ACCULYNX_BASE}${jobEndpoint}`, apiKey, fetchFn);
+      await archiveRaw(sb, syncBatchId, "job_detail", jobEndpoint, jobStatus, jobBody);
+      if (jobStatus === 200 && jobBody && typeof jobBody === "object") {
+        const header = headerFieldsFromDetail(jobBody as Record<string, unknown>, walkStartedAt);
+        if (header) {
+          const { error } = await sb.from("acculynx_jobs").update(header).eq("id", jobId);
+          if (error) {
+            await recordWalkError(sb, acct.account_key, jobId, "job_detail", syncBatchId, error.message, jobStatus);
+          }
+        }
+      }
+    }
 
     // 1. Job contacts
     await sleep(PACE_MS);
@@ -384,8 +477,21 @@ export async function syncJobWalk(
       (Array.isArray(contactsBody) ? (contactsBody as unknown[]) : []);
     if (jobContacts.length > 0) {
       const contactRows = jobContacts.map((c: any) => mapJobContact(c, ctx));
-      const { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      let { error } = await sb.from("acculynx_job_contacts").upsert(contactRows);
+      // A newly linked contact can be absent from the slower account-wide sweep.
+      // Restore it from its own authenticated endpoint; never invent a parent or drop the FK.
+      if (error?.code === "23503" && error.message?.includes("acculynx_job_contacts_contact_id_fkey")) {
+        const restored = await restoreContactParents(sb, acct, contactRows, deadline, async (id) => {
+          await sleep(PACE_MS);
+          const endpoint = `/contacts/${encodeURIComponent(id)}`;
+          const response = await acculynxGet(`${ACCULYNX_BASE}${endpoint}`, apiKey, fetchFn);
+          await archiveRaw(sb, syncBatchId, "contacts", endpoint, response.status, response.body);
+          return response;
+        });
+        if (restored) ({ error } = await sb.from("acculynx_job_contacts").upsert(contactRows));
+      }
       if (error) {
+        moneyComplete = false; // keep dependency failures eligible for the next candidate pass
         await recordWalkError(
           sb,
           acct.account_key,
@@ -407,10 +513,11 @@ export async function syncJobWalk(
       fetchFn,
     );
     await archiveRaw(sb, syncBatchId, "job_financials", financialsEndpoint, financialsStatus, financialsBody);
-    if (financialsBody && typeof financialsBody === "object" && !Array.isArray(financialsBody)) {
+    if (financialsStatus === 200 && isJobFinancialsBody(financialsBody)) {
       const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
       if (error) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -421,6 +528,19 @@ export async function syncJobWalk(
           financialsStatus,
         );
       }
+    } else {
+      moneyComplete = false;
+      await recordWalkError(
+        sb,
+        acct.account_key,
+        jobId,
+        "job_financials",
+        syncBatchId,
+        financialsStatus === 200
+          ? "Invalid financials response shape; existing financials preserved"
+          : `Financials request returned HTTP ${financialsStatus}; existing financials preserved`,
+        financialsStatus,
+      );
     }
 
     // 3. Insurance (single object)
@@ -522,11 +642,16 @@ export async function syncJobWalk(
     const invoiceStubs: any[] = (invListBody as { items?: any[] })?.items ??
       (Array.isArray(invListBody) ? (invListBody as any[]) : []);
 
+    if (invListStatus !== 200 || !Array.isArray((invListBody as any)?.items)) {
+      moneyComplete = false;
+      await recordWalkError(sb, acct.account_key, jobId, "invoices", syncBatchId, "Invalid invoice list; financial observation remains incomplete", invListStatus);
+    }
     if (invoiceStubs.length > 0) {
       // Upsert invoice headers
       const headerRows = invoiceStubs.map((inv: any) => mapInvoiceHeader(inv, ctx));
       const { error: hErr } = await sb.from("acculynx_invoices").upsert(headerRows);
       if (hErr) {
+        moneyComplete = false;
         await recordWalkError(
           sb,
           acct.account_key,
@@ -590,6 +715,12 @@ export async function syncJobWalk(
       // as a bare GUID into primary_salesperson.
       const repName = await resolveRepNameWithFetch(repsBody, userMap, sb, apiKey, fetchFn);
       if (repName) repNameByJobId.set(jobId, repName);
+    }
+
+    if (moneyComplete) options.walked?.push(jobId);
+    if (preselected && moneyComplete) {
+      const { error } = await sb.from("acculynx_jobs").update({ walked_at: walkStartedAt }).eq("id", jobId);
+      if (error) console.warn(`[job-walk] walked_at stamp for ${jobId}: ${error.message}`);
     }
 
     // Advance watermark AFTER each job is fully processed (before budget check)

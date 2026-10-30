@@ -184,6 +184,7 @@ export async function verifyProductionTrustChain() {
     gid: 0,
     executableFiles: [
       `${RELEASE_DIR}/start-listener.sh`,
+      `${RELEASE_DIR}/run-mailbox-cleanup.sh`,
       `${RELEASE_DIR}/hermes-no-file-logging.py`,
     ],
   });

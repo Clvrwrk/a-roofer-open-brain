@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily site quality sweep at 06:00 America/Chicago (DST-aware)
+
+[Timer]
+# 06:00 CT — after the nightly data pipeline (ABC sync 03:30, refresh_wip_ar_master
+# ~04:45, pack publish 06:00) so the sweep sees the same data the team will.
+OnCalendar=*-*-* 06:00:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

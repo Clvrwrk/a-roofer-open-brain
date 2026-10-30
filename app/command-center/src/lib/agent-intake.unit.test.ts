@@ -19,6 +19,12 @@ describe("buildAgentIntakeRows", () => {
     const rows = buildAgentIntakeRows(
       {
         messageId: "gmail-msg-123",
+        externalEventId: "gmail-msg-123",
+        sourceChannel: "gmail",
+        sourceThreadId: "gmail-thread-123",
+        orchestrationKey: "gmail-content:2026-06-25:abc123",
+        catSourceIssue: "CAT-24",
+        downstreamIssue: "PEC-177",
         alias: "invoices@cc.proexteriorsus.net",
         classification: "invoice",
         subject: "ABC invoice 123",
@@ -33,11 +39,11 @@ describe("buildAgentIntakeRows", () => {
     );
 
     expect(rows.workItem).toMatchObject({
-      work_key: "accounting:email-intake:gmail-msg-123",
+      work_key: "accounting:intake:gmail:gmail-content:2026-06-25:abc123",
       department: "accounting",
-      workflow: "email-intake",
+      workflow: "agent-intake",
       source_system: "gmail",
-      source_table: "gmail_messages",
+      source_table: "gmail_events",
       source_pk: "gmail-msg-123",
       title: "Invoice intake / ABC invoice 123",
       priority: "high",
@@ -53,22 +59,26 @@ describe("buildAgentIntakeRows", () => {
     expect(rows.workItem.source_data).toMatchObject({
       alias: "invoices@cc.proexteriorsus.net",
       classification: "invoice",
+      catSourceIssue: "CAT-24",
+      downstreamIssue: "PEC-177",
+      orchestrationKey: "gmail-content:2026-06-25:abc123",
       gmailLabels: ["UNREAD", "SPAM"],
       spamFlag: true,
     });
 
     expect(rows.actionLog).toMatchObject({
-      work_key: "accounting:email-intake:gmail-msg-123",
+      work_key: "accounting:intake:gmail:gmail-content:2026-06-25:abc123",
       department: "accounting",
-      workflow: "email-intake",
+      workflow: "agent-intake",
       action_type: "agent_intake",
       actor_id: "ob-accounting",
       actor_type: "service_agent",
       actor_display_name: "Accounting",
-      source_table: "gmail_messages",
+      source_table: "gmail_events",
       source_pk: "gmail-msg-123",
       slack_channel_id: "C0BCUF29G1H",
       slack_thread_ts: "1782355940.754729",
     });
+    expect(rows.actionLog.idempotency_key).toMatch(/^[0-9a-f]{64}$/);
   });
 });

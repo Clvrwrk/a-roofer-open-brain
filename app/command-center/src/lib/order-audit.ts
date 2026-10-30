@@ -1,6 +1,6 @@
 // Operations → Order Audit loader.
 // PE Office → Vendor/Branch → Order → Line drill-down over live ABC orders
-// (v_order_audit_* + v_order_acculynx_match, migrations 106/107).
+// (v_order_audit_* + mv_order_acculynx_match — the matview of v_order_acculynx_match, migrations 106/107/288).
 //
 // ABC order lines ARE priced (source of truth: apidocs.abcsupply.com/get-orders):
 //   qty = raw.orderedQty.value · uom = raw.orderedQty.uom ·
@@ -141,7 +141,7 @@ async function loadFreshOrderAudit(env: RuntimeEnv = getRuntimeEnv(), scope: "ac
   const activeOnly = scope !== "all";
   const [ordRows, matchRows, catRows, archivedCountRes] = await Promise.all([
     selectAll<any>(client, "v_order_audit_order", "*", activeOnly ? (q) => q.eq("disposition", "active") : undefined),
-    selectAll<any>(client, "v_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched,naming_status"),
+    selectAll<any>(client, "mv_order_acculynx_match", "order_number,pe_job_number,client_name,job_category_name,matched,naming_status"),
     selectAll<any>(client, "roof_system_category", "key,label,sort_order"),
     // archived count for the KPI sub-line (active scope doesn't load archived orders)
     activeOnly ? client.from("v_order_audit_order").select("order_number", { count: "exact", head: true }).eq("disposition", "archived") : Promise.resolve({ count: 0 } as any),

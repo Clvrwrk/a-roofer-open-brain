@@ -18,7 +18,7 @@
 //
 // Run: deno test supabase/functions/acculynx-sync/resources/job-walk.test.ts
 import { assertEquals } from "jsr:@std/assert@1";
-import { syncJobWalk } from "./job-walk.ts";
+import { headerFieldsFromDetail, syncJobWalk } from "./job-walk.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -36,6 +36,7 @@ const ACCT = {
 function makeJobWalkFetch(
   jobIds: string[],
   invoiceIdsPerJob: Record<string, string[]>,
+  financialsResponse?: { status: number; body: unknown },
 ): { mockFetch: (url: string | URL | Request) => Promise<Response>; fetchedUrls: string[] } {
   const fetchedUrls: string[] = [];
 
@@ -72,9 +73,14 @@ function makeJobWalkFetch(
 
     // /jobs/{id}/financials
     if (urlStr.includes("/financials")) {
-      const body = JSON.stringify({ approvedJobValue: 30368.48, balanceDue: 17532.48 });
+      const body = JSON.stringify(
+        financialsResponse ? financialsResponse.body : { approvedJobValue: 30368.48, balanceDue: 17532.48 },
+      );
       return Promise.resolve(
-        new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+        new Response(body, {
+          status: financialsResponse?.status ?? 200,
+          headers: { "content-type": "application/json" },
+        }),
       );
     }
 
@@ -112,6 +118,7 @@ const DEFAULT_USERS = [
 
 interface WalkSbOptions {
   users?: unknown[];
+  financialRows?: Record<string, unknown>[];
   /** jobId -> newest prior acculynx_raw fetched_at (ISO string). Absent = first-sight. */
   priorRawArchiveByJobId?: Record<string, string>;
 }
@@ -120,8 +127,13 @@ function makeWalkSb(options: WalkSbOptions = {}) {
   const users = options.users ?? DEFAULT_USERS;
   const priorRawArchiveByJobId = options.priorRawArchiveByJobId ?? {};
   const upsertCalls: { table: string; rows: unknown[] }[] = [];
+  const updateCalls: { table: string; values: Record<string, unknown>; id: unknown }[] = [];
   const insertCalls: { table: string; row: unknown }[] = [];
   const watermarkUpserts: unknown[] = [];
+  const financialRows = new Map(
+    (options.financialRows ?? []).map((row) => [row.job_id, { ...row }]),
+  );
+  const events: { operation: "insert" | "upsert"; table: string }[] = [];
 
   // forceErrorOnTable: when set, upsert() into that table resolves { error: {...} }
   let forceErrorOnTable: string | null = null;
@@ -133,7 +145,14 @@ function makeWalkSb(options: WalkSbOptions = {}) {
       if (message) forceErrorMessage = message;
     },
     from: (table: string) => ({
+      update: (values: Record<string, unknown>) => ({
+        eq: (_col: string, id: unknown) => {
+          updateCalls.push({ table, values, id });
+          return Promise.resolve({ error: null });
+        },
+      }),
       upsert: (rows: unknown[]) => {
+        events.push({ operation: "upsert", table });
         upsertCalls.push({ table, rows: Array.isArray(rows) ? rows : [rows] });
         if (table === "acculynx_sync_watermark") {
           watermarkUpserts.push(Array.isArray(rows) ? rows[0] : rows);
@@ -141,9 +160,15 @@ function makeWalkSb(options: WalkSbOptions = {}) {
         if (table === forceErrorOnTable) {
           return Promise.resolve({ error: { message: forceErrorMessage } });
         }
+        if (table === "acculynx_job_financials") {
+          for (const row of rows as Record<string, unknown>[]) {
+            financialRows.set(row.job_id, { ...financialRows.get(row.job_id), ...row });
+          }
+        }
         return Promise.resolve({ error: null });
       },
       insert: (row: unknown) => {
+        events.push({ operation: "insert", table });
         insertCalls.push({ table, row });
         return Promise.resolve({ error: null });
       },
@@ -190,12 +215,122 @@ function makeWalkSb(options: WalkSbOptions = {}) {
     }),
   };
 
-  return { sb, upsertCalls, insertCalls, watermarkUpserts };
+  return { sb, upsertCalls, insertCalls, watermarkUpserts, financialRows, events, updateCalls };
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+const PRIOR_FINANCIALS = {
+  job_id: "job-abc",
+  approved_job_value: 30368.48,
+  balance_due: 17532.48,
+  synced_at: "2026-08-01T00:00:00.000Z",
+  last_seen_by_api: "2026-08-01T00:00:00.000Z",
+  raw: { approvedJobValue: 30368.48, balanceDue: 17532.48 },
+};
+
+for (const response of [
+  { name: "401 error object", status: 401, body: { message: "Unauthorized" } },
+  { name: "500 error object", status: 500, body: { error: "Internal server error" } },
+  { name: "500 with financial fields", status: 500, body: { approvedJobValue: 0, balanceDue: 0 } },
+  { name: "201 with financial fields", status: 201, body: { approvedJobValue: 0, balanceDue: 0 } },
+  { name: "200 error envelope", status: 200, body: { error: "Unavailable" } },
+  { name: "200 empty object", status: 200, body: {} },
+  { name: "200 missing balance", status: 200, body: { approvedJobValue: 100 } },
+  { name: "200 missing approved value", status: 200, body: { balanceDue: 100 } },
+  { name: "200 array", status: 200, body: [{ approvedJobValue: 0, balanceDue: 0 }] },
+  { name: "200 null body", status: 200, body: null },
+  { name: "200 string amount", status: 200, body: { approvedJobValue: 100, balanceDue: "0" } },
+  { name: "200 boolean amount", status: 200, body: { approvedJobValue: false, balanceDue: 0 } },
+  {
+    name: "200 malformed optional total",
+    status: 200,
+    body: { approvedJobValue: 100, balanceDue: 0, worksheetTotal: {} },
+  },
+]) {
+  Deno.test(`syncJobWalk — ${response.name} is archived and logged without replacing financials`, async () => {
+    const { mockFetch } = makeJobWalkFetch(["job-abc"], {}, response);
+    const { sb, insertCalls, upsertCalls, financialRows, events } = makeWalkSb({
+      financialRows: [PRIOR_FINANCIALS],
+    });
+
+    const reps = await syncJobWalk(
+      sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1",
+    );
+
+    assertEquals(financialRows.get("job-abc"), PRIOR_FINANCIALS);
+    assertEquals(upsertCalls.filter((call) => call.table === "acculynx_job_financials"), []);
+    const archives = insertCalls.filter((call) =>
+      call.table === "acculynx_raw" && (call.row as Record<string, unknown>).resource_type === "job_financials"
+    );
+    assertEquals(archives.length, 1);
+    assertEquals(archives[0].row, {
+      sync_batch_id: "batch-1",
+      resource_type: "job_financials",
+      api_endpoint: "/jobs/job-abc/financials",
+      http_status: response.status,
+      page_index: null,
+      payload: response.body,
+    });
+    const errors = insertCalls.filter((call) => call.table === "acculynx_job_walk_errors");
+    assertEquals(errors.length, 1);
+    assertEquals(errors[0].row, {
+      account_key: "kansas_city",
+      job_id: "job-abc",
+      resource_type: "job_financials",
+      sync_batch_id: "batch-1",
+      http_status: response.status,
+      error_message: response.status === 200
+        ? "Invalid financials response shape; existing financials preserved"
+        : `Financials request returned HTTP ${response.status}; existing financials preserved`,
+    });
+    // Contacts archive is first, financials archive second; the failure follows it.
+    assertEquals(events.slice(0, 3), [
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_job_walk_errors" },
+    ]);
+    assertEquals(reps.get("job-abc"), "Bob Smolek", "The remaining job walk must still complete");
+  });
+}
+
+for (const amounts of [
+  { approvedJobValue: 0, balanceDue: 0 },
+  { approvedJobValue: null, balanceDue: null },
+  { approvedJobValue: 100, balanceDue: null },
+  { approvedJobValue: null, balanceDue: 0 },
+  { approvedJobValue: 100, balanceDue: -10 },
+]) {
+  Deno.test(`syncJobWalk — HTTP 200 financials ${JSON.stringify(amounts)} updates the stored snapshot`, async () => {
+    const body = { ...amounts, worksheetTotal: null, changeOrderTotal: 0, amendments: [], futureField: "kept" };
+    const { mockFetch } = makeJobWalkFetch(["job-abc"], {}, { status: 200, body });
+    const { sb, financialRows, events, insertCalls, upsertCalls } = makeWalkSb({
+      financialRows: [PRIOR_FINANCIALS],
+    });
+
+    await syncJobWalk(
+      sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1",
+    );
+
+    const stored = financialRows.get("job-abc")!;
+    assertEquals(upsertCalls.filter((call) => call.table === "acculynx_job_financials").length, 1);
+    assertEquals(stored.approved_job_value, amounts.approvedJobValue);
+    assertEquals(stored.balance_due, amounts.balanceDue);
+    assertEquals(stored.worksheet_total, null);
+    assertEquals(stored.change_order_total, 0);
+    assertEquals(stored.raw, body);
+    assertEquals(stored.synced_at === PRIOR_FINANCIALS.synced_at, false);
+    assertEquals(stored.last_seen_by_api, stored.synced_at);
+    assertEquals(insertCalls.filter((call) => call.table === "acculynx_job_walk_errors"), []);
+    assertEquals(events.slice(0, 3), [
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "insert", table: "acculynx_raw" },
+      { operation: "upsert", table: "acculynx_job_financials" },
+    ]);
+  });
+}
 
 Deno.test("syncJobWalk — fetches /jobs/{id}/invoices for each job (level 1)", async () => {
   const jobIds = ["job-abc", "job-def"];
@@ -508,4 +643,142 @@ Deno.test("syncJobWalk — the Task 2a jobId->repName Map still returns correctl
   assertEquals(repMap.get("job-first-sight"), "Bob Smolek");
   // job-unchanged was skipped (D-16) and therefore has no rep-map entry this run.
   assertEquals(repMap.has("job-unchanged"), false);
+});
+
+Deno.test("syncJobWalk — cursor at END of list wraps to the top (MC-68 incident, 2026-08-07)", async () => {
+  // When last_walked_job_id is the LAST job in the ordered list, the old resume
+  // logic set startIdx past the end and the walk never ran again for the account —
+  // freezing invoices/financials forever. A completed sweep must wrap to index 0.
+  const jobIds = ["job-abc", "job-def"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, {
+    "job-abc": ["inv-1"],
+    "job-def": ["inv-2"],
+  });
+  const { sb } = makeWalkSb();
+  const deadline = Date.now() + 60_000;
+  const watermark = {
+    account_key: "kansas_city",
+    resource_type: "job_walk",
+    last_walked_job_id: "job-def", // cursor parked on the FINAL job
+  };
+
+  await syncJobWalk(sb, ACCT, "test-api-key", deadline, watermark, jobIds, mockFetch, "batch-1");
+
+  const walkedFirstJob = fetchedUrls.some((u) => u.includes("/jobs/job-abc/"));
+  assertEquals(
+    walkedFirstJob,
+    true,
+    `A completed sweep must wrap and re-evaluate from the top. Fetched: ${JSON.stringify(fetchedUrls)}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Preselected mode (mig 321): the caller passes acculynx_job_walk_candidates() output.
+// ---------------------------------------------------------------------------
+
+/** Wraps makeJobWalkFetch so GET /jobs/{id} (the job's own record) answers with `detail`. */
+function withJobDetail(
+  base: ReturnType<typeof makeJobWalkFetch>,
+  detail: Record<string, Record<string, unknown>>,
+) {
+  const mockFetch = (url: string | URL | Request): Promise<Response> => {
+    const m = String(url).match(/\/jobs\/([^/?]+)$/);
+    if (m && detail[m[1]]) {
+      base.fetchedUrls.push(String(url));
+      return Promise.resolve(
+        new Response(JSON.stringify(detail[m[1]]), { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    }
+    return base.mockFetch(url);
+  };
+  return { mockFetch, fetchedUrls: base.fetchedUrls };
+}
+
+Deno.test("syncJobWalk preselected — walks a job the D-16 probe would skip, ignoring the resume cursor", async () => {
+  const jobIds = ["job-a", "job-b"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-a": [], "job-b": [] });
+  // Both look "unchanged" to the old probe, and the cursor says job-b was walked last.
+  const { sb } = makeWalkSb({
+    priorRawArchiveByJobId: { "job-a": "2026-09-30T00:00:00Z", "job-b": "2026-09-30T00:00:00Z" },
+  });
+  const modified = new Map([["job-a", "2026-09-01T00:00:00Z"], ["job-b", "2026-09-01T00:00:00Z"]]);
+  const watermark = { account_key: "kansas_city", resource_type: "job_walk", last_walked_job_id: "job-b" };
+
+  const walked: string[] = [];
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, watermark, jobIds, mockFetch, "batch-1", modified, {
+    preselected: true,
+    walked,
+  });
+
+  assertEquals(walked, jobIds, "every walked job id is reported, in order");
+  for (const id of jobIds) {
+    assertEquals(fetchedUrls.some((u) => u.includes(`/jobs/${id}/financials`)), true, `${id} financials must be re-read`);
+  }
+});
+
+Deno.test("syncJobWalk preselected — re-reads the job record and writes its milestone, then stamps walked_at", async () => {
+  const jobIds = ["job-closed"];
+  const base = makeJobWalkFetch(jobIds, { "job-closed": [] });
+  const { mockFetch, fetchedUrls } = withJobDetail(base, {
+    "job-closed": { id: "job-closed", currentMilestone: "Closed", milestoneDate: "2026-07-04T16:38:13Z", modifiedDate: "2026-07-04T16:38:13Z" },
+  });
+  const { sb, updateCalls, insertCalls } = makeWalkSb();
+  const before = new Date().toISOString();
+
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, jobIds, mockFetch, "batch-1", new Map(), {
+    preselected: true,
+  });
+
+  assertEquals(fetchedUrls.some((u) => /\/jobs\/job-closed$/.test(u)), true, "GET /jobs/{id} must be called");
+  const jobUpdates = updateCalls.filter((c) => c.table === "acculynx_jobs" && c.id === "job-closed");
+  const header = jobUpdates.find((c) => "current_milestone" in c.values);
+  assertEquals(header?.values.current_milestone, "Closed");
+  assertEquals(header?.values.milestone_date, "2026-07-04T16:38:13Z");
+  assertEquals(header?.values.modified_date, "2026-07-04T16:38:13Z");
+  const stamp = jobUpdates.find((c) => "walked_at" in c.values);
+  assertEquals(typeof stamp?.values.walked_at, "string");
+  assertEquals((stamp!.values.walked_at as string) >= before, true, "walked_at is this walk's start time");
+  // The detail body is archived like every other per-job GET (D-14).
+  const archived = insertCalls.some((c) => c.table === "acculynx_raw" && (c.row as Record<string, unknown>).resource_type === "job_detail");
+  assertEquals(archived, true);
+});
+
+Deno.test("syncJobWalk default mode — never re-reads the job record or stamps walked_at", async () => {
+  const jobIds = ["job-x"];
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(jobIds, { "job-x": [] });
+  const { sb, updateCalls } = makeWalkSb();
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, jobIds, mockFetch, "batch-1");
+  assertEquals(fetchedUrls.some((u) => /\/jobs\/job-x$/.test(u)), false);
+  assertEquals(updateCalls.filter((c) => c.table === "acculynx_jobs").length, 0);
+});
+
+Deno.test("headerFieldsFromDetail — writes only fields the body carries, never nulls", () => {
+  const seen = "2026-10-02T18:00:00.000Z";
+  assertEquals(headerFieldsFromDetail({ currentMilestone: "Closed" }, seen), {
+    current_milestone: "Closed",
+    synced_at: seen,
+    last_seen_by_api: seen,
+  });
+  assertEquals(headerFieldsFromDetail({}, seen), null);
+  assertEquals(headerFieldsFromDetail({ currentMilestone: null, modifiedDate: "" }, seen), null);
+});
+
+Deno.test("incomplete financial observation never advances freshness or scoped CRM writes", async () => {
+  const {mockFetch}=makeJobWalkFetch(["job-failed"],{}, {status:500,body:{error:"upstream"}});
+  const {sb,updateCalls}=makeWalkSb();
+  const walked:string[]=[];
+  await syncJobWalk(sb,ACCT,"synthetic-key",Date.now()+60000,{account_key:ACCT.account_key,resource_type:"job_walk"},["job-failed"],mockFetch,"batch-test",new Map(),{preselected:true,walked});
+  assertEquals(walked,[]);
+  assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
+});
+
+Deno.test("a failed contact dependency remains eligible for retry despite successful money reads", async () => {
+  const base=makeJobWalkFetch(["job-contact-failed"],{}).mockFetch;
+  const mockFetch=(async(input:RequestInfo|URL,init?:RequestInit)=>String(input).endsWith("/contacts")?new Response(JSON.stringify({items:[{id:"relation",contact:{id:"contact"}}]}),{status:200,headers:{"content-type":"application/json"}}):base(input)) as typeof fetch;
+  const {sb,updateCalls}=makeWalkSb();
+  (sb as any).__setForceError("acculynx_job_contacts","dependency not ready");
+  const walked:string[]=[];
+  await syncJobWalk(sb,ACCT,"synthetic-key",Date.now()+60000,null,["job-contact-failed"],mockFetch,"batch-test",new Map(),{preselected:true,walked});
+  assertEquals(walked,[]);
+  assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
 });

@@ -34,6 +34,7 @@ async function throttle() {
 /** POST one Pave query. `query` is the object placed under {"query": ...};
  *  the grant key is injected into query.$ automatically. */
 export async function paveQuery(query, { attempts = 4 } = {}) {
+  throw new Error("JobTread integration retired 2026-10-23; provider calls are disabled");
   const body = JSON.stringify({
     query: { ...query, $: { ...(query.$ || {}), grantKey: grantKey() } },
   });

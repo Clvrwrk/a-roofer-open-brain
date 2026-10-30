@@ -1,0 +1,222 @@
+---
+// Shell for cc.proexteriorsus.net/design-system — the living design system.
+//
+// Its own rail (chapter navigation) instead of the department rail: the audience is a
+// designer or an agent building a surface, and the chapters are the navigation. The
+// top bar keeps a way back to the Command Center. Auth is unchanged — the middleware
+// gates every non-public route, so this site is visible to signed-in operators only.
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
+import "../styles/global.css";
+import "../styles/design-system.css";
+import { APP_VERSION, APP_VERSION_DATE } from "@lib/version";
+import { DS_BASE, chapterHref, dsChapters, findChapter, neighbours, searchIndex } from "@lib/design-system/nav";
+
+interface Props {
+  slug: string;
+  source?: string; // repo path of the file that owns this chapter's rules
+}
+
+const { slug, source } = Astro.props;
+const chapter = findChapter(slug);
+if (!chapter) throw new Error(`Unknown design-system chapter: ${slug}`);
+const { prev, next } = neighbours(slug);
+const groups = ["Foundations", "Surfaces", "Behaviour", "Collateral", "Governance"] as const;
+const index = JSON.stringify(searchIndex()).replace(/</g, "\\u003c");
+const sourcePath = source ?? `app/command-center/src/pages/design-system/${slug || "index"}.astro`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={chapter.summary} />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{chapter.title} | Design System | Open Brain</title>
+  </head>
+  <body>
+    <div class="ds-frame" id="ds-root" data-theme="light" data-pref="system">
+      <script is:inline>
+        // Rail drawer: open on desktop (the summary is hidden ≥ 821px), collapsed on a phone so
+        // the chapter lands on its content, not a full-height chapter list. Done before paint.
+        if (window.innerWidth <= 820) document.currentScript.parentElement.classList.add("is-phone");
+      </script>
+      <aside class="ds-rail" aria-label="Design system chapters">
+        <details class="ds-rail-drawer" open>
+          <summary>
+            <span>Chapters</span>
+            <span aria-hidden="true">☰</span>
+          </summary>
+          <a class="brand-lockup" href={DS_BASE}>
+            <img src="/pro-exteriors-logo.svg" alt="Pro Exteriors" width="160" height="58" />
+          </a>
+          <div class="ds-rail-title">
+            <strong>Design System</strong>
+            <small>Command Center · v{APP_VERSION}</small>
+          </div>
+          <a class="ds-back" href="/">← Command Center</a>
+          <div>
+            <label class="rail-label" for="ds-search" style="display:block;margin-bottom:6px">Find a rule</label>
+            <input class="ds-search" id="ds-search" type="search" placeholder="e.g. tabular nums, 10 rows, Pantone" autocomplete="off" />
+            <ul class="ds-search-results" id="ds-search-results" hidden></ul>
+          </div>
+          <nav class="ds-nav" aria-label="Chapters" id="ds-nav">
+            {
+              groups.map((group) => (
+                <div class="ds-nav-group">
+                  <p class="rail-label">{group}</p>
+                  {dsChapters
+                    .filter((c) => c.group === group)
+                    .map((c) => (
+                      <>
+                        <a
+                          class:list={["ds-nav-link", c.slug === slug && "is-active"]}
+                          href={chapterHref(c)}
+                          aria-current={c.slug === slug ? "page" : undefined}
+                        >
+                          {c.short}
+                        </a>
+                        {c.slug === slug && (
+                          <ul class="ds-nav-sub" id="ds-nav-sub">
+                            {c.sections.map((s) => (
+                              <li>
+                                <a href={`#${s.id}`} data-section={s.id}>
+                                  {s.label}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    ))}
+                </div>
+              ))
+            }
+          </nav>
+          <p class="ds-rail-foot">
+            Spec source: <a href="https://github.com/Clvrwrk/a-roofer-open-brain/blob/main/deployment/remote/dashboard/Design.md">Design.md</a> · tokens:
+            <a href={`${DS_BASE}/tokens.json`}>tokens.json</a> · standard: <a href="https://github.com/Clvrwrk/a-roofer-open-brain/blob/main/standards/design/v1.md">standards/design/v1.md</a>
+          </p>
+        </details>
+      </aside>
+
+      <div class="ds-main">
+        <header class="ds-topbar">
+          <div>
+            <p class="eyebrow">Design System · {chapter.group}</p>
+            <h1>{chapter.title}</h1>
+          </div>
+          <div class="ds-topbar-actions">
+            <span class="ds-source" title="The file that owns this chapter">source <code>{sourcePath}</code></span>
+            <div class="ds-theme" role="group" aria-label="Theme">
+              <button type="button" data-set-theme="system" class="is-active">System</button>
+              <button type="button" data-set-theme="light">Light</button>
+              <button type="button" data-set-theme="dark">Dark</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="ds-body">
+          <article class="ds-article" id="ds-article">
+            <p class="ds-lede">{chapter.summary}</p>
+            <slot />
+            <nav class="ds-pager" aria-label="Chapter navigation">
+              {
+                prev ? (
+                  <a href={chapterHref(prev)}>
+                    <small>Previous</small>
+                    <strong>← {prev.title}</strong>
+                  </a>
+                ) : (
+                  <span />
+                )
+              }
+              {
+                next ? (
+                  <a href={chapterHref(next)}>
+                    <small>Next</small>
+                    <strong>{next.title} →</strong>
+                  </a>
+                ) : (
+                  <span />
+                )
+              }
+            </nav>
+            <p class="ds-rail-foot" style="color:var(--text-muted)">
+              Command Center v{APP_VERSION} · {APP_VERSION_DATE}. This site is generated from the production stylesheet and the recorded decisions in the repo; when it and a screen disagree, the screen is wrong or this site is stale — fix the source, never the screenshot.
+            </p>
+          </article>
+          <aside class="ds-toc" aria-label="On this page">
+            <p class="rail-label">On this page</p>
+            {chapter.sections.map((s) => <a href={`#${s.id}`} data-section={s.id}>{s.label}</a>)}
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      import { initThemePref } from "../scripts/theme-pref";
+      const root = document.getElementById("ds-root") as HTMLElement;
+      initThemePref(root, "[data-set-theme]");
+      if (root.classList.contains("is-phone")) root.querySelector<HTMLDetailsElement>(".ds-rail-drawer")?.removeAttribute("open");
+
+      // Current-section tracking for the rail sub-list and the right-hand TOC.
+      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("[data-section]"));
+      const sections = Array.from(document.querySelectorAll<HTMLElement>(".ds-section[id]"));
+      if ("IntersectionObserver" in window && sections.length) {
+        let current = "";
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) if (e.isIntersecting) current = (e.target as HTMLElement).id;
+            links.forEach((a) => a.classList.toggle("is-current", a.dataset.section === current));
+          },
+          { rootMargin: "-80px 0px -70% 0px", threshold: 0 },
+        );
+        sections.forEach((s) => io.observe(s));
+      }
+
+      // Copy-to-clipboard token chips.
+      document.addEventListener("click", (ev) => {
+        const chip = (ev.target as HTMLElement).closest<HTMLElement>(".ds-token[data-copy]");
+        if (!chip) return;
+        navigator.clipboard?.writeText(chip.dataset.copy ?? "").then(() => {
+          chip.dataset.copied = "1";
+          setTimeout(() => delete chip.dataset.copied, 1200);
+        });
+      });
+    </script>
+
+    <script define:vars={{ index }}>
+      const entries = JSON.parse(index);
+      const input = document.getElementById("ds-search");
+      const list = document.getElementById("ds-search-results");
+      const nav = document.getElementById("ds-nav");
+      function render(q) {
+        const query = q.trim().toLowerCase();
+        if (!query) {
+          list.hidden = true;
+          list.innerHTML = "";
+          nav.hidden = false;
+          return;
+        }
+        const hits = entries.filter((e) => e.label.toLowerCase().includes(query)).slice(0, 14);
+        list.innerHTML = hits.length
+          ? hits.map((h) => `<li><a href="${h.href}"><small>${h.chapter}</small>${h.label}</a></li>`).join("")
+          : `<li><a href="#" aria-disabled="true">No rule named that — try a synonym</a></li>`;
+        list.hidden = false;
+        nav.hidden = true;
+      }
+      input?.addEventListener("input", () => render(input.value));
+      input?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") list.querySelector("a")?.click();
+        if (e.key === "Escape") {
+          input.value = "";
+          render("");
+        }
+      });
+    </script>
+  </body>
+</html>
