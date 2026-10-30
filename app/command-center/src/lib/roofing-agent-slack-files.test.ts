@@ -1,10 +1,25 @@
+import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import { buildHermesPrompt } from "../../runtime/roofing-ops-agent-router.mjs";
+import { bundledRegistry, runAgentTurn } from "../../runtime/agent-runtime.mjs";
+
+async function promptSentToModel({ message, decision }: { message: Record<string, unknown> & { files: unknown[] }; decision: Record<string, string> }) {
+  const model = new MockLanguageModelV4({
+    doGenerate: async () => ({
+      content: [{ type: "text", text: "ok" }],
+      finishReason: { unified: "stop", raw: undefined },
+      usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+      warnings: [],
+    }),
+  });
+  const registry = structuredClone(bundledRegistry);
+  registry.principals.find((p: { persona_id: string }) => p.persona_id === "alex-rivers").lifecycle.state = "authorized";
+  await runAgentTurn({ personaId: "alex-rivers", displayName: "Alex Rivers", message, decision, files: message.files, env: {}, registry, model });
+  return JSON.stringify(model.doGenerateCalls[0].prompt);
+}
 
 describe("roofing-ops Slack file handoff", () => {
-  it("passes downloaded Slack file paths and multimodal instructions into the Hermes prompt", () => {
-    const prompt = buildHermesPrompt({
-      agent: "alex",
+  it("passes downloaded Slack file paths and multimodal instructions into the agent prompt", async () => {
+    const prompt = await promptSentToModel({
       decision: { kind: "single_agent", agent: "alex", reason: "single_sop_match" },
       message: {
         channel: "C0BCUF29G1H",
@@ -29,9 +44,8 @@ describe("roofing-ops Slack file handoff", () => {
     expect(prompt).toContain("Supabase Storage");
   });
 
-  it("tells agents to route failed downloads instead of asking humans to paste files", () => {
-    const prompt = buildHermesPrompt({
-      agent: "alex",
+  it("tells agents to route failed downloads instead of asking humans to paste files", async () => {
+    const prompt = await promptSentToModel({
       decision: { kind: "single_agent", agent: "alex", reason: "single_sop_match" },
       message: {
         channel: "C0BCUF29G1H",
