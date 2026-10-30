@@ -101,3 +101,19 @@ raw data/
 
 # Generated QB export batches — client invoice data, never committed (hard rule 2)
 exports/
+
+# Runtime cache may be a symlink on external storage.
+/app/command-center/node_modules
+
+# Per-app local intake/companion histories: track curated indexes only.
+/app/CRM_PWA/*
+!/app/CRM_PWA/APP-INDEX.md
+/app/CRM_PWA_SITE_INSPECTION/*
+!/app/CRM_PWA_SITE_INSPECTION/APP-INDEX.md
+/app/PM_PWA/*
+!/app/PM_PWA/APP-INDEX.md
+/app/CC_PWA/source
+/app/HR_PWA/source
+/app/HR_PWA/repository
+/app/ADMIN_PWA/crm-source
+/app/ADMIN_PWA/cc-source

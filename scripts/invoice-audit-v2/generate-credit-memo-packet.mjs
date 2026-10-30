@@ -2,7 +2,7 @@
 // generate-credit-memo-packet.mjs — Invoice Audit v2 (docs/81 §3 decision 8)
 // Builds the weekly, vendor-specific credit memo request packet from a re-audit run:
 //   HTML email draft + MD version + line-detail CSV + week-scoped tracker CSV.
-// Vendor-specific emails; spreadsheets/CSVs are cross-vendor per docs/81.
+// Vendor-specific drafts and CSVs; never mix vendors in an accounting packet.
 // Nothing sends from here — output is drafts for the human verifiers (Chris & Lucinda).
 //
 //   node scripts/invoice-audit-v2/generate-credit-memo-packet.mjs \
@@ -12,8 +12,9 @@
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(new URL("../..", import.meta.url).pathname);
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 function parseDotenv(path) {
   const out = {};
@@ -40,6 +41,7 @@ const argOf = (name, dflt) => {
 };
 const RUN = argOf("run");
 const VENDOR = argOf("vendor", "abc");
+const VENDOR_SLUG = VENDOR === "abc" ? "abc-supply" : VENDOR;
 const VENDOR_LABEL = { abc: "ABC Supply", qxo: "QXO", srs: "SRS Distribution" }[VENDOR] || VENDOR;
 if (!RUN) { console.error("--run=<run_label> required"); process.exit(1); }
 const today = new Date().toISOString().slice(0, 10);
@@ -72,19 +74,30 @@ const csvCell = (v) => {
 };
 
 const lines = (await restAll(
-  `invoice_line_reaudit?run_label=eq.${encodeURIComponent(RUN)}&classification=eq.discrepancy` +
+  `invoice_line_reaudit?run_label=eq.${encodeURIComponent(RUN)}&vendor_slug=eq.${encodeURIComponent(VENDOR_SLUG)}&classification=eq.discrepancy` +
   `&select=invoice_number,item_number,item_description,quantity,uom,invoiced_price,office_name,` +
   `office_price,variance_ext,match_method,agreement_number,agreement_effective,agreement_expiry,paexp_tag` +
   `&order=invoice_number.asc,variance_ext.desc`
 )).filter((l) => Number(l.variance_ext) >= 0.05);
 
+if (lines.some(l => !l.office_name || !l.agreement_number || !l.agreement_effective)) throw new Error("Claim packet lacks office/agreement provenance; complete the re-audit before generating");
+
 if (!lines.length) { console.error(`No discrepancy lines for run ${RUN}`); process.exit(1); }
 
 const invNums = [...new Set(lines.map((l) => l.invoice_number))];
-const invMeta = Object.fromEntries(
-  (await restAll(`abc_invoices?invoice_number=in.(${invNums.map((n) => `"${n}"`).join(",")})&select=invoice_number,invoice_date`))
-    .map((r) => [r.invoice_number, (r.invoice_date || "").slice(0, 10)])
-);
+const invoiceFilter = invNums.map((n) => `"${n}"`).join(",");
+let invRows;
+if (VENDOR_SLUG === "abc-supply") {
+  invRows = await restAll(`abc_invoices?invoice_number=in.(${invoiceFilter})&select=invoice_number,invoice_date`);
+} else {
+  const [vendor] = await rest(`vendors?slug=eq.${encodeURIComponent(VENDOR_SLUG)}&select=id`);
+  if (!vendor) throw new Error(`Unknown vendor: ${VENDOR_SLUG}`);
+  invRows = await restAll(`vendor_invoices?vendor_id=eq.${vendor.id}&invoice_number=in.(${invoiceFilter})&select=invoice_number,invoice_date,doc_type,total_due`);
+  if (invRows.length !== invNums.length || invRows.some(r => r.doc_type === "credit" || Number(r.total_due) <= 0)) {
+    throw new Error("Claim packet requires matching positive invoices from the selected vendor");
+  }
+}
+const invMeta = Object.fromEntries(invRows.map(r => [r.invoice_number, (r.invoice_date || "").slice(0, 10)]));
 
 const byInvoice = new Map();
 for (const l of lines) {
@@ -110,8 +123,8 @@ mkdirSync(OUTDIR, { recursive: true });
 let html = `<!doctype html><meta charset="utf-8"><title>Credit memo request - ${VENDOR_LABEL}</title><body style="margin:24px;background:#fff">`;
 html += `<p style="font-family:Arial;font-size:13px;color:#888">Subject: Credit memo request - Pro Exteriors LLC - ${invNums.length} invoices, ${money(grandTotal)}<br>Select all below, copy, paste into Gmail.</p><hr>`;
 html += `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.5;max-width:760px">`;
-html += `<p>Casey,</p>`;
-html += `<p>Following your challenge to our July 28 request, we have completed a full line-by-line re-audit. Every invoice below has been re-priced against the price agreement in force for its own Pro Exteriors office location on the invoice date, rather than the pooled benchmark we used previously. This request supersedes the July 28 request ($1,941.44) in its entirety.</p>`;
+html += `<p>Accounts Receivable Team,</p>`;
+html += `<p>Our invoice review identified the following differences against the price agreement in force for each invoice's Pro Exteriors office on its invoice date.</p>`;
 html += `<p>We are requesting credit memos on ${lines.length} lines across ${invNums.length} invoices. Total credit requested: <b>${money(grandTotal)}</b>. Detail and per-line reasoning are listed by invoice, and the same detail is attached as a spreadsheet.</p>`;
 html += `<p>Where an agreement lapsed with no successor in place, we have priced against that agreement, which remains in force for the location until replaced; those lines are marked with a PAEXP reference.</p>`;
 html += `<p>Please issue the credits against the original invoice numbers and confirm, so we can clear them from our pending schedule.</p>`;
@@ -132,7 +145,7 @@ writeFileSync(resolve(OUTDIR, `credit_memo_request_email_${VENDOR}.html`), html)
 
 // ---------- MD ----------
 let md = `# Credit Memo Request - ${VENDOR_LABEL} - ${today}\n\n`;
-md += `Supersedes the 2026-07-28 batch request ($1,941.44, challenged). Re-audited line-by-line against each invoice's own PE office price agreement in force at invoice date (run \`${RUN}\`).\n\n`;
+md += `Draft for human review. Invoice office, vendor, date, and pricing UOM determine the agreement comparison (run \`${RUN}\`).\n\n`;
 md += `**${lines.length} lines across ${invNums.length} invoices — total credit requested: ${money(grandTotal)}**\n\n`;
 for (const inv of invNums) {
   md += `## Invoice ${inv}${invMeta[inv] ? ` (${invMeta[inv]})` : ""} — ${money(invTotal(inv))}\n\n`;
@@ -144,7 +157,7 @@ for (const inv of invNums) {
 }
 writeFileSync(resolve(OUTDIR, `credit_memo_request_${VENDOR}.md`), md);
 
-// ---------- detail CSV (cross-vendor columns; this run is single-vendor) ----------
+// ---------- detail CSV (one vendor per packet) ----------
 const detailHdr = ["Vendor","Invoice #","Invoice Date","PE Office","Item #","Item Description","Qty","UOM",
   "Invoiced Price","Agreement Price","Line Credit","Agreement #","Agreement Effective","Agreement Expiry","Match Method","PAEXP Tag"];
 let detail = detailHdr.join(",") + "\n";

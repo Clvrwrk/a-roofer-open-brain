@@ -1,3 +1,4 @@
+console.error("Maya retired 2026-10-23; no work executed."); process.exit(0);
 import { Composio } from "@composio/core";
 import {
   ReceiptStore,

@@ -1,8 +1,8 @@
 [Unit]
-Description=CompanyCam photo copy every 30 minutes
+Description=CompanyCam photo copy every 30 minutes at :08 and :38 (off the top of the hour, docs/125)
 
 [Timer]
-OnCalendar=*:00/30
+OnCalendar=*:08/30
 AccuracySec=1min
 Persistent=false
 

@@ -21,6 +21,7 @@
 // Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional tools: pdftotext + pdfinfo (poppler) for
 // the text layer and page count; without them, or with --no-text, text columns are left alone.
 
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -29,7 +30,7 @@ import { promisify } from "node:util";
 import { basename, extname, join, resolve } from "node:path";
 
 const run = promisify(execFile);
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const args = parseArgs(process.argv.slice(2));
 // An explicit --env-file wins over the shell: login shells on this fleet export other projects'
 // SUPABASE_URL values (docs/120 §4).

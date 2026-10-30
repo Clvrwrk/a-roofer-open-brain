@@ -20,21 +20,22 @@ Read this before broad search. Its job is to keep agent orientation cheap.
 | --- | --- |
 | `agents/` | The 13-agent workforce charters and IO contracts. |
 | `config/` | Client config, env examples, and brand/design tokens. |
-| `deployment/remote/dashboard/` | Current prototype dashboard slated for Astro SSR migration. |
+| `app/` | App folder index, Command Center source and companion-surface navigation. |
+| `deployment/remote/dashboard/` | Retained legacy dashboard source; verify consumers before any relocation. |
 | `docs/` | Architecture, product, security, UI, integration, and transition docs. |
 | `integrations/bridges/` | External system bridge contracts and handlers. |
 | `recipes/` | Repeatable business workflows used by agents. |
 | `schemas/` | OB1 base and roofer-specific SQL migrations. |
 | `scripts/` | Repo automation, verification, and maintenance tools. |
-| `server/` | Deno MCP/server runtime. |
+| `server/` | Uncommissioned Deno knowledge-MCP scaffold; current app/ingestion accesses Supabase server-side. |
 | `skills/` | Agent skills and metadata. |
 | `standards/` | QC-owned standards, including design-system rules. |
 
-## Planned Folders
+## Application and intake folders
 
 | Path | Purpose |
 | --- | --- |
-| `app/command-center/` | Future production UI once the dashboard migrates out of `deployment/remote/dashboard/`. |
+| `app/command-center/` | Implemented production Astro SSR app; keep its deployed path stable. |
 | `data/` | Sanitized seed/reference data only. |
 | `imports/` | Gitignored raw import inbox for copied projects. |
 | `private/` | Gitignored client-private working files. |
@@ -47,7 +48,9 @@ Read this before broad search. Its job is to keep agent orientation cheap.
 
 ## Current App Direction
 
-The app target is a human-in-the-loop Command Center:
+The implemented Command Center is a human-in-the-loop surface. CRM and HR live in `Clvrwrk/CRM_PWA`; scheduling lives in `Clvrwrk/pm.proexteriorsus.net`. Read `app/README.md` and each surface's `APP-INDEX.md` before moving files. Shared backend and deployment roots retain their ownership.
+
+Its department model includes:
 
 - Departments: Accounting, Operations, Sales, Marketing, Executive, plus horizontal system agents.
 - Cadences: daily, weekly, monthly, quarterly, annual, and ad hoc.

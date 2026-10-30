@@ -16,13 +16,14 @@
 // private `companycam-photos` storage bucket. Never deletes: rows missing from a full sweep get
 // removed_at; storage objects are never removed by this script.
 
+import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createCompanyCamClient } from "./read-only-client.mjs";
 import { mapPhoto, mapProject, mapVideo } from "../../../supabase/functions/companycam-webhook/mapping.mjs";
 
-const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const args = parseArgs(process.argv.slice(2));
 const mode = args._[0] || "nightly";
 // An explicit --env-file wins over the shell: login shells on this fleet export other projects'

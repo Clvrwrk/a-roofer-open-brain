@@ -95,20 +95,20 @@ for f in "${SCHEMA_FILES[@]}"; do
 done
 
 # --- 3. MCP servers on Hetzner via Coolify (Historian/Capture internal + a SEPARATE Researcher) ---
-say "3. Trigger Coolify deploy hooks for MCP containers"
-trigger_hook "brain-mcp (internal: Historian + Capture; service_role)" COOLIFY_BRAIN_MCP_DEPLOY_HOOK
-trigger_hook "researcher (external-only; NO db creds)" COOLIFY_RESEARCHER_DEPLOY_HOOK
+say "3. Deploy commissioned bridges"
+# The knowledge MCP scaffold has no current production consumer or backing RPCs.
+# Commissioning it requires its own reviewed deployment, not template setup.
+say "   knowledge MCP scaffold remains undeployed (see server/README.md)"
 if [[ "$(cfg '.integrations.acculynx.enabled')" == "true" && "$(cfg '.integrations.acculynx.webhook')" == "true" ]]; then
   trigger_hook "acculynx-bridge" COOLIFY_ACCULYNX_BRIDGE_DEPLOY_HOOK
 fi
 
 # --- 4. Runtime env inventory (set in Coolify/vault; never committed) ---
 say "4. Confirm runtime env inventory"
-for k in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY OB_ACCESS_KEY_HISTORIAN BRAIN_MCP_URL; do
+for k in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
   if is_set "${!k:-}"; then echo "   ✓ $k present in local .env"; else warn "$k is missing or placeholder in .env"; fi
 done
-warn "Before live deploy, set brain-mcp env in Coolify: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OB_ACCESS_KEY_HISTORIAN, embeddings keys, and enabled bridge keys."
-warn "Set researcher env separately and do NOT give it SUPABASE_SERVICE_ROLE_KEY."
+warn "Set Command Center and enabled bridge runtime credentials through the approved secrets workflow."
 
 # --- 5. Seed jurisdictions + regulatory snapshots from config (property-onboarding recipe) ---
 say "5. Seed jurisdictions / regulatory snapshots from config"

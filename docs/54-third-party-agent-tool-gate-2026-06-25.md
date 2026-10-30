@@ -14,6 +14,9 @@ Scope: external skills, plugins, MCP servers, agent wrappers, installer scripts,
 | `headroomlabs-ai/headroom` | Defer | Revisit only if token/memory compression becomes a validated bottleneck. | Do not let it rewrite `CLAUDE.md`/`AGENTS.md` or wrap production agents without A3 approval. |
 | `DietrichGebert/ponytail` | Principle-only | Borrow the bias toward simple, reusable, standard-library-first work. | Do not install plugin hooks, hidden lifecycle context, or statusline changes. |
 | `JuliusBrussee/caveman` | Reject | None. | Conflicts with professional tone/workflow and uses risky installer/memory rewrite patterns. |
+| `mattpocock/skills` (plugin `mattpocock-skills`) | Allow (2026-10-21) | Engineering workflow skills enabled in repo `.claude/settings.json` and the cloud setup script. A3: [`proposals/a3-mattpocock-skills-plugin.md`](../proposals/a3-mattpocock-skills-plugin.md). | Skills only (no hooks or MCPs) as of v1.3.1; re-review if a release adds hooks or MCP servers. |
+| Inngest (durable workflow SaaS) | Defer (2026-10-21) | None now. The self-healing loop runs on GitHub Actions with Linear labels as state ([docs/127](127-self-healing-loop.md)). | Revisit with an A3 only if minute-level reaction becomes a requirement. |
+| PostHog (product analytics, replay) | Defer to phase 2 A3 (2026-10-21) | None now. Planned as the self-healing loop's product-signal source. | Own A3 with PII, replay masking, egress and consent review before any SDK ships. |
 
 ## Required Gate Before Any Install
 

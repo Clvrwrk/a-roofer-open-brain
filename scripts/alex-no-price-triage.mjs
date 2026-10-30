@@ -5,10 +5,11 @@
 // other pending No-Price line passed/valid as Alex. Logs to dashboard_action_log.
 // Runs from scripts/abc-nightly-sync.sh after the invoice ingest.
 
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const ROOT = resolve(new URL("..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const envText = (() => { try { return readFileSync(resolve(ROOT, ".env"), "utf8"); } catch { return ""; } })();
 const env = Object.fromEntries(
   envText.split("\n").map((l) => l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/)).filter(Boolean)

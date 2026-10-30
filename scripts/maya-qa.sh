@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "Maya retired 2026-10-23; no work executed." >&2; exit 0
 # Maya nightly QA runner (scripts/maya-qa-orchestrate.mjs).
 # systemd: deployment/remote/systemd/openbrain-maya-qa.{service,timer}.
 set -euo pipefail

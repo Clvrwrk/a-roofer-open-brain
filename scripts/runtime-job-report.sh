@@ -34,7 +34,8 @@ case "$RESULT" in
   exit-code|signal|core-dump|watchdog|resources|protocol|start-limit-hit) STATUS="failure" ;;
   *)              STATUS="failure" ;;
 esac
-# SuccessExitStatus=0 1 units report success with exit 1 — the board shows that as yellow.
+if [ "$STATUS" = "success" ] && [ -n "$EXIT" ] && [ "$EXIT" != "0" ]; then STATUS="failure"; fi
+# Accepted systemd exit codes do not turn failed QA into successful health receipts.
 SUMMARY="service_result=${RESULT} exit_code=${EXIT_CODE:-?} exit_status=${EXIT:-?}"
 HOST="$(hostname -s 2>/dev/null || echo unknown)"
 EXIT_JSON="null"; case "$EXIT" in ''|*[!0-9]*) ;; *) EXIT_JSON="$EXIT" ;; esac

@@ -63,7 +63,7 @@ async function acculynxGet(
  * Map a camelCase AccuLynx contact API item to snake_case DB columns.
  * Only maps fields that exist in the acculynx_contacts table schema.
  */
-function mapContact(item: any, acct: any, now: string): Record<string, unknown> {
+export function mapContact(item: any, acct: any, now: string): Record<string, unknown> {
   const mailing = item.mailingAddress ?? {};
   const billing = item.billingAddress ?? {};
   return {

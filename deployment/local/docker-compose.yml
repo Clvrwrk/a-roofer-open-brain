@@ -32,6 +32,7 @@ services:
     # Pull an embedding model after start: docker exec roofbrain-ollama ollama pull nomic-embed-text
 
   brain-mcp:
+    profiles: ["uncommissioned-knowledge-scaffold"]
     build:
       context: ../../server
       dockerfile: Dockerfile        # create from denoland/deno:alpine; runs index.ts

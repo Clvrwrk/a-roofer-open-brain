@@ -11,7 +11,7 @@ describe("decideRoofingOpsResponse", () => {
     });
 
     expect(decision.kind).toBe("single_agent");
-    expect(decision.agent).toBe("maya");
+    expect(decision.agent).toBe("ops");
     expect(decision.replyMode).toBe("thread");
   });
 
@@ -24,7 +24,7 @@ describe("decideRoofingOpsResponse", () => {
     });
 
     expect(decision.kind).toBe("ops_overlap");
-    expect(decision.candidates).toEqual(expect.arrayContaining(["maya", "alex", "casey"]));
+    expect(decision.candidates).toEqual(expect.arrayContaining(["ops", "alex", "casey"]));
   });
 
   it("does not answer out-of-domain ambient messages", () => {
