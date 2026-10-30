@@ -24,3 +24,22 @@ if (dsn) {
     },
   });
 }
+
+// Latitude tracing for agent turns (AI SDK spans), attached to the Sentry OTel provider when present.
+// No-ops unless LATITUDE_API_KEY is set.
+if (process.env.LATITUDE_API_KEY) {
+  const [{ Latitude }, { registerTelemetry }, { OpenTelemetry }] = await Promise.all([
+    import("@latitude-data/telemetry"),
+    import("ai"),
+    import("@ai-sdk/otel"),
+  ]);
+  const latitude = new Latitude({
+    apiKey: process.env.LATITUDE_API_KEY,
+    project: process.env.LATITUDE_PROJECT_SLUG ?? "pe-cc-agents",
+  });
+  await latitude.ready;
+  registerTelemetry(new OpenTelemetry({ tracer: latitude.getTracer("vercelai") }));
+  const flush = () => latitude.shutdown().catch(() => {});
+  process.once("SIGTERM", flush);
+  process.once("SIGINT", flush);
+}

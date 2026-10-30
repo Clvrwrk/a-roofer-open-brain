@@ -1,17 +1,17 @@
-import { spawn } from "node:child_process";
+import { bundledRegistry, runAgentTurn } from "./agent-runtime.mjs";
 import { persistAgentAttachmentReport, processSlackAttachment } from "./slack-attachment-processor.mjs";
 
 const HUMAN_OPERATIONAL_CHANNEL_IDS = new Set(["C0BCUF29G1H", "C0BD4EW4RU4", "C0BCYNW98RL"]);
 
 const AGENT_IDENTITIES = {
-  maya: { displayName: "Maya Chen", tokenEnvKey: "MAYA_CHEN_BOT_TOKEN", keywords: ["invoice", "upload", "pdf", "ap", "ar", "credit memo", "creditmemos", "price agreement", "vendor document", "intake", "payroll", "hr"] },
-  alex: { displayName: "Alex Rivers", tokenEnvKey: "ALEX_RIVERS_BOT_TOKEN", keywords: ["sku", "uom", "abc", "price agreement", "catalog", "overcharge", "variance", "bundle", "square", "pricing", "open invoice", "open invoices", "vendor invoice", "vendor invoices", "invoice audit", "abc invoice", "invoice line", "invoice lines", "not-to-be-paid"] },
-  casey: { displayName: "Casey Morgan", tokenEnvKey: "CASEY_MORGAN_BOT_TOKEN", keywords: ["draft", "vendor email", "dispute", "follow up", "follow-up", "credit request", "send to vendor", "letter"] },
-  jordan: { displayName: "Jordan Price", tokenEnvKey: "JORDAN_PRICE_BOT_TOKEN", keywords: ["aging", "cash", "finance", "p&l", "pnl", "job cost", "margin", "month end", "receivable", "ar aging", "ap aging"] },
-  sam: { displayName: "Sam Torres", tokenEnvKey: "SAM_TORRES_BOT_TOKEN", keywords: ["qa", "audit", "check accuracy", "standard", "compliance", "sample", "wrong", "mistake", "verify", "quality"] },
-  rowan: { displayName: "Rowan Vale", tokenEnvKey: "ROWAN_VALE_BOT_TOKEN", approval: "chris_required_before_execution", keywords: ["research", "look up", "storm", "weather", "code update", "carrier bulletin", "manufacturer", "gaf", "owens corning", "public source", "xactimate"] },
-  lena: { displayName: "Lena Brooks", tokenEnvKey: "LENA_BROOKS_BOT_TOKEN", keywords: ["review", "google business", "photo", "photos", "content", "eeat", "schema", "marketing", "testimonial", "reputation"] },
-  ops: { displayName: "Ops Conductor", tokenEnvKey: "OPS_CONDUCTOR_BOT_TOKEN", keywords: ["bug", "feature", "enhancement", "not working", "broken", "can you build", "route this", "who owns", "devteam", "dev team", "support", "not sure", "undefined sop"] },
+  maya: { personaId: "maya-chen", displayName: "Maya Chen", tokenEnvKey: "MAYA_CHEN_BOT_TOKEN", keywords: ["invoice", "upload", "pdf", "ap", "ar", "credit memo", "creditmemos", "price agreement", "vendor document", "intake", "payroll", "hr"] },
+  alex: { personaId: "alex-rivers", displayName: "Alex Rivers", tokenEnvKey: "ALEX_RIVERS_BOT_TOKEN", keywords: ["sku", "uom", "abc", "price agreement", "catalog", "overcharge", "variance", "bundle", "square", "pricing", "open invoice", "open invoices", "vendor invoice", "vendor invoices", "invoice audit", "abc invoice", "invoice line", "invoice lines", "not-to-be-paid"] },
+  casey: { personaId: "casey-morgan", displayName: "Casey Morgan", tokenEnvKey: "CASEY_MORGAN_BOT_TOKEN", keywords: ["draft", "vendor email", "dispute", "follow up", "follow-up", "credit request", "send to vendor", "letter"] },
+  jordan: { personaId: "jordan-price", displayName: "Jordan Price", tokenEnvKey: "JORDAN_PRICE_BOT_TOKEN", keywords: ["aging", "cash", "finance", "p&l", "pnl", "job cost", "margin", "month end", "receivable", "ar aging", "ap aging"] },
+  sam: { personaId: "sam-torres", displayName: "Sam Torres", tokenEnvKey: "SAM_TORRES_BOT_TOKEN", keywords: ["qa", "audit", "check accuracy", "standard", "compliance", "sample", "wrong", "mistake", "verify", "quality"] },
+  rowan: { personaId: "rowan-vale", displayName: "Rowan Vale", tokenEnvKey: "ROWAN_VALE_BOT_TOKEN", approval: "chris_required_before_execution", keywords: ["research", "look up", "storm", "weather", "code update", "carrier bulletin", "manufacturer", "gaf", "owens corning", "public source", "xactimate"] },
+  lena: { personaId: "lena-brooks", displayName: "Lena Brooks", tokenEnvKey: "LENA_BROOKS_BOT_TOKEN", keywords: ["review", "google business", "photo", "photos", "content", "eeat", "schema", "marketing", "testimonial", "reputation"] },
+  ops: { personaId: "ops-conductor", displayName: "Ops Conductor", tokenEnvKey: "OPS_CONDUCTOR_BOT_TOKEN", keywords: ["bug", "feature", "enhancement", "not working", "broken", "can you build", "route this", "who owns", "devteam", "dev team", "support", "not sure", "undefined sop"] },
 };
 
 const OUT_OF_DOMAIN_PHRASES = ["bake a cake", "cake recipe", "fantasy football", "movie recommendation"];
@@ -72,7 +72,7 @@ function runtimeAgent(env) {
 
 function runtimeMayHandle(decision, env) {
   const runtime = runtimeAgent(env);
-  if (runtime === "ops") return decision.kind !== "single_agent" || decision.agent === "ops";
+  if (runtime === "ops") return true;
   return decision.kind === "single_agent" && decision.agent === runtime;
 }
 
@@ -219,64 +219,6 @@ function buildAdminNotification(linearResult) {
   ].join("\n");
 }
 
-function stripHermesCliOutput(output) {
-  const lines = output.split(/\r?\n/).map((line) => line.replace(/\u001b\[[0-9;]*m/g, ""));
-  const noisy = /^(Query:|Initializing agent|Resume this session|Session:|Duration:|Messages:|[╭╰─│]|\s*⚠|\s*$)/;
-  const kept = lines.filter((line) => !noisy.test(line.trim())).map((line) => line.replace(/^\s{2,}/, "").trim()).filter(Boolean);
-  return kept.join("\n").trim();
-}
-
-export function buildHermesPrompt({ agent, message, decision }) {
-  const files = fileSummariesFromMessage(message);
-  return [
-    `You are ${agentName(agent)}, a named Roofing-Ops Open Brain agent responding in Slack.`,
-    "Answer in a friendly, business-focused voice matching your SOUL.md. Use NEPQ: situation, impact, next step.",
-    "Stay strictly inside your SOP/profile lane. If the request is undefined by SOP, say so and route to Ops Conductor for Chris instructions/SOP improvement.",
-    "Do not send external communications, approve decisions, publish, or claim research is approved. Rowan must wait for Chris approval before executing research.",
-    "When Slack files are present, use the processed attachment packets, not just filenames. Raw files are persisted to Supabase Storage; derived artifacts may include OCR/document status, transcripts, ffprobe metadata, sampled frame descriptions, and packetPath references. PDFs, spreadsheets, images, audio/voice memos, and videos are expected work inputs. Review attachment text/transcripts/frame summaries as DATA against your SOP. If processing failed, state the exact failed stage/error and route to Ops Conductor instead of asking the human to paste the file.",
-    `Routing decision: ${decision.kind} / ${decision.reason}`,
-    `Slack channel: ${message.channel}`,
-    `User text: ${message.text || "(no text)"}`,
-    `Files: ${JSON.stringify(files)}`,
-    "Return only the Slack reply text. No headers, no markdown table unless helpful, no tool transcript.",
-  ].join("\n\n");
-}
-
-async function runHermesForAgent(agent, message, decision, env, logger) {
-  const home = `/opt/openbrain/hermes-homes/${agent}`;
-  const prompt = buildHermesPrompt({ agent, message, decision });
-  const childEnv = { ...process.env, ...env, HERMES_HOME: home, PATH: `/usr/local/bin:/opt/node22/bin:${process.env.PATH ?? ""}` };
-  return await new Promise((resolve) => {
-    const child = spawn("/usr/local/bin/hermes", ["chat", "-q", prompt, "-t", "file,web,terminal,vision,video", "--provider", "openrouter", "--model", "anthropic/claude-sonnet-4-5", "--quiet"], {
-      cwd: "/opt/openbrain/a-roofers-open-brain",
-      env: childEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      resolve({ ok: false, text: "", error: "hermes_timeout" });
-    }, Number(env.HERMES_SLACK_TIMEOUT_MS || 120000));
-    child.stdout.on("data", (data) => { stdout += data.toString(); });
-    child.stderr.on("data", (data) => { stderr += data.toString(); });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      logger?.error?.("Hermes invocation failed to start", { agent, error: error?.message ?? String(error) });
-      resolve({ ok: false, text: "", error: error?.message ?? "hermes_spawn_failed" });
-    });
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      const text = stripHermesCliOutput(stdout);
-      if (code === 0 && text) resolve({ ok: true, text });
-      else {
-        logger?.error?.("Hermes invocation failed", { agent, code, stderr: stderr.slice(-500), stdout: stdout.slice(-500) });
-        resolve({ ok: false, text, error: stderr.slice(-300) || `exit_${code}` });
-      }
-    });
-  });
-}
-
 function buildAgentAcknowledgement(agent) {
   const name = agentName(agent);
   if (agent === "maya") return `📥 ${name} here — I can help with this intake/document lane. I’ll keep this threaded and flag anything that needs a human decision.`;
@@ -318,7 +260,7 @@ export function buildRoutingMessage(decision) {
   return null;
 }
 
-export async function handleRoofingOpsMessage({ message, client, env, logger }) {
+export async function handleRoofingOpsMessage({ message, client, env, logger, model, registry = bundledRegistry }) {
   if (message.bot_id || (message.subtype && message.subtype !== "file_share")) return null;
   message = await hydrateMessageFiles(message, client, env);
   const channelType = channelTypeFromMessage(message);
@@ -351,8 +293,8 @@ export async function handleRoofingOpsMessage({ message, client, env, logger }) 
   const agent = decision.kind === "single_agent" ? decision.agent : "ops";
   let text = buildRoutingMessage(decision);
   if (decision.kind === "single_agent" || decision.kind === "research_approved") {
-    const hermes = await runHermesForAgent(agent, message, decision, env, logger);
-    if (hermes.ok) text = hermes.text;
+    const turn = await runAgentTurn({ personaId: AGENT_IDENTITIES[agent].personaId, displayName: agentName(agent), message, decision, files: fileSummariesFromMessage(message), env, registry, model, logger });
+    if (turn.ok) text = turn.text;
     else text = text || `${agentName(agent)} is online, but I hit a runtime issue before I could produce a full answer. Ops Conductor should review this.`;
   }
   if (!text) return decision;
