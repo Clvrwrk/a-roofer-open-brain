@@ -62,6 +62,13 @@ describe("in-process agent runtime", () => {
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Alex Rivers");
   });
 
+  it("the agent's bundled SOUL.md persona is in its system prompt", async () => {
+    const model = replyModel("ok");
+    await handleRoofingOpsMessage({ client: slackClient(), env: alexEnv, logger: console, message: alexMessage, model, registry: registryWith({ "alex-rivers": "authorized" }) });
+    const soul = readFileSync(resolve(__dirname, "../../../../agents/profiles/alex-rivers/SOUL.md"), "utf8").trim();
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain(JSON.stringify(soul.split("\n")[0]).slice(1, -1));
+  });
+
   it("a planned agent makes no model call and posts the canned acknowledgement", async () => {
     const client = slackClient();
     const model = replyModel("should never be used");
