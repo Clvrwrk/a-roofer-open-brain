@@ -1,8 +1,9 @@
 /**
  * Linear GraphQL helpers for DevTeam webhooks and queue runner documentation.
- * Server-side only — requires LINEAR_API_KEY.
+ * Server-side only — acts as the PE Dev Agents app (LINEAR_AGENT_CLIENT_*) or falls back to LINEAR_API_KEY.
  */
 import { getRuntimeEnv } from "@lib/runtime-env";
+import { linearAuth, linearGraphql as guardedGraphql } from "@lib/linear-client.server";
 
 const TEAM_ID = "f7fd2005-aa04-4de7-a17d-ddae528b5e4a";
 const PROJECT_ID = "ba9edb00-077d-47cc-9f69-d2ac04bfc6c9";
@@ -16,23 +17,9 @@ export interface LinearIssueInput {
 }
 
 async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
-  const apiKey = getRuntimeEnv().LINEAR_API_KEY?.trim();
-  if (!apiKey) return null;
-
-  const res = await fetch("https://api.linear.app/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: apiKey,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (json.errors?.length) {
-    throw new Error(json.errors.map((e) => e.message).join("; "));
-  }
-  return json.data ?? null;
+  const authorization = await linearAuth.authorization();
+  if (!authorization) return null;
+  return guardedGraphql<T>(query, variables, { authorization });
 }
 
 export async function createDevLinearIssue(input: LinearIssueInput) {
@@ -66,5 +53,6 @@ export async function createDevLinearIssue(input: LinearIssueInput) {
 }
 
 export function isLinearConfigured() {
-  return Boolean(getRuntimeEnv().LINEAR_API_KEY?.trim());
+  const env = getRuntimeEnv();
+  return Boolean(env.LINEAR_API_KEY?.trim() || (env.LINEAR_AGENT_CLIENT_ID?.trim() && env.LINEAR_AGENT_CLIENT_SECRET?.trim()));
 }
