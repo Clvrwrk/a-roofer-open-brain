@@ -1,0 +1,35 @@
+{
+ "run_name": "aroofer-docs-pilot",
+ "workdir": "/workspace/ringer-pilot/run",
+ "repo": "/workspace/a-roofer-open-brain",
+ "worktrees": true,
+ "max_parallel": 3,
+ "tasks": [
+  {
+   "key": "docs-index",
+   "task_type": "docs",
+   "engine": "grok",
+   "max_attempts": 1,
+   "timeout_s": 1200,
+   "spec": "Repository: a-roofer-open-brain (you are at its root). Create docs/INDEX.md: an index of every file AND every subfolder directly inside docs/ (except INDEX.md itself). Link each subfolder too, e.g. [linear/](linear/), with a one-line description of at least 8 words of what it contains. Group by topic heading. Each entry is one markdown table row or bullet: a relative link like [05-model-matrix.md](05-model-matrix.md) followed by a one-line description of at least 8 words taken from that file's H1 title and opening paragraph. Hard rules: docs only. Create exactly ONE new file (named below) and do not edit, move, delete or stage any other file. Do not run git commit. Describe each item from its actual contents (read the file's header or first lines); never invent behaviour; if unclear write 'purpose unclear (see source)'. No secrets, keys, tokens, emails or customer data. Use relative markdown links. Before finishing, run this exact check and fix any reported problem: python3 /workspace/ringer-pilot/checks/index_check.py docs/INDEX.md docs '*' /workspace/ringer-pilot/out",
+   "check": "python3 /workspace/ringer-pilot/checks/index_check.py docs/INDEX.md docs '*' /workspace/ringer-pilot/out && mkdir -p /workspace/ringer-pilot/out && cp docs/INDEX.md /workspace/ringer-pilot/out/docs__INDEX.md",
+   "expect_files": [
+    "docs/INDEX.md"
+   ],
+   "verified": "every file and subfolder in docs/ is linked from docs/INDEX.md with a description, and every link resolves"
+  },
+  {
+   "key": "scripts-readme",
+   "task_type": "docs",
+   "engine": "grok",
+   "max_attempts": 1,
+   "timeout_s": 1200,
+   "spec": "Repository: a-roofer-open-brain (you are at its root). Create scripts/README.md: a catalog of every file and folder directly inside scripts/ (except README.md). Group by type (shell, node .mjs/.ts, python, SQL, folders). Each entry: a relative link like [foo.sh](foo.sh) followed by a one-line purpose of at least 8 words, from the script's header comment, usage text or code, plus how to run it if stated. Hard rules: docs only. Create exactly ONE new file (named below) and do not edit, move, delete or stage any other file. Do not run git commit. Describe each item from its actual contents (read the file's header or first lines); never invent behaviour; if unclear write 'purpose unclear (see source)'. No secrets, keys, tokens, emails or customer data. Use relative markdown links. IMPORTANT: every subfolder (e.g. [tests/](tests/)) MUST be its own linked entry; run `ls scripts` and verify every name appears as a link before finishing. Before finishing, run this exact check and fix any reported problem: python3 /workspace/ringer-pilot/checks/index_check.py scripts/README.md scripts '*' /workspace/ringer-pilot/out",
+   "check": "python3 /workspace/ringer-pilot/checks/index_check.py scripts/README.md scripts '*' /workspace/ringer-pilot/out && mkdir -p /workspace/ringer-pilot/out && cp scripts/README.md /workspace/ringer-pilot/out/scripts__README.md",
+   "expect_files": [
+    "scripts/README.md"
+   ],
+   "verified": "every file and folder in scripts/ is linked from scripts/README.md with a purpose line, and every link resolves"
+  }
+ ]
+}
