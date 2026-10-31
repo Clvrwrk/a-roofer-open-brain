@@ -14,3 +14,9 @@
 - (B) Roofing SMB workflow catalog. About 71 workflows were found in code: CRM ~16, PM ~11, HR ~21, CC ~20, ADMIN ~3. It includes a gap list (with research cited) and demo-mode design notes.
 - Fast.io: BSG_GROK_WORLD/Sub-Vaults/grok-world/helo-dev-pair/proposals/workflow-catalog/2026-10-30/{aia4-dev-workflow,roofing-smb-catalog}/. 10 new files, all sha-verified.
 - Nothing spent, merged, or sent outside the team.
+
+## 2026-10-30 — Estimates sub-projects + proposal (t56u)
+- Linear projects created: CC › Estimates P-PEC-208 (PEC-833..837), CRM › Estimates P-PEC-209 (PEC-838..841 + moved PEC-487), PM › Estimates P-PEC-210 (PEC-842..844 + moved PEC-772 from PM M5 → E3).
+- Fast.io: helo-dev-pair/proposals/estimates/2026-10-30/ (workflow, templates, agent; MD+HTML+Excalidraw).
+- Supabase read-only findings: 5 pilot estimate_runs, 4 custom-tier templates, 556 AccuLynx estimates (market NULL), no "needs estimate" tag.
+- Open questions for Chris: needs-estimate field, Richardson/Euless overlap, office attribution, tier mapping, margin floors, Roofr cost, carrier scope ingestion.
