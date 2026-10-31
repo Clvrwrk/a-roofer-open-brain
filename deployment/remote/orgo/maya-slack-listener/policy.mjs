@@ -34,6 +34,20 @@ export const REQUIRED_EMAIL_CC = Object.freeze([
   "chussey@aia4.io",
 ]);
 
+// Mirror of agents/registry/named-agent-principals.json (and the Command Center runtime copy);
+// a test fails if they drift. Security notices about these identities are routine unless risky.
+export const KNOWN_PRINCIPAL_EMAILS = Object.freeze([
+  "maya.chen@cc.proexteriorsus.net",
+  "alex.rivers@cc.proexteriorsus.net",
+  "casey.morgan@cc.proexteriorsus.net",
+  "jordan.price@cc.proexteriorsus.net",
+  "sam.torres@cc.proexteriorsus.net",
+  "rowan.vale@cc.proexteriorsus.net",
+  "lena.brooks@cc.proexteriorsus.net",
+  "ops-conductor@cc.proexteriorsus.net",
+]);
+export const UNKNOWN_PRINCIPAL_POLICY = "deny";
+
 export const MAYA_EMAIL_ADDRESS = "maya.chen@cc.proexteriorsus.net";
 
 // Canonical internal-domain rule (Chris, 2026-08-11): every subdomain of these

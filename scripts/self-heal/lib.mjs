@@ -17,6 +17,8 @@ export const LABELS = Object.freeze({
   // Staff "Report a bug" submissions (docs/delivery/BUG-LOG.md, "User reports"). Optional for --apply: while it
   // is unset, user reports are skipped (never filed under source:sentry) and every other issue is triaged.
   sourceUser: { name: 'source:user', env: 'LINEAR_LABEL_SOURCE_USER', optional: true },
+  // Ops-remediation lane for provider/infra outages (retry, restart sync, check provider). Optional.
+  laneSentinel: { name: 'lane:sentinel', env: 'LINEAR_LABEL_LANE_SENTINEL', optional: true },
 });
 
 export const IDENTIFIER_RE = /^[A-Z][A-Z0-9]{0,9}-\d{1,6}$/;
@@ -90,6 +92,8 @@ export function readConfig(env, { apply = false } = {}) {
     repository: /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '') ? env.GITHUB_REPOSITORY : '',
     maxIssues: positiveInt(env.TRIAGE_MAX_ISSUES, 25),
     maxPerRun: positiveInt(env.AUTOFIX_MAX_PER_RUN, 2),
+    // Failed autofix runs (no PR) are re-queued until this many attempts, then escalated to needs-human.
+    maxAutofixAttempts: positiveInt(env.AUTOFIX_MAX_ATTEMPTS, 3),
     // Impact gate: new bug logs are filed only at this severity or worse (S1 worst). S4 files everything.
     minSeverity: /^S[1-4]$/.test(env.TRIAGE_MIN_SEVERITY || '') ? env.TRIAGE_MIN_SEVERITY : 'S4',
     extraNeedsHumanCodes: (env.TRIAGE_NEEDS_HUMAN_CODES || '').split(',').map(s => s.trim()).filter(Boolean),
