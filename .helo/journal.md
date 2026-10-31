@@ -32,3 +32,8 @@
 - Baselines (≥90%) per office × primary shingle. Strong groups: Denver Vista n=199, Richardson Vista n=98, Wichita Highlander n=44 / Vista n=36 / GAF NS n=19, Denver Legacy n=18, Richardson Highlander n=11. Pensacola, Insurance, Atlanta, MF and KC are too thin.
 - Insurance, Roofr and measurement docs are in Supabase for ~45 jobs only, so each gap gets a PLACEHOLDER row (missing, source=AccuLynx). Added a spec for the extraction bot.
 - Fast.io: grok-world/helo-dev-pair/proposals/estimates/2026-10-30/baseline-templates/ (6 new files, sha verified). Read-only. $0.
+
+## 2026-10-30 20:45 PDT, Baseline templates v2: full-invoice rematch + SRS (Chris t73u)
+- Linked 2,099 of 2,798 ABC invoices (v1: 1,930): PO code 1,928, code found elsewhere on the invoice 24, bare code + office of purchase 36, address 111, credit memo → original 0 net new. 699 remain unmatched (mostly Will Call, Delivery, Express Pickup and adjustments with names, SHOP or addresses).
+- SRS: found 91 docs / 726 lines (vendor_invoices, from 2026-06-18). 89 matched. Merged at the cross-supplier "family" level. Credits are netted per job × line.
+- Scope is CO/TX/KS/KC. KC prefix = KC-. KC is still n=8 jobs, too thin. Fast.io: baseline-templates/*-v2 files (6 new, sha verified). Read-only. $0.

@@ -1,0 +1,1606 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Baseline templates v2</title><style>body{font-family:system-ui;max-width:1100px;margin:auto;padding:20px}table{border-collapse:collapse;font-size:13px;margin:8px 0}td,th{border:1px solid #ccc;padding:3px 6px}th{background:#f1f3f5}svg{max-width:100%;height:auto}</style></head><body><h1>Baseline estimate templates v2: full-invoice rematch + SRS (2026-10-30)</h1>
+<p>Chris t73u: "Look at the entire invoice. There may be a reference to a job if these are credit memos. On every invoice there is an office of purchase, which establishes the location, and a jobid code." He also asked to include SRS and to scope this to <strong>Denver, Richardson, Wichita and Kansas City</strong>. Pensacola, Multi-family, Insurance and Atlanta are skipped. Everything here is READ-ONLY.</p>
+<p><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" font-family="Virgil,Segoe UI,sans-serif" font-size="14"><defs><marker id="m2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z"/></marker></defs><rect width="1200" height="460" fill="#fff"/>
+<rect x="20" y="40" width="200" height="120" rx="12" fill="#a5d8ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="120.0" y="96.0" text-anchor="middle">ABC 2,798 inv</text>
+<text x="120.0" y="114.0" text-anchor="middle">+ SRS 91 docs</text>
+<rect x="250" y="40" width="200" height="120" rx="12" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<text x="350.0" y="87.0" text-anchor="middle">Match: PO code, code</text>
+<text x="350.0" y="105.0" text-anchor="middle">elsewhere, bare code</text>
+<text x="350.0" y="123.0" text-anchor="middle">+office, address, CM→orig</text>
+<line x1="220" y1="100" x2="250" y2="100" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+<rect x="480" y="40" width="200" height="120" rx="12" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<text x="580.0" y="96.0" text-anchor="middle">Net credits</text>
+<text x="580.0" y="114.0" text-anchor="middle">per job × line</text>
+<line x1="450" y1="100" x2="480" y2="100" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+<rect x="710" y="40" width="200" height="120" rx="12" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<text x="810.0" y="96.0" text-anchor="middle">Office × shingle</text>
+<text x="810.0" y="114.0" text-anchor="middle">family % of jobs</text>
+<line x1="680" y1="100" x2="710" y2="100" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+<rect x="940" y="40" width="200" height="120" rx="12" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1040.0" y="96.0" text-anchor="middle">≥90% baseline</text>
+<text x="1040.0" y="114.0" text-anchor="middle">70–90% optional</text>
+<line x1="910" y1="100" x2="940" y2="100" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+<rect x="250" y="220" width="430" height="90" rx="12" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<text x="465.0" y="261.0" text-anchor="middle">Missing docs → PLACEHOLDER rows</text>
+<text x="465.0" y="279.0" text-anchor="middle">(ABC / SRS / AccuLynx extraction bot)</text>
+<line x1="1040" y1="160" x2="690" y2="240" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+<rect x="250" y="360" width="430" height="80" rx="12" fill="#c3fae8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="465.0" y="396.0" text-anchor="middle">Good / Better / Best per office</text>
+<text x="465.0" y="414.0" text-anchor="middle">CO · TX · KS · KC</text>
+<line x1="465" y1="310" x2="465" y2="360" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m2)"/>
+</svg></p>
+<h2>1. Fields found on the full invoice</h2>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Field (Supabase)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Office of purchase / location</td>
+<td><code>abc_line_items.branch_number</code> + <code>branch_state</code>; header <code>abc_invoices.raw-&gt;branch</code> (number, name, city, state). The ABC sub-account <code>abc_account_name</code> is the office account: <em>Denver Co Account</em> (2036874-9) = Denver, <em>DFW Account</em> (-2) = Richardson, <em>Storm/wichita</em> (-16) = Wichita, <em>STORM North KC</em> (-20) = Kansas City, <em>Commercial</em> / <em>Texas Motor Speedway</em> = MF. Generic "PRO EXTERIORS LLC / 930014…" accounts fall back to the branch state (MO → KC).</td>
+</tr>
+<tr>
+<td>Job ID code</td>
+<td><code>customer_po</code> (main), header <code>purchase_order_number</code>, <code>order_name</code>, line <code>job_name</code>. Codes appear as <code>CO-189</code>, <code>TX216</code>, <code>AUSTINTX-318</code>, <code>PO 188: NAME</code>, or a bare <code>180</code> with the office implied.</td>
+</tr>
+<tr>
+<td>Credit memo → original</td>
+<td><code>abc_invoices.is_credit_memo</code>, <code>original_invoice_reference</code> (<code>2005594507-1</code> → invoice <code>2005594507-001</code>), <code>raw.creditRebillReason</code>. Only 83 headers carry a reference, and the header table covers only part of the line data.</td>
+</tr>
+<tr>
+<td>Address</td>
+<td><code>abc_line_items.shipping_address</code>, header <code>raw.shipTo.addressLine1</code> (often the office address, so it's used only after the job code).</td>
+</tr>
+<tr>
+<td>SRS</td>
+<td><code>vendor_invoices</code> + <code>vendor_invoice_lines</code> (vendor = SRS Distribution): <strong>91 docs (59 invoices, 32 credits), 726 lines, 2026-06-18 → 2026-10-20</strong>. <code>po_number</code> holds the job code. <code>branch_key</code> (DJWIC = Wichita, AMDEN/SHCOL/SSCOP = Denver, CDFTW/SSMEL = DFW). Also <code>qbo_registers."SRS Distribution"</code> (91 register rows, no item lines).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>AccuLynx note:</strong> 6,088 of 7,419 jobs in <code>acculynx_jobs</code> have a <strong>blank job_number</strong> (leads that never got a number). Only numbered jobs can match. Kansas City's prefix is <strong><code>KC-</code></strong> (verified), not MO.</p>
+<h2>2. Match rates (ABC, 2,798 invoices)</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>ABC invoices matched</th>
+<th>% of 2,798</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M2 job code elsewhere on invoice</td>
+<td>24</td>
+<td>0.9%</td>
+</tr>
+<tr>
+<td>M1 PO job code (prefixed)</td>
+<td>1928</td>
+<td>68.9%</td>
+</tr>
+<tr>
+<td>M3 bare job code + office of purchase</td>
+<td>36</td>
+<td>1.3%</td>
+</tr>
+<tr>
+<td>M4 job address (street no.+name)</td>
+<td>111</td>
+<td>4.0%</td>
+</tr>
+<tr>
+<td>unmatched</td>
+<td>699</td>
+<td>25.0%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Order of methods: M1 → M2 → M3 (a bare code turned into <code>PREFIX-n</code> using the office of purchase, accepted only if that job exists) → M4 (house number + street name match AccuLynx <code>location_street1</code>, unique within the office) → M5 (credit memo inherits the job of its original invoice).</li>
+<li><strong>Linked: 2099 / 2,798 invoices (v1: 1,930), giving 639 jobs.</strong></li>
+<li><strong>Still unmatched (699):</strong> Will Call 211, Delivery 168, Express Pickup 124, Adjustment 112, Credit Memo 80, Debit Memo 4. By office: Richardson 466, Denver 106, MF 62, Atlanta 29, Wichita 25, unknown 11. Most have a person's name, "SHOP"/"RUSH", or a house address with no matching AccuLynx job number. Those jobs are likely un-numbered leads or shop stock.</li>
+<li><strong>SRS:</strong> 88 of 91 docs matched by PO job code, 1 by address, 2 unmatched.</li>
+<li>Medium confidence: M3 (36) and M4 (111). Spot-check these before training.</li>
+</ul>
+<p><strong>Credit netting:</strong> credit-memo and SRS-credit lines are negative and summed per job × line before counting. A line counts as "present" only if its net qty &gt; 0. Some jobs are fully reversed by a credit and drop out, which is why "no shingle" jobs rose (Wichita 17 → 49, mostly accessory-only and return-netted jobs).</p>
+<h2>3. Coverage (in-scope offices)</h2>
+<table>
+<thead>
+<tr>
+<th>Office</th>
+<th>Jobs with any invoice</th>
+<th>Jobs with supplier lines (ABC+SRS)</th>
+<th>…with SRS lines</th>
+<th>Primary shingle found</th>
+<th>Insurance doc</th>
+<th>Roofr</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Richardson TX</td>
+<td>404</td>
+<td>163</td>
+<td>2</td>
+<td>142</td>
+<td>4</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Denver CO</td>
+<td>300</td>
+<td>270</td>
+<td>3</td>
+<td>227</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Kansas City MO</td>
+<td>13</td>
+<td>8</td>
+<td>0</td>
+<td>7</td>
+<td>4</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>223</td>
+<td>158</td>
+<td>35</td>
+<td>109</td>
+<td>28</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Change vs v1:</strong>
+| Office | v1 supplier-line jobs → v2 | v1 shingle jobs → v2 |
+|---|---|---|
+| Denver CO | 261 → 270 | 225 → 227 |
+| Richardson TX | 149 → 163 | 132 → 142 |
+| Wichita KS | 121 → 158 | 104 → 109 |
+| Kansas City MO | 8 → 8 | 7 → 7 |</p>
+<p><strong>Kansas City is still too thin:</strong> 8 jobs with supplier lines, 7 with a shingle (Vista and Highlander have fewer than 5 each). KC POs mostly use the generic accounts or carry no code. Getting KC to n≥10 needs AccuLynx job numbers on KC POs, or the extraction bot below (material orders and work orders attached in AccuLynx).</p>
+<h2>4. Group summary (product level, in scope)</h2>
+<table>
+<thead>
+<tr>
+<th>Office</th>
+<th>Shingle</th>
+<th>n</th>
+<th>Product baseline lines</th>
+<th>Common optional</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Denver CO</td>
+<td>Malarkey Vista AR</td>
+<td>200</td>
+<td>7</td>
+<td>9</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Denver CO</td>
+<td>NO SHINGLE ON INVOICE</td>
+<td>43</td>
+<td>0</td>
+<td>0</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Denver CO</td>
+<td>Malarkey Legacy</td>
+<td>19</td>
+<td>5</td>
+<td>6</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Denver CO</td>
+<td>OC Duration</td>
+<td>5</td>
+<td>4</td>
+<td>8</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Kansas City MO</td>
+<td>Malarkey Highlander NEX AR</td>
+<td>4</td>
+<td>9</td>
+<td>5</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Kansas City MO</td>
+<td>Malarkey Vista AR</td>
+<td>3</td>
+<td>10</td>
+<td>0</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Malarkey Vista AR</td>
+<td>103</td>
+<td>7</td>
+<td>4</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>NO SHINGLE ON INVOICE</td>
+<td>21</td>
+<td>0</td>
+<td>0</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Malarkey Highlander NEX AR</td>
+<td>12</td>
+<td>4</td>
+<td>6</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Tamko Heritage</td>
+<td>8</td>
+<td>2</td>
+<td>5</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Malarkey Legacy</td>
+<td>5</td>
+<td>1</td>
+<td>3</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Atlas Pinnacle</td>
+<td>4</td>
+<td>1</td>
+<td>5</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>GAF Timberline HDZ</td>
+<td>4</td>
+<td>1</td>
+<td>0</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Richardson TX</td>
+<td>Tamko Titan XT</td>
+<td>3</td>
+<td>8</td>
+<td>0</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>NO SHINGLE ON INVOICE</td>
+<td>49</td>
+<td>0</td>
+<td>0</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>Malarkey Highlander NEX AR</td>
+<td>45</td>
+<td>7</td>
+<td>4</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>Malarkey Vista AR</td>
+<td>36</td>
+<td>7</td>
+<td>3</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>GAF Timberline NS AR</td>
+<td>18</td>
+<td>5</td>
+<td>5</td>
+<td>ok</td>
+</tr>
+<tr>
+<td>Wichita KS</td>
+<td>IKO</td>
+<td>5</td>
+<td>0</td>
+<td>2</td>
+<td>LOW (n&lt;10)</td>
+</tr>
+</tbody>
+</table>
+<h2>5. Templates. Family level (cross-supplier: ABC + SRS map to the same function family) is the template the estimate agent uses; product level is in the CSV.</h2>
+<p>SRS names are mapped to families with the same rules (e.g. TOP SHIELD STARTER STRIP → Starter, TS20 SYNTHETIC → Synthetic underlayment, ICE &amp; WATER DEFENDER → Ice &amp; water, METAL EDGE → Drip edge). The shingle family is identified with the same shingle regex, so <code>MALARKEY VISTA AR … 3 BD/SQ</code> → Malarkey Vista AR.</p>
+<h3>Denver CO · Malarkey Vista AR (n=200)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY VISTA</td>
+<td>BD</td>
+<td>3.0</td>
+<td>44.0</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>99.5%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.161</td>
+<td>84.5</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>99.5%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY SMART START</td>
+<td>BD</td>
+<td>0.117</td>
+<td>76.2</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>98.0%</td>
+<td><strong>baseline</strong></td>
+<td>GALVANIZED STEEL DRIP APRON</td>
+<td>EA</td>
+<td>1.438</td>
+<td>15.82</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>98.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 401 ARCTIC SEAL</td>
+<td>RL</td>
+<td>0.222</td>
+<td>102.0</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>96.5%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: FLASHING</td>
+<td>EA</td>
+<td>0.183</td>
+<td>13.99</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>96.5%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.085</td>
+<td>59.55</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>96.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC PRO GUARD 20 SYNTH UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.107</td>
+<td>100.99</td>
+</tr>
+<tr>
+<td>Delivery / fees</td>
+<td>95.0%</td>
+<td><strong>baseline</strong></td>
+<td>JURISDICTION DELIVERY FEE</td>
+<td>EA</td>
+<td>0.085</td>
+<td>75.14</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>94.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.143</td>
+<td>12.36</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>93.5%</td>
+<td><strong>baseline</strong></td>
+<td>GAF MISCELLANEOUS ROOF VENTS</td>
+<td>EA</td>
+<td>0.319</td>
+<td>47.11</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>91.5%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.261</td>
+<td>6.99</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>90.0%</td>
+<td><strong>baseline</strong></td>
+<td>GENERIC SCREWS</td>
+<td>EA</td>
+<td>0.063</td>
+<td>44.99</td>
+</tr>
+<tr>
+<td>Step flashing</td>
+<td>77.5%</td>
+<td>optional</td>
+<td>GALVANIZED STEEL STEP FLASHING</td>
+<td>BD</td>
+<td>0.051</td>
+<td>91.49</td>
+</tr>
+</tbody>
+</table>
+<h3>Denver CO · Malarkey Legacy (n=19)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flashing (other)</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: FLASHING</td>
+<td>EA</td>
+<td>0.107</td>
+<td>14.99</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY LEGACY 50 YR</td>
+<td>BD</td>
+<td>3.0</td>
+<td>39.75</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY SMART START</td>
+<td>BD</td>
+<td>0.081</td>
+<td>80.99</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.146</td>
+<td>83.99</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>EA</td>
+<td>0.043</td>
+<td>48.99</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.065</td>
+<td>70.99</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GALVANIZED STEEL DRIP APRON</td>
+<td>EA</td>
+<td>0.901</td>
+<td>18.4</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>94.7%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 401 ARCTIC SEAL</td>
+<td>RL</td>
+<td>0.181</td>
+<td>103.49</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>94.7%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.149</td>
+<td>13.58</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>94.7%</td>
+<td><strong>baseline</strong></td>
+<td>ABC PRO GUARD 20 SYNTH UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.075</td>
+<td>106.99</td>
+</tr>
+<tr>
+<td>Delivery / fees</td>
+<td>94.7%</td>
+<td><strong>baseline</strong></td>
+<td>FUEL SURCHARGE</td>
+<td>EA</td>
+<td>0.049</td>
+<td>95.12</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>89.5%</td>
+<td>optional</td>
+<td>CAULKS &amp; SEALANTS</td>
+<td>TB</td>
+<td>0.221</td>
+<td>12.76</td>
+</tr>
+<tr>
+<td>Step flashing</td>
+<td>89.5%</td>
+<td>optional</td>
+<td>GALVANIZED STEEL STEP FLASHING</td>
+<td>BD</td>
+<td>0.027</td>
+<td>97.99</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>84.2%</td>
+<td>optional</td>
+<td>GAF MISCELLANEOUS ROOF VENTS</td>
+<td>EA</td>
+<td>0.237</td>
+<td>47.01</td>
+</tr>
+</tbody>
+</table>
+<h3>Richardson TX · Malarkey Vista AR (n=103)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY VISTA</td>
+<td>BD</td>
+<td>3.0</td>
+<td>41.24</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>98.1%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.071</td>
+<td>54.0</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>98.1%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY SMART START</td>
+<td>BD</td>
+<td>0.082</td>
+<td>81.95</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>97.1%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 401 ARCTIC SEAL</td>
+<td>RL</td>
+<td>0.057</td>
+<td>107.42</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>97.1%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: FLASHING</td>
+<td>EA</td>
+<td>0.152</td>
+<td>8.4</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>97.1%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.25</td>
+<td>95.65</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>97.1%</td>
+<td><strong>baseline</strong></td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.058</td>
+<td>17.3</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>96.1%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.092</td>
+<td>8.96</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>95.1%</td>
+<td><strong>baseline</strong></td>
+<td>ABC PRO GUARD 20 SYNTH UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.1</td>
+<td>89.1</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>95.1%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.163</td>
+<td>8.8</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>91.3%</td>
+<td><strong>baseline</strong></td>
+<td>AIRVENT ALUM ROOF VENTS</td>
+<td>EA</td>
+<td>0.175</td>
+<td>35.02</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>77.7%</td>
+<td>optional</td>
+<td>ACM GALVANIZED STEEL DRIP EDGE</td>
+<td>EA</td>
+<td>0.957</td>
+<td>9.6</td>
+</tr>
+</tbody>
+</table>
+<h3>Richardson TX · Malarkey Highlander NEX AR (n=12)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coil nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.082</td>
+<td>54.0</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY NEX HIGHLANDER 242</td>
+<td>BD</td>
+<td>3.0</td>
+<td>36.67</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY SMART START</td>
+<td>BD</td>
+<td>0.081</td>
+<td>89.0</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>ACM GALVANIZED STEEL DRIP EDGE</td>
+<td>EA</td>
+<td>0.957</td>
+<td>9.6</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: FLASHING</td>
+<td>EA</td>
+<td>0.167</td>
+<td>9.05</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.054</td>
+<td>17.3</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.211</td>
+<td>8.7</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 401 ARCTIC SEAL</td>
+<td>RL</td>
+<td>0.054</td>
+<td>99.0</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>83.3%</td>
+<td>optional</td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.254</td>
+<td>85.97</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>83.3%</td>
+<td>optional</td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.105</td>
+<td>8.96</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>83.3%</td>
+<td>optional</td>
+<td>ABC PRO GUARD 20 SYNTH UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.108</td>
+<td>87.05</td>
+</tr>
+</tbody>
+</table>
+<h3>Richardson TX · Tamko Heritage (n=8) <strong>LOW CONFIDENCE</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>TAMKO HERITAGE 30YR</td>
+<td>BD</td>
+<td>3.0</td>
+<td>33.0</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.123</td>
+<td>6.6</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.067</td>
+<td>8.96</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>LOMANCO TURBINE VENTS</td>
+<td>EA</td>
+<td>0.076</td>
+<td>40.71</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.056</td>
+<td>17.3</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.066</td>
+<td>54.0</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>ACM GALVANIZED STEEL DRIP EDGE</td>
+<td>EA</td>
+<td>0.867</td>
+<td>9.6</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>TAMKO UNIVERSAL STARTER SHINGLE</td>
+<td>BD</td>
+<td>0.083</td>
+<td>64.3</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: FLASHING</td>
+<td>EA</td>
+<td>0.141</td>
+<td>8.4</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>87.5%</td>
+<td>optional</td>
+<td>ABC PRO GUARD 20 SYNTH UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.099</td>
+<td>85.0</td>
+</tr>
+</tbody>
+</table>
+<h3>Wichita KS · Malarkey Highlander NEX AR (n=45)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coil nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.079</td>
+<td>49.12</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY NEX HIGHLANDER 242</td>
+<td>BD</td>
+<td>3.0</td>
+<td>40.0</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.079</td>
+<td>8.9</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>97.8%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: IPS MULT</td>
+<td>EA</td>
+<td>0.133</td>
+<td>24.0</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>97.8%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.136</td>
+<td>91.25</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>97.8%</td>
+<td><strong>baseline</strong></td>
+<td>GAF PRO-START</td>
+<td>BD</td>
+<td>0.094</td>
+<td>55.1</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>97.8%</td>
+<td><strong>baseline</strong></td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.056</td>
+<td>19.5</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>95.6%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.062</td>
+<td>8.95</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>93.3%</td>
+<td><strong>baseline</strong></td>
+<td>ALUMINUM DRIP EDGE</td>
+<td>EA</td>
+<td>1.038</td>
+<td>7.14</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>91.1%</td>
+<td><strong>baseline</strong></td>
+<td>AIRVENT GALV ROOF VENTS</td>
+<td>EA</td>
+<td>0.289</td>
+<td>27.5</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>82.2%</td>
+<td>optional</td>
+<td>GAP WATERGUARD UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.061</td>
+<td>82.27</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>82.2%</td>
+<td>optional</td>
+<td>ROOFNADO ANCHORDECK SYN UNDERLAYMNT</td>
+<td>RL</td>
+<td>0.106</td>
+<td>75.0</td>
+</tr>
+</tbody>
+</table>
+<h3>Wichita KS · Malarkey Vista AR (n=36)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drip edge / apron</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ALUMINUM DRIP EDGE</td>
+<td>EA</td>
+<td>1.101</td>
+<td>7.15</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.078</td>
+<td>49.12</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY VISTA</td>
+<td>BD</td>
+<td>3.0</td>
+<td>43.75</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GAF PRO-START</td>
+<td>BD</td>
+<td>0.1</td>
+<td>55.1</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.139</td>
+<td>91.25</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.082</td>
+<td>8.9</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.057</td>
+<td>8.95</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>97.2%</td>
+<td><strong>baseline</strong></td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.065</td>
+<td>19.5</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>94.4%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: IPS MULT</td>
+<td>EA</td>
+<td>0.157</td>
+<td>28.09</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>94.4%</td>
+<td><strong>baseline</strong></td>
+<td>ROOFNADO ANCHORDECK SYN UNDERLAYMNT</td>
+<td>RL</td>
+<td>0.106</td>
+<td>75.0</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>GAP WATERGUARD UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.065</td>
+<td>82.27</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>91.7%</td>
+<td><strong>baseline</strong></td>
+<td>AIRVENT GALV ROOF VENTS</td>
+<td>EA</td>
+<td>0.312</td>
+<td>27.5</td>
+</tr>
+<tr>
+<td>Delivery / fees</td>
+<td>72.2%</td>
+<td>optional</td>
+<td>GROUND DROP DELIVERY CHARGE</td>
+<td>EA</td>
+<td>0.033</td>
+<td>75.0</td>
+</tr>
+</tbody>
+</table>
+<h3>Wichita KS · GAF Timberline NS AR (n=18)</h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GAF TIMBERLINE NATURAL SHADOW</td>
+<td>BD</td>
+<td>3.14</td>
+<td>33.96</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: IPS 4N1</td>
+<td>EA</td>
+<td>0.16</td>
+<td>25.58</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GAF PRO-START</td>
+<td>BD</td>
+<td>0.095</td>
+<td>55.1</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>94.4%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.076</td>
+<td>8.9</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>94.4%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.081</td>
+<td>49.12</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>88.9%</td>
+<td>optional</td>
+<td>AIRVENT GALV ROOF VENTS</td>
+<td>EA</td>
+<td>0.325</td>
+<td>25.95</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>88.9%</td>
+<td>optional</td>
+<td>ROOFNADO ANCHORDECK SYN UNDERLAYMNT</td>
+<td>RL</td>
+<td>0.119</td>
+<td>75.0</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>88.9%</td>
+<td>optional</td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.062</td>
+<td>8.95</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>83.3%</td>
+<td>optional</td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.059</td>
+<td>19.5</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>83.3%</td>
+<td>optional</td>
+<td>GAP WATERGUARD UNDERLAYMENT</td>
+<td>RL</td>
+<td>0.067</td>
+<td>82.27</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>77.8%</td>
+<td>optional</td>
+<td>ALUMINUM DRIP EDGE</td>
+<td>EA</td>
+<td>1.109</td>
+<td>7.29</td>
+</tr>
+</tbody>
+</table>
+<h3>Kansas City MO · Malarkey Vista AR (n=3) <strong>LOW CONFIDENCE</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Synthetic underlayment</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ROOFNADO ANCHORDECK SYN UNDERLAYMNT</td>
+<td>RL</td>
+<td>0.12</td>
+<td>76.0</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF VENTS: AIRVENT TYPE B ADJ</td>
+<td>EA</td>
+<td>0.25</td>
+<td>29.94</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY VISTA</td>
+<td>BD</td>
+<td>3.0</td>
+<td>41.67</td>
+</tr>
+<tr>
+<td>Delivery / fees</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>DELIVERY CHARGE</td>
+<td>EA</td>
+<td>0.077</td>
+<td>65.0</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.077</td>
+<td>49.99</td>
+</tr>
+<tr>
+<td>Sealant / caulk</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.08</td>
+<td>11.11</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.188</td>
+<td>79.19</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GALVANIZED STEEL DRIP APRON</td>
+<td>EA</td>
+<td>1.0</td>
+<td>7.81</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GAF PRO-START</td>
+<td>BD</td>
+<td>0.115</td>
+<td>52.02</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: IPS 4N1</td>
+<td>EA</td>
+<td>0.08</td>
+<td>13.39</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.08</td>
+<td>9.16</td>
+</tr>
+</tbody>
+</table>
+<h3>Kansas City MO · Malarkey Highlander NEX AR (n=4) <strong>LOW CONFIDENCE</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>% jobs</th>
+<th>Band</th>
+<th>Top product</th>
+<th>UoM</th>
+<th>Median qty/sq</th>
+<th>Median unit $</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sealant / caulk</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MULEHIDE WATERPROOF SEALANTS</td>
+<td>TB</td>
+<td>0.068</td>
+<td>10.79</td>
+</tr>
+<tr>
+<td>Starter</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>GAF PRO-START</td>
+<td>BD</td>
+<td>0.101</td>
+<td>52.02</td>
+</tr>
+<tr>
+<td>Hip &amp; ridge</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY 227 12" SBS MOD H&amp;R</td>
+<td>BD</td>
+<td>0.148</td>
+<td>79.19</td>
+</tr>
+<tr>
+<td>Synthetic underlayment</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ROOFNADO ANCHORDECK SYN UNDERLAYMNT</td>
+<td>RL</td>
+<td>0.101</td>
+<td>76.0</td>
+</tr>
+<tr>
+<td>Touch-up paint</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>ABC TOUCH-UP PAINT</td>
+<td>CN</td>
+<td>0.052</td>
+<td>9.16</td>
+</tr>
+<tr>
+<td>Field shingle</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MALARKEY NEX HIGHLANDER 242</td>
+<td>BD</td>
+<td>3.0</td>
+<td>38.46</td>
+</tr>
+<tr>
+<td>Ice &amp; water underlayment</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>RESISTO ICE &amp; WATER UNDERLAYMENTS</td>
+<td>RL</td>
+<td>0.12</td>
+<td>66.25</td>
+</tr>
+<tr>
+<td>Flashing (other)</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>MISCELLANEOUS ROOF FLASHING AND ACC: IPS 4N1</td>
+<td>EA</td>
+<td>0.106</td>
+<td>13.39</td>
+</tr>
+<tr>
+<td>Delivery / fees</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>DELIVERY CHARGE</td>
+<td>EA</td>
+<td>0.081</td>
+<td>65.0</td>
+</tr>
+<tr>
+<td>Roof vents</td>
+<td>100.0%</td>
+<td><strong>baseline</strong></td>
+<td>LOMANCO GALV ROOF VENTS</td>
+<td>EA</td>
+<td>0.197</td>
+<td>26.35</td>
+</tr>
+<tr>
+<td>Cap nails</td>
+<td>75.0%</td>
+<td>optional</td>
+<td>ABC CAP NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.06</td>
+<td>38.09</td>
+</tr>
+<tr>
+<td>Drip edge / apron</td>
+<td>75.0%</td>
+<td>optional</td>
+<td>GALVANIZED STEEL DRIP APRON</td>
+<td>EA</td>
+<td>0.84</td>
+<td>7.77</td>
+</tr>
+<tr>
+<td>Coil nails</td>
+<td>75.0%</td>
+<td>optional</td>
+<td>ABC COIL NAILS - CATALOG</td>
+<td>BX</td>
+<td>0.074</td>
+<td>49.99</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Changes at product level vs v1 (n≥10):</strong>
+- Dropped below 90%:
+  - Denver Vista: ABC coil nails (87.5%; now covered at family level 96.5% via other nail SKUs).
+  - Denver Legacy: Pro Guard 20 (89.5%).
+  - Wichita Vista: GAP Waterguard (88.9%).
+  - Wichita GAF NS: Roofnado, touch-up paint, Waterguard, cap nails (78–89%). SRS jobs use Top Shield equivalents, which the <strong>family</strong> view fixes.
+- At family level, most groups now have 10–13 baseline families (Denver Vista 13, Wichita Vista 12, Richardson Vista 11).</p>
+<h2>6. Placeholders and the extraction-bot spec (update to v1 §6)</h2>
+<ul>
+<li><code>job-document-status-v2.csv</code> has one row per in-scope job × doc type: <code>supplier_material_invoice_abc</code>, <code>supplier_material_invoice_srs</code>, <code>customer_invoice_lines</code>, <code>insurance_scope</code>, <code>roofr_report</code>. Missing docs are written as <code>status=missing</code>, <code>source=&lt;ABC|SRS|AccuLynx&gt; (not yet extracted)</code>, never as zero.</li>
+<li>Add to the bot spec:</li>
+<li><strong>SRS</strong> as a supplier source: <code>vendor_invoices</code>/<code>vendor_invoice_lines</code> already exist (since 2026-06-18). Backfill SRS history before June 2026 from the SRS portal or PDFs into the same tables.</li>
+<li>Map <code>branch_key</code> → office in <code>vendor_branch_code_map</code>.</li>
+<li>Require <code>po_number</code> = AccuLynx job number at order time (the forward fix).</li>
+<li>Pull AccuLynx <strong>job numbers</strong> for the 6,088 un-numbered jobs if they're assigned later.</li>
+</ul>
+<h2>Evidence</h2>
+<p>Read-only queries over <code>abc_line_items</code> (16,282 lines / 2,798 invoices), <code>abc_invoices</code> (1,216 headers, 274 credit memos, 83 with an original reference), <code>vendor_invoices</code>/<code>vendor_invoice_lines</code> SRS (91 / 726) and <code>acculynx_jobs</code> (7,419; 1,331 numbered). Scripts: <code>analyze2.py</code>, <code>build2.py</code>.</p>
+</body></html>
