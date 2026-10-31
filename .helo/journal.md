@@ -7,3 +7,9 @@
 
 ## 2026-10-30 17:30 PDT, Helo working context (branch chore/helo-working-context)
 - Added `.helo/README.md`, `CURRENT.md`, `CONTEXT-MAP.md` and `DECISIONS.md`, following the Working Context Starter Kit, with copies in Fast.io `helo-dev-pair/working-context/2026-10-30/`. No secrets.
+
+## 2026-10-30 17:45 PDT, Ringer pilot set up (branch chore/ringer-pilot-docs)
+- Ringer installed on the box (`/workspace/ringer-src`). Grok Build CLI 1.0.70 installed, with a `[engines.grok]` lane configured.
+- `.helo/ringer/swarm.json` has 3 docs-only chores (docs/INDEX.md, scripts/README.md, agents/README.md), each with a worktree, `max_attempts: 1` and a check that exports its deliverable.
+- Lint is clean except the known "relative deliverable in a worktree" note; the checks copy each deliverable out.
+- **Blocked:** the Grok Build device login needs Chris. OpenRouter has 0 credits, so that lane is not used. Cost so far: $0.

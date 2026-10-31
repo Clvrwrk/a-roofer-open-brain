@@ -1,0 +1,48 @@
+{
+ "run_name": "aroofer-docs-pilot",
+ "workdir": "/workspace/ringer-pilot/run",
+ "repo": "/workspace/a-roofer-open-brain",
+ "worktrees": true,
+ "max_parallel": 3,
+ "tasks": [
+  {
+   "key": "docs-index",
+   "task_type": "docs",
+   "engine": "grok",
+   "max_attempts": 1,
+   "timeout_s": 1200,
+   "spec": "Repository: a-roofer-open-brain (you are at its root). Create docs/INDEX.md: an index of every file directly inside docs/ (except INDEX.md itself). Group by topic heading. Each entry is one markdown table row or bullet: a relative link like [05-model-matrix.md](05-model-matrix.md) followed by a one-line description of at least 8 words taken from that file's H1 title and opening paragraph. Hard rules: docs only. Create exactly ONE new file (named below) and do not edit, move, delete or stage any other file. Do not run git commit. Describe each item from its actual contents (read the file's header or first lines); never invent behaviour; if unclear write 'purpose unclear (see source)'. No secrets, keys, tokens, emails or customer data. Use relative markdown links.",
+   "check": "python3 /workspace/ringer-pilot/checks/index_check.py docs/INDEX.md docs '*' /workspace/ringer-pilot/out && mkdir -p /workspace/ringer-pilot/out && cp docs/INDEX.md /workspace/ringer-pilot/out/docs__INDEX.md",
+   "expect_files": [
+    "docs/INDEX.md"
+   ],
+   "verified": "every file in docs/ is linked from docs/INDEX.md with a description, and every link resolves"
+  },
+  {
+   "key": "scripts-readme",
+   "task_type": "docs",
+   "engine": "grok",
+   "max_attempts": 1,
+   "timeout_s": 1200,
+   "spec": "Repository: a-roofer-open-brain (you are at its root). Create scripts/README.md: a catalog of every file and folder directly inside scripts/ (except README.md). Group by type (shell, node .mjs/.ts, python, SQL, folders). Each entry: a relative link like [foo.sh](foo.sh) followed by a one-line purpose of at least 8 words, from the script's header comment, usage text or code, plus how to run it if stated. Hard rules: docs only. Create exactly ONE new file (named below) and do not edit, move, delete or stage any other file. Do not run git commit. Describe each item from its actual contents (read the file's header or first lines); never invent behaviour; if unclear write 'purpose unclear (see source)'. No secrets, keys, tokens, emails or customer data. Use relative markdown links.",
+   "check": "python3 /workspace/ringer-pilot/checks/index_check.py scripts/README.md scripts '*' /workspace/ringer-pilot/out && mkdir -p /workspace/ringer-pilot/out && cp scripts/README.md /workspace/ringer-pilot/out/scripts__README.md",
+   "expect_files": [
+    "scripts/README.md"
+   ],
+   "verified": "every file and folder in scripts/ is linked from scripts/README.md with a purpose line, and every link resolves"
+  },
+  {
+   "key": "agents-readme",
+   "task_type": "docs",
+   "engine": "grok",
+   "max_attempts": 1,
+   "timeout_s": 1200,
+   "spec": "Repository: a-roofer-open-brain (you are at its root). Create agents/README.md: an orientation guide to the agents/ folder. Include (1) a section per subfolder of agents/ (link each as e.g. [registry/](registry/)) describing what it holds from its actual files, and (2) a roster table of every SOUL.md under agents/ (find agents -name SOUL.md) with columns: persona (link with path relative to agents/, e.g. [vertical/x/SOUL.md](vertical/x/SOUL.md)), role, one-line summary from the file. Hard rules: docs only. Create exactly ONE new file (named below) and do not edit, move, delete or stage any other file. Do not run git commit. Describe each item from its actual contents (read the file's header or first lines); never invent behaviour; if unclear write 'purpose unclear (see source)'. No secrets, keys, tokens, emails or customer data. Use relative markdown links.",
+   "check": "python3 /workspace/ringer-pilot/checks/agents_check.py agents/README.md /workspace/ringer-pilot/out && mkdir -p /workspace/ringer-pilot/out && cp agents/README.md /workspace/ringer-pilot/out/agents__README.md",
+   "expect_files": [
+    "agents/README.md"
+   ],
+   "verified": "agents/README.md covers every agents/ subfolder and links every SOUL.md, with no broken links"
+  }
+ ]
+}
