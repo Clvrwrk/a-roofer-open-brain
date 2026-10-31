@@ -193,19 +193,19 @@ const INFRA_TEXT = /(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch
 
 export function classifyFixability(s, extraNeedsHumanCodes = []) {
   // Free text from a staff member is never handed to the autofix agent (prompt-injection risk).
-  if (s.userReport) return { fixable: false, reason: 'user report: free text is never auto-fixed (prompt-injection risk); a human reproduces it first' };
+  if (s.userReport) return { fixable: false, route: 'human', reason: 'user report: free text is never auto-fixed (prompt-injection risk); a human reproduces it first' };
   const code = s.errorCode;
   const text = [s.title, s.culprit, s.errorType].filter(Boolean).join(' ');
   if ((code && (INFRA_CODES.has(code) || extraNeedsHumanCodes.includes(code))) || [429, 502, 503, 504].includes(s.status) || INFRA_TEXT.test(text)) {
-    return { fixable: false, reason: 'infrastructure or provider outage class; code change is unlikely to be the fix' };
+    return { fixable: false, route: 'ops-remediation', reason: 'infrastructure or provider outage class; queued for ops remediation (retry, restart sync, check provider)' };
   }
   if ((code && AUTH_CODES.has(code)) || s.status === 401 || s.status === 403) {
-    return { fixable: false, reason: 'authorization boundary; changes need human security review' };
+    return { fixable: false, route: 'human', reason: 'authorization boundary; changes need human security review' };
   }
-  if (code && SCHEMA_CODES.has(code)) return { fixable: false, reason: 'schema or release-ordering mismatch; needs a human migration decision' };
-  if (s.level === 'warning' || s.level === 'info' || s.level === 'debug') return { fixable: false, reason: 'non-error level; triage by a human' };
-  if (!s.stack.length && !code && !s.route) return { fixable: false, reason: 'insufficient signal (no stack, error code or route)' };
-  return { fixable: true, reason: 'application error with a route, error code or stack to reproduce from' };
+  if (code && SCHEMA_CODES.has(code)) return { fixable: false, route: 'human', reason: 'schema or release-ordering mismatch; needs a human migration decision' };
+  if (s.level === 'warning' || s.level === 'info' || s.level === 'debug') return { fixable: false, route: 'human', reason: 'non-error level; triage by a human' };
+  if (!s.stack.length && !code && !s.route) return { fixable: false, route: 'human', reason: 'insufficient signal (no stack, error code or route)' };
+  return { fixable: true, route: 'autofix', reason: 'application error with a route, error code or stack to reproduce from' };
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +235,7 @@ export function sentryContextBlock(s, sev, cls, linkedIds = []) {
     '',
     line('Sentry issue', `[${s.shortId}](${s.sentryUrl})`),
     line('Severity', `${sev.severity} (${sev.reason})`),
-    line('Classification', `${cls.fixable ? 'fixable' : 'needs-human'} (${cls.reason})`),
+    line('Classification', `${cls.fixable ? 'fixable' : cls.route === 'ops-remediation' ? 'ops-remediation' : 'needs-human'} (${cls.reason})`),
     line('Level / substatus', `${s.level}${s.substatus ? ' / ' + s.substatus : ''}${s.unhandled ? ' / unhandled' : ''}`),
     line('First seen', s.firstSeen), line('Last seen', s.lastSeen),
     line('Events', String(s.count)), line('Users affected', String(s.usersAffected)),
@@ -318,7 +318,11 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
     const s = summarizeIssue(issue, latest, events, cfg, sentry.canonicalUrl(issue.id));
     const sev = classifySeverity(s);
     const cls = classifyFixability(s, cfg.extraNeedsHumanCodes);
-    const labelKeys = s.userReport ? ['bug', 'sourceUser', 'needsHuman'] : ['bug', 'sourceSentry', cls.fixable ? 'queued' : 'needsHuman'];
+    const labelKeys = s.userReport ? ['bug', 'sourceUser', 'needsHuman']
+      : cls.route === 'human' ? ['bug', 'sourceSentry', 'needsHuman']
+      : ['bug', 'sourceSentry', 'queued', ...(cls.route === 'ops-remediation' && cfg.linear.labels.laneSentinel ? ['laneSentinel'] : [])];
+    // Only issues that genuinely need a human are assigned to one; everything else stays with the agents.
+    const humanAssignee = labelKeys.includes('needsHuman') ? (cfg.linear.humanAssigneeId || undefined) : undefined;
     const base = { sentryId: s.sentryId, shortId: s.shortId, severity: sev.severity, fixable: cls.fixable, signature: s.signature, ...(s.userReport ? { source: 'user' } : {}) };
     // A user report is never filed under source:sentry; without its label it waits for the next run.
     if (s.userReport && !cfg.linear.labels.sourceUser) {
@@ -359,10 +363,10 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
       if (marker && !stamped) description += `\n${marker}\n`;
       const names = labelNames(existing);
       const requeue = s.regressed && cls.fixable && !['autofix:queued', 'autofix:running', 'autofix:pr-open'].some(n => names.has(n));
-      const action = { ...base, action: description === existing.description && !requeue && (!cfg.linear.humanAssigneeId || existing.assignee?.id === cfg.linear.humanAssigneeId) ? 'unchanged' : 'update', linear: existing.identifier, requeue };
+      const action = { ...base, action: description === existing.description && !requeue ? 'unchanged' : 'update', linear: existing.identifier, requeue };
       actions.push(action); log(action);
       if (cfg.apply && action.action === 'update') {
-        const input = { description, ...(cfg.linear.humanAssigneeId ? {assigneeId:cfg.linear.humanAssigneeId} : {}) };
+        const input = { description };
         if (requeue) input.addedLabelIds = [cfg.linear.labels.queued];
         await linear.updateIssue(existing.id, input);
         if (requeue) await linear.comment(existing.id, `Regressed in release ${s.release ?? 'unknown'}; re-queued for autofix.`);
@@ -384,7 +388,7 @@ export async function runTriage({ cfg, sentry, linear, log = () => {} }) {
     const action = { ...base, action: 'create', title, labels: labelKeys };
     actions.push(action); log(action);
     if (cfg.apply) {
-      const created = await linear.createIssue({ title, description, priority: sev.priority, labelIds: labelKeys.map(k => cfg.linear.labels[k]), assigneeId: cfg.linear.humanAssigneeId || undefined });
+      const created = await linear.createIssue({ title, description, priority: sev.priority, labelIds: labelKeys.map(k => cfg.linear.labels[k]), assigneeId: humanAssignee });
       await linear.attach(created.id, s.sentryUrl, `Sentry ${s.shortId}`, `${s.count} events, ${s.usersAffected} users`);
       await sentry.comment(s.sentryId, `Tracked in Linear ${created.identifier}: ${created.url}`);
       action.linear = created.identifier;

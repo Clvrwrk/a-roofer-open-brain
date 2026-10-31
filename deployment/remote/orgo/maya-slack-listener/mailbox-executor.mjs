@@ -15,6 +15,8 @@ import {
   APPROVED,
   ACKNOWLEDGEMENT_DOMAINS,
   GMAIL_TOOL_VERSION,
+  KNOWN_PRINCIPAL_EMAILS,
+  UNKNOWN_PRINCIPAL_POLICY,
   MAILBOX_CLEANUP_MAX_PAGES,
   MAILBOX_MAX_PAGES,
   MAILBOX_PAGE_SIZE,
@@ -138,14 +140,56 @@ function approvedInternalFallbackDecision(message) {
   });
 }
 
+const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gu;
+const ROUTINE_SECURITY_EVENT = /\b(?:new sign-in|signed in|2-step verification (?:is|was) (?:on|turned on)|2-step verification (?:enabled|turned on)|security checkup)\b/iu;
+// Risky events always reach Christopher, even for a registered identity: the notice alone does
+// not prove the runtime made the change.
+const RISKY_SECURITY_EVENT = /\b(?:recover(?:y|ed)?|security key|password (?:was )?(?:changed|reset)|2-step verification (?:is |was )?(?:off|turned off|disabled)|suspicious|unauthori[sz]ed|blocked|critical security|sign-in assistance)\b/iu;
+const SENDER_DOMAINS = new Set(["accounts.google.com", "google.com", "slack.com"]);
+
+export function classifySecurityIdentity(message, knownEmails = KNOWN_PRINCIPAL_EMAILS, policy = UNKNOWN_PRINCIPAL_POLICY) {
+  const content = `${message.subject}\n${message.body}`;
+  const affected = [...new Set((content.match(EMAIL_IN_TEXT) ?? []).map((item) => item.toLowerCase()))]
+    .filter((email) => !SENDER_DOMAINS.has(email.split("@")[1]));
+  const known = new Set(knownEmails.map((item) => item.toLowerCase()));
+  const identity = affected.length > 0 && affected.every((email) => known.has(email)) ? "known" : "unknown";
+  const risky = RISKY_SECURITY_EVENT.test(content);
+  const routine = !risky && ROUTINE_SECURITY_EVENT.test(content);
+  // unknown_principal_policy "deny": an unidentified account is never treated as routine.
+  // Any policy other than an explicit allow still escalates; there is no auto-allow path for unknown principals.
+  const route = identity === "known" && routine ? "known-identity" : "needs-chris";
+  void policy;
+  return Object.freeze({ route, identity, risky, routine, affected });
+}
+
+function knownIdentityDecision(message, source) {
+  return Object.freeze({
+    version: 1,
+    action: "track",
+    priority: 4,
+    securityRoute: "known-identity",
+    title: `[MAYA] Known-identity ${source} security notice (logged)`,
+    summary: `${source} sent a routine security notice about a registered agent identity.`,
+    reason: "Routine event on a principal in the named-agent registry; logged and closed without owner review.",
+    question: "",
+    options: [],
+  });
+}
+
 function securityAuthorizationDecision(message) {
   const content = `${message.subject}\n${message.body}`;
-  if (message.senderEmail === "no-reply@accounts.google.com" && /\b(?:security alert|security key|new sign-in|login attempt)\b/iu.test(content)) {
+  const isGoogle = message.senderEmail === "no-reply@accounts.google.com" && /\b(?:security alert|security key|new sign-in|login attempt|2-step verification)\b/iu.test(content);
+  const isSlack = message.senderEmail === "feedback@slack.com" && /\b(?:login attempt|new sign-in|security alert)\b/iu.test(content);
+  if ((isGoogle || isSlack) && classifySecurityIdentity(message).route === "known-identity") {
+    return knownIdentityDecision(message, isGoogle ? "Google" : "Slack");
+  }
+  if (isGoogle) {
     const securityKey = /\bsecurity key\b/iu.test(content);
     return Object.freeze({
       version: 1,
       action: "block",
       priority: 1,
+      securityRoute: "needs-chris",
       title: securityKey
         ? "[MAYA] Google security-key authorization check"
         : "[MAYA] Google account-security authorization check",
@@ -162,11 +206,12 @@ function securityAuthorizationDecision(message) {
       ],
     });
   }
-  if (message.senderEmail === "feedback@slack.com" && /\b(?:login attempt|new sign-in|security alert)\b/iu.test(content)) {
+  if (isSlack) {
     return Object.freeze({
       version: 1,
       action: "block",
       priority: 1,
+      securityRoute: "needs-chris",
       title: "[MAYA] Slack login authorization check",
       summary: "Slack reported a recent login attempt for the pe-command-center workspace. The notification does not say that Maya's account was deactivated.",
       reason: "This is an owner-authorization check. The notification reports only a login attempt and does not establish the account's broader status.",
@@ -266,6 +311,11 @@ export function buildAcknowledgementArguments(message, linearReference) {
   };
 }
 
+// Known-identity security notices are logged without an owner; everything else keeps the reviewer.
+function reviewerFor(decision, expected) {
+  return decision?.securityRoute === "known-identity" ? {} : { assignee_id: expected.linearReviewerId };
+}
+
 export function buildLinearSourceIssueArguments(message, decision, sourceKeys, expected = APPROVED) {
   if (!expected.linearSourceTeamId || !expected.linearSourceProjectId) {
     throw new Error("Linear CAT source routing is not pinned");
@@ -275,7 +325,7 @@ export function buildLinearSourceIssueArguments(message, decision, sourceKeys, e
     project_id: expected.linearSourceProjectId,
     parent_id: expected.linearSourceParentId,
     state_id: expected.linearSourceReviewStateId,
-    assignee_id: expected.linearReviewerId,
+    ...reviewerFor(decision, expected),
     title: `[Maya intake][Accounting] ${decision.title.replace(/^\[MAYA\]\s*/u, "")}`.slice(0, 140),
     priority: decision.priority,
     description: [
@@ -305,7 +355,7 @@ export function buildLinearIssueArguments(message, decision, catSource, sourceKe
     team_id: expected.linearWorkTeamId,
     parent_id: catSource.id,
     state_id: expected.linearWorkReviewStateId,
-    assignee_id: expected.linearReviewerId,
+    ...reviewerFor(decision, expected),
     title: decision.title,
     priority: decision.priority,
     description: [
@@ -558,6 +608,7 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
           reason: decision.reason,
           priority: decision.priority,
           attachments: message.attachments.map((attachment) => attachment.filename),
+          ...(decision.securityRoute ? { securityRoute: decision.securityRoute } : {}),
         },
         signal,
         expected,
@@ -594,7 +645,7 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
       acknowledgementReference = await sendAcknowledgement(composio, message, signal, expected, linearPair?.work?.reference);
       await state.recordAction(claim.name, "gmail_acknowledgement", acknowledgementReference);
     }
-    if (capabilityAgent && decision.action !== "ignore") {
+    if (capabilityAgent && decision.action !== "ignore" && decision.securityRoute !== "known-identity") {
       // A capability run may perform multiple external writes. Any uncertain failure
       // is terminally ambiguous, so the legacy fallback send must not run afterward.
       slackAttempted = true;
@@ -672,7 +723,7 @@ async function processMessage({ composio, classifier, capabilityAgent, recordInt
       return { state: "confirmed", action: "capability_work" };
     }
     let slackTimestamp;
-    if (decision.action !== "ignore") {
+    if (decision.action !== "ignore" && decision.securityRoute !== "known-identity") {
       slackAttempted = true;
       slackTimestamp = await sendOwnerSlack(
         composio,
