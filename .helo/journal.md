@@ -21,3 +21,8 @@
   - **docs-index: FAIL.** 9 docs/ subfolders were not linked. The spec said "every file", but the check also required folders, so this is a spec/check mismatch on my side.
   - **scripts-readme: FAIL.** 6 scripts/ folders were not linked, though the spec required folders.
 - Grok reported about $6.51 of notional usage (1.79 + 1.95 + 2.77), billed to the SuperGrok plan. OpenRouter: $0.
+
+## 2026-10-30 17:50 PDT, Ringer pilot rerun (run aroofer-docs-pilot-20261031T004335Z)
+- Fixed the docs-index spec to index files and folders, and added a run-the-check-before-finishing step to both specs. One attempt each.
+- **docs-index: PASS** and **scripts-readme: PASS**. Reviewed and committed `docs/INDEX.md` and `scripts/README.md`. All 3 pilot chores now pass.
+- Grok reported about $7.35 of notional usage, inside the SuperGrok quota (Chris: 39% used, no real dollars). OpenRouter: $0.
