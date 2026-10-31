@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="790" viewBox="0 0 1160 790" font-family="Helvetica,Arial" font-size="12"><defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#333"/></marker></defs><rect width="1160" height="790" fill="#fff"/>
+<rect x="40" y="30" width="300" height="100" rx="10" fill="#ffe8a3" stroke="#333" stroke-width="1.2"/>
+<text x="190.0" y="58" text-anchor="middle" font-weight="bold" font-size="13">OFFICE</text>
+<text x="190.0" y="80" text-anchor="middle" font-weight="normal" font-size="11">crm.pe_offices (8) / public.office (7)</text>
+<text x="190.0" y="102" text-anchor="middle" font-weight="normal" font-size="11">key, job_number_prefix</text>
+<rect x="40" y="630" width="300" height="100" rx="10" fill="#ffe8a3" stroke="#333" stroke-width="1.2"/>
+<text x="190.0" y="658" text-anchor="middle" font-weight="bold" font-size="13">ABC BRANCH</text>
+<text x="190.0" y="680" text-anchor="middle" font-weight="normal" font-size="11">abc_vendor_branches (720)</text>
+<text x="190.0" y="702" text-anchor="middle" font-weight="normal" font-size="11">vendor_branches -&gt; branch_office_candidate</text>
+<rect x="420" y="180" width="300" height="100" rx="10" fill="#cfe8ff" stroke="#333" stroke-width="1.2"/>
+<text x="570.0" y="208" text-anchor="middle" font-weight="bold" font-size="13">PROPERTY / CUSTOMER</text>
+<text x="570.0" y="230" text-anchor="middle" font-weight="normal" font-size="11">properties (13,577) address_key</text>
+<text x="570.0" y="252" text-anchor="middle" font-weight="normal" font-size="11">owner, property_owner, acculynx_job_contacts</text>
+<rect x="40" y="180" width="300" height="100" rx="10" fill="#e3d7ff" stroke="#333" stroke-width="1.2"/>
+<text x="190.0" y="208" text-anchor="middle" font-weight="bold" font-size="13">CRM EFFORT</text>
+<text x="190.0" y="230" text-anchor="middle" font-weight="normal" font-size="11">crm.efforts (7,341)</text>
+<text x="190.0" y="252" text-anchor="middle" font-weight="normal" font-size="11">office_key, acculynx_job_id</text>
+<rect x="420" y="330" width="300" height="100" rx="10" fill="#ffb3b3" stroke="#333" stroke-width="3"/>
+<text x="570.0" y="358" text-anchor="middle" font-weight="bold" font-size="13">AccuLynx JOB  (spine)</text>
+<text x="570.0" y="380" text-anchor="middle" font-weight="normal" font-size="11">acculynx_jobs.id (7,419)</text>
+<text x="570.0" y="402" text-anchor="middle" font-weight="normal" font-size="11">job_number e.g. TX-216 (only 15% set)</text>
+<rect x="800" y="180" width="300" height="100" rx="10" fill="#d4f7d4" stroke="#333" stroke-width="1.2"/>
+<text x="950.0" y="208" text-anchor="middle" font-weight="bold" font-size="13">ESTIMATE</text>
+<text x="950.0" y="230" text-anchor="middle" font-weight="normal" font-size="11">acculynx_estimates (556 / 454 jobs)</text>
+<text x="950.0" y="252" text-anchor="middle" font-weight="normal" font-size="11">backfill.estimate_items (182 jobs)</text>
+<rect x="800" y="330" width="300" height="100" rx="10" fill="#d4f7d4" stroke="#333" stroke-width="1.2"/>
+<text x="950.0" y="358" text-anchor="middle" font-weight="bold" font-size="13">CUSTOMER INVOICE</text>
+<text x="950.0" y="380" text-anchor="middle" font-weight="normal" font-size="11">acculynx_invoices (1,966 / 1,095 jobs)</text>
+<text x="950.0" y="402" text-anchor="middle" font-weight="normal" font-size="11">lump sums</text>
+<rect x="40" y="480" width="300" height="100" rx="10" fill="#ffd9b3" stroke="#333" stroke-width="1.2"/>
+<text x="190.0" y="508" text-anchor="middle" font-weight="bold" font-size="13">ABC LINE ITEMS</text>
+<text x="190.0" y="530" text-anchor="middle" font-weight="normal" font-size="11">abc_line_items (16,282)</text>
+<text x="190.0" y="552" text-anchor="middle" font-weight="normal" font-size="11">customer_po, invoice_number, branch</text>
+<rect x="420" y="630" width="300" height="100" rx="10" fill="#ffd9b3" stroke="#333" stroke-width="1.2"/>
+<text x="570.0" y="658" text-anchor="middle" font-weight="bold" font-size="13">ABC INVOICE HDR</text>
+<text x="570.0" y="680" text-anchor="middle" font-weight="normal" font-size="11">abc_invoices (1,216; 274 CM)</text>
+<text x="570.0" y="702" text-anchor="middle" font-weight="normal" font-size="11">PO, original_invoice_reference</text>
+<rect x="40" y="330" width="300" height="100" rx="10" fill="#ffd9b3" stroke="#333" stroke-width="1.2"/>
+<text x="190.0" y="358" text-anchor="middle" font-weight="bold" font-size="13">SRS / QXO</text>
+<text x="190.0" y="380" text-anchor="middle" font-weight="normal" font-size="11">vendor_invoices (94) + lines (741)</text>
+<text x="190.0" y="402" text-anchor="middle" font-weight="normal" font-size="11">po_number</text>
+<rect x="800" y="480" width="300" height="100" rx="10" fill="#f7d4ec" stroke="#333" stroke-width="1.2"/>
+<text x="950.0" y="508" text-anchor="middle" font-weight="bold" font-size="13">INSURANCE</text>
+<text x="950.0" y="530" text-anchor="middle" font-weight="normal" font-size="11">acculynx_job_insurance (7,401)</text>
+<text x="950.0" y="552" text-anchor="middle" font-weight="normal" font-size="11">claim # on 87%</text>
+<rect x="420" y="480" width="300" height="100" rx="10" fill="#f7d4ec" stroke="#333" stroke-width="1.2"/>
+<text x="570.0" y="508" text-anchor="middle" font-weight="bold" font-size="13">DOCUMENTS</text>
+<text x="570.0" y="530" text-anchor="middle" font-weight="normal" font-size="11">acculynx_job_documents (1,220 / 78 jobs)</text>
+<text x="570.0" y="552" text-anchor="middle" font-weight="normal" font-size="11">doc_type insurance|measurement</text>
+<rect x="420" y="30" width="300" height="100" rx="10" fill="#f7d4ec" stroke="#333" stroke-width="1.2"/>
+<text x="570.0" y="58" text-anchor="middle" font-weight="bold" font-size="13">ROOFR</text>
+<text x="570.0" y="80" text-anchor="middle" font-weight="normal" font-size="11">roofr_measurements (5)</text>
+<text x="570.0" y="102" text-anchor="middle" font-weight="normal" font-size="11">via property_id</text>
+<rect x="800" y="30" width="300" height="100" rx="10" fill="#eeeeee" stroke="#333" stroke-width="1.2"/>
+<text x="950.0" y="58" text-anchor="middle" font-weight="bold" font-size="13">COMPANYCAM</text>
+<text x="950.0" y="80" text-anchor="middle" font-weight="normal" font-size="11">companycam_projects (7,650)</text>
+<text x="950.0" y="102" text-anchor="middle" font-weight="normal" font-size="11">82% linked to job</text>
+<line x1="190" y1="130" x2="190" y2="180" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="190" y="151" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK office_key 99.9%</text>
+<line x1="317" y1="280" x2="443" y2="330" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="380" y="301" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">acculynx_job_id 99.9%</text>
+<line x1="570" y1="280" x2="570" y2="330" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="570" y="301" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK property_id 82%</text>
+<line x1="697" y1="330" x2="823" y2="280" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="760" y="301" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK job_id</text>
+<line x1="720" y1="380" x2="800" y2="380" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="760" y="376" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK job_id</text>
+<line x1="697" y1="430" x2="823" y2="480" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="760" y="451" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK job_id</text>
+<line x1="570" y1="430" x2="570" y2="480" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="570" y="451" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">acculynx_job_id</text>
+<line x1="317" y1="480" x2="443" y2="430" stroke="#c00" stroke-width="1.5" marker-end="url(#a)" stroke-dasharray="6,4"/>
+<text x="380" y="451" text-anchor="middle" fill="#c00" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">PO norm TX-216-&gt;TX216: 76%  (FK col 0%)</text>
+<line x1="443" y1="630" x2="317" y2="580" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="380" y="601" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">invoice_number 31%</text>
+<path d="M680,730 q60,50 40,-10" fill="none" stroke="#c00" marker-end="url(#a)"/><text x="740" y="670" fill="#c00" font-size="11">CM ref pad -1 -> -001: 80/83</text>
+<line x1="190" y1="580" x2="190" y2="630" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="190" y="601" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK branch_number 100%</text>
+<line x1="340" y1="380" x2="420" y2="380" stroke="#c00" stroke-width="1.5" marker-end="url(#a)" stroke-dasharray="6,4"/>
+<text x="380" y="376" text-anchor="middle" fill="#c00" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">po_number norm 97%</text>
+<line x1="570" y1="130" x2="570" y2="180" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="570" y="151" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">FK property_id (2 reach job)</text>
+<line x1="887" y1="130" x2="633" y2="330" stroke="#333" stroke-width="1.5" marker-end="url(#a)" />
+<text x="760" y="226" text-anchor="middle" fill="#333" font-size="10.5" paint-order="stroke" stroke="#fff" stroke-width="3">acculynx_job_id 82%</text>
+<polyline points="340,60 380,60 380,360 420,360" fill="none" stroke="#c00" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#a)"/><text x="384" y="120" fill="#c00" font-size="10.5" transform="rotate(90 384 120)">job_number prefix CO/TX/KS/KC/GA/FL/MC/INS (15% set)</text>
+<polyline points="40,680 18,680 18,80 40,80" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#a)"/><text x="12" y="420" font-size="10.5" transform="rotate(-90 12 420)" text-anchor="middle">branch of purchase -> office (branch_office_candidate / branch_state)</text>
+<text x="20" y="775" font-size="11" fill="#555">Solid = declared FK / exact key. Red dashed = implicit key needing normalization. Supabase rnhmvcpsvtqjlffpsayu, measured 2026-10-30 PT.</text></svg>
