@@ -7,3 +7,10 @@
 
 ## 2026-10-30 17:30 PDT, Helo working context (branch chore/helo-working-context)
 - Added `.helo/README.md`, `CURRENT.md`, `CONTEXT-MAP.md` and `DECISIONS.md`, following the Working Context Starter Kit, with copies in Fast.io `helo-dev-pair/working-context/2026-10-30/`. No secrets.
+
+## 2026-10-30 17:30 PT: Workflow catalog v0 + AIA4 dev workflow spec (proposal only)
+- Request: Chris t52u/t53u. Two separate tracks.
+- (A) AIA4/Cleverwork Concierge/Records/QA dev-workflow spec + Excalidraw. Spec only, no bots created.
+- (B) Roofing SMB workflow catalog. About 71 workflows were found in code: CRM ~16, PM ~11, HR ~21, CC ~20, ADMIN ~3. It includes a gap list (with research cited) and demo-mode design notes.
+- Fast.io: BSG_GROK_WORLD/Sub-Vaults/grok-world/helo-dev-pair/proposals/workflow-catalog/2026-10-30/{aia4-dev-workflow,roofing-smb-catalog}/. 10 new files, all sha-verified.
+- Nothing spent, merged, or sent outside the team.
