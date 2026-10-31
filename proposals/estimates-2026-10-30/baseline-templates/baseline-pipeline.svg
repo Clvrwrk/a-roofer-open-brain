@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="450" font-family="Virgil,Segoe UI,sans-serif" font-size="14"><defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z"/></marker></defs><rect width="1200" height="450" fill="#fff"/>
+<rect x="20" y="40" width="200" height="110" rx="12" fill="#a5d8ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="120.0" y="91.0" text-anchor="middle">ABC invoice lines</text>
+<text x="120.0" y="109.0" text-anchor="middle">16,282 lines / 2,798 inv</text>
+<rect x="250" y="40" width="200" height="110" rx="12" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<text x="350.0" y="91.0" text-anchor="middle">PO → job_number</text>
+<text x="350.0" y="109.0" text-anchor="middle">575 jobs matched</text>
+<line x1="220" y1="95" x2="250" y2="95" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+<rect x="480" y="40" width="200" height="110" rx="12" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<text x="580.0" y="91.0" text-anchor="middle">Office (account_key)</text>
+<text x="580.0" y="109.0" text-anchor="middle">+ primary shingle</text>
+<line x1="450" y1="95" x2="480" y2="95" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+<rect x="710" y="40" width="200" height="110" rx="12" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<text x="810.0" y="82.0" text-anchor="middle">% of jobs per line</text>
+<text x="810.0" y="100.0" text-anchor="middle">≥90% baseline</text>
+<text x="810.0" y="118.0" text-anchor="middle">70–90% optional</text>
+<line x1="680" y1="95" x2="710" y2="95" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+<rect x="940" y="40" width="200" height="110" rx="12" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1040.0" y="91.0" text-anchor="middle">Baseline template</text>
+<text x="1040.0" y="109.0" text-anchor="middle">qty/sq + unit $</text>
+<line x1="910" y1="95" x2="940" y2="95" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+<rect x="250" y="210" width="430" height="90" rx="12" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<text x="465.0" y="251.0" text-anchor="middle">NEXT: insurance scope + Roofr per job</text>
+<text x="465.0" y="269.0" text-anchor="middle">(missing → PLACEHOLDER, extraction bot)</text>
+<line x1="1040" y1="150" x2="690" y2="230" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+<rect x="250" y="350" width="430" height="80" rx="12" fill="#c3fae8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="465.0" y="386.0" text-anchor="middle">Good / Better / Best estimates</text>
+<text x="465.0" y="404.0" text-anchor="middle">~90% complete → sales audits edge cases</text>
+<line x1="465" y1="300" x2="465" y2="350" stroke="#1e1e1e" stroke-width="2" marker-end="url(#m)"/>
+</svg>

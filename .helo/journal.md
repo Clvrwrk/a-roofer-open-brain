@@ -26,3 +26,9 @@
 - Trigger = CRM stage "Approved to buy Roofr" (new). Measurement ladder Roofr → GAF → EagleView → drone; each paid step needs Chris OK.
 - Tiers deferred; shingle usage table per office (210/556 estimates have line items). Margin floors deferred; one-page input model.
 - Fast.io v2 files added (no overwrite). Linear: 3 project specs + PEC-833/836/838/839/840 updated.
+
+## 2026-10-30 20:05 PDT, Baseline estimate templates from invoice lines (Chris t59u)
+- Source: ABC supplier invoice lines (`abc_line_items`). The PO is normalized to an AccuLynx job_number, giving 12,399 lines / 1,930 invoices / 575 jobs with 0 duplicate matches. `acculynx_invoice_lines` is empty. AccuLynx customer invoices are lump-sum (no line reaches 50% of jobs in any office).
+- Baselines (≥90%) per office × primary shingle. Strong groups: Denver Vista n=199, Richardson Vista n=98, Wichita Highlander n=44 / Vista n=36 / GAF NS n=19, Denver Legacy n=18, Richardson Highlander n=11. Pensacola, Insurance, Atlanta, MF and KC are too thin.
+- Insurance, Roofr and measurement docs are in Supabase for ~45 jobs only, so each gap gets a PLACEHOLDER row (missing, source=AccuLynx). Added a spec for the extraction bot.
+- Fast.io: grok-world/helo-dev-pair/proposals/estimates/2026-10-30/baseline-templates/ (6 new files, sha verified). Read-only. $0.
