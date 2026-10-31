@@ -20,3 +20,9 @@
 - Fast.io: helo-dev-pair/proposals/estimates/2026-10-30/ (workflow, templates, agent; MD+HTML+Excalidraw).
 - Supabase read-only findings: 5 pilot estimate_runs, 4 custom-tier templates, 556 AccuLynx estimates (market NULL), no "needs estimate" tag.
 - Open questions for Chris: needs-estimate field, Richardson/Euless overlap, office attribution, tier mapping, margin floors, Roofr cost, carrier scope ingestion.
+
+## 2026-10-30 — Estimates v2 (Chris t58u)
+- Office = AccuLynx job prefix → account fallback (7,419 jobs, 100%); TX overlap → Richardson. Estimates: Wichita 229, MF/Com 119, Richardson 78, KC 55, Pensacola 38, Denver 26, Atlanta 10, INS 1.
+- Trigger = CRM stage "Approved to buy Roofr" (new). Measurement ladder Roofr → GAF → EagleView → drone; each paid step needs Chris OK.
+- Tiers deferred; shingle usage table per office (210/556 estimates have line items). Margin floors deferred; one-page input model.
+- Fast.io v2 files added (no overwrite). Linear: 3 project specs + PEC-833/836/838/839/840 updated.
