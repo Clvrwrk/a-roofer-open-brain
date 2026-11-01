@@ -365,7 +365,7 @@ Deno.test("mapJobFinancials — F2: a non-numeric nested total maps to null, nev
 });
 
 Deno.test("worksheetPath — F2: the financials row links its worksheet", () => {
-  assertEquals(worksheetPath({ worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1", _link: "https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet" } }), "/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet");
+  assertEquals(worksheetPath({ worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1", _link: "https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet" } }), "/financials/e194e192-d43e-4922-8d31-c434986e74b1/worksheet"); // the _link's singular /financial/ path answers 404 in prod (2026-11-01); the documented GET is /financials/{id}/worksheet
   assertEquals(worksheetPath({ worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1" } }), "/financials/e194e192-d43e-4922-8d31-c434986e74b1/worksheet");
   assertEquals(worksheetPath({ worksheet: { _link: "https://evil.example/api/v2/financial/x/worksheet" } }), null);
   assertEquals(worksheetPath({}), null);

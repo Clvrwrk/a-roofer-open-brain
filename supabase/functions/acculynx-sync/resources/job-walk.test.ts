@@ -72,7 +72,7 @@ function makeJobWalkFetch(
       );
     }
 
-    // F2: /financial/{id}/worksheet (checked before /financials)
+    // F2: /financials/{id}/worksheet (checked before /financials)
     if (urlStr.includes("/worksheet")) {
       return Promise.resolve(new Response(JSON.stringify(worksheetResponse?.body ?? { items: [] }), {
         status: worksheetResponse?.status ?? 200, headers: { "content-type": "application/json" },
@@ -812,7 +812,7 @@ Deno.test("syncJobWalk — F2 KS-258: section totals land in columns and workshe
   const { sb, financialRows, upsertCalls, insertCalls, events } = makeWalkSb({});
   await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1");
   assertEquals(financialRows.get("job-abc")!.insurance_claim_total, 21424.86);
-  assertEquals(fetchedUrls.includes("https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet"), true);
+  assertEquals(fetchedUrls.includes("https://api.acculynx.com/api/v2/financials/e194e192-d43e-4922-8d31-c434986e74b1/worksheet"), true);
   const ws = upsertCalls.filter((c) => c.table === "acculynx_job_worksheet_items");
   assertEquals(ws.length, 1);
   assertEquals((ws[0].rows[0] as Record<string, unknown>).item_name, "Roofing System");
