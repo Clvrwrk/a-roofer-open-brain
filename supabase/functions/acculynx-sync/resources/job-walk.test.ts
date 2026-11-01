@@ -37,6 +37,7 @@ function makeJobWalkFetch(
   jobIds: string[],
   invoiceIdsPerJob: Record<string, string[]>,
   financialsResponse?: { status: number; body: unknown },
+  worksheetResponse?: { status: number; body: unknown },
 ): { mockFetch: (url: string | URL | Request) => Promise<Response>; fetchedUrls: string[] } {
   const fetchedUrls: string[] = [];
 
@@ -69,6 +70,13 @@ function makeJobWalkFetch(
       return Promise.resolve(
         new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
       );
+    }
+
+    // F2: /financial/{id}/worksheet (checked before /financials)
+    if (urlStr.includes("/worksheet")) {
+      return Promise.resolve(new Response(JSON.stringify(worksheetResponse?.body ?? { items: [] }), {
+        status: worksheetResponse?.status ?? 200, headers: { "content-type": "application/json" },
+      }));
     }
 
     // /jobs/{id}/financials
@@ -781,4 +789,47 @@ Deno.test("a failed contact dependency remains eligible for retry despite succes
   await syncJobWalk(sb,ACCT,"synthetic-key",Date.now()+60000,null,["job-contact-failed"],mockFetch,"batch-test",new Map(),{preselected:true,walked});
   assertEquals(walked,[]);
   assertEquals(updateCalls.some(x=>x.table==="acculynx_jobs"&&"walked_at" in x.values),false);
+});
+
+// ---------------------------------------------------------------------------
+// F2 — the linked worksheet is mirrored after the financials row
+// ---------------------------------------------------------------------------
+
+const KS258_FIN = {
+  approvedJobValue: 21424.86, balanceDue: 21424.86,
+  worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1", _link: "https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet" },
+  worksheetSectionTotals: { insuranceClaimTotal: 21424.86, worksheetTotal: 0 },
+};
+const KS258_WS = {
+  id: "e194e192-d43e-4922-8d31-c434986e74b1", jobId: "job-abc", currentState: "Approved", totalPrice: 21424.86,
+  sections: [{ id: "s-1", sectionType: "Insurance Claim", totalPrice: 21424.86, items: [
+    { id: "i-1", itemName: "Roofing System", price: 21424.86, totalPrice: 21424.86, hierarchySortOrder: 1, tradeId: "t-roof" },
+  ] }],
+};
+
+Deno.test("syncJobWalk — F2 KS-258: section totals land in columns and worksheet lines are stored", async () => {
+  const { mockFetch, fetchedUrls } = makeJobWalkFetch(["job-abc"], {}, { status: 200, body: KS258_FIN }, { status: 200, body: KS258_WS });
+  const { sb, financialRows, upsertCalls, insertCalls, events } = makeWalkSb({});
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1");
+  assertEquals(financialRows.get("job-abc")!.insurance_claim_total, 21424.86);
+  assertEquals(fetchedUrls.includes("https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet"), true);
+  const ws = upsertCalls.filter((c) => c.table === "acculynx_job_worksheet_items");
+  assertEquals(ws.length, 1);
+  assertEquals((ws[0].rows[0] as Record<string, unknown>).item_name, "Roofing System");
+  assertEquals((ws[0].rows[0] as Record<string, unknown>).total_price, 21424.86);
+  // capture-first: the worksheet raw archive precedes its upsert
+  const iRaw = events.findIndex((e, i) => i > 2 && e.table === "acculynx_raw");
+  const iWs = events.findIndex((e) => e.table === "acculynx_job_worksheet_items");
+  assertEquals(iRaw > -1 && iRaw < iWs, true);
+  assertEquals(insertCalls.filter((c) => c.table === "acculynx_job_walk_errors"), []);
+});
+
+Deno.test("syncJobWalk — F2: a worksheet HTTP error is logged and leaves financials stored", async () => {
+  const { mockFetch } = makeJobWalkFetch(["job-abc"], {}, { status: 200, body: KS258_FIN }, { status: 500, body: { title: "boom" } });
+  const { sb, financialRows, upsertCalls, insertCalls } = makeWalkSb({});
+  await syncJobWalk(sb, ACCT, "test-api-key", Date.now() + 60_000, null, ["job-abc"], mockFetch, "batch-1");
+  assertEquals(financialRows.get("job-abc")!.approved_job_value, 21424.86);
+  assertEquals(upsertCalls.filter((c) => c.table === "acculynx_job_worksheet_items"), []);
+  const errs = insertCalls.filter((c) => c.table === "acculynx_job_walk_errors").map((c) => c.row as Record<string, unknown>);
+  assertEquals(errs.some((e) => e.resource_type === "job_worksheet"), true);
 });

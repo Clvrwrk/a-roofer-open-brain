@@ -18,6 +18,8 @@ import {
   mapJobFinancials,
   mapJobInsurance,
   mapMilestoneHistoryItem,
+  mapWorksheetItems,
+  worksheetPath,
 } from "./mappers.ts";
 
 const CTX = {
@@ -333,4 +335,63 @@ Deno.test("mapInvoiceLine — missing fields default to null", () => {
   assertEquals(row.section_id, null);
   assertEquals(row.price, null);
   assertEquals(row.total_price, null);
+});
+
+// ---------------------------------------------------------------------------
+// F2 — section totals live under worksheetSectionTotals in the live API (KS-258)
+// ---------------------------------------------------------------------------
+
+Deno.test("mapJobFinancials — F2 KS-258: totals come from worksheetSectionTotals", () => {
+  const raw = {
+    approvedJobValue: 21424.86,
+    balanceDue: 21424.86,
+    worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1", _link: "https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet" },
+    worksheetSectionTotals: {
+      worksheetTotal: 0, changeOrderTotal: 0, insuranceClaimTotal: 21424.86, upgradeTotal: 0,
+      discountTotal: 0, supplementTotal: 0, workNotDoingTotal: 0,
+    },
+  };
+  const row = mapJobFinancials(raw, CTX);
+  assertEquals(row.insurance_claim_total, 21424.86);
+  assertEquals(row.worksheet_total, 0);
+  assertEquals(row.supplement_total, 0);
+  assertEquals(row.approved_job_value, 21424.86);
+});
+
+Deno.test("mapJobFinancials — F2: a non-numeric nested total maps to null, never a string", () => {
+  const row = mapJobFinancials({ approvedJobValue: 1, balanceDue: 1, worksheetSectionTotals: { insuranceClaimTotal: "x" } }, CTX);
+  assertEquals(row.insurance_claim_total, null);
+  assertEquals(row.upgrade_total, null);
+});
+
+Deno.test("worksheetPath — F2: the financials row links its worksheet", () => {
+  assertEquals(worksheetPath({ worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1", _link: "https://api.acculynx.com/api/v2/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet" } }), "/financial/e194e192-d43e-4922-8d31-c434986e74b1/worksheet");
+  assertEquals(worksheetPath({ worksheet: { id: "e194e192-d43e-4922-8d31-c434986e74b1" } }), "/financials/e194e192-d43e-4922-8d31-c434986e74b1/worksheet");
+  assertEquals(worksheetPath({ worksheet: { _link: "https://evil.example/api/v2/financial/x/worksheet" } }), null);
+  assertEquals(worksheetPath({}), null);
+});
+
+Deno.test("mapWorksheetItems — F2: one row per section line, a section row when empty", () => {
+  const ws = {
+    id: "fin-1", jobId: "job-1", currentState: "Approved", totalPrice: 21424.86, title: "Insurance",
+    sections: [
+      { id: "s-1", sectionType: "Insurance Claim", totalPrice: 21424.86, items: [
+        { id: "i-1", itemName: "Roofing System", price: 18000, totalPrice: 18000, parentItemId: null, hierarchySortOrder: 1, tradeId: "t-roof" },
+        { id: "i-2", itemName: "Gutter System", price: 3424.86, totalPrice: 3424.86, parentItemId: null, hierarchySortOrder: 2, tradeId: "t-gut" },
+      ] },
+      { id: "s-2", sectionType: "Supplements", totalPrice: 0, items: [] },
+    ],
+  };
+  const rows = mapWorksheetItems(ws, { ...CTX, job_id: "job-1" });
+  assertEquals(rows.length, 3);
+  assertEquals(rows[0], {
+    job_id: "job-1", financial_id: "fin-1", worksheet_state: "Approved", worksheet_total: 21424.86,
+    section_id: "s-1", section_type: "Insurance Claim", section_total: 21424.86, item_key: "i-1",
+    item_name: "Roofing System", price: 18000, total_price: 18000, parent_item_id: null, sort_order: 1, trade_id: "t-roof",
+    account_key: CTX.account_key, market: CTX.market, synced_at: CTX.now,
+  });
+  assertEquals(rows[2].item_key, "section");
+  assertEquals(rows[2].item_name, null);
+  assertEquals(rows.reduce((s, r) => s + (r.section_type === "Insurance Claim" ? Number(r.total_price) : 0), 0), 21424.86);
+  assertEquals(mapWorksheetItems({ error: "nope" }, CTX), []);
 });
