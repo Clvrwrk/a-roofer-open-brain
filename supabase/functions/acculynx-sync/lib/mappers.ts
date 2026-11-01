@@ -75,8 +75,10 @@ export function worksheetPath(raw: any): string | null {
   if (typeof link === "string") {
     try {
       const u = new URL(link);
-      const m = u.pathname.match(/^\/api\/v2(\/financials?\/[0-9a-f-]+\/worksheet)$/i);
-      return u.protocol === "https:" && u.host === "api.acculynx.com" && m ? m[1] : null;
+      // The link says /financial/{id}/worksheet, which answers 404 in prod (2026-11-01, 19 of 19 jobs); the documented
+      // getWorksheetById is /financials/{id}/worksheet, so keep the link's id and use the plural path.
+      const m = u.pathname.match(/^\/api\/v2\/financials?\/([0-9a-f-]+)\/worksheet$/i);
+      return u.protocol === "https:" && u.host === "api.acculynx.com" && m ? `/financials/${m[1]}/worksheet` : null;
     } catch {
       return null;
     }
