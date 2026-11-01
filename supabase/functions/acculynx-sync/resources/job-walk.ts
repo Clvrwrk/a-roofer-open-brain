@@ -57,6 +57,8 @@ import {
   mapInvoiceLine,
   mapJobContact,
   mapJobFinancials,
+  mapWorksheetItems,
+  worksheetPath,
   mapJobInsurance,
   mapMilestoneHistoryItem,
 } from "../lib/mappers.ts";
@@ -516,6 +518,25 @@ export async function syncJobWalk(
     if (financialsStatus === 200 && isJobFinancialsBody(financialsBody)) {
       const finRow = mapJobFinancials(financialsBody, ctx);
       const { error } = await sb.from("acculynx_job_financials").upsert([finRow]);
+      // F2: mirror the linked worksheet (section, line, trade, amount). Capture-first like every walk read; a failure
+      // is logged and never touches the financials row. Lines are upserted by (job_id, section_id, item_key); readers
+      // use acculynx_job_worksheet_current (latest synced_at per job), so removed lines drop out without deletes.
+      const wsPath = error ? null : worksheetPath(financialsBody);
+      if (wsPath) {
+        await sleep(PACE_MS);
+        const { status: wsStatus, body: wsBody } = await acculynxGet(`${ACCULYNX_BASE}${wsPath}`, apiKey, fetchFn);
+        await archiveRaw(sb, syncBatchId, "job_worksheet", wsPath, wsStatus, wsBody);
+        const wsRows = wsStatus === 200 ? mapWorksheetItems(wsBody, ctx) : [];
+        const { error: wsError } = wsRows.length
+          ? await sb.from("acculynx_job_worksheet_items").upsert(wsRows, { onConflict: "job_id,section_id,item_key" })
+          : { error: null };
+        if (wsStatus !== 200 || wsError) {
+          await recordWalkError(
+            sb, acct.account_key, jobId, "job_worksheet", syncBatchId,
+            wsError ? wsError.message : `Worksheet request returned HTTP ${wsStatus}; existing worksheet preserved`, wsStatus,
+          );
+        }
+      }
       if (error) {
         moneyComplete = false;
         await recordWalkError(

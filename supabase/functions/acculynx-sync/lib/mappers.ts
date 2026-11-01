@@ -55,6 +55,70 @@ export function mapJobContact(raw: any, ctx: MapperCtx): Record<string, unknown>
 }
 
 /**
+ * F2: the live API nests the section totals under `worksheetSectionTotals` (prod: 7,419 rows, every parsed total column
+ * NULL before this fix). Read the nested value first, then the legacy top-level key; only finite numbers count.
+ */
+function totals(raw: any, key: string): number | null {
+  for (const v of [raw?.worksheetSectionTotals?.[key], raw?.[key]]) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+const UUIDISH = /^[0-9a-f-]{8,64}$/i;
+/**
+ * F2: the API path of the worksheet a financials body links (`worksheet._link`, pinned to api.acculynx.com/api/v2), or
+ * `/financials/{id}/worksheet` from its id. Null when there is no worksheet.
+ */
+export function worksheetPath(raw: any): string | null {
+  const link = raw?.worksheet?._link;
+  if (typeof link === "string") {
+    try {
+      const u = new URL(link);
+      const m = u.pathname.match(/^\/api\/v2(\/financials?\/[0-9a-f-]+\/worksheet)$/i);
+      return u.protocol === "https:" && u.host === "api.acculynx.com" && m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+  const id = raw?.worksheet?.id;
+  return typeof id === "string" && UUIDISH.test(id) ? `/financials/${id}/worksheet` : null;
+}
+
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : null);
+/**
+ * F2: one acculynx_job_worksheet_items row per worksheet line (section, line, trade, amount); a section with no lines
+ * still gets one `item_key = 'section'` row so its total is kept. A body without `sections` maps to [].
+ */
+export function mapWorksheetItems(raw: any, ctx: MapperCtx): Record<string, unknown>[] {
+  if (!raw || !Array.isArray(raw.sections)) return [];
+  const head = {
+    job_id: ctx.job_id ?? str(raw.jobId),
+    financial_id: str(raw.id),
+    worksheet_state: str(raw.currentState),
+    worksheet_total: num(raw.totalPrice),
+  };
+  const rows: Record<string, unknown>[] = [];
+  for (const s of raw.sections) {
+    if (!s || typeof s.id !== "string") continue;
+    const sec = { section_id: s.id, section_type: str(s.sectionType), section_total: num(s.totalPrice) };
+    const stamp = { account_key: ctx.account_key, market: ctx.market, synced_at: ctx.now };
+    const items = Array.isArray(s.items) ? s.items.filter((i: any) => i && typeof i.id === "string") : [];
+    if (!items.length) {
+      rows.push({ ...head, ...sec, item_key: "section", item_name: null, price: null, total_price: null, parent_item_id: null, sort_order: null, trade_id: null, ...stamp });
+    }
+    for (const i of items) {
+      rows.push({
+        ...head, ...sec, item_key: i.id, item_name: str(i.itemName), price: num(i.price), total_price: num(i.totalPrice),
+        parent_item_id: str(i.parentItemId), sort_order: num(i.hierarchySortOrder), trade_id: str(i.tradeId), ...stamp,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
  * Map a raw /jobs/{id}/financials body to acculynx_job_financials columns (job_id PK).
  * Anchored on the KS-11 ground truth: approvedJobValue 30368.48 -> approved_job_value 30368.48,
  * balanceDue 17532.48 -> balance_due 17532.48.
@@ -64,13 +128,13 @@ export function mapJobFinancials(raw: any, ctx: MapperCtx): Record<string, unkno
     job_id: ctx.job_id ?? null,
     approved_job_value: raw?.approvedJobValue ?? null,
     balance_due: raw?.balanceDue ?? null,
-    worksheet_total: raw?.worksheetTotal ?? null,
-    change_order_total: raw?.changeOrderTotal ?? null,
-    insurance_claim_total: raw?.insuranceClaimTotal ?? null,
-    upgrade_total: raw?.upgradeTotal ?? null,
-    discount_total: raw?.discountTotal ?? null,
-    supplement_total: raw?.supplementTotal ?? null,
-    work_not_doing_total: raw?.workNotDoingTotal ?? null,
+    worksheet_total: totals(raw, "worksheetTotal"),
+    change_order_total: totals(raw, "changeOrderTotal"),
+    insurance_claim_total: totals(raw, "insuranceClaimTotal"),
+    upgrade_total: totals(raw, "upgradeTotal"),
+    discount_total: totals(raw, "discountTotal"),
+    supplement_total: totals(raw, "supplementTotal"),
+    work_not_doing_total: totals(raw, "workNotDoingTotal"),
     amendments: raw?.amendments ?? null,
     account_key: ctx.account_key,
     market: ctx.market,
