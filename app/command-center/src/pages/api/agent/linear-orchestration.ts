@@ -9,7 +9,7 @@ import {
   ensureAccountingLinearPair,
   parseAccountingLinearPairInput,
 } from "@lib/linear-accounting.server";
-import { getRuntimeEnv } from "@lib/runtime-env";
+import { linearAuth } from "@lib/linear-client.server";
 
 export const prerender = false;
 
@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const apiKey = getRuntimeEnv().LINEAR_API_KEY?.trim();
+  const apiKey = await linearAuth.authorization();
   if (!apiKey) {
     return jsonApiResponse(
       { error: "service_unavailable", error_description: "Linear orchestration is not configured." },

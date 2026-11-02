@@ -82,12 +82,15 @@ describe("accounting Linear orchestration", () => {
       parentId: "16ac625e-9f89-4622-80f8-ea36f20bf72f",
       stateId: "721fd015-d82a-4ae2-b5d8-a34c1fb76c05",
       assigneeId: "002bc1e6-c102-42f7-86cc-45b7c499dae3",
+      // Chris is only assigned because the issue carries needs-chris (assignment guard).
+      labelIds: ["9cf305cd-2042-44b2-bfe5-a0cec377c4d4"],
     });
     const workInput = (calls[2].body.variables as { input: Record<string, unknown> }).input;
     expect(workInput).toMatchObject({
       teamId: "f7fd2005-aa04-4de7-a17d-ddae528b5e4a",
       parentId: source.id,
       stateId: "3e03cd48-d3c8-4e63-867c-734387f39efb",
+      labelIds: ["9cf305cd-2042-44b2-bfe5-a0cec377c4d4"],
     });
     expect(String(workInput.description)).toContain("CAT source issue: CAT-901");
   });
