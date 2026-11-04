@@ -182,25 +182,17 @@ Every app, service and work surface ships inside the self-healing loop: Sentry (
 
 ## 11. Design system (one source of truth for every visual asset)
 
-- Every visual asset the brain produces — web copy with styling, Property Cards, graphics, decks, dashboards, agent-app/Slack surfaces — follows **one** design system. The format is **DESIGN.md** (Google Labs, Apache-2.0), vendored at `standards/design/vendor/design.md/` so the brain is self-contained.
-- The **live brand tokens** live in `config/brand/DESIGN.md` (brand identity is per-client → customization surface, §9). It is the source of truth: tokens are normative, prose is rationale. When an asset disagrees with the brand file, the brand file wins.
-- The **contract** is `standards/design/v1.md` — QC owns it, Auditor enforces it. Brand file must lint with **zero errors** (`scripts/lint-design.sh`) before any change ships. Assets use **only** tokens from the brand file — no hard-coded hex, off-palette fonts, one-off radii, or bypass CSS custom properties. A value needed repeatedly is promoted to a token, not search-and-replaced.
-- **Role discipline is the brand.** Each brand color keeps its single role (CTA color on interactions only; never decorative). Monospace tokens appear on Property Card surfaces only. Typeface phase migrations happen only when the brand file's tokens change (the token update is the trigger).
-- **The living design system is `cc.proexteriorsus.net/design-system`** (source `app/command-center/src/pages/design-system/`, docs/112). It parses the production tokens from `global.css` at build time, renders every component in both modes, catalogues every motion, and carries the UX decisions log with permanent rule ids (`C-`, `CMP-`, `UX-`, `MD-`, `MO-`, `D-`, `M-`, `A-`, `W-`, `P-`, `SW-`, `WEB-`, `G-`). Build any new surface from its agent handbook (`/design-system/agents`) and cite the rule ids in the PR; a change to a token, component or decision updates the matching chapter in the same PR. Machine feed: `/design-system/tokens.json`.
+- **The design system is https://ds.proexteriorsus.net** (Chris, 2026-11-04). Source: `packages/ds` (`@proexteriors/ds` 1.0.0) in Clvrwrk/CRM_PWA; rules: `packages/ds/RULES.md` (CRM_PWA PR #268 until it merges). It supersedes `config/brand/DESIGN.md`, `deployment/remote/dashboard/Design.md`, `standards/design/v1.md`, `docs/40`, `docs/112` and the CC `/design-system` site, which are now pointers. Where old designs disagree, CC/CRM win.
+- Every visual asset and work surface uses ds tokens only (`--pe-*`, K-01 to K-03). A value needed twice is added in a ds PR, never as an app-local custom property. A UI PR names the ds rule ids it relies on (G-01), and a new pattern needs a ds PR first (G-04).
+- Rule ids are permanent. The old ids (`UX-`, `CMP-`, `M-`, `S-`, `D-`, `A-`, `G-`, `DSN-` …) are kept in brackets next to the ds rule that replaced them, so old PRs and docs still resolve.
 
 ## 11a. Long-list disclosure (app-wide)
 
-- Any work surface that can render an unbounded list opens showing **10 rows**, with the rest behind a `Show all N …` control. Revealing them keeps the pane **exactly 10 rows tall** so the list scrolls internally and the page does not grow.
-- The pane is the **same height collapsed and expanded**. Collapsed it holds its 10 rows so no scrollbar appears and the wheel unambiguously belongs to the page; the wheel only changes owner as the direct result of a click.
-- Pane height is **measured** (`header + rowHeight × 10 + scrollbar gutter`), never hardcoded. Reveal state persists per surface in `localStorage`. Filters apply **before** paging.
-- Full contract, including the sticky-header rules a bounded pane forces (`overflow-x: auto` never with `overflow-y: visible`; measured multi-row header offsets; frozen-column selectors scoped to `thead tr:not(.fw-grouprow)` / `tbody`; column-group `colspan` recomputed on expand): [`standards/design/v1.md`](standards/design/v1.md) § Long-list disclosure.
+- ds rules **T-01 to T-05** and **F-06**: an unbounded list opens at 10 rows behind "Show all N", in a pane that is the same measured height collapsed and expanded, filtered before paging, with the sticky-header rules a bounded pane forces. [old: standards/design/v1.md § Long-list disclosure, UX-06]
 
 ## 11b. Attachment intake (app-wide) — UX-11
 
-- Every surface that holds files, photos, videos or documents shows a **placeholder** (type icon + what belongs there) when empty, never a blank.
-- The slot is a **drag-and-drop** target on a computer; **one click** on the placeholder or Add opens the device's own chooser (file picker; on a phone the Photo library · Take photo · Choose file sheet).
-- A surface with a **camera** button keeps it and gains **Photo library** beside it. Never put `capture` on the only file input: it locks phones to the camera.
-- One shared component per app, one upload path for chooser and drop. Full contract: [`standards/design/v1.md`](standards/design/v1.md) § Attachment intake.
+- ds rule **E-04**: every surface that holds files shows a placeholder, takes drag and drop, opens the device's own tools in one click, and keeps a camera option beside Photo library. [old: UX-11, standards/design/v1.md § Attachment intake]
 
 ## 12. Workspace front desk and GSD loop
 

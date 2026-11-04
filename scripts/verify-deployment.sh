@@ -119,32 +119,10 @@ if is_set "${DASHBOARD_ORIGIN:-}" && command -v curl >/dev/null; then
   rm -f "$queue_file"
 else warn "DASHBOARD_URL/COMMAND_CENTER_PUBLIC_URL unset — skipping command-center ping"; fi
 
-# 7. Design system: brand DESIGN.md lints clean + Tailwind v3 theme in sync (standards/design/v1.md)
-DESIGN_MD="$ROOT/config/brand/DESIGN.md"
-TW_THEME="$ROOT/config/brand/tailwind.theme.json"
-DESIGNMD_VERSION="${DESIGNMD_VERSION:-latest}"
-if [[ -f "$DESIGN_MD" ]]; then
-  if command -v npx >/dev/null; then
-    lint_out=$(npx --yes "@google/design.md@${DESIGNMD_VERSION}" lint "$DESIGN_MD" 2>/dev/null)
-    if echo "$lint_out" | grep -qE '"errors":[[:space:]]*0\b'; then
-      ok "DESIGN.md lints clean (0 errors)"
-    else
-      bad "DESIGN.md has lint errors — run scripts/lint-design.sh"
-    fi
-    # Tailwind v3 theme must match what DESIGN.md derives (drift gate)
-    if [[ -f "$TW_THEME" ]]; then
-      tmp_theme=$(mktemp)
-      if npx --yes "@google/design.md@${DESIGNMD_VERSION}" export --format json-tailwind "$DESIGN_MD" 2>/dev/null > "$tmp_theme" && [[ -s "$tmp_theme" ]]; then
-        if diff -q "$tmp_theme" "$TW_THEME" >/dev/null 2>&1; then
-          ok "Tailwind v3 theme in sync with DESIGN.md"
-        else
-          bad "Tailwind v3 theme stale — regenerate: npx @google/design.md export --format json-tailwind config/brand/DESIGN.md > config/brand/tailwind.theme.json"
-        fi
-      else warn "could not derive Tailwind theme (export failed) — review @google/design.md"; fi
-      rm -f "$tmp_theme"
-    else bad "config/brand/tailwind.theme.json missing — generate it from DESIGN.md"; fi
-  else warn "npx (Node) unavailable — skipping DESIGN.md lint + theme sync check"; fi
-else warn "config/brand/DESIGN.md absent — no brand tokens to verify"; fi
+# 7. Design system: governed by ds (https://ds.proexteriorsus.net, @proexteriors/ds in
+#    Clvrwrk/CRM_PWA), which builds and lints its own tokens. The old DESIGN.md lint and
+#    Tailwind-theme drift check were removed on 2026-11-04 with the files they checked.
+ok "design system: ds.proexteriorsus.net (no brain-local token files to verify)"
 
 echo ""
 echo "== summary: $PASS passed, $WARN warnings, $FAIL failed =="

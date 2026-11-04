@@ -1,32 +1,11 @@
 #!/usr/bin/env bash
-# lint-design.sh — validate a DESIGN.md against the DESIGN.md format spec.
+# lint-design.sh — RETIRED 2026-11-04.
 #
-# Wraps the @google/design.md CLI (Google Labs, Apache-2.0; spec vendored at
-# standards/design/vendor/design.md/). Enforces standards/design/v1.md DSN-001:
-# the brand file must lint with ZERO errors before any change ships.
-#
-# Usage:
-#   scripts/lint-design.sh                       # lints config/brand/DESIGN.md
-#   scripts/lint-design.sh path/to/DESIGN.md     # lints a specific file
-#
-# Exit code is the CLI's: 1 if errors are found, 0 otherwise.
-set -euo pipefail
-
-# Pin the CLI version so lint results are reproducible across machines/CI.
-DESIGNMD_VERSION="${DESIGNMD_VERSION:-latest}"
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${1:-$ROOT/config/brand/DESIGN.md}"
-
-if [[ ! -f "$TARGET" ]]; then
-  echo "lint-design: no DESIGN.md at '$TARGET'" >&2
-  exit 2
-fi
-
-if ! command -v npx >/dev/null 2>&1; then
-  echo "lint-design: npx (Node.js) is required but not on PATH" >&2
-  exit 2
-fi
-
-echo "lint-design: linting $TARGET (npx @google/design.md@$DESIGNMD_VERSION)" >&2
-exec npx --yes "@google/design.md@${DESIGNMD_VERSION}" lint "$TARGET"
+# This used to lint config/brand/DESIGN.md with the @google/design.md CLI. That
+# file is now a pointer, the vendored spec is gone, and nothing calls this script
+# (scripts/verify-deployment.sh no longer runs it). The design system is
+# https://ds.proexteriorsus.net (@proexteriors/ds in Clvrwrk/CRM_PWA); its check is
+#   node packages/ds/scripts/lint.mjs <app dir>      (run in CRM_PWA)
+# Kept as a stub so old docs and muscle memory get a clear answer, not a failure.
+echo "lint-design: retired 2026-11-04. Use the ds check in Clvrwrk/CRM_PWA: node packages/ds/scripts/lint.mjs <app dir> (see https://ds.proexteriorsus.net)." >&2
+exit 0
