@@ -50,6 +50,10 @@ Follow ds rules **T-01 to T-05** and **F-06** at **https://ds.proexteriorsus.net
 
 Follow ds rule **E-04** [UX-11]: a placeholder when empty, drag and drop, the device's own tools in one click, and a camera option beside Photo library. Pointer: [`CONVENTIONS.md`](CONVENTIONS.md) §11b.
 
+## Mockup first, never a written spec (app-wide UI rule)
+
+No screen is ever built from a written tech spec (Chris, 2026-11-04). Before any UI code, every screen in the flow has (a) a full mockup, (b) a full brand-alignment audit against ds.proexteriorsus.net, and (c) a full gap analysis between the mockup and what the current data can supply. Chris signs off, then the build starts; the UI PR links all three. Pointer: [`CONVENTIONS.md`](CONVENTIONS.md) §11c.
+
 ## Self-healing loop (every surface, by default)
 
 Every app, service and work surface ships inside the self-healing loop: Sentry -> deduped Linear bug log -> reproduce-first draft-PR fix (where a verify chain exists) -> human merge -> verify-and-close against production (resolve, or reopen with evidence). Nothing auto-merges; the fixing agent holds no credentials. A new surface is not done until it has a Sentry project, `/healthz` with `buildCommit`, and the vendored kit (`scripts/self-heal/`, `.github/workflows/self-heal.yml`). Contract: [`docs/127-self-healing-loop.md`](docs/127-self-healing-loop.md) and [`CONVENTIONS.md`](CONVENTIONS.md) §10d.
