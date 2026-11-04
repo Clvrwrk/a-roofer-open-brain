@@ -1,24 +1,22 @@
 ---
-status: deprecated-pointer
-canonical: ../../deployment/remote/dashboard/Design.md
-styleguide: ../../deployment/remote/dashboard/design-system.html
+status: superseded
+superseded: 2026-11-04
+canonical: https://ds.proexteriorsus.net
+rules: Clvrwrk/CRM_PWA packages/ds/RULES.md
 ---
 
-# Pro Exteriors Design System
+# Pro Exteriors design system: moved to ds.proexteriorsus.net
 
-This file is intentionally not a second design source of truth.
+**Superseded on 2026-11-04** by the Pro Exteriors design system (`@proexteriors/ds`). This file was already a pointer to the CC `/design-system` site and `Design.md`; both of those are now superseded too.
 
-The approved and canonical design specification for active Pro Exteriors Open
-Brain work is:
+- **Live reference:** https://ds.proexteriorsus.net
+- **Rules:** `packages/ds/RULES.md` in [Clvrwrk/CRM_PWA](https://github.com/Clvrwrk/CRM_PWA) (package `@proexteriors/ds` 1.0.0; on branch `claude/pe-design-system-v1`, CRM_PWA PR #268, until it merges)
+- **Check:** `node packages/ds/scripts/lint.mjs <app dir>` (in CRM_PWA)
 
-- **https://cc.proexteriorsus.net/design-system** — the living design system (source
-  `app/command-center/src/pages/design-system/`, docs/112): tokens parsed from the
-  production stylesheet, every component live in both modes, motion catalogue, the UX
-  decisions log, print / swag / marketing-web rules, and the agent handbook.
-- `deployment/remote/dashboard/Design.md` — the written principles.
-- `deployment/remote/dashboard/design-system.html` — the earlier static styleguide,
-  superseded by the site above for everything it covers.
+The old rule ids (`UX-xx`, `CMP-xx`, `M-xx`, `S-xx`, `D-xx`, `A-xx`, `G-xx`, `DSN-xxx` and the other CC/CRM ids) are kept in brackets next to the ds rule that replaced them in ds `RULES.md`, so PRs, issues and docs that cite them still resolve.
 
-All active UI, dashboard, and brand implementation work must follow that
-canonical dashboard design system. Do not add or maintain separate color,
-spacing, typography, radius, or layout rules here.
+There is no DESIGN.md lint or Tailwind theme export any more: `config/brand/tailwind.theme.json` and the vendored DESIGN.md spec were deleted on 2026-11-04, and tokens come only from ds `dist/tokens.css` (`--pe-*`, ds rule K-01).
+
+Where the old designs disagree, CC/CRM win (Chris, 2026-11-04). Do not add design rules here; change ds instead (ds rule G-03, G-04).
+
+The full previous text is in git history: `git show 8320236b:config/brand/DESIGN.md`.

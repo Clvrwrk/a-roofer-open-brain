@@ -1,52 +1,12 @@
-# Brand — design tokens
+# Brand
 
-This folder holds the **live brand identity** for this client's brain, expressed
-in the [DESIGN.md format](../../standards/design/vendor/design.md/spec.md)
-(Google Labs, Apache-2.0). It is part of the customization surface (CONVENTIONS
-§9): brand identity is a per-client value, so it lives under `config/` next to
-`roofer.config.yaml`, not hard-coded anywhere else.
+**Design tokens no longer live here (2026-11-04).** The Pro Exteriors design system is **https://ds.proexteriorsus.net**, built from `packages/ds` (`@proexteriors/ds` 1.0.0) in [Clvrwrk/CRM_PWA](https://github.com/Clvrwrk/CRM_PWA); its rules are `packages/ds/RULES.md` (CRM_PWA PR #268 until it merges). Old rule ids are kept in brackets there.
 
-| File | What it is |
+| File | What it is now |
 | --- | --- |
-| [`DESIGN.md`](./DESIGN.md) | The source of truth for design tokens — colors, typography, spacing, radii, and components. The **first design** in this brain: **Pro Exteriors**. |
-| [`tailwind.theme.json`](./tailwind.theme.json) | Tailwind v3 `theme.extend` config **derived from** `DESIGN.md`. Generated, not hand-edited; kept in sync by the go-live gate. |
-| [`assets/`](./assets/) | Official logo files (full-color + white knockout + favicon) and their usage rules. See [`assets/README.md`](./assets/README.md). |
+| [`DESIGN.md`](./DESIGN.md) | A pointer to ds. Not a token source and not linted. |
+| [`assets/`](./assets/) | The legacy logo set (set A). Still read by the Command Center and `scripts/design-system-swag.mjs`; it moves to the ds logo set in a later migration. See [`assets/README.md`](./assets/README.md). |
 
-## How it fits together
+Deleted on 2026-11-04: `tailwind.theme.json` (a Tailwind v3 export of the old DESIGN.md tokens that nothing rendered from) and the vendored DESIGN.md spec at `standards/design/vendor/design.md/`. The go-live gate (`scripts/verify-deployment.sh`) no longer lints DESIGN.md or checks the Tailwind theme.
 
-- **The format** is vendored at `standards/design/vendor/design.md/` so the brain
-  carries its own copy of the spec.
-- **The contract** every visual asset must follow is the design standard at
-  [`standards/design/v1.md`](../../standards/design/v1.md) — QC owns it, Auditor
-  enforces it. Tokens here are normative; the prose explains how to apply them.
-- **The tooling** runs on demand via npm — no packages are vendored:
-
-  ```bash
-  # lint the brand file (zero errors required before any change ships)
-  ./scripts/lint-design.sh config/brand/DESIGN.md
-
-  # export tokens to Tailwind / W3C DTCG instead of re-typing values
-  npx @google/design.md export --format json-tailwind config/brand/DESIGN.md > config/brand/tailwind.theme.json
-  npx @google/design.md export --format css-tailwind  config/brand/DESIGN.md > theme.css   # Tailwind v4
-  npx @google/design.md export --format dtcg          config/brand/DESIGN.md > tokens.json
-  ```
-
-  The committed **Tailwind v3 theme** lives at
-  [`tailwind.theme.json`](./tailwind.theme.json) (a `theme.extend` object). It is
-  derived from `DESIGN.md` and must stay in sync: `scripts/verify-deployment.sh`
-  re-derives it and **fails the go-live gate** if it drifts. After any token
-  change, regenerate with the `json-tailwind` command above.
-
-  **Token-naming note:** spacing token names must be valid CSS identifiers
-  (`/^[a-zA-Z][a-zA-Z0-9-]*$/`) or the Tailwind v4 CSS export rejects them. The
-  large-end scale is therefore named `xl-2`…`xl-5` (not `2xl`…`5xl`). Keep new
-  tokens letter-leading.
-
-## Changing the brand
-
-Edit `DESIGN.md`, then lint. A token needed repeatedly is promoted to a token in
-this file — never search-and-replaced into the codebase, and never bypassed with
-a new one-off CSS custom property. Display/heading fonts stay on Phase 1 (Inter)
-until the Phase 2 brand pass is explicitly initiated; the token update in
-`DESIGN.md` is the trigger. See the Do's and Don'ts in `DESIGN.md` for the full
-guard rails.
+Brand identity is still per-client (CONVENTIONS §9), but token values change only in ds (ds rules K-03, G-03).
