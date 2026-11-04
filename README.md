@@ -20,7 +20,7 @@ flowchart LR
 
 - **Accounting:** vendor invoice audits, negotiated-price agreement workflows, credit-memo review, Friday WIP/AR, cash-flow and export preparation.
 - **Operations and property work:** order and estimate audits, territory/property review, source-backed queues and integration health.
-- **Executive and system surfaces:** pipeline and cash visibility, runtime/sync status, review queues and the living design system.
+- **Executive and system surfaces:** pipeline and cash visibility, runtime/sync status, review queues.
 - **Shared infrastructure:** property-first SQL migrations, Supabase Edge Functions, provider adapters, operational scripts and deployment configuration.
 - **Agent operating model:** five department roles and eight infrastructure roles, with charters, recipes, provenance and human approval boundaries. Thirteen roles do not imply thirteen independently deployed services.
 
@@ -97,7 +97,7 @@ A green local build does not establish a deployed release, successful provider a
 - [Command Center setup and routes](app/command-center/README.md)
 - [Architecture brief](docs/00-architecture-brief.md) — original design context; use current source/contracts for implementation status
 - [CRM and shared-system contract](docs/111-crm-pwa-companion-repo.md)
-- [Living design system](docs/112-design-system-site.md)
+- [Design system](https://ds.proexteriorsus.net) (`@proexteriors/ds` in Clvrwrk/CRM_PWA; [docs/112](docs/112-design-system-site.md) is now a pointer)
 - [Current integration scope and gaps](docs/129-sync-verification-gaps.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Cleverwork](https://cleverwork.io) — project maintainer
@@ -106,6 +106,6 @@ Report vulnerabilities through the private reporting channel in [`SECURITY.md`](
 
 ## License and acknowledgments
 
-Cleverwork-original work is MIT-licensed; see [`LICENSE`](LICENSE). Vendored materials retain their own notices, including the OB1 schemas' FSL-1.1-MIT terms and the DESIGN.md specification's Apache-2.0 license. See [`LICENSE.md`](LICENSE.md) and individual source notices; do not assume every retained third-party file shares the root license.
+Cleverwork-original work is MIT-licensed; see [`LICENSE`](LICENSE). Vendored materials retain their own notices, including the OB1 schemas' FSL-1.1-MIT terms. See [`LICENSE.md`](LICENSE.md) and individual source notices; do not assume every retained third-party file shares the root license.
 
 The project builds on concepts and attributed work from Nate B. Jones / OB1, Dynamous, InfraNodus, Andrej Karpathy's LLM Wiki and Google Labs' DESIGN.md. Preserve upstream attribution when redistributing applicable material.
