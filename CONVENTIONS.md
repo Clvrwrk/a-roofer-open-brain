@@ -194,6 +194,16 @@ Every app, service and work surface ships inside the self-healing loop: Sentry (
 
 - ds rule **E-04**: every surface that holds files shows a placeholder, takes drag and drop, opens the device's own tools in one click, and keeps a camera option beside Photo library. [old: UX-11, standards/design/v1.md § Attachment intake]
 
+## 11c. Mockup first, never a written spec (app-wide)
+
+- **No screen is ever built from a written tech spec** (Chris, 2026-11-04). Before any UI code is written, every screen in the flow (every tab, step, state and phone layout) has all three of:
+  1. **a full mockup** (Figma frame or design-canvas artboard) that is thoughtful and creative, not a plain list or form (for example, a clickable state map for licensing requirements);
+  2. **a full brand-alignment audit** of that mockup against https://ds.proexteriorsus.net (tokens, components, sidebar, header logo, nesting and table rules), naming the ds rule ids it relies on;
+  3. **a full gap analysis** between the mockup and what the current data can actually supply: each field or display is marked supported, needs new data, or cannot be filled. Missing data is never invented.
+- Chris signs off on the three for the whole flow, then the build starts. The build follows the mockup for layout and visuals; the written spec covers behaviour and data only.
+- The UI PR links all three and still carries the side-by-side screenshots of built page and frame (CRM_PWA SR-26/SR-27). A flow already built from text is redone this way, tab by tab.
+- Why: the hr app was built from text specs and came out generic, ignoring the mockups and the nesting and table rules, so every tab and workflow had to be redone.
+
 ## 12. Workspace front desk and GSD loop
 
 - **Maintenance/Hermes owns orientation.** Agents should read `agents/horizontal/maintenance/WORKSPACE-MAP.md` before broad repo search. If the map is stale, flag Maintenance.
