@@ -1,0 +1,7 @@
+---
+// Retired 2026-11-04: the CC design-system site moved to https://ds.proexteriorsus.net.
+// The middleware answers these paths first (before auth); this catch-all route makes
+// sure /design-system/* always matches a route, so the redirect never becomes a 404.
+import { designSystemRedirect, DS_ORIGIN } from "@lib/design-system-redirect";
+return Astro.redirect(designSystemRedirect(Astro.url.pathname) ?? `${DS_ORIGIN}/`, 301);
+---

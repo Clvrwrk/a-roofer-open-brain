@@ -36,7 +36,7 @@ The production Docker context is this directory: its package files, `public/`, `
 | `/executive/*` | Pipeline, cash flow/runway and fixed-cost surfaces. |
 | `/sales/*`, `/marketing/*`, `/system/*` | Department and system routes; live Sales paths may be owned by the CRM companion router. |
 | `/agents`, `/api/system/sync-health` | Runtime and integration monitoring with authorization/readiness distinctions. |
-| `/design-system/*` | Living tokens, components, decisions and agent handbook. |
+| `/design-system/*` | Retired 2026-11-04: 301 redirect to https://ds.proexteriorsus.net (the Pro Exteriors design system, `@proexteriors/ds`). |
 | `/api/agent/*` | Authorized agent identities, queues and supported actions. |
 | `/auth/*` | WorkOS sign-in/session flows. |
 | `/oauth2/*` and reserved OAuth endpoints | Partial/reserved interfaces; do not infer a complete OAuth authorization server. |
@@ -57,4 +57,4 @@ Check `/healthz` for the deployed `buildCommit`, then verify protected API denia
 
 ## Shared contracts
 
-Read the [repository conventions](../../CONVENTIONS.md), [CRM companion boundary](../../docs/111-crm-pwa-companion-repo.md), [pricing/UOM silo rules](../../docs/105-price-agreement-silo-rules.md), [design system](../../docs/112-design-system-site.md) and [self-healing loop](../../docs/127-self-healing-loop.md). Shared migrations, ingestion functions, provider adapters and deployment files remain at their repository-level roots.
+Read the [repository conventions](../../CONVENTIONS.md), [CRM companion boundary](../../docs/111-crm-pwa-companion-repo.md), [pricing/UOM silo rules](../../docs/105-price-agreement-silo-rules.md), [design system](https://ds.proexteriorsus.net) and [self-healing loop](../../docs/127-self-healing-loop.md). Shared migrations, ingestion functions, provider adapters and deployment files remain at their repository-level roots.
