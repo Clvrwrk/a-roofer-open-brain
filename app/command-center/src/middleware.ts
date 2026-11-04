@@ -19,6 +19,7 @@ import { getRuntimeEnv } from "@lib/runtime-env";
 import { prewarmSurfaceCaches, recordCommandCenterActivity } from "@lib/prewarm.server";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
 import { isPec78RuntimePath, pec78Json, pec78Mode, shouldStopPec78Request } from "@lib/pec78/contract";
+import { designSystemRedirect } from "@lib/design-system-redirect";
 
 prewarmSurfaceCaches();
 
@@ -106,6 +107,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
       status: 429,
       headers: { "content-type": "application/json; charset=utf-8", "retry-after": "60", "cache-control": "no-store" },
     });
+  }
+
+  // 0b. Retired CC design-system site: /design-system and /design-system/* are permanent
+  //     redirects to https://ds.proexteriorsus.net (ds rule S-06, docs/112). Answered before
+  //     auth so old links and bookmarks resolve without a session; nothing here is private.
+  const dsTarget = designSystemRedirect(pathname);
+  if (dsTarget) {
+    return new Response(null, { status: 301, headers: { location: dsTarget, "cache-control": "public, max-age=3600" } });
   }
 
   // 1. Public surface: discovery, health, auth flow, signed webhooks.

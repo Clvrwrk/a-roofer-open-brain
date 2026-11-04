@@ -97,13 +97,10 @@ for (const [l, srcs] of links) {
 // ---------- 2. fabricated data ----------
 const moneyRx = />\s*\$[0-9][0-9,.]*/;
 const pctRx = />[0-9]+(\.[0-9]+)?%</;
-// The design-system site (docs/112) renders component SPECIMENS — a KPI tile showing
-// "$12,340" is documentation of the tile, not a number a human could mistake for money.
-// Its chapters are the one place literal amounts are correct by design.
-const isDesignSystemSpecimen = (f) => /[\/\\]pages[\/\\]design-system[\/\\]/.test(f);
+// (The design-system specimen exemption was removed on 2026-11-04: the CC /design-system
+// site is retired and redirects to https://ds.proexteriorsus.net, so no page renders specimens.)
 for (const d of [join(SRC, "pages"), join(SRC, "components")].filter(existsSync))
   for (const f of walk(d).filter(isCode)) {
-    if (isDesignSystemSpecimen(f)) continue;
     const txt = readFileSync(f, "utf8");
     for (const [rx, what] of [[moneyRx, "literal $ amount"], [pctRx, "literal percentage"]]) {
       const line = txt.split("\n").findIndex((L) => rx.test(L) && !L.includes("${"));
@@ -130,12 +127,6 @@ for (const f of walk(join(SRC, "lib")).filter(isCode)) {
 // ---------- 3. orphan pages ----------
 const linkedTargets = new Set([...links.keys()].map((l) => l.split("?")[0].replace(/\/$/, "") || "/"));
 const navTxt = existsSync(join(SRC, "lib/nav.ts")) ? readFileSync(join(SRC, "lib/nav.ts"), "utf8") : "";
-// The design-system chapters are reached from their own rail (DesignSystemShell builds the
-// hrefs from lib/design-system/nav.ts at render time), never from lib/nav.ts or a literal href.
-const dsNavPath = join(SRC, "lib/design-system/nav.ts");
-const dsSlugs = new Set(existsSync(dsNavPath)
-  ? [...readFileSync(dsNavPath, "utf8").matchAll(/slug:\s*["']([^"']*)["']/g)].map((m) => "/design-system" + (m[1] ? "/" + m[1] : ""))
-  : []);
 // Machine endpoints (auth, oauth, agent, discovery, health, service worker) are
 // never linked from the UI by design — only real .astro pages can be "orphaned".
 const MACHINE = [/^\/api/, /^\/auth/, /^\/oauth2/, /^\/agent/, /^\/\.well-known/, /^\/healthz/, /^\/sw\.js/, /^\/submit-agreement/];
@@ -147,7 +138,6 @@ for (const r of routes) {
   if (/Astro\.redirect/.test(body)) continue;                       // redirect stubs are intentional
   if (linkedTargets.has(r)) continue;                               // linked from somewhere
   if (new RegExp(`href:\\s*["']${r}["']`).test(navTxt)) continue;   // in nav
-  if (dsSlugs.has(r)) continue;                                     // a design-system chapter (own rail)
   add("warn", "orphan-page", `${r} is built but has no inbound link and is not in nav (${relative(REPO, file)})`);
 }
 
