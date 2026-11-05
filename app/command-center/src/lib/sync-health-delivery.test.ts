@@ -12,3 +12,10 @@ it('never sends retired event history',async()=>{
  expect((await deliverSyncHealth([{event_id:'old',component_key:'runtime:systemd.openbrain-maya-gate'}],mock(),send)).healthy).toBe(true);
  expect(send).not.toHaveBeenCalled();
 });
+
+it('acknowledges transient probe_failed events without paging Sentry',async()=>{
+ const send=vi.fn().mockResolvedValue(true);
+ const client=mock();
+ expect((await deliverSyncHealth([{event_id:'probe-blip',component_key:'int.supabase-rest',failure_code:'probe_failed',failures:1}],client,send)).healthy).toBe(true);
+ expect(send).not.toHaveBeenCalled();
+});
