@@ -206,19 +206,27 @@ export async function report({ cfg, linear, issueId, decision: given, prUrl, run
   description = setBugLogField(description, 'Fix', published ? `${prUrl} (awaiting human review and merge). ${r.fix ?? ''}` : `no fix published: ${(decision?.reasons ?? ['autofix run did not complete']).join('; ')}`);
   description = setBugLogField(description, 'Verification', published ? verificationText : `pending; ${verificationText}`);
   const labels = cfg.linear.labels;
+  // Retry budget: a run without a PR is re-queued until maxAutofixAttempts, then escalated to a human.
+  const prior = Number(/autofix-attempts:(\d+);/.exec(description)?.[1] ?? 0);
+  const attempts = published ? prior : prior + 1;
+  const maxAttempts = cfg.maxAutofixAttempts ?? 3;
+  const escalate = !published && attempts >= maxAttempts;
+  if (!published) description = /autofix-attempts:\d+;/.test(description) ? description.replace(/autofix-attempts:\d+;/, `autofix-attempts:${attempts};`) : `${description}\nautofix-attempts:${attempts};\n`;
+  const addLabel = published ? 'autofix:pr-open' : escalate ? 'needs-human' : 'autofix:queued';
   const input = {
     description,
-    ...(cfg.linear.humanAssigneeId ? {assigneeId:cfg.linear.humanAssigneeId} : {}),
+    ...(escalate && cfg.linear.humanAssigneeId ? {assigneeId:cfg.linear.humanAssigneeId} : {}),
     removedLabelIds: [labels.running, labels.queued].filter(id => id && (issue.labels?.nodes ?? []).some(label => label.id === id)),
-    addedLabelIds: [published ? labels.prOpen : labels.needsHuman],
+    addedLabelIds: [published ? labels.prOpen : escalate ? labels.needsHuman : labels.queued],
   };
-  const plan = { issue: issue.identifier, published, addLabel: published ? 'autofix:pr-open' : 'needs-human', reasons: decision?.reasons ?? [] };
+  const plan = { issue: issue.identifier, published, addLabel, attempts, maxAttempts, reasons: decision?.reasons ?? [] };
   if (!cfg.apply) return { ...plan, mode: 'dry-run' };
   await linear.updateIssue(issue.id, input);
   if (published) await linear.attach(issue.id, prUrl, `Autofix PR for ${issue.identifier}`, 'Needs human review and merge');
   await linear.comment(issue.id, published
     ? `Autofix opened ${prUrl}. A human must review and merge; the bug log above holds the root cause, fix and verification.${runUrl ? ` Run: ${runUrl}` : ''}`
-    : `Autofix handed this to a human: ${stripPii((decision?.reasons ?? ['run did not complete']).join('; '))}.${runUrl ? ` Run: ${runUrl}` : ''}`);
+    : !escalate ? `Autofix attempt ${attempts}/${maxAttempts} produced no PR; re-queued: ${stripPii((decision?.reasons ?? ['run did not complete']).join('; '))}.${runUrl ? ` Run: ${runUrl}` : ''}`
+    : `Autofix handed this to a human after ${attempts} attempts: ${stripPii((decision?.reasons ?? ['run did not complete']).join('; '))}.${runUrl ? ` Run: ${runUrl}` : ''}`);
   return { ...plan, mode: 'apply' };
 }
 

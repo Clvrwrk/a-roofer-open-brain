@@ -31,9 +31,9 @@ test('dry run never emits an executable fix matrix or claims a ticket',async()=>
  try {await select({cfg:{...cfg,apply:false},linear:{listByLabel:async l=>l==='queued'?[ticket(1)]:[],updateIssue:async()=>writes++,comment:async()=>writes++},outDir:dir,env:{GITHUB_OUTPUT:join(dir,'outputs')}});
  assert.equal(writes,0);assert.match(readFileSync(join(dir,'outputs'),'utf8'),/count=0/);}finally{rmSync(dir,{recursive:true,force:true});}
 });
-test('triage assigns owner and stamps provenance; repeat pass deduplicates',async()=>{
+test('triage stamps provenance; repeat pass deduplicates',async()=>{
  let created=null,creates=0;
- const linear={available:true,findBySentry:async()=>created,createIssue:async input=>{creates++;assert.equal(input.assigneeId,owner);assert.match(input.description,/self-heal-repository:Clvrwrk\/a-roofer-open-brain;/);created={...ticket(9),...input,assignee:{id:owner},url:'https://linear.app/cleverwork/issue/PEC-9'};return created;},attach:async()=>{},updateIssue:async()=>{},comment:async()=>{}};
+ const linear={available:true,findBySentry:async()=>created,createIssue:async input=>{creates++;assert.equal(input.assigneeId,undefined);assert.match(input.description,/self-heal-repository:Clvrwrk\/a-roofer-open-brain;/);created={...ticket(9),...input,assignee:{id:owner},url:'https://linear.app/cleverwork/issue/PEC-9'};return created;},attach:async()=>{},updateIssue:async()=>{},comment:async()=>{}};
  const sentry={listIssues:async()=>[{id:'123',shortId:'CC-TEST',title:'Synthetic defect',level:'error',count:'1',userCount:0}],latestEvent:async()=>({tags:[{key:'error_code',value:'synthetic_drill'},{key:'route',value:'/internal/self-heal-drill'}]}),recentEvents:async()=>[],canonicalUrl:()=> 'https://cleverwork.sentry.io/issues/123/',comment:async()=>{}};
  await runTriage({cfg,sentry,linear});await runTriage({cfg,sentry,linear});assert.equal(creates,1);
 });
@@ -64,7 +64,7 @@ test('published receipt removes only labels still present and safely retries',as
  for(let i=0;i<2;i++) await report({cfg,linear,issueId:item.id,decision:{publish:true,result:{root_cause:'synthetic'}},prUrl:'https://github.com/Clvrwrk/example/pull/1'});
  assert.deepEqual(updates[0].removedLabelIds,['running']);
  assert.deepEqual(updates[1].removedLabelIds,[]);
- assert.equal(updates[0].assigneeId,owner);
+ assert.equal(updates[0].assigneeId,undefined);
 });
 
 test('Linear-normalized bullets replace and deduplicate bug log fields',()=>{

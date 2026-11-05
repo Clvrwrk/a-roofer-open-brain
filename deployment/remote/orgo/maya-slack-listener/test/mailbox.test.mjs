@@ -604,3 +604,47 @@ test("mailbox label plans preserve blocked mail for owner visibility", () => {
   assert.deepEqual(mailboxLabelPlan("track"), { add: ["STARRED"], remove: ["UNREAD", "INBOX"] });
   assert.deepEqual(mailboxLabelPlan("block"), { add: ["STARRED", "IMPORTANT"], remove: ["UNREAD"] });
 });
+
+// Identity routing (Chris, 2026-10-30): security notices reach Christopher only for an
+// unknown identity or a risky event; routine notices about registered principals are logged.
+import { classifySecurityIdentity } from "../mailbox-executor.mjs";
+import { KNOWN_PRINCIPAL_EMAILS, UNKNOWN_PRINCIPAL_POLICY } from "../policy.mjs";
+
+const googleAlert = (messageText, subject = "Security alert") => normalizeMailboxMessage(providerMessage({
+  sender: "Google <no-reply@accounts.google.com>", subject, messageText, attachmentList: [],
+}));
+
+test("known principal list mirrors the named-agent registry and runtime copy", async () => {
+  for (const file of ["../../../../../agents/registry/named-agent-principals.json", "../../../../../app/command-center/runtime/named-agent-principals.json"]) {
+    const registry = JSON.parse(await readFile(new URL(file, import.meta.url), "utf8"));
+    assert.deepEqual([...KNOWN_PRINCIPAL_EMAILS].sort(), registry.principals.map((p) => p.google.primary_email.toLowerCase()).sort());
+    assert.equal(UNKNOWN_PRINCIPAL_POLICY, registry.unknown_principal_policy);
+  }
+});
+
+test("routine notice about a known principal is logged without an owner", () => {
+  const message = googleAlert("2-Step Verification is on for maya.chen@cc.proexteriorsus.net.");
+  assert.equal(classifySecurityIdentity(message).route, "known-identity");
+  const enforced = enforceMailboxPolicy(message, decision("block"));
+  assert.equal(enforced.action, "track");
+  assert.equal(enforced.securityRoute, "known-identity");
+  assert.equal(buildLinearSourceIssueArguments(message, enforced, ["gmail-message:1"]).assignee_id, undefined);
+});
+
+test("new sign-in on a known principal is routine", () => {
+  assert.equal(classifySecurityIdentity(googleAlert("New sign-in on Linux for alex.rivers@cc.proexteriorsus.net")).route, "known-identity");
+});
+
+test("unknown identity is escalated to Christopher at high priority", () => {
+  const message = googleAlert("2-Step Verification is on for stranger@example.com.");
+  const enforced = enforceMailboxPolicy(message, decision("track"));
+  assert.equal(enforced.securityRoute, "needs-chris");
+  assert.equal(enforced.priority, 1);
+  assert.equal(buildLinearSourceIssueArguments(message, enforced, ["gmail-message:1"]).assignee_id, APPROVED.linearReviewerId);
+});
+
+test("risky events on a known principal still go to Christopher", () => {
+  for (const text of ["Someone tried to recover maya.chen@cc.proexteriorsus.net", "2-Step Verification turned off for maya.chen@cc.proexteriorsus.net", "A new security key was added to maya.chen@cc.proexteriorsus.net."]) {
+    assert.equal(classifySecurityIdentity(googleAlert(text)).route, "needs-chris", text);
+  }
+});
