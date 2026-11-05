@@ -13,7 +13,7 @@
 - The live catch-up run was not executed (blocked by the agent's permission check). The nightly cron at 09:30 UTC 2026-11-05 picks it up.
 
 **Open threads**:
-- [ ] After 09:30 UTC 2026-11-05: confirm a new `crm_private.acculynx_import_runs` row and that effort `22c4b52a-b626-48f5-bdca-f531347c44af` shows milestone Approved with job number FL-49.
+- [x] After 09:30 UTC 2026-11-05: confirm a new `crm_private.acculynx_import_runs` row and that effort `22c4b52a-b626-48f5-bdca-f531347c44af` shows milestone Approved with job number FL-49. Verified 2026-11-05 21:02 UTC in the DB: run at 09:30 (28 created, 72 updated, no error); FL-49 effort is now stage `production_signed`, phase 4, `acculynx_import.milestone = Approved`, `acculynx_job_number = FL-49`; the earlier cancelled lead is now `closed`. `crm.efforts.job_number` is still NULL (it only holds CRM-issued numbers for some rows), and the CRM UI itself was not checked.
 - [ ] Before 2027-01-01: decide the real cutover (CRM as system of record) with the CRM team, or move the date again.
 - [ ] CRM side: `acculynx_sync_nightly()` should log a run (or alert) when the cutover skips every row, instead of returning `[]` as success.
 - [x] "~6,000 efforts without job numbers" was a false alarm. 6,108 AccuLynx jobs store `job_number = ''` (empty string, not NULL), and every one is a Lead/Prospect/Dead/Cancelled job, because AccuLynx numbers a job only once it progresses. With `nullif(job_number,'')`: 5,999 efforts have no number in AccuLynx either, 1,330 match exactly, 0 mismatch, and only **8** are missing a number AccuLynx has (FL-49, FL-50, KS-263…266, INS-29, TX-469), all numbered after the cutover. The next nightly sync fills them.
