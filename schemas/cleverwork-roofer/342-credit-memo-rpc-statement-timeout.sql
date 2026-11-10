@@ -1,7 +1,7 @@
 -- 342 · credit-memo sync and reconcile callable over the API (2026-11-10)
 --
--- STATUS: NOT APPLIED as of 2026-11-10. The apply was held for Chris as a production
--- change. Verify against supabase_migrations.schema_migrations before assuming it is live.
+-- Applied to prod 2026-11-10 (approved by Chris). Verified through the live call path:
+-- credit_memo_claims_sync_all() returned over PostgREST where it had timed out before.
 --
 -- PostgREST hands service_role an 8 s statement_timeout. credit_memo_claims_sync_all()
 -- and credit_memo_reconcile() both run longer than that, so every REST call returned

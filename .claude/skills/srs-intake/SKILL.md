@@ -88,7 +88,7 @@ folders to the main checkout's `exports/`.
 |---|---|
 | `branch code X is unknown` | Compare the street address printed on the invoice with `vendor_branches` for SRS. Only on an exact street match, insert a `vendor_branch_alias` row (`status='resolved'`, `source='vendor_document'`, note the invoice and the match), then ask the user to confirm it. No match: stop and ask. Never guess. An unknown office means No-Price. |
 | `lines … != SUB-TOTAL` or a PDF line mismatch | Do not ingest. Show the user the exact rows. The CSV and PDF disagree or the export is damaged. |
-| `…: TIMED OUT over the API` | Migration 342 is not applied. Run `select public.<function>();` through the Supabase connector's SQL tool, then re-run with `--report-only`. |
+| `…: TIMED OUT over the API` | The function outran its 300 s limit (migration 342) or the limit was lost. Run `select public.<function>();` through the Supabase connector's SQL tool, then re-run with `--report-only`, and say so in the report. |
 | `mv_invoice_audit_line was not refreshed within 6 minutes` | Check pg_cron job 15 (`service-matview-refresh-requests`). Re-run with `--report-only` once it has run. |
 | `The key does not reach the prod brain` | The 1Password reference is wrong or `op` is signed out. Fix that. Do not try another key. |
 
