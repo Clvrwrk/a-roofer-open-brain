@@ -37,6 +37,33 @@ scheduled supplier import and a reusable SRS re-audit writer remain separate wor
 Financial batch receipts and draft packets are private operational artifacts, not
 repository content; the supplier health monitor returned to green after intake.
 
+## 2026-11-10 intake (14 invoices, 4 credit memos, 176 lines)
+
+- **The local `.env` did not reach the prod brain.** The loader failed on its first
+  read (`public.vendors` not in the schema cache) and wrote nothing. The batch was
+  loaded through the Supabase connector with the loader's own mapping: same upsert
+  key, same deterministic line ids (`md5(invoice_id:line_number)`), same glued
+  charge-row descriptions, then `alex_no_price_triage()`, a refresh of
+  `mv_invoice_audit_line`, `credit_memo_claims_sync_all()` and
+  `credit_memo_reconcile()`. Fix the `.env` before the next batch; the PDF linker and
+  the QB file builder need the same key.
+- **PDFs for this batch are not linked.** `link-vendor-invoice-pdfs.mjs` uploads to
+  storage and could not run. Re-run it on the Dropbox folder once the key works.
+- `MWKCK` is an alias of existing `SBP-KANSASCITYKS` (801 S. 7th St, same phone as
+  printed on invoice 0052203539-001). Same basis as `CDFTW`. Kansas City has no SRS
+  book, so its lines are No-Price.
+- The portal CSV now carries a **statement block**: rows with branch `SBPLOGO`, no
+  invoice number, and an amount in `NET_AMOUNT_COL`. The loader skips them. They are
+  the open items on the account, in invoice order, and are the only SRS AR evidence
+  in the file (gap 5).
+- **Reconcile fallback parks unrelated credits on the nearest open request.** A credit
+  that names an invoice with no request, or names none, is inserted as
+  `amount_mismatch` against the closest open SRS request by amount. Three return
+  credits landed on the 0050892738-001 request that way. They should be
+  `no_open_request`. A tax-inclusive credit also never equals a pre-tax
+  `expected_credit`, so a true match (0052070845-001, $19.00 + $1.62 tax) is held for
+  review.
+
 ## Ingestion (manual weekly, Monday nights)
 
 - SRS invoices arrive as **Billtrust CSV + one PDF per invoice, manually,
