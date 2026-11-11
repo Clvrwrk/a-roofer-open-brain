@@ -20,6 +20,7 @@ import { prewarmSurfaceCaches, recordCommandCenterActivity } from "@lib/prewarm.
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, authenticateSession } from "@lib/session.server";
 import { isPec78RuntimePath, pec78Json, pec78Mode, shouldStopPec78Request } from "@lib/pec78/contract";
 import { designSystemRedirect } from "@lib/design-system-redirect";
+import { withSecurityHeaders } from "@lib/security-headers";
 
 prewarmSurfaceCaches();
 
@@ -95,7 +96,7 @@ function buildForbiddenJsonResponse() {
   );
 }
 
-export const onRequest = defineMiddleware(async (context, next) => {
+const handleRequest = defineMiddleware(async (context, next) => {
   const { url, request, cookies, locals, redirect } = context;
   const pathname = url.pathname;
 
@@ -178,4 +179,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
   applySentryUser(actor);
   recordCommandCenterActivity({ actor, pathname });
   return next();
+});
+
+// Every response, including redirects and errors, carries the baseline browser protection headers.
+export const onRequest = defineMiddleware(async (context, next) => {
+  const response = await handleRequest(context, next);
+  return response instanceof Response ? withSecurityHeaders(response) : response;
 });
