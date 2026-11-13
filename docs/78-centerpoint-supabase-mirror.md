@@ -68,7 +68,7 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 | `343-centerpoint-work-tables.sql` | `centerpoint_work_tables` (20261113154512) | Six source-neutral tables keyed `(source, source_id)`: `work_companies`, `work_jobs`, `work_property_sources`, `work_invoices`, `work_payments`, `work_labor`. First written as an untracked `342-…`, which collided with the privacy baseline; 343 is the same DDL. |
 | `344-centerpoint-work-projection.sql` | `centerpoint_work_projection` | `project_centerpoint_work_tables()`: the six upserts from `cp_resources`, plus `missing_since` on rows the newest pull no longer returns. |
 | `345-centerpoint-work-read-layer.sql` | `centerpoint_work_read_layer` | `work_companies.is_test`, property link columns, `link_work_property_sources()`, `mv_work_job_money`, `v_work_labor_day`, `v_work_invoice_qbo_recon`, `refresh_centerpoint_work()` and the hourly pg_cron job `centerpoint-work-refresh`. |
-| `346-centerpoint-sync-expectation.sql` | not applied | Stale alarm for the daily host pull. Apply after the host timer has reported one run. |
+| `346-centerpoint-sync-expectation.sql` | `centerpoint_sync_expectation` | Stale alarm (30 h) for the daily host pull. |
 
 **Rules for anything that reads this data**
 
@@ -97,11 +97,13 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 **Schedule**
 
 - `centerpoint-work-refresh` (pg_cron, hourly at :10) runs `refresh_centerpoint_work()`. Watched as `cron:centerpoint-work-refresh`.
-- `openbrain-centerpoint-sync.timer` (agent host, 19:45 CT daily) runs `scripts/centerpoint-work-sync.sh`, which pulls the six collections. **Not installed yet:** the host has no `CENTERPOINT_API_TOKEN` and its checkout is behind `origin/main`. Until it is installed, a pull is a hand run of that script.
+- `openbrain-centerpoint-sync.timer` (agent host, 19:45 CT daily) runs `scripts/centerpoint-work-sync.sh`, which pulls the six collections. Installed 2026-11-13; the first run at 16:45 UTC succeeded and reported to the runtime board. Watched as `runtime:systemd.openbrain-centerpoint-sync`.
+- **Host caveat:** the host checkout was at `dcb8591` (2026-10-01) with local edits, so the script and both unit files were copied onto the host by hand instead of pulled. `scripts/centerpoint-work-sync.sh` is therefore an untracked file there. Remove that copy before the host next fast-forwards to `origin/main`, or the merge will stop on it.
 
 **Open items**
 
-- [ ] Put `CENTERPOINT_API_TOKEN` on the agent host, install the timer, confirm one reported run, then apply 346 and add the unit to `SYSTEMD_JOBS` in `runtime-registry.ts`.
+- [x] `CENTERPOINT_API_TOKEN` on the agent host, timer installed, one reported run, 346 applied, unit in `SYSTEMD_JOBS` (2026-11-13).
+- [ ] Realign the agent host checkout to `origin/main` after this merges (see the host caveat above).
 - [ ] `docs/delivery/PEC-755/business-sync-scope.md` still lists CenterPoint as outside the approved business sources (Chris, 2026-10-23). That needs Chris's written reversal before CenterPoint joins `BUSINESS_SYNC_PROVIDERS`.
 - [ ] 557 CenterPoint properties have no row in `public.properties`. Creating commercial properties in the spine is a separate decision.
 - [ ] Work through the 46 job numbers where CenterPoint and QuickBooks disagree.
