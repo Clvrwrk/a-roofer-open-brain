@@ -105,6 +105,7 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
   { key: "pgcron.refresh-overhead-matview", jobname: "refresh-overhead-matview", label: "Overhead matview (nightly)", purpose: "mv_overhead_account_month for Fixed Costs / Cash Runway", cadenceS: 86_400 },
   { key: "pgcron.refresh-order-acculynx-match", jobname: "refresh-order-acculynx-match", label: "Order ↔ AccuLynx match matview (15 min)", purpose: "mv_order_acculynx_match for the Operations order audit (mig 288)", cadenceS: 900 },
   { key: "pgcron.refresh-hail-heatzone-coverage", jobname: "refresh-hail-heatzone-coverage", label: "Hail heat-zone matview (15 min)", purpose: "mv_hail_heatzone_coverage for the Marketing heat-zone surface (mig 310)", cadenceS: 900 },
+  { key: "pgcron.centerpoint-work-refresh", jobname: "centerpoint-work-refresh", label: "CenterPoint work tables (hourly)", purpose: "Projects the newest CenterPoint pull into work_* and refreshes mv_work_job_money (mig 345)", cadenceS: 3_600 },
   { key: "pgcron.runtime-heartbeat-pump", jobname: "runtime-heartbeat-pump", label: "Heartbeat pump (5 min)", purpose: "Pings one Better Stack heartbeat per new successful run (mig 286)", cadenceS: 300 },
 ];
 
@@ -112,6 +113,7 @@ export const SYSTEMD_JOBS: SystemdSpec[] = [
   { key: "systemd.openbrain-sync-health-relay", unit: "openbrain-sync-health-relay.service", label: "Independent sync relay", purpose: "Minute outbox delivery independent of GitHub scheduling", cadenceS: 60, scheduleLabel: "every 60–65 s", docs: "docs/129" },
   { key: "systemd.openbrain-abc-sync", unit: "openbrain-abc-sync.service", label: "ABC nightly sync", purpose: "Catalog sync → invoice ingest → PDF backfill → Alex No-Price triage", cadenceS: 86_400, scheduleLabel: "03:30 ET daily", docs: "scripts/abc-nightly-sync.sh" },
   { key: "systemd.openbrain-qbo-thursday-sync", unit: "openbrain-qbo-thursday-sync.service", label: "QBO mirror refresh", purpose: "Read-only QuickBooks Online → Supabase mirror (PEC-102)", cadenceS: 86_400, scheduleLabel: "20:00 CT daily", docs: "docs/74" },
+  { key: "systemd.openbrain-centerpoint-sync", unit: "openbrain-centerpoint-sync.service", label: "CenterPoint pull", purpose: "Read-only CenterPoint → Supabase pull of the six work-table collections (docs/78)", cadenceS: 86_400, scheduleLabel: "19:45 CT daily", docs: "docs/78" },
   { key: "systemd.openbrain-site-sweep", unit: "openbrain-site-sweep.service", label: "Site quality sweep", purpose: "Static + live + DB money-truth checks (PEC-218)", cadenceS: 86_400, scheduleLabel: "06:00 CT daily", docs: "docs/92" },
   { key: "systemd.openbrain-companycam-sync", unit: "openbrain-companycam-sync.service", label: "CompanyCam mirror sync", purpose: "Projects + photos metadata → companycam_* mirror, job/property links, copy priority (docs/120)", cadenceS: 86_400, scheduleLabel: "02:15 CT daily (full sweep Sun)", docs: "docs/120" },
   { key: "systemd.openbrain-companycam-copy", unit: "openbrain-companycam-copy.service", label: "CompanyCam photo copy", purpose: "Copies photo bytes into the private companycam-photos bucket, open jobs first (docs/120)", cadenceS: 1_800, scheduleLabel: "every 30 min", docs: "docs/120" },
