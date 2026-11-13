@@ -33,7 +33,7 @@ Capabilities and provider commissioning vary. The current provider scope names H
 | Command Center | [`app/command-center/`](app/command-center/) | Implemented here; production uses WorkOS authentication. |
 | CRM | [Clvrwrk/CRM_PWA](https://github.com/Clvrwrk/CRM_PWA) | Separate application/release, sharing authorized backend and identity contracts. |
 | HR | `apps/hr` in [CRM_PWA](https://github.com/Clvrwrk/CRM_PWA/tree/main/apps/hr) | Separately deployed app; the observed release is an HR shell, not a completed payroll system. |
-| Project management / scheduling | [Clvrwrk/pm.proexteriorsus.net](https://github.com/Clvrwrk/pm.proexteriorsus.net) | Separate web/API/worker repository; the observed live hostname is `scheduler.proexteriorsus.net`. |
+| Project management / scheduling | [Clvrwrk/pm.proexteriorsus.net](https://github.com/Clvrwrk/pm.proexteriorsus.net) | Separate web/API/worker repository; live at `pm.proexteriorsus.net` (the former `scheduler.proexteriorsus.net` host was retired on 2026-11-13 UTC, with no redirect). |
 | Admin | Host application features and access/configuration workflows | No standalone Admin app is established by this repository. |
 
 The knowledge MCP under [`server/`](server/) is **uncommissioned scaffold**. Current Command Center and ingestion paths use Supabase server-side. Cross-application propagation and staff/device acceptance remain separate verification steps.
