@@ -17,6 +17,7 @@ Scope: external skills, plugins, MCP servers, agent wrappers, installer scripts,
 | `mattpocock/skills` (plugin `mattpocock-skills`) | Allow (2026-10-21) | Engineering workflow skills enabled in repo `.claude/settings.json` and the cloud setup script. A3: [`proposals/a3-mattpocock-skills-plugin.md`](../proposals/a3-mattpocock-skills-plugin.md). | Skills only (no hooks or MCPs) as of v1.3.1; re-review if a release adds hooks or MCP servers. |
 | Inngest (durable workflow SaaS) | Defer (2026-10-21) | None now. The self-healing loop runs on GitHub Actions with Linear labels as state ([docs/127](127-self-healing-loop.md)). | Revisit with an A3 only if minute-level reaction becomes a requirement. |
 | PostHog (product analytics, replay) | Defer to phase 2 A3 (2026-10-21) | None now. Planned as the self-healing loop's product-signal source. | Own A3 with PII, replay masking, egress and consent review before any SDK ships. |
+| `morluto/rea` (npm `rea-agents`, REA) | Conditional pilot, pending Chris's approval (2026-11-13) | CLI only, pinned `rea-agents@6.9.0`, in the disposable cloud container, behind the `/rea` skill. A3: [`proposals/a3-rea-reverse-engineering.md`](../proposals/a3-rea-reverse-engineering.md). | No `rea setup`, no MCP registration (local stdio MCP ban), no engine installs; public or Chris-owned targets only; copy structure and behavior, never code or assets. |
 
 ## Required Gate Before Any Install
 
