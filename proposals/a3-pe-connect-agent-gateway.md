@@ -209,7 +209,7 @@ Needed before phase one:
 5. **Cost limits:** the cap on phase-one engineering hours, and the ceiling on monthly run cost.
 6. **Stop rule:** the measured result that ends the pilot early.
 7. **Audit log:** where it is stored, how long it is kept, and who may read it.
-8. **Roles:** PARTLY DECIDED 2026-11-13 (Chris): the mapping of the nine residential business roles from `04_Team_Roles_and_Approvals.docx` to the four read capabilities is approved as written; it is recorded in `Clvrwrk/mcp.proexteriorsus.net` `docs/admin/role-map-residential.md`. Still open: commercial and multi-family roles, Insurance Coordinator and its training gate, line of business and access level per role, and seeding the HR role catalog with the role keys.
+8. **Roles:** DECIDED 2026-11-13 (Chris): the map of the 27 HR catalog roles to the four read capabilities is approved as written; it is recorded in `Clvrwrk/mcp.proexteriorsus.net` `docs/admin/role-map-from-catalog.md`. It replaces a nine-role residential map approved earlier the same day, whose role keys did not match the HR catalog. Not loaded yet: the catalog seed is still in CRM_PWA PR 308 and the job and org chart tools are not built.
 
 For a later write phase, not blocking phase one:
 
