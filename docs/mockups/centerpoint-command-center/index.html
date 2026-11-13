@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CenterPoint on the Command Center: mockups</title>
+<style>
+  /* Review index only. Not product UI. */
+  :root { color-scheme: light; }
+  body { margin: 0; padding: 32px 16px 64px; background: #f8fafc; color: #1f2937; font: 400 14px/1.55 Inter, system-ui, -apple-system, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 24px; line-height: 1.25; margin: 0 0 8px; font-weight: 700; }
+  h2 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
+  p { margin: 0 0 12px; }
+  .lede { font-size: 16px; max-width: 70ch; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-top: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: start; }
+  .shots { display: flex; gap: 8px; }
+  .shots img { border: 1px solid #e5e7eb; border-radius: 8px; display: block; max-height: 220px; width: auto; }
+  ul { margin: 0 0 12px; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  a { color: #1d4ed8; }
+  .links a { display: inline-block; margin-right: 16px; font-weight: 600; }
+  .ask { border-color: #b45309; background: #fffbeb; }
+  .muted { color: #4b5563; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>CenterPoint on the Command Center: mockups for sign-off</h1>
+  <p class="lede">Commercial, multi-family and service work from CenterPoint appears on three screens that already exist. No screen is added. Each mockup is the real screen, as rendered on 2026-11-13, with only the CenterPoint changes applied and outlined.</p>
+  <p class="muted">AccuLynx job rows and rep lists are left out of these files, and CenterPoint customers are shown as numbered aliases, so no customer or staff name is in them. Every CenterPoint figure is live data.</p>
+
+  <section class="card">
+    <div class="grid">
+      <div>
+        <h2>1. Friday WIP/AR</h2>
+        <ul>
+          <li>A new office group, <strong>commercial_service</strong>: 109 jobs with an unpaid invoice, in the board's own columns.</li>
+          <li>Billed AR, Total job balance and Critical AR include those jobs.</li>
+          <li>One new pill: jobs where CenterPoint and QuickBooks disagree.</li>
+          <li>The cash map's Undated amount grows until the meeting dates the new jobs.</li>
+          <li>The Job # column widens so 10-character job numbers fit.</li>
+        </ul>
+        <p class="links"><a href="friday-wip.html">Open the board</a><a href="friday-wip-columns-open.html">With all columns open</a></p>
+      </div>
+      <div class="shots"><img src="screenshots/friday-wip-desktop.png" alt="Friday WIP/AR mockup, desktop"><img src="screenshots/friday-wip-phone.png" alt="Friday WIP/AR mockup, phone"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid">
+      <div>
+        <h2>2. 13-Week Cash Flow</h2>
+        <ul>
+          <li>The undated pool includes the CenterPoint receivables, with their share on its own line.</li>
+          <li>Receipts, net cash flow and ending cash are recalculated for all 13 weeks.</li>
+          <li>The undated list at the bottom includes the CenterPoint jobs.</li>
+        </ul>
+        <p class="links"><a href="cash-flow.html">Open the forecast</a></p>
+      </div>
+      <div class="shots"><img src="screenshots/cash-flow-desktop.png" alt="13-week cash flow mockup, desktop"><img src="screenshots/cash-flow-phone.png" alt="13-week cash flow mockup, phone"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid">
+      <div>
+        <h2>3. Sales Pipeline</h2>
+        <ul>
+          <li>A new location row, <strong>commercial_service</strong>, with leads, prospects, approved, invoiced and closed.</li>
+          <li>Pipeline value, New leads and AR outstanding include CenterPoint.</li>
+          <li>The stage chart's Invoiced bar gains the open CenterPoint invoices.</li>
+        </ul>
+        <p class="links"><a href="pipeline.html">Open the pipeline</a></p>
+      </div>
+      <div class="shots"><img src="screenshots/pipeline-desktop.png" alt="Sales pipeline mockup, desktop"><img src="screenshots/pipeline-phone.png" alt="Sales pipeline mockup, phone"></div>
+    </div>
+  </section>
+
+  <section class="card ask">
+    <h2>Decisions needed from Chris</h2>
+    <ul>
+      <li><strong>Stage mapping on the pipeline.</strong> New Lead → Leads; Quoted and Pending → Prospects; Sold and open tickets → Approved; Invoiced → Invoiced; Closed Out → Closed.</li>
+      <li><strong>Critical AR.</strong> Does every unpaid CenterPoint invoice count as Tier 1?</li>
+      <li><strong>Type filter.</strong> Is every CenterPoint job "Commercial"?</li>
+      <li><strong>Group name.</strong> <code>commercial_service</code> follows the other office keys. Say if it should read differently.</li>
+      <li><strong>Meeting entries.</strong> Expected dates and notes for a CenterPoint job have nowhere to be saved yet. The mockup shows them as editable, which is the target; it needs new storage first.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>The other two sign-off documents</h2>
+    <p class="links"><a href="brand-audit.md">Brand-alignment audit</a><a href="gap-analysis.md">Gap analysis</a></p>
+    <p class="muted">Not covered yet: dark mode, tablet width, and the job list inside an expanded pipeline row.</p>
+  </section>
+</main>
+</body>
+</html>
