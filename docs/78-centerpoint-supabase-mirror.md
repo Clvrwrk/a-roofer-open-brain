@@ -26,7 +26,8 @@ Full historical extract of live **CenterPoint Connect** (JSON:API) into PE Supab
 | --- | --- | --- |
 | `smoke` | After schema change | `node …/mirror-backfill.mjs --mode=smoke` |
 | `backfill` | Inception / catch-up | `node …/mirror-backfill.mjs --mode=backfill` |
-| `thursday` | Weekly with QBO | `bash scripts/cp-thursday-sync.sh` |
+| `thursday` | Weekly with QBO, every collection | `bash scripts/cp-thursday-sync.sh` |
+| work sync | Daily, the six work-table collections | `bash scripts/centerpoint-work-sync.sh` |
 
 Skip heavy collections during a quick catch-up:
 
@@ -36,7 +37,7 @@ node integrations/bridges/centerpoint/mirror-backfill.mjs --mode=backfill --skip
 
 ## Schema
 
-Migration: `schemas/cleverwork-roofer/190-centerpoint-mirror-ddl.sql`
+Landing mirror: `schemas/cleverwork-roofer/190-centerpoint-mirror-ddl.sql` (`cp_resources`, `cp_sync_runs`, `cp_sync_watermarks`).
 
 | Object | Contents |
 | --- | --- |
@@ -52,6 +53,60 @@ Keys: `(resource_type, cp_id)` where `resource_type` is the **collection path** 
 **Env pin:** repo `.env` wins for `SUPABASE_*` (PE `rnhmvcpsvtqjlffpsayu`). Do not let `master.env` / shell override to another project. Job refuses a non-PE host.
 
 **Files / model_files:** metadata rows only — do **not** call `/file/url` or download binaries.
+
+## Work tables and read layer (2026-11-13)
+
+Chris asked on 2026-11-13 for the CenterPoint commercial, multi-family and service work to appear on the existing PE work surfaces, with no new screens. This section is the database half of that. No screen reads it yet.
+
+```
+CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6 tables) ──▶ mv_work_job_money ──▶ existing surfaces (next phase)
+   daily 19:45 CT            (190)        hourly :10      (343, 344)          (345)
+```
+
+| File | Ledger name | What it holds |
+| --- | --- | --- |
+| `343-centerpoint-work-tables.sql` | `centerpoint_work_tables` (20261113154512) | Six source-neutral tables keyed `(source, source_id)`: `work_companies`, `work_jobs`, `work_property_sources`, `work_invoices`, `work_payments`, `work_labor`. First written as an untracked `342-…`, which collided with the privacy baseline; 343 is the same DDL. |
+| `344-centerpoint-work-projection.sql` | `centerpoint_work_projection` | `project_centerpoint_work_tables()`: the six upserts from `cp_resources`, plus `missing_since` on rows the newest pull no longer returns. |
+| `345-centerpoint-work-read-layer.sql` | `centerpoint_work_read_layer` | `work_companies.is_test`, property link columns, `link_work_property_sources()`, `mv_work_job_money`, `v_work_labor_day`, `v_work_invoice_qbo_recon`, `refresh_centerpoint_work()` and the hourly pg_cron job `centerpoint-work-refresh`. |
+| `346-centerpoint-sync-expectation.sql` | not applied | Stale alarm for the daily host pull. Apply after the host timer has reported one run. |
+
+**Rules for anything that reads this data**
+
+1. Read `mv_work_job_money`, `v_work_labor_day` and `v_work_invoice_qbo_recon`. Never read the raw `work_*` tables from a surface.
+2. **Test company.** "CP Support Test Company" carries one job and two draft invoices worth $533,400.18. `work_companies.is_test` keeps it out of the money view. The first report's invoice total of $1,480,257.48 included it.
+3. **Drafts are not billed.** `billed` counts non-draft invoices only; drafts are in `draft_amount`.
+4. **Never add clock hours to job hours.** 848 time rows are day clock-ins with no job. They cover the same worker-days as the job rows (803 of 839). Job hours are in the money view; both measures sit side by side in `v_work_labor_day`.
+5. **QuickBooks already has these invoices.** `qbo_invoices.doc_number` is the CenterPoint job number. Company revenue from QuickBooks already includes this work, so do not add `work_invoices` to a revenue total. Use the work tables for job detail and receivables by job.
+6. **No due dates.** CenterPoint returns no due date. Age receivables from `oldest_open_invoice_date`.
+7. **Deletes.** CenterPoint does not flag deletes on these collections. A row missing from the newest pull gets `missing_since` and drops out of the money view; it returns if the row does.
+8. **Property links.** A unique street-and-ZIP match fills `property_id` (method `address_zip`, 0.95, the AccuLynx bar). A unique pin within 30 m is stored as a suggestion only. A person's match or rejection is never overwritten.
+
+**Verified on prod, 2026-11-13 16:32 UTC**
+
+| Measure | Value |
+| --- | --- |
+| Jobs in the money view | 1,004 (649 service, 355 sales; 4 test jobs left out) |
+| Billed (service, non-draft) | $942,487.66 |
+| Drafts held apart | $4,369.64 |
+| Collected | $685,701.18 |
+| Outstanding | $256,786.48 on 109 invoices |
+| Job hours / clock hours | 7,139.09 on the jobs in the money view / 8,571.66 |
+| Properties linked by address | 110 of 667; 9 more suggested by pin; 557 have no property in the spine yet |
+| QuickBooks check, by job number | 437 match to the cent; 18 billed differs; 8 collected differs; 11 QuickBooks only; 9 CenterPoint only |
+
+**Schedule**
+
+- `centerpoint-work-refresh` (pg_cron, hourly at :10) runs `refresh_centerpoint_work()`. Watched as `cron:centerpoint-work-refresh`.
+- `openbrain-centerpoint-sync.timer` (agent host, 19:45 CT daily) runs `scripts/centerpoint-work-sync.sh`, which pulls the six collections. **Not installed yet:** the host has no `CENTERPOINT_API_TOKEN` and its checkout is behind `origin/main`. Until it is installed, a pull is a hand run of that script.
+
+**Open items**
+
+- [ ] Put `CENTERPOINT_API_TOKEN` on the agent host, install the timer, confirm one reported run, then apply 346 and add the unit to `SYSTEMD_JOBS` in `runtime-registry.ts`.
+- [ ] `docs/delivery/PEC-755/business-sync-scope.md` still lists CenterPoint as outside the approved business sources (Chris, 2026-10-23). That needs Chris's written reversal before CenterPoint joins `BUSINESS_SYNC_PROVIDERS`.
+- [ ] 557 CenterPoint properties have no row in `public.properties`. Creating commercial properties in the spine is a separate decision.
+- [ ] Work through the 46 job numbers where CenterPoint and QuickBooks disagree.
+- [ ] 149 service jobs are Closed Out or Invoiced with $0 invoiced.
+- [ ] Surfaces: Command Center, then CRM (`centerpoint:` job key), then PM. Each needs a mockup, brand audit and gap analysis first (CONVENTIONS §11c).
 
 ## Entities mirrored (GET lists)
 

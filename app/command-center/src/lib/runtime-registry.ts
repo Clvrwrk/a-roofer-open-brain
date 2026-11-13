@@ -105,6 +105,7 @@ export const PG_CRON_JOBS: PgCronSpec[] = [
   { key: "pgcron.refresh-overhead-matview", jobname: "refresh-overhead-matview", label: "Overhead matview (nightly)", purpose: "mv_overhead_account_month for Fixed Costs / Cash Runway", cadenceS: 86_400 },
   { key: "pgcron.refresh-order-acculynx-match", jobname: "refresh-order-acculynx-match", label: "Order ↔ AccuLynx match matview (15 min)", purpose: "mv_order_acculynx_match for the Operations order audit (mig 288)", cadenceS: 900 },
   { key: "pgcron.refresh-hail-heatzone-coverage", jobname: "refresh-hail-heatzone-coverage", label: "Hail heat-zone matview (15 min)", purpose: "mv_hail_heatzone_coverage for the Marketing heat-zone surface (mig 310)", cadenceS: 900 },
+  { key: "pgcron.centerpoint-work-refresh", jobname: "centerpoint-work-refresh", label: "CenterPoint work tables (hourly)", purpose: "Projects the newest CenterPoint pull into work_* and refreshes mv_work_job_money (mig 345)", cadenceS: 3_600 },
   { key: "pgcron.runtime-heartbeat-pump", jobname: "runtime-heartbeat-pump", label: "Heartbeat pump (5 min)", purpose: "Pings one Better Stack heartbeat per new successful run (mig 286)", cadenceS: 300 },
 ];
 

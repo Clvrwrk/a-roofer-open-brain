@@ -1,0 +1,20 @@
+[Unit]
+Description=Open Brain daily CenterPoint → Supabase pull for the work tables (read-only; docs/78)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/centerpoint-work-sync.sh
+User=root
+# systemd starts oneshots with no HOME; the wrappers and the master.env loader need it (docs/109 D8).
+Environment=HOME=/root
+# Report the result to the runtime board on success AND failure (docs/109 D7/D12, mig 286).
+ExecStopPost=/usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/runtime-job-report.sh systemd.openbrain-centerpoint-sync
+# Six collections take about a minute; hard stop at 20 minutes.
+TimeoutStartSec=1200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

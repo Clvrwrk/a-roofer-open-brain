@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily CenterPoint pull at 19:45 America/Chicago (before the 20:00 QBO refresh; docs/78)
+
+[Timer]
+OnCalendar=*-*-* 19:45:00 America/Chicago
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
