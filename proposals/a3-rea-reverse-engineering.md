@@ -1,6 +1,6 @@
 # A3 — REA ("Reverse Engineer Anything") behind the /rea skill
 
-**Status:** conditional pilot — pending Chris's approval (drafted 2026-11-13)  
+**Status:** conditional pilot — approved by Chris, 2026-11-13  
 **Owner:** Chris (product and design workflow)  
 **ROI:** Chris can point Claude at a product he likes (first example: theorgchart.com) and get a structured teardown of its screens, behavior, data model and APIs, turned into a rebuild plan and mockups in `@proexteriors/ds`. That replaces ad-hoc "look at this site" sessions with one repeatable method and evidence for every claim.
 
@@ -20,7 +20,7 @@
 - [x] Local-MCP ban: honoured. REA is never registered as an MCP server; CLI only, and only in the disposable cloud container.
 - [ ] SkillSpector static scan: not yet run. Required before moving from conditional pilot to allow.
 - [x] Rollback: nothing is installed. Stop using the REA step in the `/rea` skill (or delete the skill in claude.ai); the default Playwright/Firecrawl path keeps working.
-- [ ] Human approval: Chris.
+- [x] Human approval: Chris, 2026-11-13 ("approve REA conditional pilot, PR #72"), for the conditional-pilot scope above.
 
 ## Guardrails written into the /rea skill
 
@@ -30,6 +30,6 @@
 - Rebuild only in `@proexteriors/ds` (ds.proexteriorsus.net): no one-off components; new patterns go to ds itself.
 - Mockup, brand-alignment audit and data gap analysis come before any build (CONVENTIONS §11c), with Chris's sign-off.
 
-## Decision needed
+## Decision
 
-Approve REA as a conditional pilot under the scope above (CLI only, pinned, cloud container), or keep it reference-only, in which case `/rea` runs on Playwright and Firecrawl alone.
+Approved by Chris on 2026-11-13 as a conditional pilot under the scope above (CLI only, pinned `rea-agents@6.9.0`, cloud container). Moving to `allow`, or any wider use (MCP registration, engine installs, a newer version), needs the SkillSpector scan and a fresh approval.
