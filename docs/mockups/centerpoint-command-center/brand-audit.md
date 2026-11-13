@@ -40,7 +40,7 @@ The dashed orange outline and the "Mockup" bar at the bottom are review aids. Th
 | **K-01, K-04** tokens and `pe-` classes only | No `--pe-*` tokens; `fw-`, `cfx-`, `epl-` classes | Inherited. The CenterPoint rows use the same classes |
 | **K-01** no literal colour values | The days chip is coloured with an inline `hsl()` value | Inherited on the new rows, same formula |
 | **C-02** flag red is never a chart colour | The stage chart uses red for receivables outstanding | Inherited. The chart is redrawn as static SVG in the same two colours |
-| **S-01, L-04** one shell; a tab bar on phones; nothing scrolls sideways | At 390px the navigation stacks above the page and the board runs off the right edge | Inherited. See the `*-phone.png` screenshots. The new group follows whatever phone treatment the board gets |
+| **S-01, L-04** one shell; a tab bar on phones; nothing scrolls sideways | At 390px and 768px the navigation stacks above the page, with no tab bar. On Friday WIP/AR and 13-Week Cash Flow the page scrolls sideways by 10px, caused by the navigation's "Soon" items; the Sales Pipeline fits. Measured with device emulation | Inherited: the overflow is in the navigation, not in anything the mockups add. See the `*-phone.png` and `*-tablet.png` screenshots |
 | **T-07** never a table 15 columns wide | The Friday board has 17 columns, managed by column groups | Inherited |
 | **F-04** scope control is a `.pe-seg` | Office is a select | Inherited |
 
@@ -51,5 +51,4 @@ The dashed orange outline and the "Mockup" bar at the bottom are review aids. Th
 ## Not covered
 
 - **Dark mode.** The mockups are light only. The screens have a theme switch; the build screenshots must cover both (G-01).
-- **Tablet (768×1024).** Not captured.
 - **axe (A-01).** Not run on the mockups. The additions reuse existing elements, so they bring no new contrast pair, but that is an argument, not a test.
