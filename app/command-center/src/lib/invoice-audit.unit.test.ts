@@ -459,6 +459,84 @@ describe("deriveDisposition — human closeout (mig 293)", () => {
 });
 
 
+function makeChainedClient(tables: Record<string, any>, errors: Record<string, Error> = {}) {
+  const chain = (table: string, rows: any[]) => {
+    const builder: any = {
+      eq: () => builder,
+      in: () => builder,
+      order: () => builder,
+      limit: async () => ({ data: rows, error: errors[table] ?? null }),
+      range: async () => {
+        if (errors[table]) return { data: null, error: { message: errors[table]!.message } };
+        return { data: rows, error: null };
+      },
+    };
+    return builder;
+  };
+  return {
+    from: (table: string) => ({
+      select: () => chain(table, tables[table] ?? []),
+    }),
+  };
+}
+
+describe("loadInvoiceAuditInvoiceDetail", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockCreateServerSupabaseClient.mockReset();
+  });
+
+  it("returns invoice detail when an optional cascade read times out (PEC-937)", async () => {
+    const invoiceNumber = "TIMEOUT-1";
+    const line = {
+      line_id: "line-1",
+      invoice_number: invoiceNumber,
+      item_number: "100",
+      item_description: "Shingle",
+      quantity: 1,
+      uom: "SQ",
+      unit_price: 100,
+      extended_price: 100,
+      negotiated_price: null,
+      variance_pct: 0,
+      variance_ext: 0,
+      is_auditable: true,
+      uom_mismatch: false,
+      negotiated_uom: "SQ",
+      category_key: "shingle",
+    };
+    mockCreateServerSupabaseClient.mockReturnValue({
+      client: makeChainedClient(
+        {
+          v_invoice_audit_invoice: [{ invoice_number: invoiceNumber, invoice_date: "2026-01-15", total_amount: 100, line_count: 1, office: "Denver" }],
+          v_invoice_audit_invoice_vendor: [{ invoice_number: invoiceNumber, vendor_slug: "abc-supply" }],
+          mv_invoice_audit_line: [line],
+          v_invoice_line_audit_current: [{ invoice_line_id: line.line_id, audit_status: "pending" }],
+          invoice_documents: [],
+          v_invoice_acculynx_match: [],
+          abc_invoices: [{ invoice_number: invoiceNumber, ar_status: "open", date_paid: null }],
+          vendor_invoices: [],
+          invoice_payment_processed: [],
+          invoice_audit_closeout: [],
+        },
+        {
+          v_invoice_audit_line_cascade: new Error("invoice audit query failed: canceling statement due to statement timeout"),
+        },
+      ),
+    });
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { loadInvoiceAuditInvoiceDetail } = await import("./invoice-audit");
+    const invoice = await loadInvoiceAuditInvoiceDetail(invoiceNumber);
+    warn.mockRestore();
+
+    expect(invoice?.invoiceNumber).toBe(invoiceNumber);
+    expect(invoice?.lines).toHaveLength(1);
+    expect(invoice?.lines[0]?.benchmarkSource).toBe("");
+    expect(invoice?.lines[0]?.apiPrice).toBeNull();
+  });
+});
+
 describe("supplier settlement readback", () => {
   beforeEach(() => { vi.resetModules(); mockCreateServerSupabaseClient.mockReset(); });
   it("reads SRS closure and dates from its own statement", async () => {

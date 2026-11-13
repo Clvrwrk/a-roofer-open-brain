@@ -411,9 +411,8 @@ async function loadFreshInvoiceAudit(env: RuntimeEnv = getRuntimeEnv()): Promise
     try {
       return await fetchAll(make);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("invoice_payment_processed") || message.includes("relation") || message.includes("does not exist")) return [];
-      throw error;
+      console.warn("[invoice-audit] optional read degraded:", error instanceof Error ? error.message : error);
+      return [];
     }
   };
 
@@ -966,11 +965,10 @@ async function fetchOptionalForInvoiceAudit(make: () => any): Promise<any[]> {
   try {
     return await fetchAllForInvoiceAudit(make);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("invoice_payment_processed") || message.includes("relation") || message.includes("does not exist")) {
-      return [];
-    }
-    throw error;
+    // Optional enrichments (payment ledger, cascade benchmarks, closeout register) must never
+    // take down invoice detail — only the line list and audit decisions are required (PEC-937).
+    console.warn("[invoice-audit] optional read degraded:", error instanceof Error ? error.message : error);
+    return [];
   }
 }
 
