@@ -179,3 +179,57 @@ to $8,900,085 across their row sets — matching the pill to within per-row roun
   correctly.** Every feed here was green throughout.
 - **`population_reason` must be carried by anything that widens a board's population**, so
   a KPI can always be restricted to the population it was defined against.
+
+---
+
+## 6 · 2026-11-06 — customer money was counted as job cost (migration 343)
+
+Chris: *"KS-234 — WIP/AR shows 21,281 but AccuLynx shows 9,479.86 … make sure we don't have
+invoices and checks hitting the expense line."*
+
+`v_qbo_job_cost_lines` summed every job-tagged bill/purchase line **whatever account it was
+posted to**. KS-234 carried purchase 40326 (2026-10-14, $11,801.46, memo *"Returned check-Need
+ck endorsed by bank"*): the client's check came back and the bank debit was booked to
+**Accounts Receivable**. Customer money, not cost. Without it the job is $9,479.86 —
+AccuLynx to the cent.
+
+Job-tagged lines by `qbo_accounts.classification`:
+
+| classification | lines | amount | what it is | now |
+|---|---:|---:|---|---|
+| Expense (COGS + Expense) | 18,469 | $25,092,023.59 | real job cost | counted |
+| Asset — Accounts Receivable | 31 | $400,833.25 | returned / reversed customer checks | **excluded** |
+| Revenue — Sales, Refunds to Customer | 112 | $379,466.52 | refunds and sales to customers | **excluded** |
+| Liability — EECU note/loan, credit card | 28 | $31,277.72 | loan payments | **excluded** |
+| Equity — partner distribution | 1 | $104.24 | owner draw | **excluded** |
+| account missing from mirror (deleted "Fuel related to jobs") | 86 | $5,156.52 | fuel | counted, flagged |
+
+Lines on Expense accounts that mention customers, refunds or chargebacks were reviewed: all
+are vendor-side (subcontractor backcharges, permit refunds, contractor chargebacks, Lessen
+platform fees). Invoices and deposits never enter the view (it reads only bills and purchases).
+
+**Rule:** a line is job cost only when its account is classified Expense. An account missing
+from the mirror still counts (dropping cost silently is the migration 257 failure) and is
+listed in the guard view.
+
+**Shape:** full line set in `v_qbo_job_cost_lines_all`; `v_qbo_job_cost_lines` keeps its
+columns and becomes the filtered view, so all four readers get the fix with no function
+changes — the board (`v_qbo_job_costs` → `refresh_wip_ar_master`), the CPA accrual CSV
+(`wip_accrual_snapshot`), office GM% (`v_wip_office_margin`) and
+`v_qbo_job_cost_unattributed`.
+
+**Guard:** `v_qbo_job_cost_excluded` — `excluded_non_expense_account` rows are what was left
+out; `counted_account_not_in_mirror` rows are counted but unclassified and should be reviewed.
+
+**Result (live, 2026-11-06):** board Expense Realized $9,249,007.69 → **$9,008,673.52**
+(−$240,334.17 across 20 board jobs). KS-234 $21,281.32 → $9,479.86; KS-90 $82,825.84 →
+$1,866.09; GA-26 $38,674.19 → $3,424.19; CO-286 $40,801.04 → $20,777.64.
+
+> ⚠ **Office gross margins moved**, because the trailing-12-month GM% sample also counted
+> customer money as cost: Colorado 25.48% → 31.52%, Texas 28.76% → 31.11%, Kansas City
+> 29.64% → 31.31%, Wichita 26.65% → 27.42%, company 28.81% → 30.72%. That re-estimates
+> `est_total_costs` / Est Exp Outstanding on every job, and the CPA accrual CSV's cost column
+> drops. Tell Lucinda and the CPA before the next close.
+
+**Invariant:** an expense rollup filters by **account classification**, never by "has a
+customer on it". A CustomerRef says who the money is about, not that it is a cost.
