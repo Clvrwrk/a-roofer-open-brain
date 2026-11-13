@@ -62,7 +62,7 @@ from 1Password with `op run`.
 - **`mv_invoice_audit_line` cannot be refreshed by a direct API call** (about 85 s
   against an 8 s limit). Queue it with `request_matview_refresh()`; pg_cron job 15
   services the queue every minute.
-- **Migration 342 (applied 2026-11-10)** gives `credit_memo_claims_sync_all()` and
+- **Migration 343 (applied 2026-11-10)** gives `credit_memo_claims_sync_all()` and
   `credit_memo_reconcile()` the 300 s function-level timeout the triage already has.
   Before it, the sync timed out on every API call and needed a SQL session.
 - **Reconcile gaps.** A credit that names no invoice is inserted as `amount_mismatch`

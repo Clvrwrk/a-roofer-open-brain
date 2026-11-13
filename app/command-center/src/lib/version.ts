@@ -5,4 +5,4 @@ export const APP_VERSION_MINOR = 7;
 export const APP_VERSION_PATCH = 99;
 export const APP_VERSION_STAGE: "A" | "B" | null = "A";
 export const APP_VERSION = `${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}${APP_VERSION_STAGE ?? ""}`;
-export const APP_VERSION_DATE = "2026-11-10";
+export const APP_VERSION_DATE = "2026-11-12";

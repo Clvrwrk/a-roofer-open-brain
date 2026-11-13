@@ -1,4 +1,4 @@
--- 342 · credit-memo sync and reconcile callable over the API (2026-11-10)
+-- 343 · credit-memo sync and reconcile callable over the API (2026-11-10)
 --
 -- Applied to prod 2026-11-10 (approved by Chris). Verified through the live call path:
 -- credit_memo_claims_sync_all() returned over PostgREST where it had timed out before.

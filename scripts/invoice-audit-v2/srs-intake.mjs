@@ -268,7 +268,7 @@ await rpc("request_matview_refresh", { p_matview: "mv_invoice_audit_line", p_rea
   }
   if (!done) { console.error("mv_invoice_audit_line was not refreshed within 6 minutes (is pg_cron job 15 running?). Re-run with --report-only once it has."); process.exit(1); }
 }
-// Migration 342 gives both functions a 300 s limit; without it they outrun PostgREST's 8 s.
+// Migration 343 gives both functions a 300 s limit; without it they outrun PostgREST's 8 s.
 // A timeout here is reported, not fatal: the report still builds, and the skill tells the
 // operator to run the two functions in a SQL session and re-run with --report-only.
 const needsSqlSession = [];
