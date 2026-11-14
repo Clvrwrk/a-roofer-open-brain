@@ -187,6 +187,11 @@ const INFRA_CODES = new Set([
   'database_unavailable', 'rate_limited', 'gateway_timeout', 'bad_gateway', 'network_error',
   '57P01', '57P03', '53300', '08000', '08001', '08006', '57014',
 ]);
+const SYNC_HEALTH_APP_CODES = new Set([
+  'stale_financials', 'stale_heartbeat', 'stale_schedule', 'scheduler_disabled_or_missing',
+  'delivery_backlog', 'watchdog_stale', 'probe_failed', 'partial_or_invalid', 'scheduler_error',
+  'duplicate_identity', 'schema_error', 'worker_failed', 'worker_timeout', 'runtime_failed', 'transport_error',
+]);
 const AUTH_CODES = new Set(['unauthenticated', 'unauthorized', 'forbidden', 'csrf_invalid', 'session_expired', '42501']);
 const SCHEMA_CODES = new Set(['42P01', '42703', '42883', '42P07']);
 const INFRA_TEXT = /(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|Failed to fetch|NetworkError|Load failed|ChunkLoadError|dynamically imported module|QuotaExceededError|statement timeout)/i;
@@ -196,6 +201,9 @@ export function classifyFixability(s, extraNeedsHumanCodes = []) {
   if (s.userReport) return { fixable: false, reason: 'user report: free text is never auto-fixed (prompt-injection risk); a human reproduces it first' };
   const code = s.errorCode;
   const text = [s.title, s.culprit, s.errorType].filter(Boolean).join(' ');
+  if (code && SYNC_HEALTH_APP_CODES.has(code)) {
+    return { fixable: true, reason: 'integration sync-health condition with an explicit failure code to reproduce from' };
+  }
   if ((code && (INFRA_CODES.has(code) || extraNeedsHumanCodes.includes(code))) || [429, 502, 503, 504].includes(s.status) || INFRA_TEXT.test(text)) {
     return { fixable: false, reason: 'infrastructure or provider outage class; code change is unlikely to be the fix' };
   }
