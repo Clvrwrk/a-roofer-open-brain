@@ -58,16 +58,16 @@ Chris asked for it to be actually deleted so only pm.proexteriorsus.net serves t
 
 - Research and options A to D: `~/Library/Application Support/Claude/side-session-notes/local_d359d942-733b-461d-a1f6-735a9c886050/pm-activity-nest-options.md`.
 - Chris chose on 2026-11-13: "A, yes, hold" (see Decisions).
-- [Clvrwrk/pm.proexteriorsus.net#31](https://github.com/Clvrwrk/pm.proexteriorsus.net/pull/31) "Job activity nest on the History tab, with the CRM's note threads": OPEN, head `059fbb48`, branch `claude/pm-activity-nest`, worktree `~/pm-activity-nest-build`.
-- What it holds: migration `supabase/migrations/202609140022_job_crm_effort.sql` (function `public.scheduler_job_crm_effort`), a CRM notes client on the PM server, three routes, the History tab nest, the Inbox at ten rows behind "Show all N", design record `docs/JOB-ACTIVITY-NEST.md`, screenshots at 1440 and 390.
-- CI on `059fbb48`: "Verify scheduler" passed. **"secret-scan" FAILED: gitleaks reports 1 finding in the PR's 4 commits.** The cause has not been looked at.
+- [Clvrwrk/pm.proexteriorsus.net#31](https://github.com/Clvrwrk/pm.proexteriorsus.net/pull/31) "Job activity nest on the History tab, with the CRM's note threads": OPEN, head `30e31d16` (was `059fbb48`), branch `claude/pm-activity-nest`, worktree `~/pm-activity-nest-build`.
+- What it holds: migration `supabase/migrations/202609140023_job_crm_effort.sql` (function `public.scheduler_job_crm_effort`), a CRM notes client on the PM server, three routes, the History tab nest, the Inbox at ten rows behind "Show all N", design record `docs/JOB-ACTIVITY-NEST.md`, screenshots at 1440 and 390.
+- CI: `secret-scan` failed on the first head `059fbb48` (gitleaks, 1 finding). The PM session fixed it and renumbered the migration from 022 to 023; on the new head `30e31d16` `secret-scan` passes (run 43559006988, re-read 2026-11-14 05:00Z) and "Verify scheduler" was still running. What gitleaks had flagged is in that session's report; it was not re-read here.
 - Prod database re-read now: `public.scheduler_job_crm_effort` does not exist and the ledger has no row for it. The hold is intact.
 
 ### 7. Linear (PE-DEV-TEAM), updated 2026-11-14 04:53Z
 
 - [PEC-996](https://linear.app/cleverwork/issue/PEC-996): new, Done. Record of the CRM nested Job Activity (JOB-ACTIVITY-11).
 - [PEC-995](https://linear.app/cleverwork/issue/PEC-995): new, Done. Record of the scheduler host removal.
-- [PEC-743](https://linear.app/cleverwork/issue/PEC-743) (quick note and shared job communication on PM): moved Backlog to In Progress, PR 31 linked, status comment with what the PR covers, what it leaves out, the failed secret scan and the hold.
+- [PEC-743](https://linear.app/cleverwork/issue/PEC-743) (quick note and shared job communication on PM): moved Backlog to In Progress, PR 31 linked, status comment with what the PR covers, what it leaves out, the secret scan and the hold.
 - [PEC-721](https://linear.app/cleverwork/issue/PEC-721) (PM slice 5 mapping): comment that the mapping function is written in PR 31 and not applied.
 - [PEC-915](https://linear.app/cleverwork/issue/PEC-915) (Activity box position): comment that the box's contents changed in t23; its own acceptance criteria were not re-checked.
 
@@ -86,16 +86,16 @@ None. The CRM work is closed. The PM work stopped at an open PR by Chris's instr
 **Task:** Get PM PR 31 ready to merge, then wait for Chris's word before any database change or release.
 
 **What to check / do:**
-1. Find the gitleaks finding on PR 31: `gh run view 43538709875 --repo Clvrwrk/pm.proexteriorsus.net --log-failed`, then run gitleaks locally over `origin/main..claude/pm-activity-nest` in `~/pm-activity-nest-build`. If it is a real secret, rotate it and rewrite the commit; never print the value. If it is a test fixture or the public WorkOS client id, fix the fixture or add a narrow allowlist entry and say why in the PR.
+1. Confirm both checks are green on PR 31's current head: `gh run list --repo Clvrwrk/pm.proexteriorsus.net --branch claude/pm-activity-nest --limit 4`. `secret-scan` already passes on `30e31d16`.
 2. Put the built History tab beside the mockup board "PM job" (and "Phone" for an opened thread) and compare, using the PR's screenshots. The PR lists three intended differences; anything else is a defect.
 3. Read CodeRabbit's summary on PR 31. Greptile auto-review is off for this repo and CodeRabbit is on the free plan, so "both bots clean" cannot be met as written; say so in the PR.
-4. Ask Chris for three separate go-aheads: merge PR 31, apply migration `202609140022` to production, and release PM.
+4. Ask Chris for three separate go-aheads: merge PR 31, apply migration `202609140023` to production, and release PM.
 5. On his word, in this order: apply the migration, set `SUPABASE_PUBLISHABLE_KEY` in `/opt/pe-scheduler/.env`, release with `deploy/activate.sh` as root on `178.105.220.14`. The release will also ship PRs 25 to 28; state that before shipping.
 6. Verify: `pm.proexteriorsus.net/healthz` `buildCommit` equals the released commit, then Chris opens one job's History tab. Claude cannot sign in to production.
 
 **If the CRM refuses the PM token:** the tab says the notes could not be loaded, and Sentry shows `CRM_NOTES_GATEWAY_REFUSED` or `CRM_NOTES_TOKEN_REFUSED`. Unset `SUPABASE_PUBLISHABLE_KEY` to turn the CRM part off; the tab then shows production history only.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Find the gitleaks finding on pm.proexteriorsus.net PR 31 and compare the built History tab with the PM mockup board. Do not merge, apply the migration or release."
+**Prompt to use:** "Read docs/handoffs/current.md. Confirm the checks on pm.proexteriorsus.net PR 31 and compare the built History tab with the PM mockup board. Do not merge, apply the migration or release."
 
 ## Decisions Made This Session
 
@@ -109,7 +109,7 @@ None. The CRM work is closed. The PM work stopped at an open PR by Chris's instr
 
 ## Blockers Requiring Human Action
 
-1. **PM PR 31:** Chris's word to merge, to apply migration `202609140022`, and to release PM.
+1. **PM PR 31:** Chris's word to merge, to apply migration `202609140023`, and to release PM.
 2. **Signed-in check on PM after release:** Chris opens one job's History tab. This is also the first proof that a real PM session token is accepted by the CRM.
 3. **This handoff's docs PR in the brain repo:** needs one approving review to merge.
 4. **ds follow-ups (not started, need a mockup or a ds change first):** a shared thread component, a gold focus ring on navy bars, and a ds site redeploy for the N-01 line.
@@ -118,7 +118,7 @@ None. The CRM work is closed. The PM work stopped at an open PR by Chris's instr
 1. `curl -s https://crm.proexteriorsus.net/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin)["buildCommit"])'`, then `gh api repos/Clvrwrk/CRM_PWA/compare/38c0d8dd...<that commit> --jq .behind_by`: should return `0` (the nest is in the running build).
 2. `curl -s https://pm.proexteriorsus.net/healthz`: `buildCommit` should be `c753b1f00d9027b621882c393239dbadba8e3b82` until PM is released again.
 3. `dig +short scheduler.proexteriorsus.net @1.1.1.1`: should return nothing.
-4. `gh pr view 31 --repo Clvrwrk/pm.proexteriorsus.net --json state,headRefOid,mergeStateStatus`: `OPEN`, `059fbb48…`, until someone pushes or merges.
+4. `gh pr view 31 --repo Clvrwrk/pm.proexteriorsus.net --json state,headRefOid,mergeStateStatus`: `OPEN`, `30e31d16…`, until someone pushes or merges.
 5. `gh run list --repo Clvrwrk/pm.proexteriorsus.net --branch claude/pm-activity-nest --limit 5`: `secret-scan` must be `success` before merge.
 6. SQL (MCP, read-only, project `rnhmvcpsvtqjlffpsayu`): `select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='scheduler_job_crm_effort';`: `0` while the hold stands, `1` after Chris approves the apply.
 7. `curl -s https://cc.proexteriorsus.net/healthz`: `buildCommit` should equal brain `origin/main`.
