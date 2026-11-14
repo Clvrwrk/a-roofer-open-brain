@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily CenterPoint -> Supabase pull of the six collections behind the work tables
+# Daily CenterPoint -> Supabase pull of the seven collections behind the work tables
 # (docs/78; files 343-345). READ-ONLY against CenterPoint: GET requests only.
 #
 #   bash scripts/centerpoint-work-sync.sh
@@ -15,7 +15,7 @@ set -euo pipefail
 
 REPO_ROOT="${CP_SYNC_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export PATH="/opt/homebrew/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$PATH"
-ONLY="companies,productions,properties,invoices,transactions,work_time_entries"
+ONLY="companies,productions,properties,invoices,transactions,work_time_entries,profiles"
 
 cd "$REPO_ROOT"
 for f in "$HOME/.config/cleverwork/master.env" "$REPO_ROOT/.env"; do
