@@ -26,6 +26,8 @@ export interface ProbeResult {
 
 export const PROBE_TIMEOUT_MS = 6_000;
 export const PROBE_CACHE_MS = 60_000;
+export const PROBE_RETRY_BACKOFF_MS = 400;
+export const PROBE_MAX_ATTEMPTS = 2;
 const cache = new Map<string, { at: number; result: ProbeResult }>();
 
 function credential(env: RuntimeEnv, name?: string): string | undefined {
@@ -46,6 +48,17 @@ export function resolveProbeUrl(template: string, env: RuntimeEnv): string | nul
 
 export function expectedStatus(spec: IntegrationSpec, mode: ProbeResult["mode"]): number {
   return mode === "authenticated" ? spec.expectAuthed ?? 200 : spec.expectAnon;
+}
+
+export function isRetryableProbeResult(result: Pick<ProbeResult, "ok" | "error" | "status">): boolean {
+  if (result.ok) return false;
+  if (result.error?.includes("timeout") || result.error === "fetch failed") return true;
+  if (result.status != null && (result.status >= 500 || result.status === 429)) return true;
+  return false;
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function runProbe(spec: IntegrationSpec, env: RuntimeEnv, now = Date.now(), fetchFn: typeof fetch = fetch): Promise<ProbeResult> {
@@ -89,7 +102,11 @@ export async function probeIntegrations(specs: IntegrationSpec[], env: RuntimeEn
   return Promise.all(specs.map(async (spec) => {
     const hit = cache.get(spec.key);
     if (hit && now - hit.at < PROBE_CACHE_MS) return hit.result;
-    const result = await runProbe(spec, env, now, fetchFn);
+    let result = await runProbe(spec, env, now, fetchFn);
+    for (let attempt = 2; attempt <= PROBE_MAX_ATTEMPTS && isRetryableProbeResult(result); attempt++) {
+      await sleep(PROBE_RETRY_BACKOFF_MS);
+      result = await runProbe(spec, env, now, fetchFn);
+    }
     cache.set(spec.key, { at: now, result });
     return result;
   }));

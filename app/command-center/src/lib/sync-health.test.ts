@@ -7,7 +7,9 @@ describe("sync health relay",()=>{
   expect(await sendSyncHealthEvent({...e,untrusted:"sensitive"} as typeof e,fn)).toBe(true);
   expect(fn.mock.calls[0][0]).toBe(SYNC_SENTRY_URL);
   const parts=fn.mock.calls[0][1].body.split("\n");
-  expect(JSON.parse(parts[2]).event_id).toBe(e.event_id.replaceAll("-",""));
+  const payload=JSON.parse(parts[2]);
+  expect(payload.event_id).toBe(e.event_id.replaceAll("-",""));
+  expect(payload.tags.error_code).toBe("scheduler_error");
   expect(parts[2]).not.toContain("sensitive");
  });
  it("keeps failed deliveries pending",async()=>{
