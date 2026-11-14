@@ -81,6 +81,7 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 6. **No due dates.** CenterPoint returns no due date. Age receivables from `oldest_open_invoice_date`.
 7. **Deletes.** CenterPoint does not flag deletes on these collections. A row missing from the newest pull gets `missing_since` and drops out of the money view; it returns if the row does.
 8. **Property links.** A unique street-and-ZIP match fills `property_id` (method `address_zip`, 0.95, the AccuLynx bar). A unique pin within 30 m is stored as a suggestion only. A person's match or rejection is never overwritten.
+9. **`scheduled_at` is not the visit date.** It is the moment the ticket was scheduled in CenterPoint. The visit itself is `startDate` and `startTime` on the production in `cp_resources`, with `endDate` for multi-day work and `workProfileId` for the technician. Migration 347 projects all four onto `work_jobs` (see "Visits and technicians" below); CenterPoint records no end time.
 
 **Verified on prod, 2026-11-13 16:32 UTC**
 

@@ -1,0 +1,5014 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta name="sentry-trace" content="81f36d17532c4d3895eb78ac490d2741-a0c89050eed21c82-1"><meta name="baggage" content="sentry-environment=production,sentry-public_key=1aa281d5b1ead40eeffaa2ae97461876,sentry-trace_id=81f36d17532c4d3895eb78ac490d2741,sentry-org_id=4511120856449024,sentry-transaction=GET%20%2Fexecutive%2Fpipeline,sentry-sampled=true,sentry-sample_rand=0.5336513696622072,sentry-sample_rate=1">
+<meta name="sentry-route-name" content="%2Fexecutive%2Fpipeline"><meta charset="UTF-8"><meta name="description" content="Open Brain Command Center"><meta name="viewport" content="width=device-width"><title>Sales Pipeline | Open Brain</title><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/node_modules/@fontsource/inter/400.css">/* inter-cyrillic-ext-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-cyrillic-ext-400-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-ext-400-normal.woff) format('woff');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* inter-cyrillic-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-cyrillic-400-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-400-normal.woff) format('woff');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* inter-greek-ext-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-greek-ext-400-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-ext-400-normal.woff) format('woff');
+  unicode-range: U+1F00-1FFF;
+}
+
+/* inter-greek-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-greek-400-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-400-normal.woff) format('woff');
+  unicode-range: U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;
+}
+
+/* inter-vietnamese-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-vietnamese-400-normal.woff2) format('woff2'), url(assets/fonts/inter-vietnamese-400-normal.woff) format('woff');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* inter-latin-ext-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-latin-ext-400-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-ext-400-normal.woff) format('woff');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* inter-latin-400-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(assets/fonts/inter-latin-400-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-400-normal.woff) format('woff');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}</style><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/node_modules/@fontsource/inter/600.css">/* inter-cyrillic-ext-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-cyrillic-ext-600-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-ext-600-normal.woff) format('woff');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* inter-cyrillic-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-cyrillic-600-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-600-normal.woff) format('woff');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* inter-greek-ext-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-greek-ext-600-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-ext-600-normal.woff) format('woff');
+  unicode-range: U+1F00-1FFF;
+}
+
+/* inter-greek-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-greek-600-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-600-normal.woff) format('woff');
+  unicode-range: U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;
+}
+
+/* inter-vietnamese-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-vietnamese-600-normal.woff2) format('woff2'), url(assets/fonts/inter-vietnamese-600-normal.woff) format('woff');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* inter-latin-ext-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-latin-ext-600-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-ext-600-normal.woff) format('woff');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* inter-latin-600-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(assets/fonts/inter-latin-600-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-600-normal.woff) format('woff');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}</style><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/node_modules/@fontsource/inter/700.css">/* inter-cyrillic-ext-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-cyrillic-ext-700-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-ext-700-normal.woff) format('woff');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* inter-cyrillic-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-cyrillic-700-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-700-normal.woff) format('woff');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* inter-greek-ext-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-greek-ext-700-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-ext-700-normal.woff) format('woff');
+  unicode-range: U+1F00-1FFF;
+}
+
+/* inter-greek-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-greek-700-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-700-normal.woff) format('woff');
+  unicode-range: U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;
+}
+
+/* inter-vietnamese-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-vietnamese-700-normal.woff2) format('woff2'), url(assets/fonts/inter-vietnamese-700-normal.woff) format('woff');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* inter-latin-ext-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-latin-ext-700-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-ext-700-normal.woff) format('woff');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* inter-latin-700-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(assets/fonts/inter-latin-700-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-700-normal.woff) format('woff');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}</style><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/node_modules/@fontsource/inter/800.css">/* inter-cyrillic-ext-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-cyrillic-ext-800-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-ext-800-normal.woff) format('woff');
+  unicode-range: U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;
+}
+
+/* inter-cyrillic-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-cyrillic-800-normal.woff2) format('woff2'), url(assets/fonts/inter-cyrillic-800-normal.woff) format('woff');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+/* inter-greek-ext-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-greek-ext-800-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-ext-800-normal.woff) format('woff');
+  unicode-range: U+1F00-1FFF;
+}
+
+/* inter-greek-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-greek-800-normal.woff2) format('woff2'), url(assets/fonts/inter-greek-800-normal.woff) format('woff');
+  unicode-range: U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;
+}
+
+/* inter-vietnamese-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-vietnamese-800-normal.woff2) format('woff2'), url(assets/fonts/inter-vietnamese-800-normal.woff) format('woff');
+  unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;
+}
+
+/* inter-latin-ext-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-latin-ext-800-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-ext-800-normal.woff) format('woff');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* inter-latin-800-normal */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url(assets/fonts/inter-latin-800-normal.woff2) format('woff2'), url(assets/fonts/inter-latin-800-normal.woff) format('woff');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}</style><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/src/styles/global.css">:root {
+  color-scheme: light;
+  --color-primary: #11133f;
+  --color-primary-container: #0a0c27;
+  --color-primary-soft: #bbbeed;
+  --color-on-primary: #ffffff;
+  --color-secondary: #3b6b4c;
+  --color-secondary-container: #24412e;
+  --color-secondary-soft: #d3e7da;
+  --color-tertiary: #c22326;
+  --color-tertiary-container: #9b1c1f;
+  --color-on-tertiary: #ffffff;
+  --color-accent: #eaa221;
+  --color-accent-soft: #fbedd2;
+  --color-on-accent: #000000;
+  --color-on-accent-soft: #11133f;
+  --color-info: #0066cc;
+  --color-info-soft: #c2e0ff;
+  --color-on-info-soft: #11133f;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-inset: #f9fafb;
+  --color-surface-alt: #f3f4f6;
+  --color-surface-dark: #111827;
+  --color-on-surface: #111827;
+  --color-on-surface-secondary: #374151;
+  --color-on-surface-muted: #4b5563;
+  --color-on-surface-dark: #ffffff;
+  --color-border: #e5e7eb;
+  --color-border-subtle: #f3f4f6;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-error-surface: #fef2f2;
+  --color-error-text: #7f1d1d;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --shadow-float: 0 20px 60px rgba(17, 19, 63, 0.14);
+  --container: 72rem;
+  --gutter: clamp(1rem, 4vw, 3rem);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --primary: var(--color-primary);
+  --primary-dark: var(--color-primary-container);
+  --primary-soft: var(--color-primary-soft);
+  --secondary: var(--color-secondary);
+  --secondary-dark: var(--color-secondary-container);
+  --tertiary: var(--color-tertiary);
+  --tertiary-dark: var(--color-tertiary-container);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --info: var(--color-info);
+  --info-soft: var(--color-info-soft);
+  --surface: var(--color-surface);
+  --surface-inset: var(--color-surface-inset);
+  --surface-alt: var(--color-surface-alt);
+  --surface-dark: var(--color-surface-dark);
+  --text: var(--color-on-surface);
+  --text-secondary: var(--color-on-surface-secondary);
+  --text-muted: var(--color-on-surface-muted);
+  --border: var(--color-border);
+  --border-strong: #cbd5e1;
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --error: var(--color-error);
+  /* Consumed by .button-danger, .priority-critical and the credit-memo panel since the first
+     build but never declared, so the destructive button rendered with no fill. Caught while
+     documenting the button hierarchy on /design-system (2026-09-14). */
+  --error-surface: var(--color-error-surface);
+  --error-text: var(--color-error-text);
+  --radius: var(--radius-md);
+  --shadow: 0 12px 32px rgba(17, 19, 63, 0.08);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--surface-inset);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  /* Design.md typography: body 14px / 1.5 (was 15px — drift caught 2026-09-11, CRM_PWA docs/design/CC-PARITY-UX-REVIEW.md 4.11). */
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-frame {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* Sidebar collapse (rail-toggle in AppShell): full-width work surface for
+   wide boards like Friday WIP/AR. Class lives on <body>; persists via
+   localStorage "cc-rail-collapsed". */
+body.rail-collapsed .app-frame {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.rail-collapsed .side-rail {
+  display: none;
+}
+
+.top-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rail-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail-toggle:hover {
+  border-color: #98a2b3;
+}
+
+.side-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100vh;
+  padding: 24px 18px;
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.brand-lockup {
+  display: block;
+}
+
+.brand-lockup img {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.brand-lockup strong,
+.brand-lockup small,
+.operator-card strong,
+.operator-card span,
+.department-link span,
+.department-link small {
+  display: block;
+}
+
+.brand-lockup strong {
+  font-size: 17px;
+}
+
+.brand-lockup small,
+.department-link small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.primary-nav,
+.department-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.rail-label,
+.eyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.side-rail .rail-label {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.nav-link,
+.department-link {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.department-link {
+  display: block;
+}
+
+.nav-link:hover,
+.department-link:hover,
+.nav-link.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.nav-icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--accent);
+}
+
+.nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Department accordion (native <details>) */
+.department-stack {
+  gap: 4px;
+}
+
+.dept {
+  border-radius: var(--radius);
+}
+
+.dept-summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.dept-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dept-summary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.dept-label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.dept-chevron {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 16px;
+  transition: transform 0.15s ease;
+}
+
+.dept[open] > .dept-summary .dept-chevron {
+  transform: rotate(90deg);
+}
+
+.dept[open] > .dept-summary {
+  color: #ffffff;
+}
+
+.dept-items {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 6px;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+
+.dept-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 7px 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+}
+
+a.dept-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+a.dept-link.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  border-left-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.dept-link.is-soon {
+  color: rgba(255, 255, 255, 0.42);
+  cursor: default;
+}
+
+.soon-badge {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-main {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  min-width: 0;
+  background: var(--surface-inset);
+}
+
+.app-main-map {
+  grid-template-rows: auto 1fr;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-bottom: 0;
+  color: var(--primary);
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+h3 {
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.operator-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.runtime-pill-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.app-version {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  padding-left: 2px;
+  white-space: nowrap;
+}
+
+.operator-card,
+.runtime-pill {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.operator-card {
+  min-width: 168px;
+  padding: 9px 12px;
+}
+
+.operator-card strong {
+  font-size: 14px;
+}
+
+.operator-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.runtime-pill {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.logout-form {
+  margin: 0;
+}
+
+.logout-button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-height: 38px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  border-color: var(--text-muted);
+}
+
+.signal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--success);
+}
+
+.runtime-pill[data-tone="watch"] .signal-dot {
+  background: var(--warning);
+}
+
+.status-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.app-main-map .status-strip {
+  display: none;
+}
+
+.status-strip div {
+  padding: 14px 28px;
+  border-right: 1px solid var(--border);
+}
+
+.status-strip div:last-child {
+  border-right: 0;
+}
+
+.status-strip span {
+  display: block;
+  color: var(--primary);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.status-strip small {
+  color: var(--text-muted);
+}
+
+main {
+  min-width: 0;
+  padding: 24px 28px 32px;
+}
+
+.app-main-map main {
+  padding-top: 18px;
+}
+
+.product-surface {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.gap-hero {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.gap-alert {
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  background: #fff1f2;
+  color: #7f1d1d;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.surface-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.surface-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.gap-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.gap-metric-card {
+  display: grid;
+  gap: 5px;
+  min-height: 136px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.gap-metric-card span {
+  color: var(--primary);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gap-metric-card strong {
+  color: var(--text);
+}
+
+.gap-metric-card small {
+  color: var(--text-muted);
+}
+
+.metric-critical {
+  border-color: #fecaca;
+}
+
+.branch-gap-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.branch-gap-strip article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.branch-gap-strip strong,
+.branch-gap-strip span,
+.branch-gap-strip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-gap-strip strong {
+  color: var(--primary);
+  font-size: 16px;
+}
+
+.branch-gap-strip span,
+.branch-gap-strip small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.product-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  min-height: 252px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.product-card[data-source-status="error"] {
+  border-color: #fecaca;
+}
+
+.product-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-card-heading strong,
+.product-card-heading span {
+  display: block;
+}
+
+.product-card-heading strong {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+.product-card-heading span:not(.health-badge) {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.product-primary-metric {
+  display: grid;
+  gap: 3px;
+}
+
+.product-primary-metric span {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.product-primary-metric small,
+.field-coverage {
+  color: var(--text-muted);
+}
+
+.product-metric-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-metric-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.product-metric-list li:last-child {
+  border-bottom: 0;
+}
+
+.product-metric-list strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.field-coverage {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.gap-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+.queue-panel,
+.detail-panel,
+.gap-table-panel,
+.gap-detail-panel,
+.agent-table-panel,
+.cron-panel,
+.auth-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gap-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(150px, 190px));
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.segment {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.segment:hover,
+.segment.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.select-label {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.search-label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.select-label select,
+.search-label input {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.gap-count-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.gap-count-row strong {
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.queue-table-wrap {
+  overflow-x: auto;
+}
+
+.queue-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.gap-table {
+  min-width: 1840px;
+}
+
+.queue-table th,
+.queue-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.queue-table th {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.queue-table td {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.queue-table td strong,
+.queue-table td span {
+  display: block;
+}
+
+.queue-table td strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.queue-table td span:not(.status-badge):not(.health-badge) {
+  max-width: 420px;
+  color: var(--text-muted);
+}
+
+.work-row {
+  outline: none;
+}
+
+.gap-row {
+  outline: none;
+}
+
+.work-row:hover,
+.work-row:focus,
+.work-row.is-selected,
+.gap-row:hover,
+.gap-row:focus,
+.gap-row.is-selected,
+.accounting-table tr.is-selected {
+  background: var(--surface-alt);
+}
+
+.work-row.is-selected,
+.gap-row.is-selected,
+.accounting-table tr.is-selected {
+  box-shadow: inset 4px 0 0 var(--tertiary);
+}
+
+.status-badge,
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.status-scheduled,
+.health-ready {
+  background: var(--info-soft);
+  color: #053b78;
+}
+
+.status-queued,
+.status-running,
+.health-watch {
+  background: var(--accent-soft);
+  color: #6e4300;
+}
+
+.status-needs_review {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.status-blocked,
+.health-blocked {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.gap-critical {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.gap-blocked {
+  background: var(--accent-soft);
+  color: #6e4300;
+}
+
+.gap-review {
+  background: var(--info-soft);
+  color: #053b78;
+}
+
+.status-done {
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+.variance-hot {
+  color: var(--tertiary);
+}
+
+.row-action {
+  min-height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.row-action:hover {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.detail-panel {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.gap-detail-panel {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.detail-heading {
+  display: grid;
+  gap: 8px;
+}
+
+.detail-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.detail-list div {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.reasoning-block,
+.audit-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface-inset);
+}
+
+.reasoning-block p,
+.action-note {
+  margin-bottom: 0;
+  color: var(--text-secondary);
+}
+
+.source-row-detail {
+  scroll-margin-top: var(--space-5);
+}
+
+.gap-reason-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.audit-block ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.approval-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.button {
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.button-primary {
+  background: var(--tertiary);
+}
+
+.button-primary:hover {
+  background: var(--tertiary-dark);
+}
+
+.button-secondary {
+  background: var(--primary);
+}
+
+.button-secondary:hover {
+  background: var(--primary-dark);
+}
+
+.button-ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.button-ghost:hover {
+  background: var(--surface-alt);
+}
+
+.button-danger {
+  background: var(--error-surface);
+  color: var(--error-text);
+}
+
+.button-danger:hover {
+  background: var(--color-error);
+  color: var(--color-on-surface-dark);
+}
+
+.human-queue-panel,
+.human-decision-panel,
+.human-sop-panel,
+.accounting-full-source-detail {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.human-sop-panel,
+.accounting-full-source-detail {
+  margin-bottom: var(--space-6);
+}
+
+.human-transparency-list div,
+.human-transparency-row dl div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.human-transparency-list dt,
+.human-transparency-row dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.human-transparency-list dd,
+.human-transparency-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.human-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: var(--space-5);
+  align-items: start;
+  margin-bottom: var(--space-6);
+}
+
+.human-decision-panel {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.human-unblocker-table {
+  min-width: 840px;
+  table-layout: fixed;
+}
+
+.human-unblocker-table th:nth-child(1),
+.human-unblocker-table td:nth-child(1) {
+  width: 34%;
+}
+
+.human-unblocker-table th:nth-child(2),
+.human-unblocker-table td:nth-child(2) {
+  width: 32%;
+}
+
+.human-unblocker-table th:nth-child(3),
+.human-unblocker-table td:nth-child(3) {
+  width: 14%;
+}
+
+.human-unblocker-table th:nth-child(4),
+.human-unblocker-table td:nth-child(4) {
+  width: 20%;
+}
+
+.human-window-note {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.human-unblocker-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.human-answer-cell {
+  border-left: 4px solid var(--accent);
+}
+
+.human-transparency-row {
+  max-width: 100%;
+  margin-top: var(--space-2);
+}
+
+.human-transparency-row summary,
+.human-evidence-expander summary,
+.accounting-full-source-detail > summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.human-transparency-row dl,
+.human-transparency-list,
+.human-evidence-expander ol {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.human-evidence-expander {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.human-evidence-expander ol {
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+}
+
+.source-answer-needed {
+  display: grid;
+  gap: var(--space-1);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.source-answer-needed strong {
+  color: var(--primary);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.source-answer-needed span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.human-action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.human-sop-table {
+  min-width: 920px;
+}
+
+.accounting-full-source-detail {
+  padding: var(--space-4);
+}
+
+.accounting-full-source-detail > summary {
+  list-style-position: inside;
+}
+
+.accounting-full-source-detail .accounting-workbench {
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+}
+
+.vendor-map-workspace {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.vendor-map-header,
+.vendor-map-header-actions,
+.vendor-map-toolbar,
+.vendor-map-button-group,
+.vendor-detail-chip-row,
+.vendor-map-legend,
+.vendor-map-legend span {
+  display: flex;
+  align-items: center;
+}
+
+.vendor-map-header {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.vendor-map-header h2 {
+  margin: var(--space-1) 0 0;
+  color: var(--primary);
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.05;
+}
+
+.vendor-map-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.vendor-map-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.vendor-map-metric-grid div,
+.vendor-office-counts div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-3);
+}
+
+.vendor-map-metric-grid strong,
+.vendor-office-counts strong {
+  color: var(--primary);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.vendor-map-metric-grid span,
+.vendor-office-counts span,
+.vendor-map-toolbar label > span,
+.vendor-assignment-box label > span,
+.vendor-agreement-card > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vendor-map-toolbar {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-3);
+}
+
+.vendor-map-toolbar label,
+.vendor-assignment-box label {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.vendor-map-search-label {
+  flex: 1 1 240px;
+}
+
+.vendor-map-toolbar select,
+.vendor-map-toolbar input,
+.vendor-assignment-box select {
+  min-height: 38px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.vendor-map-button-group {
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.vendor-map-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.vendor-map-canvas-column {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vendor-google-map {
+  width: 100%;
+  min-height: 680px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.vendor-map-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  min-height: 360px;
+  padding: var(--space-5);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.vendor-map-empty strong {
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.vendor-map-fallback {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-height: 360px;
+  padding: var(--space-5);
+  color: var(--text-secondary);
+}
+
+.vendor-map-fallback > div:first-child {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vendor-map-fallback strong {
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.vendor-map-fallback-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.vendor-map-fallback-stats span {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.vendor-map-fallback-stats b {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.vendor-map-fallback ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vendor-map-fallback li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px;
+}
+
+.vendor-map-fallback li strong {
+  font-size: 13px;
+}
+
+.vendor-map-fallback li span,
+.vendor-map-fallback li em {
+  font-size: 12px;
+  font-style: normal;
+}
+
+.vendor-map-legend {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.vendor-map-legend span {
+  gap: var(--space-1);
+}
+
+.vendor-map-legend i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+/* Legend swatches mirror the map markers: a white disc whose ring carries status. */
+.vendor-map-legend i.legend-ring {
+  width: 13px;
+  height: 13px;
+  background: #ffffff;
+  border: 3px solid currentColor;
+  box-sizing: border-box;
+}
+
+.vendor-map-legend .legend-badge {
+  display: inline-block;
+  vertical-align: -3px;
+  border-radius: 999px;
+}
+
+.vendor-map-legend i.legend-territory {
+  width: 15px;
+  height: 11px;
+  border-radius: 3px;
+  background: rgb(15 118 110 / 13%);
+  border: 2px solid rgb(15 118 110 / 85%);
+  box-sizing: border-box;
+}
+
+.vendor-map-legend .legend-note {
+  text-transform: none;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* Cluster count pill parked beside a single-vendor badge. */
+.vendor-cluster-count {
+  background: #ffffff;
+  border: 1.5px solid #0f172a;
+  border-radius: 999px;
+  padding: 0 4px;
+  line-height: 14px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 35%);
+}
+
+/* Map popup (Google InfoWindow KPI card + quick links) */
+.vmpop {
+  min-width: 232px;
+  max-width: 280px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.vmpop-eyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vmpop-title {
+  margin: 2px 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.vmpop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.vmpop-chip {
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eef2f7;
+  color: #475569;
+}
+
+.vmpop-chip.chip-ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.vmpop-chip.chip-muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.vmpop-chip.chip-status {
+  text-transform: capitalize;
+}
+
+.vmpop-chip.chip-pa {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.vmpop-chip.chip-expired {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.vmpop-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.vmpop-kpi {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.vmpop-kpi strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.vmpop-kpi span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.vmpop-kpi.tone-ok strong {
+  color: #15803d;
+}
+
+.vmpop-kpi.tone-bad strong {
+  color: #dc2626;
+}
+
+.vmpop-kpi.tone-warn strong {
+  color: #b45309;
+}
+
+.vmpop-section {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.vmpop-contact {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.vmpop-contact a {
+  color: var(--accent, #2563eb);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.vmpop-contact a:hover {
+  text-decoration: underline;
+}
+
+.vmpop-muted {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.vmpop-links {
+  display: grid;
+  gap: 4px;
+}
+
+.vmpop-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.vmpop-link:hover {
+  border-color: var(--accent, #2563eb);
+  background: #f0f6ff;
+  color: var(--accent, #2563eb);
+}
+
+.vmpop-link.is-soon {
+  color: #94a3b8;
+  cursor: default;
+}
+
+.vmpop-link small {
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.vmpop-assign {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.vmpop-assign-now {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vmpop-muted-inline {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.vmpop-select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text-primary);
+}
+
+.vmpop-save {
+  width: 100%;
+  margin-top: 8px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.vmpop-save:hover {
+  filter: brightness(0.95);
+}
+
+.vmpop-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.vmpop-assign-status {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.vendor-map-detail-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+  position: sticky;
+  top: 18px;
+}
+
+.vendor-map-detail-panel h3 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.vendor-detail-chip-row {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.territory-marker-chip,
+.territory-gate-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.marker-needs_office_route,
+.marker-agreement_expired {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.marker-missing_branch_pricing,
+.territory-gate-chip[data-gate="blocked"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.marker-vendor_brand,
+.territory-gate-chip[data-gate="approved"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.vendor-detail-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.vendor-detail-list div {
+  display: grid;
+  gap: 3px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-2);
+}
+
+.vendor-detail-list dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vendor-detail-list dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.vendor-agreement-card,
+.vendor-assignment-box {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.vendor-agreement-card strong {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+.vendor-agreement-card p,
+.vendor-agreement-card small,
+.vendor-assignment-box p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.vendor-agreement-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vendor-agreement-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.vendor-agreement-list span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.vendor-office-counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.territory-status {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.status-covered {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-overlap_pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-out_of_boundary {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.status-unclassified {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.line-direct-entry span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.line-evidence-actions,
+.line-direct-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.line-direct-entry {
+  align-items: end;
+}
+
+.line-direct-entry label {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 120px;
+  flex: 1 1 120px;
+}
+
+.line-direct-entry input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.accounting-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-2);
+}
+
+.accounting-mode-tab {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 800;
+  padding: 9px 12px;
+  text-decoration: none;
+}
+
+.accounting-mode-tab:hover,
+.accounting-mode-tab.is-active {
+  border-color: var(--border);
+  background: var(--primary);
+  color: var(--color-on-primary);
+}
+
+.invoice-gate-workbench {
+  display: grid;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.invoice-workbench-heading {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-5);
+  box-shadow: var(--shadow);
+}
+
+.invoice-workbench-heading h2,
+.invoice-repair-heading h2 {
+  max-width: 780px;
+  color: var(--primary);
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.05;
+}
+
+.invoice-workbench-heading p,
+.invoice-repair-heading p,
+.invoice-line-card p {
+  max-width: 780px;
+  color: var(--text-secondary);
+}
+
+.invoice-workbench-count {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-4);
+}
+
+.invoice-workbench-count strong {
+  color: var(--primary);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.invoice-workbench-count span,
+.invoice-fact-grid span,
+.invoice-evidence-board span,
+.line-evidence-grid span,
+.human-answer-callout span,
+.invoice-guidance-panel dt,
+.invoice-queue-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-gate-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.invoice-queue-rail,
+.invoice-repair-surface,
+.invoice-guidance-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.invoice-queue-rail,
+.invoice-guidance-panel {
+  position: sticky;
+  top: var(--space-5);
+}
+
+.invoice-queue-rail-heading,
+.invoice-guidance-panel,
+.invoice-repair-surface {
+  padding: var(--space-4);
+}
+
+.invoice-queue-list {
+  display: grid;
+  max-height: 68vh;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.invoice-queue-item {
+  display: grid;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+}
+
+.invoice-queue-item:hover,
+.invoice-queue-item.is-selected {
+  background: var(--surface-alt);
+  box-shadow: inset 4px 0 0 var(--tertiary);
+}
+
+.invoice-queue-main,
+.invoice-queue-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.invoice-queue-main strong {
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+
+.invoice-queue-main span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.invoice-repair-surface {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-repair-heading {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-4);
+}
+
+.invoice-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.invoice-fact-grid,
+.invoice-evidence-board,
+.line-evidence-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.invoice-fact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.invoice-evidence-board,
+.line-evidence-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.invoice-fact-grid div,
+.invoice-evidence-board div,
+.line-evidence-grid div,
+.human-answer-callout {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.invoice-fact-grid strong,
+.invoice-evidence-board strong,
+.line-evidence-grid strong,
+.human-answer-callout strong {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.invoice-line-card-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-line-card {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+}
+
+.invoice-line-card header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+}
+
+.agreement-match-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  border: 1px solid #f1c36d;
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  padding: var(--space-3);
+}
+
+.agreement-match-control label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.agreement-match-control label span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.agreement-match-control select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.agreement-match-control p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agreement-match-meta {
+  min-width: 88px;
+  border: 1px solid rgba(17, 19, 63, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  padding: var(--space-2);
+  text-align: center;
+}
+
+.agreement-match-meta span,
+.agreement-match-meta strong {
+  display: block;
+}
+
+.agreement-match-meta span {
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.agreement-match-meta strong {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.invoice-line-card h3 {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.human-answer-callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.invoice-guidance-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.invoice-guidance-panel h3 {
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.invoice-guidance-panel dl {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.invoice-guidance-panel div {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-3);
+}
+
+.invoice-guidance-panel dd {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+}
+
+.action-note {
+  display: grid;
+  gap: 6px;
+  min-height: 48px;
+  border-left: 4px solid var(--accent);
+  padding: 10px 12px;
+  background: var(--accent-soft);
+}
+
+.action-note strong,
+.action-note span {
+  display: block;
+}
+
+.action-note strong {
+  color: var(--primary);
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+.monitor-summary {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-panel {
+  display: grid;
+  gap: 6px;
+  min-height: 136px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.metric-panel span {
+  color: var(--primary);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.metric-panel strong {
+  color: var(--text);
+}
+
+.metric-panel small {
+  color: var(--text-muted);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cadence-list {
+  display: grid;
+}
+
+.cadence-item {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cadence-item:last-child {
+  border-bottom: 0;
+}
+
+.cadence-item strong {
+  color: var(--primary);
+}
+
+.cadence-item span {
+  color: var(--text-muted);
+}
+
+.auth-panel {
+  grid-column: 2;
+}
+
+.auth-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.auth-list div {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.auth-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.auth-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.snapshot-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.snapshot-hero h2 {
+  max-width: 760px;
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.snapshot-health {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.snapshot-source {
+  display: grid;
+  min-width: 180px;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  padding: var(--space-3);
+}
+
+.snapshot-source strong {
+  color: var(--color-primary);
+  font-size: 13px;
+}
+
+.snapshot-source span {
+  color: var(--color-on-surface-muted);
+  font-size: 12px;
+}
+
+.snapshot-source[data-source-status="live"] {
+  border-color: var(--color-secondary-soft);
+  background: var(--color-secondary-soft);
+}
+
+.snapshot-source[data-source-status="degraded"],
+.snapshot-source[data-source-status="reference"] {
+  border-color: var(--color-accent-soft);
+  background: var(--color-accent-soft);
+}
+
+.snapshot-source[data-source-status="unconfigured"] {
+  background: var(--color-surface-alt);
+}
+
+.snapshot-alert {
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.snapshot-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 520px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.snapshot-report,
+.snapshot-dashboard {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+.snapshot-report {
+  padding: var(--space-8);
+}
+
+.snapshot-report-head {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.snapshot-brand {
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.snapshot-report-head h2 {
+  margin: var(--space-3) 0 0;
+  color: var(--color-on-surface-secondary);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.snapshot-report-head p,
+.snapshot-report-head small {
+  margin: 0;
+  color: var(--color-on-surface-muted);
+}
+
+.snapshot-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-8) 0;
+  padding-bottom: var(--space-8);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.snapshot-metric {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-on-surface-secondary);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.snapshot-metric:hover,
+.snapshot-metric:focus,
+.snapshot-metric[aria-current="true"],
+.snapshot-row:hover,
+.snapshot-row:focus,
+.snapshot-row[aria-current="true"] {
+  border-color: var(--color-info);
+  background: var(--color-surface-inset);
+  outline: none;
+}
+
+.snapshot-metric[aria-current="true"],
+.snapshot-row[aria-current="true"] {
+  box-shadow: inset 4px 0 0 var(--color-info);
+}
+
+.metric-icon,
+.snapshot-section-head > span {
+  display: inline-grid;
+  min-width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.metric-sales .metric-icon,
+.snapshot-section[data-section-kind="jobs-sold"] .snapshot-section-head > span {
+  background: var(--color-secondary-soft);
+  color: var(--color-secondary-container);
+}
+
+.metric-receivable .metric-icon,
+.snapshot-section[data-section-kind="accounts-receivable"] .snapshot-section-head > span {
+  background: var(--color-info-soft);
+  color: var(--color-on-info-soft);
+}
+
+.metric-payment .metric-icon,
+.snapshot-section[data-section-kind="new-leads"] .snapshot-section-head > span {
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+}
+
+.snapshot-section[data-section-kind="sales"] .snapshot-section-head > span,
+.snapshot-section[data-section-kind="claims"] .snapshot-section-head > span,
+.snapshot-section[data-section-kind="activity"] .snapshot-section-head > span {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.snapshot-metric strong,
+.snapshot-metric small,
+.snapshot-metric b {
+  display: block;
+}
+
+.snapshot-metric strong {
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+}
+
+.snapshot-metric small {
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+}
+
+.snapshot-metric b {
+  margin-top: var(--space-2);
+  color: var(--color-primary);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.snapshot-section {
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.snapshot-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.snapshot-section-head {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  text-align: center;
+}
+
+.snapshot-section-head h3 {
+  margin: 0;
+  color: var(--color-on-surface-secondary);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.snapshot-section-head p {
+  margin: 0;
+  color: var(--color-on-surface-muted);
+  font-size: 12px;
+}
+
+.snapshot-list {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.snapshot-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-inset);
+  color: var(--color-on-surface-secondary);
+  padding: var(--space-2) var(--space-2);
+}
+
+.snapshot-row:nth-child(even) {
+  background: var(--color-surface);
+}
+
+.snapshot-rank {
+  min-width: 24px;
+  color: var(--color-secondary);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.snapshot-row-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-row-value {
+  color: var(--color-info);
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.snapshot-row small {
+  grid-column: 2 / -1;
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.snapshot-activity-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.snapshot-activity-list .snapshot-row {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
+}
+
+.snapshot-activity-list .snapshot-row small {
+  grid-column: auto;
+  text-align: center;
+}
+
+.snapshot-dashboard {
+  position: sticky;
+  top: var(--space-5);
+  overflow: hidden;
+}
+
+.snapshot-dashboard-head {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: linear-gradient(180deg, var(--color-primary-container), var(--color-primary));
+  color: var(--color-on-primary);
+}
+
+.snapshot-dashboard-head .eyebrow {
+  color: var(--color-accent);
+}
+
+.snapshot-dashboard-head h2 {
+  color: var(--color-on-primary);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.snapshot-dashboard-head strong {
+  color: var(--color-on-primary);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.snapshot-dashboard-head span {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.snapshot-dashboard-link {
+  width: max-content;
+  max-width: 100%;
+  margin-top: var(--space-2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-on-primary);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.snapshot-record-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-inset);
+  color: var(--color-on-surface-muted);
+  padding: var(--space-3) var(--space-4);
+}
+
+.snapshot-record-count strong {
+  color: var(--color-primary);
+  font-size: 20px;
+}
+
+.snapshot-record-table-wrap {
+  overflow-x: auto;
+}
+
+.snapshot-record-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.snapshot-record-table th,
+.snapshot-record-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.snapshot-record-table th {
+  color: var(--color-on-surface-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.snapshot-record-table td {
+  color: var(--color-on-surface-secondary);
+  font-size: 13px;
+}
+
+.snapshot-record-table a,
+.snapshot-record-table span {
+  display: block;
+}
+
+.snapshot-record-table a {
+  color: var(--color-info);
+  font-weight: 800;
+}
+
+.snapshot-record-table span {
+  color: var(--color-on-surface-muted);
+}
+
+.snapshot-dashboard-note {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-4);
+  border-left: 4px solid var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+  padding: var(--space-3);
+  font-size: 12px;
+}
+
+.snapshot-dashboard-note strong,
+.snapshot-dashboard-note span {
+  display: block;
+}
+
+.snapshot-detail-page,
+.snapshot-record-detail {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.snapshot-detail-table-panel,
+.snapshot-record-ledger {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.snapshot-detail-table {
+  min-width: 900px;
+}
+
+.snapshot-record-ledger {
+  padding: var(--space-5);
+}
+
+.accounting-hero,
+.accounting-dashboard-section {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.accounting-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.accounting-metric-card {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 136px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-4);
+  box-shadow: var(--shadow);
+}
+
+.accounting-metric-card:hover,
+.accounting-metric-card:focus {
+  border-color: var(--info);
+  outline: none;
+}
+
+.accounting-metric-card span,
+.accounting-metric-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.accounting-metric-card strong {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.accounting-metric-card[data-tone="critical"] {
+  border-color: var(--color-error-surface);
+}
+
+.accounting-metric-card[data-tone="review"] {
+  border-color: var(--accent-soft);
+}
+
+.accounting-metric-card[data-tone="ready"] {
+  border-color: var(--secondary-soft);
+}
+
+.accounting-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--space-5);
+  align-items: start;
+  margin-bottom: var(--space-5);
+}
+
+.accounting-priority-panel,
+.accounting-decision-panel,
+.accounting-dashboard-tile {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.accounting-decision-panel {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.accounting-decision-panel h2 {
+  font-size: 22px;
+}
+
+.accounting-decision-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.accounting-decision-list li {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.accounting-decision-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.accounting-decision-list strong {
+  color: var(--primary);
+}
+
+.accounting-decision-list span {
+  color: var(--text-secondary);
+}
+
+.accounting-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.accounting-dashboard-tile {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.accounting-tile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.accounting-tile-head h3 {
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.accounting-tile-head p,
+.accounting-tile-foot span {
+  margin-bottom: 0;
+  color: var(--text-secondary);
+}
+
+.accounting-mini-ledger,
+.accounting-evidence-stack {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.accounting-mini-ledger div,
+.accounting-evidence-stack div {
+  display: grid;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  padding: var(--space-3);
+}
+
+.accounting-mini-ledger dt,
+.accounting-evidence-stack dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.accounting-mini-ledger dd,
+.accounting-evidence-stack dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.accounting-tile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.accounting-boundary-notice {
+  display: grid;
+  gap: var(--space-1);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--color-on-accent-soft);
+  padding: var(--space-3);
+}
+
+.accounting-boundary-notice strong,
+.accounting-boundary-notice span,
+.accounting-boundary-notice small {
+  display: block;
+}
+
+.accounting-boundary-notice small {
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+
+.accounting-table {
+  min-width: 980px;
+}
+
+.accounting-gap-table {
+  min-width: 1360px;
+}
+
+.accounting-empty-workspace {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.accounting-dashboard-tile[data-readiness="live"] .status-badge {
+  background: var(--secondary-soft);
+  color: var(--secondary-container);
+}
+
+.accounting-dashboard-tile[data-readiness="partial"] .status-badge {
+  background: var(--info-soft);
+  color: #053b78;
+}
+
+.live-department-hero,
+.department-route-grid,
+.live-workbench {
+  margin-bottom: var(--space-6);
+}
+
+.live-source-summary {
+  max-width: 820px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.live-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.live-metric-card {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-4);
+  text-decoration: none;
+}
+
+.live-metric-card span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-metric-card strong {
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.live-metric-card small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.live-metric-card[data-tone="critical"] {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: var(--error-surface);
+}
+
+.live-metric-card[data-tone="review"] {
+  border-color: rgba(234, 162, 33, 0.35);
+  background: var(--accent-soft);
+}
+
+.live-metric-card[data-tone="ready"] {
+  border-color: rgba(5, 150, 105, 0.22);
+  background: var(--secondary-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   Dense executive-dashboard system (07-02 checkpoint rework) — copies the
+   vetted Invoice Audit layout (.iv-toolbar / .iv-kpis / .iv-office) instead of
+   inventing a new one. Reuses existing tokens only (no new hex/spacing added).
+   Fixed-height stat cards that NEVER grow with content; a one-line status
+   strip instead of a pill wall; expandable per-location rows with inline
+   right-aligned metrics + a progress bar, matching .iv-office/.iv-mini/.iv-bar.
+--------------------------------------------------------------------------- */
+
+.epl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+
+.epl-toolbar .select-label {
+  min-width: 150px;
+}
+
+.epl-spacer {
+  flex: 1;
+}
+
+.epl-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+.epl-status[data-tone="ready"] .epl-status-dot {
+  background: var(--secondary);
+}
+
+.epl-status[data-tone="review"] .epl-status-dot {
+  background: var(--accent);
+}
+
+.epl-status[data-tone="critical"] .epl-status-dot {
+  background: var(--tertiary);
+}
+
+.epl-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--secondary);
+}
+
+/* Dense fixed-height KPI grid — number-first, one tiny caption line, never grows. */
+.epl-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.epl-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  height: 92px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-3) var(--space-4);
+  overflow: hidden;
+}
+
+.epl-kpi-lab {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.epl-kpi-val {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.epl-kpi-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checkpoint round 3, item 4: Res/Com split pills inside one dense KPI card — a
+   slightly taller variant (still fixed-height, never grows) with a two-column value
+   row instead of a single big number. */
+.epl-kpi--split {
+  height: 108px;
+}
+
+.epl-kpi-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: 1px;
+}
+
+.epl-kpi-split-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.epl-kpi-split-lab {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.epl-kpi-split-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checkpoint round 3, item 3 / Round 3 item D: per-queue value chips on the account
+   bar row — the CENTER, right-aligned KPI group. Every chip uses the SAME format:
+   bold $value with the unique-job count in parentheses (e.g. **$1.5M** (24)), same
+   stage order on every row (leads/prospects/approved/invoiced/closed), so rows align
+   vertically regardless of which queues actually carry a value on a given row. */
+.epl-queues {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.epl-queue {
+  text-align: right;
+  min-width: 68px;
+}
+
+.epl-queue strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.epl-queue span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+/* Checkpoint round 4, item 2: trailing-7-day totals pill row — sits between the KPI
+   grid and the charts, dense Invoice-Audit chip styling (mirrors .iv-kpi's compact
+   card look, collapsed into a single-row strip of pills instead of a grid). Reuses
+   existing tokens only (no new hex/spacing added). */
+.epl-t7 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.epl-t7-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.epl-t7-pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.epl-t7-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+  padding: var(--space-2) var(--space-4);
+  min-width: 132px;
+}
+
+.epl-t7-pill strong {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.epl-t7-pill span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.epl-t7-coverage {
+  font-size: 9px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* Chart card legend note (checkpoint round 4, item 1 — "Collected vs AR outstanding"). */
+.epl-chart-legend-note {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-left: var(--space-2);
+}
+
+/* Charts stay in a fixed-height wrapper so Chart.js (responsive + no aspect
+   ratio) cannot grow the surrounding card unboundedly. */
+.epl-chart-card {
+  height: 280px;
+}
+
+.epl-chart-wrap {
+  position: relative;
+  height: 220px;
+  width: 100%;
+}
+
+/* Per-location expandable rows — mirrors .iv-office/.iv-office>summary/.iv-mini/.iv-bar. */
+.epl-locations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  transition: outline-color 0.2s;
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+  border-radius: var(--radius);
+}
+
+[data-locations-section][data-flash="true"] .epl-locations {
+  outline-color: var(--primary);
+}
+
+.epl-location {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* Round 3, item D: ONE justification for the account bar — label + stale marker
+   LEFT (fixed-width name column so every row's queues start at the same x
+   position), all numeric KPIs (queue chips + mini metrics) RIGHT-aligned in
+   fixed-width columns via CSS grid, so rows align vertically regardless of each
+   location's name length or which queues have values. No mixed alignments. */
+.epl-location > summary {
+  display: grid;
+  grid-template-columns: 18px minmax(140px, 200px) 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.epl-location > summary::-webkit-details-marker {
+  display: none;
+}
+
+.epl-chev {
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  font-size: 14px;
+}
+
+.epl-location[open] > summary .epl-chev {
+  transform: rotate(90deg);
+}
+
+.epl-location-name {
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.epl-location-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.epl-stale-marker {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tertiary);
+  border: 1px solid var(--tertiary);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* Center KPI chips (queue values) — every chip carries the SAME format:
+   bold $value with the unique-job count in parentheses, e.g. **$1.5M** (24) —
+   same order (leads/prospects/approved/invoiced/closed) on every row. */
+.epl-mini {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: flex-end;
+}
+
+.epl-mini div {
+  text-align: right;
+  min-width: 64px;
+}
+
+.epl-mini strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.epl-mini span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.epl-bar {
+  display: inline-flex;
+  align-items: center;
+  width: 60px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  flex: none;
+}
+
+.epl-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.epl-location-body {
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.epl-jobs-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Round 3, item E: fixed table-layout so column headings never drift out of
+   alignment with their data cells regardless of free-text job/rep content length.
+   Column widths: Job (flex/auto share), Stage, Rep, Value, Outstanding AR, AccuLynx. */
+.epl-jobs-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-top: var(--space-2);
+  font-size: 12.5px;
+}
+
+.epl-jobs-table col.epl-jobs-col-job {
+  width: 28%;
+}
+
+.epl-jobs-table th,
+.epl-jobs-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epl-jobs-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.epl-jobs-table th.num {
+  text-align: right;
+}
+
+.epl-jobs-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+}
+
+.epl-jobs-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.epl-jobs-loading,
+.epl-jobs-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: var(--space-2) 0;
+}
+
+.epl-jobs-hidden-caption {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+  padding: var(--space-1, 4px) 0 0;
+}
+
+@media (max-width: 1180px) {
+  .epl-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .epl-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .epl-mini {
+    gap: var(--space-3);
+  }
+
+  /* Round 3, item D: below 820px the account-bar grid collapses to a wrapping flex
+     row — label+stale stay LEFT (first, unchanged), every numeric group wraps
+     underneath, still right-aligned within itself (no mixed alignments). */
+  .epl-location > summary {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .epl-queues,
+  .epl-mini {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+}
+
+.department-route-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.department-route-card {
+  display: grid;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-4);
+  text-decoration: none;
+}
+
+.department-route-card span,
+.department-route-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.department-route-card strong {
+  color: var(--primary);
+  font-size: 16px;
+}
+
+.live-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.live-queue-panel,
+.live-decision-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.live-queue-panel {
+  min-width: 0;
+}
+
+.live-decision-panel {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.live-work-table {
+  min-width: 1120px;
+}
+
+.priority-critical {
+  background: var(--error-surface);
+  color: var(--error-text);
+}
+
+.priority-high {
+  background: var(--accent-soft);
+  color: #6e4300;
+}
+
+.priority-normal {
+  background: var(--info-soft);
+  color: #053b78;
+}
+
+.priority-low {
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+}
+
+.decision-note-label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.decision-note-label span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.decision-note-label textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+  padding: var(--space-3);
+}
+
+.button-full {
+  justify-content: center;
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .app-frame {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .product-grid,
+  .gap-summary-grid,
+  .branch-gap-strip,
+  .accounting-metric-grid,
+  .accounting-dashboard-grid,
+  .vendor-map-metric-grid,
+  .live-metric-grid,
+  .department-route-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vendor-map-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-map-detail-panel {
+    position: static;
+  }
+
+  .workbench,
+  .gap-workbench,
+  .monitor-grid,
+  .snapshot-layout,
+  .invoice-gate-layout,
+  .accounting-workbench,
+  .human-workbench,
+  .live-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel {
+    grid-column: auto;
+  }
+
+  .detail-panel,
+  .gap-detail-panel,
+  .snapshot-dashboard,
+  .invoice-queue-rail,
+  .invoice-guidance-panel,
+  .accounting-decision-panel,
+  .human-decision-panel,
+  .live-decision-panel {
+    position: static;
+  }
+
+  .invoice-repair-surface {
+    order: 1;
+  }
+
+  .invoice-queue-rail {
+    order: 2;
+  }
+
+  .invoice-guidance-panel {
+    order: 3;
+  }
+
+  .monitor-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gap-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-workbench-heading,
+  .invoice-repair-heading,
+  .invoice-line-card header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agreement-match-control {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-heading-actions {
+    flex-direction: column;
+    justify-content: stretch;
+  }
+
+  .invoice-heading-actions .button,
+  .agreement-match-meta {
+    width: 100%;
+  }
+
+  .invoice-workbench-count {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
+    padding-left: 0;
+  }
+
+  .invoice-fact-grid,
+  .invoice-evidence-board,
+  .line-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .side-rail {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px 14px;
+  }
+
+  .brand-lockup {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+    max-width: 340px;
+  }
+
+  .brand-lockup img {
+    width: 92px;
+    height: auto;
+    max-height: 34px;
+  }
+
+  .brand-lockup strong {
+    font-size: 15px;
+  }
+
+  .brand-lockup small {
+    font-size: 11px;
+  }
+
+  .primary-nav,
+  .department-stack {
+    gap: 6px;
+  }
+
+  .primary-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .department-stack {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rail-label {
+    grid-column: 1 / -1;
+    font-size: 10px;
+  }
+
+  .nav-link,
+  .department-link {
+    min-width: 0;
+    min-height: 34px;
+    padding: 7px 8px;
+    font-size: 12.5px;
+    line-height: 1.15;
+  }
+
+  .nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .department-link small {
+    display: none;
+  }
+
+  .top-bar,
+  .filter-bar,
+  .surface-heading,
+  .snapshot-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-main-map {
+    grid-template-rows: 1fr;
+  }
+
+  .app-main-map .top-bar {
+    display: none;
+  }
+
+  .app-main-map main {
+    padding-top: 16px;
+  }
+
+  .operator-cluster {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .operator-card,
+  .runtime-pill {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .surface-meta {
+    justify-content: flex-start;
+  }
+
+  .vendor-map-header,
+  .vendor-map-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .vendor-google-map {
+    min-height: 460px;
+  }
+
+  .product-grid,
+  .gap-summary-grid,
+  .branch-gap-strip,
+  .gap-filter-bar,
+  .snapshot-metric-grid,
+  .snapshot-activity-list,
+  .accounting-metric-grid,
+  .accounting-dashboard-grid,
+  .human-action-grid,
+  .live-metric-grid,
+  .department-route-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-map-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .vendor-map-metric-grid div {
+    padding: 12px 10px;
+  }
+
+  .vendor-map-metric-grid strong {
+    font-size: 21px;
+  }
+
+  .monitor-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .status-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  main,
+  .top-bar {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .status-strip div {
+    padding: 10px 8px;
+  }
+
+  .status-strip span {
+    font-size: 20px;
+  }
+
+  .status-strip small {
+    display: block;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .queue-table {
+    min-width: 780px;
+  }
+
+  .gap-table {
+    min-width: 1280px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Data Quality — Price Foundation migration review                    */
+/* ------------------------------------------------------------------ */
+
+.pf-overview,
+.pf-queues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.pf-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.pf-run-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pf-run-line code {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pf-readonly-tag {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.pf-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+}
+
+.pf-card-grid {
+  margin: 0;
+}
+
+.pf-stat-card {
+  cursor: default;
+}
+
+.pf-stat-pct {
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.pf-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow);
+}
+
+.pf-panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+}
+
+.pf-panel-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.pf-panel-head small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pf-queue-table {
+  min-width: 720px;
+}
+
+.pf-priority-high {
+  background: #fde2e2;
+  color: var(--color-error-text);
+}
+
+.pf-priority-medium {
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+}
+
+.pf-priority-low {
+  background: var(--color-secondary-soft);
+  color: var(--color-secondary-container);
+}
+
+/* reusable pricing health */
+.pf-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.pf-health-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-health-grid dt {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.pf-health-grid dd {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.pf-health-grid dd em {
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.pf-health-grid small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pf-ok {
+  color: var(--success);
+}
+
+.pf-bad {
+  color: var(--error);
+}
+
+.pf-fineprint {
+  margin: var(--space-4) 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pf-fineprint code,
+.pf-health small code {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+}
+
+/* tabs */
+.pf-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.pf-tab:hover {
+  color: var(--text);
+}
+
+.pf-tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--tertiary);
+}
+
+.pf-tab-count {
+  background: var(--surface-alt);
+  border-radius: var(--radius-full);
+  padding: 1px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.pf-tab.is-active .pf-tab-count {
+  background: var(--primary);
+  color: var(--color-on-primary);
+}
+
+/* filter bar */
+.pf-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.pf-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pf-chip:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--color-on-primary);
+}
+
+.pf-chip input {
+  accent-color: var(--accent);
+}
+
+.pf-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.pf-filter-field select,
+.pf-filter-field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.pf-search {
+  flex: 1 1 220px;
+}
+
+/* layout: table + side panel */
+.pf-queue-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.pf-table-region {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.pf-detail-table {
+  min-width: 640px;
+}
+
+.pf-row {
+  cursor: pointer;
+  outline: none;
+}
+
+.pf-row:hover,
+.pf-row:focus,
+.pf-row.is-selected {
+  background: var(--surface-alt);
+}
+
+.pf-row.is-selected {
+  box-shadow: inset 4px 0 0 var(--tertiary);
+}
+
+.pf-problem {
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+}
+
+.pf-status-open {
+  background: var(--info-soft);
+  color: #053b78;
+}
+
+.pf-status-resolved {
+  background: var(--color-secondary-soft);
+  color: var(--color-secondary-container);
+}
+
+.pf-status-rejected {
+  background: #fde2e2;
+  color: var(--color-error-text);
+}
+
+.pf-status-deferred {
+  background: var(--color-accent-soft);
+  color: var(--color-on-accent-soft);
+}
+
+.pf-pagination {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pf-pagination em {
+  font-style: normal;
+}
+
+/* side panel */
+.pf-side-panel {
+  position: sticky;
+  top: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: var(--space-5);
+  min-height: 220px;
+}
+
+.pf-side-empty p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pf-side-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.pf-side-head h3 {
+  margin: 0;
+  font-size: 16px;
+  word-break: break-word;
+}
+
+.pf-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+
+.pf-detail-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pf-detail-grid dt {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.pf-detail-grid dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.pf-proposed {
+  background: var(--surface-inset);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.pf-detail-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.pf-proposed p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pf-action-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.pf-action-field input,
+.pf-action-field textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.pf-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pf-action-buttons .button {
+  flex: 1 1 auto;
+}
+
+.pf-action-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-height: 16px;
+}
+
+.pf-readonly-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.button-small {
+  min-height: 30px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .pf-queue-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pf-side-panel {
+    position: static;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared progress + checklist primitive (see scripts/progress-checklist.ts) */
+/* Reusable across multi-step surfaces: same bar, checkboxes, resumable.      */
+/* ------------------------------------------------------------------ */
+.cc-progress {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 13px;
+  margin: 8px 0 12px;
+}
+.cc-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.cc-progress-head b { color: var(--ink); font-size: 12.5px; }
+.cc-progress-track {
+  height: 8px;
+  background: var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.cc-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #16a34a);
+  border-radius: 99px;
+  transition: width .35s ease;
+}
+.cc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.cc-check input { cursor: pointer; margin: 0; }
+</style><style data-vite-dev-id="/Volumes/M1 Application SSD/Projects/Pro Exteriors US APP/.claude/worktrees/pe-merge-tables-review-2fa5bb/app/command-center/src/pages/executive/pipeline.astro?astro&amp;type=style&amp;index=0&amp;lang.css">.epl[data-astro-cid-rbiu4e4o] {
+  display: block;
+}
+
+.epl-t7-joblink[data-astro-cid-rbiu4e4o] {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.epl-t7-joblink[data-astro-cid-rbiu4e4o]:hover {
+  color: #1e3a8a;
+}
+
+.epl-jobs-table[data-astro-cid-rbiu4e4o] tr[data-astro-cid-rbiu4e4o].epl-job-flash {
+  animation: 2.4s ease-out epl-job-flash;
+}
+
+@keyframes epl-job-flash {
+  0%, 25% {
+    background-color: #fde68a;
+  }
+
+  100% {
+    background-color: #0000;
+  }
+}
+</style><style id="mock-annotation">
+  /* Mockup-only review aid. Not part of the design; not for the build. */
+  body.mock-notes [data-mock-new] { outline: 2px dashed #b45309; outline-offset: 2px; }
+  body.mock-notes tr[data-mock-new] > td:first-child { box-shadow: inset 3px 0 0 #b45309; }
+  .mock-legend { position: fixed; right: 16px; bottom: 16px; z-index: 99999; display: flex; gap: 8px;
+    align-items: center; padding: 8px 12px; border-radius: 8px; border: 1px solid #b45309;
+    background: #fffbeb; color: #1f2937; font: 600 13px/1.3 Inter, system-ui, sans-serif; }
+  .mock-legend button { font: inherit; padding: 4px 10px; border-radius: 8px; border: 1px solid #1f2937;
+    background: #fff; color: #1f2937; cursor: pointer; }
+  .mock-legend a { color: #1d4ed8; text-decoration: underline; }
+  .mock-omitted { padding: 14px 16px; font-style: italic; opacity: .75; text-align: left; }
+  @media (max-width: 760px) { .mock-legend { left: 8px; right: 8px; bottom: 8px; flex-wrap: wrap; } }
+</style></head> <body class="mock-notes"> <div class="app-frame"> <aside class="side-rail" aria-label="Department navigation"> <a class="brand-lockup" href="#"> <img src="assets/pro-exteriors-logo.svg" alt="Pro Exteriors" width="160" height="58"> </a> <nav class="primary-nav" aria-label="Primary"> <a class="nav-link nav-home" href="#"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"></path><path d="M9 4v13M15 6.5v13"></path></svg></span> Territory Map </a> </nav> <div class="department-stack" aria-label="Departments"> <p class="rail-label">Departments</p> <details class="dept" data-department="accounting"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h13l3 3v15H4Z"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg></span> <span class="dept-label">Accounting</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <a class="dept-link" href="#"> Invoice Audit </a> </li><li> <a class="dept-link" href="friday-wip.html" title="Live AR meeting board · Thursday pack · Maya email (docs/85)"> Friday WIP/AR </a> </li><li> <a class="dept-link" href="cash-flow.html" title="13WCF — receipts live from WIP/AR expected dates; editable drivers; Friday huddle instrument (mig 281)"> 13-Week Cash Flow </a> </li><li> <a class="dept-link" href="#" title="Per-vendor bank-ledger CSVs (invoices · CM-TBD · credit memos) — human loads into QB (mig 226)"> QB Bank Export </a> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Fleet Audit <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Software, subscriptions" aria-disabled="true"> Tools Audit <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Insurance, CPA, advisors, compliance" aria-disabled="true"> Business Expense Audit <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Environmental, Health &amp; Safety" aria-disabled="true"> EH&amp;S Audit <small class="soon-badge">soon</small> </span> </li><li> <a class="dept-link" href="#" title="Coverage · Gap Worksheet (bought 2+ times, no negotiated price) · Renewal Worksheet (docs/83)"> Price Agreements </a> </li><li> <a class="dept-link" href="#" title="Confirm item-id matches for family-level PDFs (Denver/Dallas), then promote to agreements"> Price List Review </a> </li><li> <a class="dept-link" href="#" title="Per-branch negotiable worksheet (A+B), prefilled from prior agreements"> Agreement Builder </a> </li><li> <a class="dept-link" href="#" title="Bind every vendor price line to the PE product file; category is inherited from the product, never typed twice (docs/103)"> Categorize Price Lines </a> </li> </ul> </details><details class="dept" data-department="operations"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"></path></svg></span> <span class="dept-label">Operations</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <a class="dept-link" href="#" title="HR &amp; Compliance live here"> Overview </a> </li><li> <a class="dept-link" href="#"> Estimate Audit </a> </li><li> <a class="dept-link" href="#" title="ABC orders ↔ AcuLynx job + negotiated coverage"> Order Audit </a> </li><li> <a class="dept-link" href="#" title="Link AccuLynx jobs to their property, or send them back for a fix"> Property Review </a> </li><li> <span class="dept-link is-soon" title="Shares the Estimate Audit tree" aria-disabled="true"> Proposal Audit <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Scheduling <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Tax forms, insurance, 1099" aria-disabled="true"> 1099 Employee Mgmt <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Inventory / Warehouse <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Client Portal / Comms <small class="soon-badge">soon</small> </span> </li> </ul> </details><details class="dept" data-department="sales"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"></path><path d="m7 14 3-4 3 3 5-7"></path><path d="M18 6h2v2"></path></svg></span> <span class="dept-label">Sales</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <a class="dept-link" href="#"> Overview </a> </li> </ul> </details><details class="dept" data-department="marketing"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"></path><path d="M9 4v13M15 6.5v13"></path></svg></span> <span class="dept-label">Marketing</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <a class="dept-link" href="#"> Overview </a> </li><li> <a class="dept-link" href="#"> Hail Zones </a> </li><li> <a class="dept-link" href="#"> Market Proof </a> </li> </ul> </details><details class="dept" open="" data-department="executive"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V10M10 21V4M16 21v-7M22 21H2"></path></svg></span> <span class="dept-label">Executive</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <a class="dept-link is-active" href="pipeline.html" aria-current="page"> Pipeline Review </a> </li><li> <a class="dept-link" href="#" title="13-week cash curve with the Owner's minimum-cash floor (mig 281)"> Cash Runway </a> </li><li> <a class="dept-link" href="#" title="Fixed-Cost Register: pools, budget vs actual, allocation preview — provisional until CPA rulings (mig 281)"> Fixed Costs </a> </li> </ul> </details><details class="dept" data-department="ai-agents"> <summary class="dept-summary"> <span class="nav-icon" aria-hidden="true"><svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="8" width="12" height="10" rx="2"></rect><path d="M12 8V4M9 4h6M9 13h.5M14.5 13h.5"></path><path d="M4 12h2M18 12h2"></path></svg></span> <span class="dept-label">AI Agents</span> <span class="dept-chevron" aria-hidden="true">›</span> </summary> <ul class="dept-items"> <li> <span class="dept-link is-soon" title="Returns here — recaptured from the old home" aria-disabled="true"> Work Queue <small class="soon-badge">soon</small> </span> </li><li> <a class="dept-link" href="#"> Agent Monitor </a> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Project Management <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="When/why/how we deploy &amp; manage new agents" aria-disabled="true"> Builds <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Tasking, thinking, planning, conductor, research, audit" aria-disabled="true"> Agent SOPs <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" title="Roadmap" aria-disabled="true"> Deployment Schedule <small class="soon-badge">soon</small> </span> </li><li> <span class="dept-link is-soon" aria-disabled="true"> Bugs / Maintenance / Enhancements <small class="soon-badge">soon</small> </span> </li> </ul> </details> </div> </aside> <div class="app-main"> <header class="top-bar"> <div class="top-bar-title"> <button type="button" class="rail-toggle" id="rail-toggle" title="Collapse / expand the sidebar for more work surface" aria-label="Toggle sidebar"> <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg> </button> <div> <p class="eyebrow">AccuLynx + Open Brain</p> <h1>Sales Pipeline</h1> </div> </div> <div class="operator-cluster" aria-label="Runtime summary"> <div class="runtime-pill-stack"> <div class="runtime-pill" data-tone="watch"> <span class="signal-dot" aria-hidden="true"></span> Local auth </div> <p class="app-version" title="App version · last updated">v0.7.101A · 2026-11-13</p> </div> <div class="operator-card"> <strong>Local Operator</strong> <span>Phase 1 shell</span> </div>  </div> </header> <main>  <section class="epl" data-executive-pipeline="" data-astro-cid-rbiu4e4o="">  <form class="epl-toolbar" aria-label="Global pipeline filters" data-filter-bar="" data-astro-cid-rbiu4e4o=""> <label class="select-label" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Location</span> <select name="location" data-filter="location" data-astro-cid-rbiu4e4o=""> <option value="all" selected data-astro-cid-rbiu4e4o="">All locations</option> <option value="colorado" data-astro-cid-rbiu4e4o=""> colorado </option><option value="florida" data-astro-cid-rbiu4e4o=""> florida </option><option value="georgia" data-astro-cid-rbiu4e4o=""> georgia </option><option value="kansas_city" data-astro-cid-rbiu4e4o=""> kansas_city </option><option value="texas" data-astro-cid-rbiu4e4o=""> texas </option><option value="wichita" data-astro-cid-rbiu4e4o=""> wichita </option><option value="insurance_program" data-astro-cid-rbiu4e4o=""> insurance_program </option><option value="multi_family_commercial" data-astro-cid-rbiu4e4o=""> multi_family_commercial </option> <option value="commercial_service" data-mock-new="New location filter value">commercial_service</option></select> </label> <label class="select-label" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Type</span> <select name="type" data-filter="type" data-astro-cid-rbiu4e4o=""> <option value="all" selected data-astro-cid-rbiu4e4o="">All types</option> <option value="Residential" data-astro-cid-rbiu4e4o=""> Residential </option><option value="Commercial" data-astro-cid-rbiu4e4o=""> Commercial </option><option value="Property Management" data-astro-cid-rbiu4e4o=""> Property Management </option><option value="uncategorized" data-astro-cid-rbiu4e4o=""> uncategorized </option> </select> </label> <label class="select-label" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Rep</span> <select name="rep" data-filter="rep" data-astro-cid-rbiu4e4o=""> <option value="all" selected data-astro-cid-rbiu4e4o="">All reps</option> </select> </label> <label class="select-label" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Window</span> <select name="window" data-filter="window" data-astro-cid-rbiu4e4o=""> <option value="wtd" data-astro-cid-rbiu4e4o=""> Week-to-Date </option><option value="mtd" selected data-astro-cid-rbiu4e4o=""> Month-to-Date </option><option value="qtd" data-astro-cid-rbiu4e4o=""> Current Quarter </option><option value="ytd" data-astro-cid-rbiu4e4o=""> Year-to-Date </option> </select> </label> <span class="epl-spacer" data-astro-cid-rbiu4e4o=""></span> <button type="button" class="segment" data-reset-filters="" data-astro-cid-rbiu4e4o="">
+Reset filters
+</button> </form> <div class="epl-status" data-tone="ready" data-status-strip="" data-astro-cid-rbiu4e4o="" data-mock-new="Freshness names the second source"> <span class="epl-status-dot" aria-hidden="true" data-astro-cid-rbiu4e4o=""></span> <span data-status-text="" data-astro-cid-rbiu4e4o="">Data live · oldest sync 0h ago · CenterPoint pulled daily</span> </div> <section class="epl-kpis" aria-label="Topline KPIs" data-kpi-grid="" data-astro-cid-rbiu4e4o=""> <div class="epl-kpi epl-kpi--split" data-kpi="pipeline-value" data-astro-cid-rbiu4e4o="" style="cursor: pointer;" data-mock-new="Now includes CenterPoint"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Pipeline Value</span> <strong class="epl-kpi-val" data-kpi-val="pipeline-value" data-astro-cid-rbiu4e4o="">$4,522,531</strong> <small class="epl-kpi-sub" data-astro-cid-rbiu4e4o="">Pre-close (prospects w/ estimate)</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="pipeline-value-residential" data-astro-cid-rbiu4e4o=""> $0 </span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="pipeline-value-commercial" data-astro-cid-rbiu4e4o="">$4.5M</span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="sold-value" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Sold Value</span> <strong class="epl-kpi-val" data-kpi-val="sold-value" data-astro-cid-rbiu4e4o="">$0</strong> <small class="epl-kpi-sub" data-kpi-sub="sold-value" data-astro-cid-rbiu4e4o="">Month-to-Date · closed by close date</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="sold-value-residential" data-astro-cid-rbiu4e4o=""> $0 </span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="sold-value-commercial" data-astro-cid-rbiu4e4o=""> $0 </span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="jobs-sold" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Jobs Sold</span> <strong class="epl-kpi-val" data-kpi-val="jobs-sold" data-astro-cid-rbiu4e4o="">0</strong> <small class="epl-kpi-sub" data-kpi-sub="jobs-sold" data-astro-cid-rbiu4e4o="">Month-to-Date · jobs closed in period</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="jobs-sold-residential" data-astro-cid-rbiu4e4o="">0</span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="jobs-sold-commercial" data-astro-cid-rbiu4e4o="">0</span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="close-rate" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Close Rate</span> <strong class="epl-kpi-val" data-kpi-val="close-rate" data-astro-cid-rbiu4e4o="">61%</strong> <small class="epl-kpi-sub" data-astro-cid-rbiu4e4o="">Snapshot: Approved+Invoiced+Closed / all</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="close-rate-residential" data-astro-cid-rbiu4e4o=""> 64%
+</span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="close-rate-commercial" data-astro-cid-rbiu4e4o=""> 37%
+</span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="new-leads" data-astro-cid-rbiu4e4o="" style="cursor: pointer;" data-mock-new="Now includes CenterPoint"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">New Leads</span> <strong class="epl-kpi-val" data-kpi-val="new-leads" data-astro-cid-rbiu4e4o="">82</strong> <small class="epl-kpi-sub" data-astro-cid-rbiu4e4o="">Month-to-Date · jobs in Lead milestone</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="new-leads-residential" data-astro-cid-rbiu4e4o="">62</span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="new-leads-commercial" data-astro-cid-rbiu4e4o="">20</span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="margin" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Margin %</span> <strong class="epl-kpi-val" data-kpi-val="margin" data-astro-cid-rbiu4e4o="">90%</strong> <small class="epl-kpi-sub" data-kpi-sub="margin" data-astro-cid-rbiu4e4o="">102 of 201 jobs have cost data</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="margin-residential" data-astro-cid-rbiu4e4o="">92%</span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="margin-commercial" data-astro-cid-rbiu4e4o="">81%</span> </span> </span> </div> <div class="epl-kpi epl-kpi--split" data-kpi="average-ticket" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Average Ticket</span> <strong class="epl-kpi-val" data-kpi-val="average-ticket" data-astro-cid-rbiu4e4o=""> $19,430 </strong> <small class="epl-kpi-sub" data-astro-cid-rbiu4e4o="">Approved in Month-to-Date</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="average-ticket-residential" data-astro-cid-rbiu4e4o=""> $19K </span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="average-ticket-commercial" data-astro-cid-rbiu4e4o=""> $55K </span> </span> </span> </div> <div class="epl-kpi" data-kpi="ar-outstanding" data-astro-cid-rbiu4e4o="" style="cursor: pointer;" data-mock-new="Now includes CenterPoint"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">AR Outstanding</span> <strong class="epl-kpi-val" data-kpi-val="ar-outstanding" data-astro-cid-rbiu4e4o="">$2,172,366</strong> <small class="epl-kpi-sub" data-astro-cid-rbiu4e4o="">Open invoices · point-in-time</small> </div> <div class="epl-kpi epl-kpi--split" data-kpi="signed-7d" data-astro-cid-rbiu4e4o="" style="cursor: pointer;"> <span class="epl-kpi-lab" data-astro-cid-rbiu4e4o="">Signed (7d)</span> <strong class="epl-kpi-val" data-kpi-val="signed-7d" data-astro-cid-rbiu4e4o="">27</strong> <small class="epl-kpi-sub" data-kpi-sub="signed-7d" data-astro-cid-rbiu4e4o="">$578,083 signed · last 7 days</small> <span class="epl-kpi-split" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Res</span> <span class="epl-kpi-split-val" data-kpi-split="signed-7d-residential" data-astro-cid-rbiu4e4o="">27</span> </span> <span class="epl-kpi-split-item" data-astro-cid-rbiu4e4o=""> <span class="epl-kpi-split-lab" data-astro-cid-rbiu4e4o="">Com</span> <span class="epl-kpi-split-val" data-kpi-split="signed-7d-commercial" data-astro-cid-rbiu4e4o="">0</span> </span> </span> </div> </section> <section class="epl-t7" aria-label="Trailing 7 days" data-t7-row="" data-astro-cid-rbiu4e4o=""> <span class="epl-t7-label" data-astro-cid-rbiu4e4o="">Trailing 7 days</span> <div class="epl-t7-pills" data-astro-cid-rbiu4e4o=""> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o=""> <strong data-t7-val="leadToProspect" data-astro-cid-rbiu4e4o="">$0</strong> <span data-t7-sub="leadToProspect" data-astro-cid-rbiu4e4o="">Lead → Prospect · 0 jobs</span> <span class="epl-t7-coverage" data-t7-coverage="leadToProspect" data-astro-cid-rbiu4e4o="">No jobs in this window</span> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o=""> <strong data-t7-val="prospectToApproved" data-astro-cid-rbiu4e4o="">$546,370</strong> <span data-t7-sub="prospectToApproved" data-astro-cid-rbiu4e4o="">Prospect → Approved · 26 jobs · $12K collected</span> <span class="epl-t7-coverage" data-t7-coverage="prospectToApproved" data-astro-cid-rbiu4e4o="">Based on 26 of 26 jobs with history</span> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o=""> <strong data-t7-val="approvedToInvoiced" data-astro-cid-rbiu4e4o="">$226,978</strong> <span data-t7-sub="approvedToInvoiced" data-astro-cid-rbiu4e4o="">Approved → Invoiced · 13 jobs · $0 AR</span> <span class="epl-t7-coverage" data-t7-coverage="approvedToInvoiced" data-astro-cid-rbiu4e4o="">Based on 13 of 13 jobs with history</span> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o=""> <strong data-t7-val="invoicedToClosed" data-astro-cid-rbiu4e4o="">$0</strong> <span data-t7-sub="invoicedToClosed" data-astro-cid-rbiu4e4o="">Invoiced → Closed · 0 jobs · $0 AR</span> <span class="epl-t7-coverage" data-t7-coverage="invoicedToClosed" data-astro-cid-rbiu4e4o="">No jobs in this window</span> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o="" data-mock-new="Now includes CenterPoint receivables"> <strong data-t7-val="totalOutstandingAr" data-astro-cid-rbiu4e4o="">$2,172,366</strong> <span data-astro-cid-rbiu4e4o="">Total Outstanding AR</span> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o=""> <strong data-t7-val="highestArAgingDays" data-astro-cid-rbiu4e4o="">700d</strong> <span data-astro-cid-rbiu4e4o="">Highest AR Aging</span> <a class="epl-t7-joblink" data-t7-ar-joblink="" data-account-key="texas" data-job-id="aa620c15-efb8-46a9-9986-d11237e7e28e" href="#office-texas" title="Open this job in the office breakdown below" data-astro-cid-rbiu4e4o="">Job TX-281</a> </div> <div class="epl-t7-pill" data-astro-cid-rbiu4e4o="" data-mock-new="Now includes CenterPoint payments in the last 7 days"> <strong data-t7-val="totalMoniesCollectedThisWeek" data-astro-cid-rbiu4e4o="">$270,611</strong> <span data-astro-cid-rbiu4e4o="">Monies Collected this week</span> </div> </div> </section> <section class="live-metric-grid" aria-label="Pipeline charts" data-chart-grid="" style="grid-template-columns: repeat(2, minmax(0, 1fr));" data-astro-cid-rbiu4e4o=""> <div class="live-metric-card epl-chart-card" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Pipeline value by stage <em class="epl-chart-legend-note" data-astro-cid-rbiu4e4o="">Collected vs AR outstanding</em></span> <div class="epl-chart-wrap" data-astro-cid-rbiu4e4o="" data-mock-new="Invoiced bar gains the open CenterPoint invoices"> <svg viewbox="0 0 502 220" width="100%" role="img" aria-label="Pipeline value by stage, collected against receivables outstanding" xmlns="http://www.w3.org/2000/svg" style="font: 600 11px Inter, system-ui, sans-serif"><text x="102" y="27" text-anchor="end" fill="currentColor">approved</text><rect x="110" y="12" width="194.4" height="22" fill="var(--color-primary, #14213d)"></rect><rect x="304.4" y="12" width="181.6" height="22" fill="var(--color-error, #b91c1c)"></rect><text x="207.2" y="27" text-anchor="middle" fill="#fff">$1.3M</text><text x="395.2" y="27" text-anchor="middle" fill="#fff">$1.2M</text><text x="102" y="63" text-anchor="end" fill="currentColor">completed</text><rect x="110" y="48" width="49.6" height="22" fill="var(--color-primary, #14213d)"></rect><rect x="159.6" y="48" width="62.0" height="22" fill="var(--color-error, #b91c1c)"></rect><text x="134.8" y="63" text-anchor="middle" fill="#fff">$342K</text><text x="190.6" y="63" text-anchor="middle" fill="#fff">$426K</text><text x="102" y="99" text-anchor="end" fill="currentColor">invoiced</text><rect x="110" y="84" width="51.5" height="22" fill="var(--color-primary, #14213d)"></rect><rect x="161.5" y="84" width="38.3" height="22" fill="var(--color-error, #b91c1c)"></rect><text x="135.7" y="99" text-anchor="middle" fill="#fff">$354K</text><text x="205.8" y="99" fill="currentColor">+$258K commercial service</text><text x="102" y="135" text-anchor="end" fill="currentColor">prospect</text><rect x="110" y="120" width="0.0" height="22" fill="var(--color-primary, #14213d)"></rect><rect x="110.0" y="120" width="33.7" height="22" fill="var(--color-error, #b91c1c)"></rect><text x="102" y="171" text-anchor="end" fill="currentColor">unassigned_lead</text><rect x="110" y="156" width="0.0" height="22" fill="var(--color-primary, #14213d)"></rect><rect x="110.0" y="156" width="0.1" height="22" fill="var(--color-error, #b91c1c)"></rect></svg></div> </div> <div class="live-metric-card epl-chart-card" data-astro-cid-rbiu4e4o=""> <span data-astro-cid-rbiu4e4o="">Rep leaderboard (sold value) <em class="epl-chart-legend-note" data-astro-cid-rbiu4e4o="">Collected vs AR outstanding</em></span> <div class="epl-chart-wrap" data-astro-cid-rbiu4e4o=""> <p class="mock-omitted">Rep leaderboard is unchanged and is left out of this mockup. CenterPoint jobs carry no rep yet, so they add nothing here.</p></div> </div> </section> <section aria-label="Locations" data-locations-section="" data-astro-cid-rbiu4e4o=""> <div class="epl-locations" data-locations-list="" data-astro-cid-rbiu4e4o=""> <details class="epl-location" data-location-row="" data-account-key="colorado" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">colorado</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">0</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$438K</strong> <span data-astro-cid-rbiu4e4o="">Approved (7)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$37K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (2)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">100%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">99%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 9/9</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$302,644</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="99% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:98.62283101626912%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="colorado" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="florida" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">florida</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">55</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$83K</strong> <span data-astro-cid-rbiu4e4o="">Approved (12)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (0)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">18%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">100%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 11/67</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$38,572</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="100% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:100%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="florida" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="georgia" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">georgia</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">0</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Approved (0)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (0)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">0%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">—</strong> <span data-astro-cid-rbiu4e4o="">Margin · no data</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="0% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:0%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="georgia" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="kansas_city" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">kansas_city</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">0</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$216K</strong> <span data-astro-cid-rbiu4e4o="">Approved (8)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$5K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (1)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">90%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">99%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 10/10</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$179,082</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="99% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:98.63550673459295%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="kansas_city" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="texas" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">texas</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">0</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$54K</strong> <span data-astro-cid-rbiu4e4o="">Approved (4)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$17K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (1)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">100%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">63%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 2/5</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$22,986</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="63% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:62.736655767872975%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="texas" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="wichita" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">wichita</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">3</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$1.4M</strong> <span data-astro-cid-rbiu4e4o="">Approved (41)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$254K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (10)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">88%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">82%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 35/58</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$524,583</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="82% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:81.87960279411007%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="wichita" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="insurance_program" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">insurance_program</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">4</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$344K</strong> <span data-astro-cid-rbiu4e4o="">Approved (19)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$42K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (3)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">79%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">100%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 21/28</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$18,556</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="100% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:100%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="insurance_program" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details><details class="epl-location" data-location-row="" data-account-key="multi_family_commercial" data-astro-cid-rbiu4e4o=""> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">multi_family_commercial</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">9</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Prospects (0)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$782K</strong> <span data-astro-cid-rbiu4e4o="">Approved (9)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$6K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (1)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$0</strong> <span data-astro-cid-rbiu4e4o="">Closed (0)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">42%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">81%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 14/24</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$828,404</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="81% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:80.53581619041906%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="multi_family_commercial" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details> <details class="epl-location" data-location-row="" data-account-key="commercial_service" data-astro-cid-rbiu4e4o="" data-mock-new="New location row fed by CenterPoint"> <summary data-astro-cid-rbiu4e4o=""> <span class="epl-chev" aria-hidden="true" data-astro-cid-rbiu4e4o=""> › </span> <span class="epl-location-name" data-astro-cid-rbiu4e4o=""> <span class="epl-location-name-text" data-astro-cid-rbiu4e4o="">commercial_service</span>  </span> <span class="epl-queues" data-astro-cid-rbiu4e4o=""> <span class="epl-queue" data-queue="leads" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">28</strong> <span data-astro-cid-rbiu4e4o="">Leads</span> </span><span class="epl-queue" data-queue="prospects" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$4.5M</strong> <span data-astro-cid-rbiu4e4o="">Prospects (152)</span> </span><span class="epl-queue" data-queue="approved" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$1.1M</strong> <span data-astro-cid-rbiu4e4o="">Approved (47)</span> </span><span class="epl-queue" data-queue="invoiced" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$276K</strong> <span data-astro-cid-rbiu4e4o="">Invoiced (115)</span> </span><span class="epl-queue" data-queue="closed" data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$667K</strong> <span data-astro-cid-rbiu4e4o="">Closed (497)</span> </span> </span> <span class="epl-mini" data-astro-cid-rbiu4e4o=""> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">66%</strong> <span data-astro-cid-rbiu4e4o="">Close Rate</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">57%</strong> <span data-astro-cid-rbiu4e4o="">Margin · 470/612</span> </div> <div data-astro-cid-rbiu4e4o=""> <strong data-astro-cid-rbiu4e4o="">$257,539</strong> <span data-astro-cid-rbiu4e4o="">AR</span> </div> </span> <span class="epl-bar" title="57% margin" data-astro-cid-rbiu4e4o=""> <span class="epl-bar-fill" style="width:57%" data-astro-cid-rbiu4e4o=""></span> </span> </summary> <div class="epl-location-body" data-astro-cid-rbiu4e4o=""> <div class="epl-jobs-table-wrap" data-jobs-wrap="" data-account-key="commercial_service" data-astro-cid-rbiu4e4o=""> <p class="epl-jobs-loading" data-jobs-placeholder="" data-astro-cid-rbiu4e4o="">Expand to load jobs…</p> </div> </div> </details> </div> </section> </section> </main> </div> </div> <div class="mock-legend" role="note">
+  <span>Mockup · <span id="mock-count"></span> changes outlined</span>
+  <button type="button" id="mock-toggle" aria-pressed="true">Hide outlines</button>
+  <a href="index.html">All screens</a>
+</div>
+<script>
+  (function () {
+    var b = document.getElementById('mock-toggle');
+    document.getElementById('mock-count').textContent = document.querySelectorAll('[data-mock-new]').length;
+    b.addEventListener('click', function () {
+      var on = document.body.classList.toggle('mock-notes');
+      b.setAttribute('aria-pressed', String(on));
+      b.textContent = on ? 'Hide outlines' : 'Show outlines';
+    });
+  })();
+</script></body></html>
