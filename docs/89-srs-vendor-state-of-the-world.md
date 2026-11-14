@@ -37,6 +37,40 @@ scheduled supplier import and a reusable SRS re-audit writer remain separate wor
 Financial batch receipts and draft packets are private operational artifacts, not
 repository content; the supplier health monitor returned to green after intake.
 
+## 2026-11-10 intake and the `/srs-intake` skill
+
+**Run every SRS batch with `/srs-intake`** (`.claude/skills/srs-intake/SKILL.md`,
+`scripts/srs-intake.sh`). It does preflight, ingest, PDF linking, audit refresh, credit
+memo candidates and the QuickBooks draft in one command, and it reads the Supabase key
+from 1Password with `op run`.
+
+- **The repo `.env` points at a different Supabase project.** The loader failed on its
+  first read on 2026-11-10 and wrote nothing. The 1Password items named `SUPABASE_URL`
+  and `SUPABASE_SERVICE_ROLE_KEY` carry that other project too. The prod brain's key is
+  the item `Supabase Service Role - PE_CC_DEV`; `config/srs-intake.env.tpl` references it.
+- Batch loaded: 14 invoices ($43,081.86), 4 credit memos (−$782.18), 176 lines, all
+  reconciled and matched to their PDFs. All 18 PDFs are linked.
+- The CSV loader now also writes `sub_total`, `sales_tax`, `restock_fee` and `ship_cost`
+  from the printed footer rows, as the PDF arm always did.
+- `MWKCK` is an alias of existing `SBP-KANSASCITYKS` (801 S. 7th St, same phone as
+  printed on invoice 0052203539-001), confirmed by Chris. Kansas City has no SRS book,
+  so its lines are No-Price.
+- The portal CSV carries a **statement block**: rows with branch `SBPLOGO`, no invoice
+  number, and an amount in `NET_AMOUNT_COL`. The loader skips them. They are the open
+  items on the account and the only SRS AR evidence in the file (gap 5). The intake
+  report uses them to say which unstamped QuickBooks rows SRS no longer shows as open.
+- **`mv_invoice_audit_line` cannot be refreshed by a direct API call** (about 85 s
+  against an 8 s limit). Queue it with `request_matview_refresh()`; pg_cron job 15
+  services the queue every minute.
+- **Migration 343 (applied 2026-11-10)** gives `credit_memo_claims_sync_all()` and
+  `credit_memo_reconcile()` the 300 s function-level timeout the triage already has.
+  Before it, the sync timed out on every API call and needed a SQL session.
+- **Reconcile gaps.** A credit that names no invoice is inserted as `amount_mismatch`
+  against the nearest open SRS request by amount (0052126872-001, a $45 restocking-fee
+  reversal, sits on the 0050892738-001 request). A tax-inclusive credit never equals a
+  pre-tax `expected_credit`, so a true match (0052070845-001, $19.00 + $1.62 tax) is
+  held for review.
+
 ## Ingestion (manual weekly, Monday nights)
 
 - SRS invoices arrive as **Billtrust CSV + one PDF per invoice, manually,

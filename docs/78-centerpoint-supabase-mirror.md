@@ -69,6 +69,7 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 | `344-centerpoint-work-projection.sql` | `centerpoint_work_projection` | `project_centerpoint_work_tables()`: the six upserts from `cp_resources`, plus `missing_since` on rows the newest pull no longer returns. |
 | `345-centerpoint-work-read-layer.sql` | `centerpoint_work_read_layer` | `work_companies.is_test`, property link columns, `link_work_property_sources()`, `mv_work_job_money`, `v_work_labor_day`, `v_work_invoice_qbo_recon`, `refresh_centerpoint_work()` and the hourly pg_cron job `centerpoint-work-refresh`. |
 | `346-centerpoint-sync-expectation.sql` | `centerpoint_sync_expectation` | Stale alarm (30 h) for the daily host pull. |
+| `347-centerpoint-work-visits.sql` | `centerpoint_work_visits` | Visit start date and time, end date, technician and truck on `work_jobs`, plus the status-change, sold and completed dates; `work_profiles` (staff names only); `v_work_job_visits`. |
 
 **Rules for anything that reads this data**
 
@@ -80,7 +81,7 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 6. **No due dates.** CenterPoint returns no due date. Age receivables from `oldest_open_invoice_date`.
 7. **Deletes.** CenterPoint does not flag deletes on these collections. A row missing from the newest pull gets `missing_since` and drops out of the money view; it returns if the row does.
 8. **Property links.** A unique street-and-ZIP match fills `property_id` (method `address_zip`, 0.95, the AccuLynx bar). A unique pin within 30 m is stored as a suggestion only. A person's match or rejection is never overwritten.
-9. **`scheduled_at` is not the visit date.** It is the moment the ticket was scheduled in CenterPoint. The visit itself is `startDate` and `startTime` on the production in `cp_resources`, with `endDate` for multi-day work and `workProfileId` for the technician. None of those four is projected yet, and CenterPoint records no end time.
+9. **`scheduled_at` is not the visit date.** It is the moment the ticket was scheduled in CenterPoint. The visit itself is `startDate` and `startTime` on the production in `cp_resources`, with `endDate` for multi-day work and `workProfileId` for the technician. Migration 347 projects all four onto `work_jobs` (see "Visits and technicians" below); CenterPoint records no end time.
 
 **Verified on prod, 2026-11-13 16:32 UTC**
 
@@ -94,6 +95,14 @@ CenterPoint API ──GET──▶ cp_resources ──project──▶ work_* (6
 | Job hours / clock hours | 7,139.09 on the jobs in the money view / 8,571.66 |
 | Properties linked by address | 110 of 667; 9 more suggested by pin; 557 have no property in the spine yet |
 | QuickBooks check, by job number | 437 match to the cent; 18 billed differs; 8 collected differs; 11 QuickBooks only; 9 CenterPoint only |
+
+**Visits and technicians (347, 2026-11-13)**
+
+- **`scheduled_at` is not the visit date.** It is the moment the ticket was scheduled in CenterPoint. The visit is `visit_start_date` and `visit_start_time`, local to the job site, with `visit_end_date` for multi-day work. CenterPoint records no end time, so there is no visit length.
+- **`technician_source_id`** is the person doing the work and joins `work_profiles`. That table holds only staff a job or a time row points at, with name, position and active flag. The source's profiles collection also holds customer contacts with email and phone; none of that is copied.
+- **Read `v_work_job_visits`** for visits. It leaves out the same rows the money view does.
+- Verified on prod: 612 jobs carry a visit date, the same count as the raw data; 552 carry a start time; 40 are multi-day; all 13 technicians resolve to a name; `work_profiles` holds 25 people.
+- The daily pull now includes the profiles collection, so a new technician's name arrives the same night.
 
 **Schedule**
 
