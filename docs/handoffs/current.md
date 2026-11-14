@@ -1,184 +1,162 @@
-# Project Handoff — Pro Exteriors Open Brain / CRM (crm.proexteriorsus.net)
-**Project:** a-roofers-open-brain + the CRM app (`Clvrwrk/CRM_PWA`)
-**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain and https://github.com/Clvrwrk/CRM_PWA
-**Production URL:** https://crm.proexteriorsus.net (CRM) · https://cc.proexteriorsus.net (Command Center)
-**Date:** 2026-10-06 23:41 PDT
-**Agent:** Lead Orchestrator (Claude Code)
-**Reason:** User-requested (/project-handoff after the CRM nesting → journey → role access → My jobs run, 2026-10-05 to 2026-10-07)
+# Project Handoff — Company MCP gateway for staff AI agents (pe-connect)
+**Project:** Staff AI agent gateway: the A3 in a-roofers-open-brain, the gateway in `mcp.proexteriorsus.net`, the data contract in `CRM_PWA`
+**Repo:** https://github.com/Clvrwrk/mcp.proexteriorsus.net (gateway) · https://github.com/Clvrwrk/CRM_PWA (data contract) · https://github.com/Clvrwrk/a-roofer-open-brain (A3)
+**Production URL:** not yet deployed. No staging host exists either. The gateway has only run in tests.
+**Date:** 2026-11-13 20:55 PST
+**Agent:** Lead Orchestrator (Claude Code), with Ringer workers on GPT-5.6 Sol
+**Reason:** User-requested (/project-handoff)
+
+The previous handoff (CRM journey work, 2026-10-06) is at `docs/handoffs/archive/2026-11-13-2050-crm-journey-handoff-2026-10-06.md`.
 
 ---
 
 ## Accomplished This Session
 
-Every release below was switched by Chris on the CRM host and verified afterwards: `/healthz buildCommit`, anonymous 401s, the route-generator hash and Sentry. Every migration had a rolled-back prod dry run first and a ledger sha check after. The full records are in the CRM repo at `docs/delivery/FULL-RELEASE-2026-10-0*.md`, in PR #141.
+### Proposal (a-roofers-open-brain)
 
-### CRM releases (crm.proexteriorsus.net)
+- `proposals/a3-pe-connect-agent-gateway.md`: wrote the A3 for one company-owned remote MCP gateway that staff agents (Grok Bot, ChatGPT dots, Claude Duet) connect to. Merged as PR 74 (`7f296285`, admin override at Chris's instruction).
+- Two Ringer review rounds on the A3 (run `pe-connect-a3-review`, five lanes): 42 findings, then 31 with none at P0. Both rounds were applied. The text after the second revision has not been reviewed again.
+- PR 76 (open): records Chris's decisions in the A3. Decision 1 (10x exemption), decision 2 (new repo), decision 8 (27-role catalog map), and the "build to staging" status.
 
-| Release | Switched | Port | What changed |
-|---|---|---|---|
-| `ca21f94d` (#139) | 2026-10-06 15:16Z | 4465 | Search, Today and lead freshness are set-based (6.5 s to 0.1 s); trade names; Back to the row; Roles dialog fits; phone median labels |
-| `61602f2b` (#140) | 2026-10-06 15:53Z | 4466 | Customer journey card on every job: 10 phases, gate list v1 (38 gates), owners, next action, gated moves |
-| `91ad20cf` (#142) | 2026-10-06 23:22Z | 4467 | JOURNEY-13: journey-role holders get the job rep's access to every open job their role covers |
-| `9a1e4d9e` (#143) | 2026-10-07 06:34Z | 4468 | My jobs as a nest, a Next task on each office bar, actions greyed out with the reason (MY-JOBS-NEST-1–9) |
+### Gateway (Clvrwrk/mcp.proexteriorsus.net, new repo, `main` at `059470f`, 59 tests pass)
 
-### CRM migrations applied to prod `rnhmvcpsvtqjlffpsayu` (ledger sha equals file)
+- Issue 1: the spec. Issues 2 to 14: thirteen tickets (ticket NN is issue NN+1), each with a `Blocked by:` line.
+- PR 15 (ticket 01): walking skeleton. Streamable HTTP MCP server, one seeded tool call end to end, `/healthz` with `buildCommit`.
+- PR 16 (ticket 03): agent instruction standard. Server instructions, tool description standard, usage guide (`docs/agents/`).
+- PR 17 (ticket 04): policy. `access/capabilities.yaml`, `role-map.yaml`, `agent-ceilings.yaml`; effective access is the intersection; training gate fails closed.
+- PR 19 (ticket 06): instance registry, kill switch, call limits, JSON-RPC batch rejection, refusal status codes.
+- PR 20 (ticket 07): audit store in a separate append-only database.
+- PR 21 (ticket 05): sign-in as an OAuth 2.1 protected resource with WorkOS AuthKit as the authorization server. Tested only against a local stand-in issuer.
+- PR 22 (ticket 12): administrator runbook (`docs/admin/`, ten pages).
+- PR 18, then PR 23 and 24: role map. The nine-role residential map (PR 18) used keys that are not in the real catalog. PR 23 replaced it with a map over the 27 HR catalog roles, which Chris approved as written (`docs/admin/role-map-from-catalog.md`).
 
-| Migration | Ledger |
-|---|---|
-| `20261023010000_crm_speed_search_worklist` | `20261006044741` |
-| `20261023020000_crm_profile_trade_names` | `20261006044927` |
-| `20261024010000_crm_job_journey` | `20261006132336` |
-| `20261025010000_crm_journey_role_access` | `20261006211939`, sha `d3c8d105…`; Chris applied it |
-| `20261025020000_crm_journey_role_lists` | `20261006211940`, sha `7e6e8b46…` |
-| `20261026010000_crm_my_jobs_nest` | `20261007052547`, sha `d305422e…`; new functions only |
+### CRM data contract (Clvrwrk/CRM_PWA)
 
-### Brain repo (this repo, now on main)
+- PR 317 (merged as `f6f07305`): the HR org chart access tables, split out of PR 308 so the gateway was not blocked by the screens.
+- PR 319 (open, branch `chussey/mcp-api-contract-v1`, head `dff9f968`): ticket 02, first slice.
+  - `supabase/migrations/20261202090000_mcp_api_contract.sql`: schema `mcp_api`, `crm_private.mcp_membership`, `mcp_api.effective_access`, `mcp_api.directory_search`.
+  - `ops/mcp-gateway/install-role.sql` and `README.md`: installer for the `mcp_gateway` database role.
+  - `supabase/contracts/mcp_api/v1/`: JSON schemas, fixtures, role keys, README.
+  - `tests/database/mcp-api-contract.test.ts`: 9 tests. `scripts/test-mcp-api-contract.mjs`: the SR-24 pins.
+  - `docs/architecture/MCP-API.md` and a `docs/delivery/STATUS.md` entry.
+  - CI passed on `dafb4fed` and again on `235576f2` (9 database tests on Postgres 17). `dff9f968` merges main after PR 308 landed; its CI run had just started when this was written.
 
-- **`schemas/cleverwork-roofer/325-acculynx-unarchive-reseen.sql`:** applied 2026-10-06 (ledger `20261006123149`). It restored 157 wrongly archived AccuLynx estimates and held back 2 that are proven gone. acculynx-sync v54 (commit 874a716d) had already fixed the cause.
-- **`docs/knowledge-base/acculynx/ingestion/sync-pipeline.md`:** records the 325 apply.
-- **`docs/124-crm-job-journey-gates.md`:** journey live, plus a JOURNEY-13 section.
-- **`app/command-center/src/pages/design-system/decisions.astro`:** five CRM decision rows (journey card, JOURNEY-13, My jobs nest, Next task on office bars, greyed-with-reason). Deployed: cc `/healthz` = `404229e8`.
-- **`context/memory/2026-10-06-crm-journey.md`:** the session log.
+### What changed underneath this work (another session, same day)
 
-### Other prod changes
-
-- **CRM variables:** P6 readiness version 1 (`e2c6319f…`) submitted as Christopher Hussey at his direction. It is `in_review`, effective 2026-10-08 13:00Z, with the 8 Readiness Policy checks.
+- CRM_PWA PR 308 merged as `be899eda` at 2026-11-14 02:28Z. hr.proexteriorsus.net reports that commit.
+- Migrations `20261201090000`, `20261201100000` and `20261201110000` (tables, writers including `crm.read_hr_access`, and the 27-role seed) are applied to production. Source: the CRM `docs/delivery/STATUS.md` entry, approved by Chris 2026-11-13 22:19Z. This session did not check the production ledger itself.
 
 ## Git State
-- **Branch:** `claude/crm-performance-nesting-760bc9` (brain worktree); `main` matches it except for this handoff commit, which is pushed with this file.
-- **Last commit:** see the report at the end of this session (the handoff commit).
-- **Uncommitted changes:** none.
-- **CRM repo:** `main` = `9a1e4d9e` (live). PR #141 (release records for all four releases, docs only) is open. The feature branches are merged.
+
+| Repo | Branch | Last commit | Uncommitted |
+|------|--------|-------------|-------------|
+| a-roofers-open-brain (this worktree) | `contrib/cleverwork/pe-connect-a3-decisions` (PR 76) | the commit that adds this handoff | none |
+| mcp.proexteriorsus.net | `main` | `059470f` — "Merge pull request #24 from Clvrwrk/docs/runbook-role-map-links" | none |
+| CRM_PWA (clone at `Archives/home-builds/mcp-gateway-build/crm-pwa-split`) | `chussey/mcp-api-contract-v1` (PR 319) | `dff9f968` — "Merge origin/main (hr org chart rebuild, #308) into chussey/mcp-api-contract-v1" | none |
 
 ## Task Cut Off
-None. The session ended at a clean boundary: the last release is verified and the records are written.
+
+None. The session ended at a clean boundary. One check was still running: CI for PR 319 on `dff9f968`.
 
 ## Next Task — Start Here
 
-**Task:** Confirm the My jobs release with Chris's signed-in click-through, then pick up the follow-ups below.
+**Task:** Land PR 319, then build ticket 02b (job and job-notes functions in `mcp_api`).
 
 **What to check / do:**
-1. Ask Chris for the signed-in result. As a journey-role holder, Jobs should open on My jobs with the right reason tags and a Next task link on each office bar. On a covered job, Mark lost, Cancel and Reassign should be greyed with the reason under them. If anything is off, the source is CRM `packages/sales-workspace/src/components/nest/*` and `WhyNot.tsx`.
-2. Check whether a second admin approved P6 readiness version 1 before 2026-10-08 13:00Z: `select state, reviewed_by from crm.config_versions order by created_at desc limit 1;`. If it is still `in_review` after that time, approval fails with `effective_date_in_past`; the version must be returned and resubmitted with a new date.
-3. Ask Chris to merge CRM PR #141.
+1. Read the real CI result for PR 319: `gh run list -R Clvrwrk/CRM_PWA --branch chussey/mcp-api-contract-v1 --limit 3`, then `gh run view <id> --json conclusion`. Do not trust `gh run watch | tail`.
+2. If green and Chris says merge: `gh pr merge 319 -R Clvrwrk/CRM_PWA --squash`. If CRM `main` has moved again, merge it in first; `docs/delivery/STATUS.md` and the skip list in `scripts/test-my-jobs.mjs` conflict every time.
+3. Now that PR 308 is on `main`, read `crm.read_hr_access` in `20261201100000_hr_org_chart_access_writers.sql` and compare it with `mcp_api.effective_access`. Reuse its helpers (`crm_private.hr_role_current`, `hr_grant_at`, `hr_oc_scope`) where they do the same job.
+4. Check `supabase/contracts/mcp_api/v1/role-keys.json` against the merged seed. It holds two keys (`client_support_lead`, `field_coordinator`) that are not in `20261201110000_hr_role_catalog_matrix_seed.sql`. Decide whether they are test-only fixtures or should be the real 27.
+5. Ticket 02b in a new CRM branch: `mcp_api.find_jobs`, `mcp_api.get_job`, `mcp_api.list_job_notes` (coverage and cursor, never marks anything read). Reuse `crm_private.effort_visible(m,m,e)` and `crm_private.job_notes_page`. Then `org_chart`.
+6. Then gateway tickets 08 to 10 (issues 9, 10, 11): vendor the contract at a pinned CRM commit and build the tools.
 
-**If a CRM release is needed:** use the release kit in `~/crm-nesting-build/release/`. Write a spec with `prev=9a1e4d9e7d35` and port `4469` (copy `spec-9a1e4d9e.json`, update `observed` from the `9a1e4d9e` switch: container `d7ab55db…`, image `sha256:165591fabd34183dee1bf6cc6d95d7ef9ff3bd9d440c4ba063273ead5e6753b3`, route `7d7ed15722912e01ce9e82f5bd4713c7fff0528f57f6b2da75e755c6dbaada84`). Then run `zsh prepare2.sh <spec>`, hand Chris `COMMANDS-*.md`, and verify after his switch.
+**If CRM CI fails on SR-24:** every new `crm` or `crm_private` function needs a pin in a `scripts/test-*.mjs` file changed in the same diff. Pins inside a vitest file do not count.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Check the P6 readiness approval state and PR #141, then ask me for the My jobs click-through result."
+**If CRM CI fails in `test:db:my-jobs`:** the new migration is missing from the skip list in `scripts/test-my-jobs.mjs`.
+
+**Prompt to use:** "Read docs/handoffs/current.md in the pe-workflow-ai-connectivity worktree and the memory file mcp-gateway-build-resume. Check CI on CRM_PWA PR 319, then start ticket 02b."
 
 ## Decisions Made This Session
 
-- **Journey (JOURNEY-1–12):** stage = the 10 journey phases; gate list v1 has 38 gates; inferred means evidence until a person confirms; manual gates never read Met on their own; move back is admin-only; once a person sets the CRM phase, the AccuLynx sync never changes it; conditional waivers into P9 and unconditional into P10; an office with no seat holder shows the company holder.
-- **JOURNEY-13:**
-  - Holding a journey role gives the rep's access to every open job the role covers.
-  - Coverage: an office seat covers its office at every stage; a company seat covers only offices with no holder of that role.
-  - Rights: same as the rep. Reassign, cancel, lost, reopen, proposal ready, readiness review and waive, and request assign stay with managers and admins.
-  - Sales Consultant (the job's rep) and AI roles grant nothing.
-- **My jobs (MY-JOBS-NEST-1–9):**
-  - Jobs opens on My jobs, with a toggle to All jobs.
-  - The nest is Office › Sales rep › Job type › Estimates.
-  - A "why it's mine" reason on every job.
-  - One Next task per office bar.
-  - Unavailable actions are greyed out with the reason; Chris chose greying over hiding.
-- **Rollout rule (learned the hard way, 2026-10-06 21:19–23:22Z):** the CRM's parsers are strict, so a new field or enum value in an existing answer breaks the live app. Ship new data through NEW function names and routes, applied before the app, or ship the parser first.
-- **Prod routes for large SQL:** agents can send about 130 KB through the Supabase MCP. The 239 KB JOURNEY-13 dry run was stopped by the safety classifier, and a psql apply script was denied. Keep migrations under about 90 KB, or Chris runs them.
+- **10x gate exemption:** Chris classed the gateway as mission-grade infrastructure (hard rule 9).
+- **New repo `Clvrwrk/mcp.proexteriorsus.net`:** the gateway is not part of the client brain and must not share its lineage.
+- **Build to staging with seeded test data only:** no agent product is connected and no production data is read until A3 decisions 3 to 8 are settled.
+- **Tracker is GitHub issues in the new repo:** spec is issue 1.
+- **Two test seams:** the MCP HTTP endpoint, and the CRM database functions in the CRM test suite.
+- **Phase one is read-only CRM and HR:** no Historian or client-brain tool is exposed to a vendor-hosted agent (hard rule 5). QuickBooks is never reachable.
+- **Access source is the HR role catalog (27 roles):** Chris approved the map as written. The earlier nine-role residential map is superseded.
+- **Documentation is a first-class deliverable:** Chris corrected the first breakdown for lacking instructions for human users and for agents. Staff guide, admin runbook, agent-facing instructions and `AGENTS.md` are tickets, not afterthoughts.
+- **Ringer engine:** GPT-5.6 Sol.
+- **PR 308 was split, not merged by this session:** Chris chose "split out the migration" (PR 317) while another session finished the screens.
+- **Contract lives in CRM_PWA, the gateway vendors it:** the gateway never reads CRM tables. It gets `USAGE` on `mcp_api` and `EXECUTE` on the readers through a `NOLOGIN NOINHERIT` role.
 
 ## Blockers Requiring Human Action
 
-1. **Signed-in click-through** of journey, JOURNEY-13 and My jobs: Chris.
-2. **P6 readiness approval** by a second admin (Roberto, Chandler, …) in Admin › CRM variables before 2026-10-08 13:00Z.
-3. **Merge CRM PR #141** (docs only).
-4. **CRM host operations** (stage, switch, rollback over SSH) stay with Chris: the classifier blocks the agent.
-5. **Unmerged CRM PRs from earlier work:** #136, #135, #133, #132, #130, #127 and #123. #123 (lien waivers) needs an audience decision for Crew compliance holders.
+1. **PR 76 (a-roofers-open-brain)** — merge state is BLOCKED on review. Needs Chris's admin merge. Merging to `main` triggers a Command Center build because the commit hook bumps `version.ts`.
+2. **PR 319 (CRM_PWA)** — Chris to say merge once CI is green. Not applied to any database; the `mcp_gateway` role is not installed anywhere.
+3. **Ticket 13 (staging deploy)** — needs a WorkOS staging test person and a Sentry project.
+4. **A3 section 9, decisions 3 to 7** — still open. They gate connecting any agent product.
+5. **WorkOS staging** — register the gateway URL as a resource indicator, turn on client registration, and read the real claim names for org, client id and session from an AuthKit token. The code assumes `org_id`, `client_id`, `sid`.
 
 ## Verification Commands
-1. `curl -s https://crm.proexteriorsus.net/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin)["buildCommit"])'`: should return `9a1e4d9e7d35944142e25cfa6350668622253b47`.
-2. `curl -s -o /dev/null -w '%{http_code}' https://crm.proexteriorsus.net/api/v1/nest/mine`: should return `401`.
-3. `curl -s https://cc.proexteriorsus.net/healthz`: `buildCommit` should equal brain `origin/main`.
-4. SQL (MCP, read-only): `select name, encode(sha256(convert_to(array_to_string(statements,''),'UTF8')),'hex') from supabase_migrations.schema_migrations where name like 'crm_%2026102%' order by version;`: six rows, each sha equal to its CRM file.
+
+1. `cd "/Volumes/M1 Application SSD/Projects/mcp.proexteriorsus.net" && npm test` — should report 59 tests passing.
+2. `gh issue list -R Clvrwrk/mcp.proexteriorsus.net --state open` — should list issues 1, 3, 9, 10, 11, 12, 14.
+3. `gh pr view 319 -R Clvrwrk/CRM_PWA --json state,mergeStateStatus` — `OPEN`, and not `DIRTY`.
+4. `curl -s https://hr.proexteriorsus.net/healthz` — `buildCommit` should be `be899eda…` or later.
+5. `cd ~/mcp-gateway-build/crm-pwa-split && node scripts/test-mcp-api-contract.mjs` — prints `mcp api contract pins: ok`.
 
 ## Full Context
 
 ### What was built across ALL sessions (complete feature list)
-Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
-- Invoice Audit v2 (docs/81), office-inherited pricing, vendor/office/time/UOM silos (migs 119–122, 201, 208, 217)
-- Friday WIP/AR board (mig 215), credit-memo claim sets, Agreement Builder + `agreement_gap_queue` (migs 229/229b)
-- Materialised audit line + on-demand refresh (migs 272–276); item-aware supersession (277); weekly QB export set (278); vendor arm parity (279); negative-total/CM routing + per-vendor export (280)
-- Cash family: 13-week cash flow, cash runway, fixed costs (mig 281)
-- Runtime uptime board `/agents` with direct third-party pings (docs/109, 2026-09-11/12); Thursday WIP/AR pack on openpyxl
-- Living design system at `/design-system` (docs/112, 2026-09-14)
-- **2026-09-15 → 09-22:**
-  - triage office-matview race + reconcile scope (289); June line reopen (290);
-  - branch 326 re-key + aliases (291); slug-keyed branch aliases + stub office carry (292/292b);
-  - June invoice closeout register + reset guard + "Processed — closed" label (293/293b + app);
-  - AccuLynx link INS- prefix + client-name fallback (294);
-  - weekly export set on the app's pending rule + NOT-paid/ledger guards (295/295b);
-  - site-sweep timeout fix + evergreen + design-system exemptions; job-report `started_at`;
-  - SRS September ingest + 71 PDFs; QB bank batch 7/31–8/12 rebuilt from the export log
-- **2026-10-05 → 10-07 (CRM):**
-  - nested Office › Sales rep › Stage surfaces and the corner rule (5e69f758);
-  - set-based Search, Today and lead freshness (ca21f94d);
-  - the customer journey card (61602f2b);
-  - JOURNEY-13 role-holder access (91ad20cf);
-  - My jobs nest + Next task + greyed actions (9a1e4d9e);
-  - AccuLynx archive repair 325 + sync v54;
-  - P6 readiness version submitted
+
+Earlier CRM and Command Center work is listed in the archived handoff named at the top. For this project:
+
+- A3 proposal, merged, twice reviewed.
+- Gateway repo with spec, thirteen tickets, and tickets 01, 03, 04, 05, 06, 07, 12 merged.
+- Approved 27-role map.
+- CRM tables for role grants (PR 317, merged; applied to production by another session).
+- CRM `mcp_api` contract v1, first slice (PR 319, open).
+
+### What is NOT true yet (do not report otherwise)
+
+- The gateway is not deployed anywhere. `GATEWAY_MODE=test` only.
+- The operator commands (kill switch, register, audit tail) each start a private embedded database. They cannot affect a running gateway. There is no working kill switch, rollback or offboarding until ticket 13 adds a persistent Postgres.
+- The only tool is a seeded directory lookup. No job, notes or org chart tool exists.
+- Sign-in has never run against real WorkOS.
+- Nine moderate `npm audit` findings in dev dependencies are not triaged.
+- The gateway repo and CRM_PWA have automatic CodeRabbit and Greptile reviews turned off. None of the merged gateway PRs had a bot review.
 
 ### Architecture decisions
-- `v_invoice_audit_line` is the definition of record; every reader goes through `mv_invoice_audit_line`. The matview is refreshed by pg_cron job 13 every 15 min, and on demand via `request_matview_refresh` → job 15. The invoice-level view `v_invoice_audit_invoice` is still live and is the next materialisation candidate.
-- The pricing arm resolves an invoice's PE office through `mv_invoice_pricing_office`, which resolves `abc_invoices.vendor_branch_id`, set at ingest through `vendor_branch_alias` (mig 243). Branch identity is the alias row, never the branch-number string.
-- Alex's triage refreshes `mv_office_agreement_versions` + `mv_invoice_pricing_office` before evaluating, and fails closed without a pricing-office row (mig 289).
-- `invoice_audit_closeout` is a human register: `invoice_audit_reset()` refuses closed-out invoices.
-- "Pending" is defined once (app + `v_inv_processed_weekly`): undecided AND visible discrepancy.
-- Credit status is derived from the amount, never written onto the vendor mirror.
-- Service tokens cannot export QB bank files (`approval.decide`).
-- **CRM access model:**
-  - **Core rule:** `crm_private.rep_access` keyed by owner, plus `effort_roles` per job, plus journey coverage (`crm_private.journey_cover` / `journey_covers`).
-  - **`effort_visible(v,b,e)`** is the single-job predicate. Under View-as it is the target ∩ the admin. It never reads the JWT.
-  - **Set readers** compute owners and cover arrays once per call. Never call a per-row access function in a set reader; a static test (D9) pins this.
-  - **Manager-only operations** refuse a `journey_role`-only basis (`crm_private.effort_access_basis`).
-- **CRM journey:**
-  - Gate catalog `crm_private.journey_gate_catalog()` (journey-gates-v1).
-  - Confirmations are append-only (`crm.journey_gate_confirmations`).
-  - The phase source is `efforts.journey_phase_source`. Once a person sets it (`'crm'`), the AccuLynx import leaves the phase alone.
-- **CRM My jobs:**
-  - `crm.read_my_nest` returns a NestPage plus reasons and next_tasks.
-  - `crm.read_effort_permissions(ids)` returns per-job `can_*` flags. The client greys on false and keeps today's behaviour when the read fails.
 
-### Design system
-- **Site:** https://cc.proexteriorsus.net/design-system (docs/112).
-- **Type:** Inter 400/600/700/800, body 14px.
-- **Colors:** navy `#11133f` authority, flag red `#c22326` the one CTA, gold `#eaa221` attention, hunter green `#3b6b4c` status, smart blue `#0066cc` links.
-- **Lists:** ten-row long-list panes.
-- **CRM corner rule (S-10):** controls 8px, containers 12px, nested bars 8px, tags 4px; circles only for avatars, dots and counts.
-- **CRM disabled pattern:** greyed at 50%, still focusable, with the reason directly under the control (`aria-describedby`); never hidden.
+- TypeScript on Node 22, official MCP SDK, Streamable HTTP only, stateless.
+- PGlite (embedded Postgres) for dev and tests, because Docker on this Mac points at the remote Hetzner host and there is no local Postgres. CRM database tests run only in CI (about 15 minutes, Postgres 17).
+- Refusals: 401 means sign in; 403 unregistered instance or no membership; 503 kill switch; 429 with `Retry-After`; 400 for a JSON-RPC batch. The refusal text is fixed and tells the agent to stop and tell the person.
+- Policy bundle is hashed (SHA-256); a catalog that does not match the bundle is refused.
+- Audit sink is insert-only against a separate database.
+
+### Design system (if applicable)
+
+Not applicable. The gateway has no screens. Any future admin screen follows https://ds.proexteriorsus.net and needs a mockup first.
 
 ### Key invariants (never violate)
-- Four pricing gates: vendor · office · time (item-aware supersession) · UOM. The audit refuses rather than converts, and the lowest price wins a tie.
-- A negative total is a credit memo. One QB export file per vendor. `register_exported_at` and `qb_bank_export_log` are one-way.
-- A human cancellation or closeout is a decision: surface it, never revive it.
-- Nothing external without a human. QBO is read-only. No secrets in code or chat.
-- Every agent pass that writes decisions refreshes or verifies the matviews it reads first.
-- Every token, component or decision change updates the design-system chapter.
-- **CRM migrations:**
-  - Additive and idempotent.
-  - Prod dry run first (ending in a ROLLBACK_SENTINEL); ledger sha = file sha after.
-  - Never change the answer shape of a live function the running app parses: add new function names instead.
-  - No overloads in `crm`, and no new defaulted parameters on existing functions (42725).
-- **Durable work** lives in `~/crm-nesting-build/`, never only in /tmp: a Mac restart wipes it (global CLAUDE.md).
 
-### Service / deployment map
+- Staging and seeded data only until Chris settles A3 decisions 3 to 8: this is the approval the build runs under.
+- No client-brain or Historian tool to a vendor-hosted agent: hard rule 5.
+- Read-only in phase one; QuickBooks never: hard rule 13.
+- CRM migrations are additive and are not applied to production without Chris.
+- Never call anything live without the three checks in the global deploy rule (running commit, source branch, signed-in page with real data). Claude cannot sign in to production sites.
+- When the first Coolify app is created from a branch, switch its source to `main` after the merge.
+
+### Service / deployment map (if applicable)
+
 | Service | Detail |
 |---------|--------|
-| Prod Supabase | `rnhmvcpsvtqjlffpsayu`, shared by dev and live. For the applied watermark, query `supabase_migrations.schema_migrations`; never trust a number written here. |
-| Command Center deploy | Coolify → `cc.proexteriorsus.net` from `origin/main` on push; verify `/healthz buildCommit`. Coolify host `178.105.220.14` (`~/.ssh/a_roofers_open_brain_ed25519`). |
-| CRM deploy | Pinned release modules (`scripts/release-crm-<sha12>.py` + engine `release-property-journey.py`). Each pin derives from the previous one with `~/crm-nesting-build/release/derive-pin.py` / `prepare2.sh <spec>`. Chris runs scp, stage and switch on `178.105.220.14`. Live: `crm-weekly-9a1e4d9e7d35` on 4468; rollback target `crm-weekly-91ad20cf2ae2` on 4467. The next port is 4469. |
-| CRM local DB tests | Docker `crm-nest-test` 127.0.0.1:55439 (password in `~/crm-nesting-build/build/.pg-crm-nest`). Lock with `mkdir ~/crm-nesting-build/build/db.lock`. The full chain runner is `build/run-db-chain-myjobs.sh`. |
-| CRM Sentry | org `cleverwork`, project `pwa-crm` |
-| Dev | port 4399 via `.claude/launch.json` `command-center` |
-| Agent host | Hetzner `178.156.203.23` (`~/.ssh/hetzner_office`) |
-| Nightly ABC | `scripts/abc-nightly-sync.sh` 03:30 ET |
-| pg_cron | job 13 (15 min): matviews + CM claims + reconcile; job 15 (1 min): on-demand refresh; job 18: order↔AccuLynx matview; `crm-acculynx-nightly-sync` 09:30Z |
-| Agent auth to live site | Bearer service tokens on `/api/*`; skill `/workos-agent-auth` |
-| Slack | per-agent bots per `/slack-agents`; dev traffic → `#pe-cc-dev-team` |
-| Linear | PE-CC-DevTeam; the MCP needs authorisation |
+| Gateway | not deployed. Planned staging host `mcp-staging.proexteriorsus.net`; planned production `mcp.proexteriorsus.net` |
+| CRM | https://crm.proexteriorsus.net — `buildCommit` `d961dbcb` at 2026-11-14 04:49Z |
+| HR | https://hr.proexteriorsus.net — `buildCommit` `be899eda` |
+| Command Center | https://cc.proexteriorsus.net — `buildCommit` `60b975c8` |
+| Shared Supabase | project `rnhmvcpsvtqjlffpsayu` (production data; the gateway must not touch it yet) |
+| Ringer | `~/Library/CloudStorage/Dropbox-AIA4/Cleverwork Main/GROK/OpenEngine/repos/ringer`; run `mcp-gateway-build`; workdir `~/mcp-gateway-build` |
+| Linear | PEC-976 (status record, links the GitHub issues) and PEC-977 (items that need Chris) |
+| Resume memory | `mcp-gateway-build-resume.md` and `pe-connect-a3-resume.md` in the Claude project memory folder |
