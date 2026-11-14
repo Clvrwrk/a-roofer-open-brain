@@ -1,101 +1,127 @@
-# Project Handoff — Pro Exteriors Open Brain / CRM (crm.proexteriorsus.net)
-**Project:** a-roofers-open-brain + the CRM app (`Clvrwrk/CRM_PWA`)
-**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain and https://github.com/Clvrwrk/CRM_PWA
-**Production URL:** https://crm.proexteriorsus.net (CRM) · https://cc.proexteriorsus.net (Command Center)
-**Date:** 2026-10-06 23:41 PDT
-**Agent:** Lead Orchestrator (Claude Code)
-**Reason:** User-requested (/project-handoff after the CRM nesting → journey → role access → My jobs run, 2026-10-05 to 2026-10-07)
+# Project Handoff — Pro Exteriors Open Brain / CRM and PM job Activity
+**Project:** a-roofers-open-brain + the CRM app (`Clvrwrk/CRM_PWA`) + the PM app (`Clvrwrk/pm.proexteriorsus.net`)
+**Repo:** https://github.com/Clvrwrk/a-roofer-open-brain · https://github.com/Clvrwrk/CRM_PWA · https://github.com/Clvrwrk/pm.proexteriorsus.net
+**Production URL:** https://crm.proexteriorsus.net (CRM) · https://pm.proexteriorsus.net (PM) · https://cc.proexteriorsus.net (Command Center)
+**Date:** 2026-11-13 20:55 PST (2026-11-14 04:55Z)
+**Agent:** Lead Orchestrator (Claude Code), with two child sessions (scheduler host removal, PM Activity nest)
+**Reason:** User-requested (/project-handoff after the nested Job Activity run, 2026-11-12 to 2026-11-13)
 
 ---
 
 ## Accomplished This Session
 
-Every release below was switched by Chris on the CRM host and verified afterwards: `/healthz buildCommit`, anonymous 401s, the route-generator hash and Sentry. Every migration had a rolled-back prod dry run first and a ledger sha check after. The full records are in the CRM repo at `docs/delivery/FULL-RELEASE-2026-10-0*.md`, in PR #141.
+State below was re-read at 2026-11-14 04:50Z from GitHub, the three `/healthz` endpoints, DNS and the prod database. Anything not re-read is marked.
 
-### CRM releases (crm.proexteriorsus.net)
+### 1. AccuLynx Activity Feed check (2026-11-12, no change made)
 
-| Release | Switched | Port | What changed |
-|---|---|---|---|
-| `ca21f94d` (#139) | 2026-10-06 15:16Z | 4465 | Search, Today and lead freshness are set-based (6.5 s to 0.1 s); trade names; Back to the row; Roles dialog fits; phone median labels |
-| `61602f2b` (#140) | 2026-10-06 15:53Z | 4466 | Customer journey card on every job: 10 phases, gate list v1 (38 gates), owners, next action, gated moves |
-| `91ad20cf` (#142) | 2026-10-06 23:22Z | 4467 | JOURNEY-13: journey-role holders get the job rep's access to every open job their role covers |
-| `9a1e4d9e` (#143) | 2026-10-07 06:34Z | 4468 | My jobs as a nest, a Next task on each office bar, actions greyed out with the reason (MY-JOBS-NEST-1–9) |
+- Computer use can read the Activity Feed on an open AccuLynx tab in Chrome, as a screenshot only. Chrome is granted view-only, so it cannot scroll or click there.
+- The Chrome extension can scroll and click, but only in its own tab group. Whether Chris's AccuLynx login carries into an extension tab was not tested.
 
-### CRM migrations applied to prod `rnhmvcpsvtqjlffpsayu` (ledger sha equals file)
+### 2. CRM job page: UI/UX audit of the duplicated notes lists (2026-11-12)
 
-| Migration | Ledger |
+Audited from code (CRM `main` at `8bfd54d2`) and Chris's screenshot of KS-143. Findings:
+
+- Two lists showed the same notes (Notes threads above, activity feed below); one event could appear up to four times.
+- Replies were flattened in the feed, the two "Notes" counts disagreed, and no long text was clamped.
+- Open state was not remembered, against ds rule F-06.
+
+### 3. Mockup, brand audit, gap analysis (mockup-first rule)
+
+- Mockup canvas: https://claude.ai/artifact/GCDpnYRtYAqXR1hPrZm5bu, boards Main, Open, Phone and PM. Chris signed it off on 2026-11-12 ("Looks great, build, publish, deploy").
+- Chris's change before sign-off: nest it like invoices. Notes, Emails, Calls, Texts, Uploads, Stage and gates are bars that stay closed until someone opens them.
+- Audit and gap analysis: `docs/design/JOB-ACTIVITY-NEST.md` in CRM_PWA. Decision id JOB-ACTIVITY-11.
+- Source copy of the boards: `~/activity-mockup-build` (the scratchpad copy is throwaway).
+
+### 4. CRM release: nested Job Activity (live, confirmed by Chris)
+
+| Item | State |
 |---|---|
-| `20261023010000_crm_speed_search_worklist` | `20261006044741` |
-| `20261023020000_crm_profile_trade_names` | `20261006044927` |
-| `20261024010000_crm_job_journey` | `20261006132336` |
-| `20261025010000_crm_journey_role_access` | `20261006211939`, sha `d3c8d105…`; Chris applied it |
-| `20261025020000_crm_journey_role_lists` | `20261006211940`, sha `7e6e8b46…` |
-| `20261026010000_crm_my_jobs_nest` | `20261007052547`, sha `d305422e…`; new functions only |
+| [Clvrwrk/CRM_PWA#300](https://github.com/Clvrwrk/CRM_PWA/pull/300) "crm: Job Activity as a nest, closed until opened (JOB-ACTIVITY-11)" | Merged 2026-11-13T02:00Z as `38c0d8dd`. Front end only, no migration. |
+| Release t23 | Deployed 2026-11-13T02:03Z on `root@178.105.220.14`: `/opt/crm-t23-38c0d8dd-20261113`, container `crm-weekly-38c0d8dd95ba`. |
+| Signed-in check | Chris confirmed the bars on a signed-in Job page on 2026-11-13 ("Looks right"). |
+| [Clvrwrk/CRM_PWA#304](https://github.com/Clvrwrk/CRM_PWA/pull/304) "docs: record the t23 CRM release" | Merged 2026-11-13T14:28Z as `977c97b3`. Docs only. |
+| Live now | `/healthz` reads `d961dbcb`. Later releases by other sessions replaced t23; `d961dbcb` is 18 commits ahead of `38c0d8dd` and 0 behind, so the nest is still in the running build. |
 
-### Brain repo (this repo, now on main)
+### 5. scheduler.proexteriorsus.net deleted (child session, complete)
 
-- **`schemas/cleverwork-roofer/325-acculynx-unarchive-reseen.sql`:** applied 2026-10-06 (ledger `20261006123149`). It restored 157 wrongly archived AccuLynx estimates and held back 2 that are proven gone. acculynx-sync v54 (commit 874a716d) had already fixed the cause.
-- **`docs/knowledge-base/acculynx/ingestion/sync-pipeline.md`:** records the 325 apply.
-- **`docs/124-crm-job-journey-gates.md`:** journey live, plus a JOURNEY-13 section.
-- **`app/command-center/src/pages/design-system/decisions.astro`:** five CRM decision rows (journey card, JOURNEY-13, My jobs nest, Next task on office bars, greyed-with-reason). Deployed: cc `/healthz` = `404229e8`.
-- **`context/memory/2026-10-06-crm-journey.md`:** the session log.
+Chris asked for it to be actually deleted so only pm.proexteriorsus.net serves the PM app.
 
-### Other prod changes
+- PM release `c753b1f` activated on the host 2026-11-13T02:09Z. `https://pm.proexteriorsus.net/healthz` reads `c753b1f` (re-read now).
+- Cloudflare A record `scheduler` deleted and the TLS rule moved to pm. `dig scheduler.proexteriorsus.net` returns nothing (re-read now).
+- WorkOS scheduler callback removed through Chris's signed-in Chrome (child session's report; not re-read).
+- [Clvrwrk/pm.proexteriorsus.net#26](https://github.com/Clvrwrk/pm.proexteriorsus.net/pull/26) merged as `f77fde87`; PM docs PR 27 merged as `b4fe939`.
+- [Clvrwrk/a-roofer-open-brain#73](https://github.com/Clvrwrk/a-roofer-open-brain/pull/73) "Point PM app references at pm.proexteriorsus.net" merged 2026-11-13T14:29Z as `ced3258c`.
+- Local folder renamed to `app/PM_PWA/pm.proexteriorsus.net/`.
+- Leftovers: stopped `a6b51a3` rollback containers on the host. Resume note: memory `scheduler-host-removal-resume.md`.
 
-- **CRM variables:** P6 readiness version 1 (`e2c6319f…`) submitted as Christopher Hussey at his direction. It is `in_review`, effective 2026-10-08 13:00Z, with the 8 Readiness Policy checks.
+### 6. PM app: nested Job activity with the CRM's note threads (built, NOT deployed)
+
+- Research and options A to D: `~/Library/Application Support/Claude/side-session-notes/local_d359d942-733b-461d-a1f6-735a9c886050/pm-activity-nest-options.md`.
+- Chris chose on 2026-11-13: "A, yes, hold" (see Decisions).
+- [Clvrwrk/pm.proexteriorsus.net#31](https://github.com/Clvrwrk/pm.proexteriorsus.net/pull/31) "Job activity nest on the History tab, with the CRM's note threads": OPEN, head `30e31d16` (was `059fbb48`), branch `claude/pm-activity-nest`, worktree `~/pm-activity-nest-build`.
+- What it holds: migration `supabase/migrations/202609140023_job_crm_effort.sql` (function `public.scheduler_job_crm_effort`), a CRM notes client on the PM server, three routes, the History tab nest, the Inbox at ten rows behind "Show all N", design record `docs/JOB-ACTIVITY-NEST.md`, screenshots at 1440 and 390.
+- CI: `secret-scan` failed on the first head `059fbb48` (gitleaks, 1 finding). The PM session fixed it and renumbered the migration from 022 to 023; on the new head `30e31d16` `secret-scan` passes (run 43559006988, re-read 2026-11-14 05:00Z) and "Verify scheduler" was still running. What gitleaks had flagged is in that session's report; it was not re-read here.
+- Prod database re-read now: `public.scheduler_job_crm_effort` does not exist and the ledger has no row for it. The hold is intact.
+
+### 7. Linear (PE-DEV-TEAM), updated 2026-11-14 04:53Z
+
+- [PEC-996](https://linear.app/cleverwork/issue/PEC-996): new, Done. Record of the CRM nested Job Activity (JOB-ACTIVITY-11).
+- [PEC-995](https://linear.app/cleverwork/issue/PEC-995): new, Done. Record of the scheduler host removal.
+- [PEC-743](https://linear.app/cleverwork/issue/PEC-743) (quick note and shared job communication on PM): moved Backlog to In Progress, PR 31 linked, status comment with what the PR covers, what it leaves out, the secret scan and the hold.
+- [PEC-721](https://linear.app/cleverwork/issue/PEC-721) (PM slice 5 mapping): comment that the mapping function is written in PR 31 and not applied.
+- [PEC-915](https://linear.app/cleverwork/issue/PEC-915) (Activity box position): comment that the box's contents changed in t23; its own acceptance criteria were not re-checked.
 
 ## Git State
-- **Branch:** `claude/crm-performance-nesting-760bc9` (brain worktree); `main` matches it except for this handoff commit, which is pushed with this file.
-- **Last commit:** see the report at the end of this session (the handoff commit).
+- **Branch (brain worktree):** `claude/acculynx-activity-feed-access-f339d8`, fast-forwarded to `origin/main` (`60b975c8`) before this handoff commit. The handoff is pushed on this branch with a docs-only PR; `main` requires one approving review and the `verify` check, so the agent cannot merge it.
+- **Last commit:** the handoff commit on this branch (see the session report).
 - **Uncommitted changes:** none.
-- **CRM repo:** `main` = `9a1e4d9e` (live). PR #141 (release records for all four releases, docs only) is open. The feature branches are merged.
+- **CRM repo:** `main` holds `38c0d8dd` (PR 300) and `977c97b3` (PR 304). Worktree `~/activity-audit-build` is no longer needed.
+- **PM repo:** `main` = `c124c2c3`; production runs `c753b1f`, 15 commits behind `main` (PRs 25 to 28 from other sessions are merged but not released). PR 31 is open on `claude/pm-activity-nest`.
 
 ## Task Cut Off
-None. The session ended at a clean boundary: the last release is verified and the records are written.
+None. The CRM work is closed. The PM work stopped at an open PR by Chris's instruction ("hold").
 
 ## Next Task — Start Here
 
-**Task:** Confirm the My jobs release with Chris's signed-in click-through, then pick up the follow-ups below.
+**Task:** Get PM PR 31 ready to merge, then wait for Chris's word before any database change or release.
 
 **What to check / do:**
-1. Ask Chris for the signed-in result. As a journey-role holder, Jobs should open on My jobs with the right reason tags and a Next task link on each office bar. On a covered job, Mark lost, Cancel and Reassign should be greyed with the reason under them. If anything is off, the source is CRM `packages/sales-workspace/src/components/nest/*` and `WhyNot.tsx`.
-2. Check whether a second admin approved P6 readiness version 1 before 2026-10-08 13:00Z: `select state, reviewed_by from crm.config_versions order by created_at desc limit 1;`. If it is still `in_review` after that time, approval fails with `effective_date_in_past`; the version must be returned and resubmitted with a new date.
-3. Ask Chris to merge CRM PR #141.
+1. Confirm both checks are green on PR 31's current head: `gh run list --repo Clvrwrk/pm.proexteriorsus.net --branch claude/pm-activity-nest --limit 4`. `secret-scan` already passes on `30e31d16`.
+2. Put the built History tab beside the mockup board "PM job" (and "Phone" for an opened thread) and compare, using the PR's screenshots. The PR lists three intended differences; anything else is a defect.
+3. Read CodeRabbit's summary on PR 31. Greptile auto-review is off for this repo and CodeRabbit is on the free plan, so "both bots clean" cannot be met as written; say so in the PR.
+4. Ask Chris for three separate go-aheads: merge PR 31, apply migration `202609140023` to production, and release PM.
+5. On his word, in this order: apply the migration, set `SUPABASE_PUBLISHABLE_KEY` in `/opt/pe-scheduler/.env`, release with `deploy/activate.sh` as root on `178.105.220.14`. The release will also ship PRs 25 to 28; state that before shipping.
+6. Verify: `pm.proexteriorsus.net/healthz` `buildCommit` equals the released commit, then Chris opens one job's History tab. Claude cannot sign in to production.
 
-**If a CRM release is needed:** use the release kit in `~/crm-nesting-build/release/`. Write a spec with `prev=9a1e4d9e7d35` and port `4469` (copy `spec-9a1e4d9e.json`, update `observed` from the `9a1e4d9e` switch: container `d7ab55db…`, image `sha256:165591fabd34183dee1bf6cc6d95d7ef9ff3bd9d440c4ba063273ead5e6753b3`, route `7d7ed15722912e01ce9e82f5bd4713c7fff0528f57f6b2da75e755c6dbaada84`). Then run `zsh prepare2.sh <spec>`, hand Chris `COMMANDS-*.md`, and verify after his switch.
+**If the CRM refuses the PM token:** the tab says the notes could not be loaded, and Sentry shows `CRM_NOTES_GATEWAY_REFUSED` or `CRM_NOTES_TOKEN_REFUSED`. Unset `SUPABASE_PUBLISHABLE_KEY` to turn the CRM part off; the tab then shows production history only.
 
-**Prompt to use:** "Read docs/handoffs/current.md. Check the P6 readiness approval state and PR #141, then ask me for the My jobs click-through result."
+**Prompt to use:** "Read docs/handoffs/current.md. Confirm the checks on pm.proexteriorsus.net PR 31 and compare the built History tab with the PM mockup board. Do not merge, apply the migration or release."
 
 ## Decisions Made This Session
 
-- **Journey (JOURNEY-1–12):** stage = the 10 journey phases; gate list v1 has 38 gates; inferred means evidence until a person confirms; manual gates never read Met on their own; move back is admin-only; once a person sets the CRM phase, the AccuLynx sync never changes it; conditional waivers into P9 and unconditional into P10; an office with no seat holder shows the company holder.
-- **JOURNEY-13:**
-  - Holding a journey role gives the rep's access to every open job the role covers.
-  - Coverage: an office seat covers its office at every stage; a company seat covers only offices with no holder of that role.
-  - Rights: same as the rep. Reassign, cancel, lost, reopen, proposal ready, readiness review and waive, and request assign stay with managers and admins.
-  - Sales Consultant (the job's rep) and AI roles grant nothing.
-- **My jobs (MY-JOBS-NEST-1–9):**
-  - Jobs opens on My jobs, with a toggle to All jobs.
-  - The nest is Office › Sales rep › Job type › Estimates.
-  - A "why it's mine" reason on every job.
-  - One Next task per office bar.
-  - Unavailable actions are greyed out with the reason; Chris chose greying over hiding.
-- **Rollout rule (learned the hard way, 2026-10-06 21:19–23:22Z):** the CRM's parsers are strict, so a new field or enum value in an existing answer breaks the live app. Ship new data through NEW function names and routes, applied before the app, or ship the parser first.
-- **Prod routes for large SQL:** agents can send about 130 KB through the Supabase MCP. The 239 KB JOURNEY-13 dry run was stopped by the safety classifier, and a psql apply script was denied. Keep migrations under about 90 KB, or Chris runs them.
+- **JOB-ACTIVITY-11 (CRM):** Job Activity is one nest. A navy bar per kind (Notes, Emails, Calls, Texts, Uploads, Stage and gates), one collapsed line per entry, nothing open until someone opens it, open state remembered per job. Threads replace the flat duplicate list. Chris signed off the mockup 2026-11-12 and confirmed the live page 2026-11-13.
+- **PM reads CRM notes by option A (Chris, 2026-11-13):** the PM server forwards the signed-in person's own WorkOS access token to the CRM's existing note functions. No CRM change; the PM service key never touches CRM data.
+- **No CRM seat, no notes (Chris, 2026-11-13: "yes"):** a PM user without a CRM seat sees a plain "Notes need a CRM seat" state.
+- **Hold (Chris, 2026-11-13):** the mapping migration is not applied to production and PM is not released until Chris says so.
+- **Rejected:** B (service-key functions that act as any CRM member), C (CRM web API; blocked on a shared session), D (link out only; does not meet the goal).
+- **Only pm.proexteriorsus.net exists for the PM app (Chris, 2026-11-12).** The scheduler host, DNS record and WorkOS callback are gone; do not recreate them.
+- **Never `gh pr merge --admin` without Chris's explicit yes.** CRM PR 304 was merged normally after three rounds of merging `main` in; brain PR 73 was admin-merged only on his yes.
 
 ## Blockers Requiring Human Action
 
-1. **Signed-in click-through** of journey, JOURNEY-13 and My jobs: Chris.
-2. **P6 readiness approval** by a second admin (Roberto, Chandler, …) in Admin › CRM variables before 2026-10-08 13:00Z.
-3. **Merge CRM PR #141** (docs only).
-4. **CRM host operations** (stage, switch, rollback over SSH) stay with Chris: the classifier blocks the agent.
-5. **Unmerged CRM PRs from earlier work:** #136, #135, #133, #132, #130, #127 and #123. #123 (lien waivers) needs an audience decision for Crew compliance holders.
+1. **PM PR 31:** Chris's word to merge, to apply migration `202609140023`, and to release PM.
+2. **Signed-in check on PM after release:** Chris opens one job's History tab. This is also the first proof that a real PM session token is accepted by the CRM.
+3. **This handoff's docs PR in the brain repo:** needs one approving review to merge.
+4. **ds follow-ups (not started, need a mockup or a ds change first):** a shared thread component, a gold focus ring on navy bars, and a ds site redeploy for the N-01 line.
 
 ## Verification Commands
-1. `curl -s https://crm.proexteriorsus.net/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin)["buildCommit"])'`: should return `9a1e4d9e7d35944142e25cfa6350668622253b47`.
-2. `curl -s -o /dev/null -w '%{http_code}' https://crm.proexteriorsus.net/api/v1/nest/mine`: should return `401`.
-3. `curl -s https://cc.proexteriorsus.net/healthz`: `buildCommit` should equal brain `origin/main`.
-4. SQL (MCP, read-only): `select name, encode(sha256(convert_to(array_to_string(statements,''),'UTF8')),'hex') from supabase_migrations.schema_migrations where name like 'crm_%2026102%' order by version;`: six rows, each sha equal to its CRM file.
+1. `curl -s https://crm.proexteriorsus.net/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin)["buildCommit"])'`, then `gh api repos/Clvrwrk/CRM_PWA/compare/38c0d8dd...<that commit> --jq .behind_by`: should return `0` (the nest is in the running build).
+2. `curl -s https://pm.proexteriorsus.net/healthz`: `buildCommit` should be `c753b1f00d9027b621882c393239dbadba8e3b82` until PM is released again.
+3. `dig +short scheduler.proexteriorsus.net @1.1.1.1`: should return nothing.
+4. `gh pr view 31 --repo Clvrwrk/pm.proexteriorsus.net --json state,headRefOid,mergeStateStatus`: `OPEN`, `30e31d16…`, until someone pushes or merges.
+5. `gh run list --repo Clvrwrk/pm.proexteriorsus.net --branch claude/pm-activity-nest --limit 5`: `secret-scan` must be `success` before merge.
+6. SQL (MCP, read-only, project `rnhmvcpsvtqjlffpsayu`): `select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='scheduler_job_crm_effort';`: `0` while the hold stands, `1` after Chris approves the apply.
+7. `curl -s https://cc.proexteriorsus.net/healthz`: `buildCommit` should equal brain `origin/main`.
 
 ## Full Context
 
@@ -123,8 +149,13 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
   - My jobs nest + Next task + greyed actions (9a1e4d9e);
   - AccuLynx archive repair 325 + sync v54;
   - P6 readiness version submitted
+- **2026-11-12 → 11-13 (CRM and PM job Activity):**
+  - CRM Job Activity as a nest, closed until opened (JOB-ACTIVITY-11; CRM_PWA #300 `38c0d8dd`, release t23, record in #304);
+  - scheduler.proexteriorsus.net removed; pm.proexteriorsus.net is the only PM host (PM #26, #27; brain #73);
+  - PM History tab nest with the CRM's note threads, built in PM #31 (open; not merged, migration not applied, not released)
 
 ### Architecture decisions
+- **PM reads CRM notes with the person's own token (option A, 2026-11-13):** the PM server forwards the signed-in person's short-lived WorkOS access token to `crm.read_job_notes`, `crm.read_job_activity`, `crm.post_job_note` and `crm.mark_note_thread_read` through PostgREST profile `crm`. PM and the CRM share one WorkOS client. The PM service key has no use of schema `crm` and must not get it. The job map is `crm.efforts.acculynx_job_id = scheduler.jobs.source_id` (the id before the colon for trade packages), published as `public.scheduler_job_crm_effort`.
 - `v_invoice_audit_line` is the definition of record; every reader goes through `mv_invoice_audit_line`. The matview is refreshed by pg_cron job 13 every 15 min, and on demand via `request_matview_refresh` → job 15. The invoice-level view `v_invoice_audit_invoice` is still live and is the next materialisation candidate.
 - The pricing arm resolves an invoice's PE office through `mv_invoice_pricing_office`, which resolves `abc_invoices.vendor_branch_id`, set at ingest through `vendor_branch_alias` (mig 243). Branch identity is the alias row, never the branch-number string.
 - Alex's triage refreshes `mv_office_agreement_versions` + `mv_invoice_pricing_office` before evaluating, and fails closed without a pricing-office row (mig 289).
@@ -146,7 +177,7 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
   - `crm.read_effort_permissions(ids)` returns per-job `can_*` flags. The client greys on false and keeps today's behaviour when the read fails.
 
 ### Design system
-- **Site:** https://cc.proexteriorsus.net/design-system (docs/112).
+- **Site:** https://ds.proexteriorsus.net (`@proexteriors/ds`, rules in CRM_PWA `packages/ds/RULES.md`) since 2026-11-04. The Command Center `/design-system` page and docs/112 are pointers now.
 - **Type:** Inter 400/600/700/800, body 14px.
 - **Colors:** navy `#11133f` authority, flag red `#c22326` the one CTA, gold `#eaa221` attention, hunter green `#3b6b4c` status, smart blue `#0066cc` links.
 - **Lists:** ten-row long-list panes.
@@ -172,7 +203,8 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 |---------|--------|
 | Prod Supabase | `rnhmvcpsvtqjlffpsayu`, shared by dev and live. For the applied watermark, query `supabase_migrations.schema_migrations`; never trust a number written here. |
 | Command Center deploy | Coolify → `cc.proexteriorsus.net` from `origin/main` on push; verify `/healthz buildCommit`. Coolify host `178.105.220.14` (`~/.ssh/a_roofers_open_brain_ed25519`). |
-| CRM deploy | Pinned release modules (`scripts/release-crm-<sha12>.py` + engine `release-property-journey.py`). Each pin derives from the previous one with `~/crm-nesting-build/release/derive-pin.py` / `prepare2.sh <spec>`. Chris runs scp, stage and switch on `178.105.220.14`. Live: `crm-weekly-9a1e4d9e7d35` on 4468; rollback target `crm-weekly-91ad20cf2ae2` on 4467. The next port is 4469. |
+| CRM deploy | Pinned release modules (`scripts/release-crm-<sha12>.py` + engine `release-property-journey.py`). Each pin derives from the previous one with `~/crm-nesting-build/release/derive-pin.py` / `prepare2.sh <spec>`. Chris runs scp, stage and switch on `178.105.220.14`. The container and port named in older handoffs are stale: read `/healthz` and the host for the live release (`d961dbcb` on 2026-11-14). Since t23 the agent has run releases as `root@178.105.220.14` with a per-release `t<N>.sh` (rollback `bash t<N>.sh rollback`). There is no Coolify record for the CRM. |
+| PM deploy | Not a Coolify app. Plain Docker plus a Traefik dynamic file on `178.105.220.14`, released as root with `deploy/activate.sh` from `Clvrwrk/pm.proexteriorsus.net`; env in `/opt/pe-scheduler/.env`. Live `c753b1f` on 2026-11-14, 15 commits behind `main`. Host login: `root@178.105.220.14` with `~/.ssh/hetzner_office`. |
 | CRM local DB tests | Docker `crm-nest-test` 127.0.0.1:55439 (password in `~/crm-nesting-build/build/.pg-crm-nest`). Lock with `mkdir ~/crm-nesting-build/build/db.lock`. The full chain runner is `build/run-db-chain-myjobs.sh`. |
 | CRM Sentry | org `cleverwork`, project `pwa-crm` |
 | Dev | port 4399 via `.claude/launch.json` `command-center` |
@@ -181,4 +213,4 @@ Carried forward from prior handoffs (see `docs/handoffs/archive/`), plus:
 | pg_cron | job 13 (15 min): matviews + CM claims + reconcile; job 15 (1 min): on-demand refresh; job 18: order↔AccuLynx matview; `crm-acculynx-nightly-sync` 09:30Z |
 | Agent auth to live site | Bearer service tokens on `/api/*`; skill `/workos-agent-auth` |
 | Slack | per-agent bots per `/slack-agents`; dev traffic → `#pe-cc-dev-team` |
-| Linear | PE-CC-DevTeam; the MCP needs authorisation |
+| Linear | Team PE-DEV-TEAM (issues `PEC-…`); the MCP worked on 2026-11-13 |
