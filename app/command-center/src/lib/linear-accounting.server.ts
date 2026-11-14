@@ -8,6 +8,11 @@ const CAT_REVIEW_STATE_ID = "721fd015-d82a-4ae2-b5d8-a34c1fb76c05";
 const WORK_TEAM_ID = "f7fd2005-aa04-4de7-a17d-ddae528b5e4a";
 const WORK_REVIEW_STATE_ID = "3e03cd48-d3c8-4e63-867c-734387f39efb";
 const REVIEWER_ID = "002bc1e6-c102-42f7-86cc-45b7c499dae3";
+const CAT_DONE_STATE_ID = "2ef4e15e-d292-4cb9-9afb-3dc7a6defb67";
+const WORK_DONE_STATE_ID = "c268be16-fc25-44a6-b992-c96f23967900";
+const KNOWN_IDENTITY_LABEL_ID = "a00284f1-af67-4c69-a0f4-5ce48ba3e1de"; // security:known-identity (workspace)
+const NEEDS_CHRIS_LABEL_ID = "9cf305cd-2042-44b2-bfe5-a0cec377c4d4"; // needs-chris (workspace)
+const SECURITY_ROUTES = new Set(["known-identity", "needs-chris"]);
 const SOURCE_KEY = /^(?:gmail-(?:content|thread|message):|slack-|signal-|webhook-|linear-|recurring-)[^\s]{1,470}$/u;
 const HEX_MESSAGE_ID = /^[0-9a-fA-F]{8,128}$/u;
 
@@ -30,6 +35,8 @@ export interface AccountingLinearPairInput {
   reason: string;
   priority: number;
   attachments: string[];
+  /** Set by Maya's mailbox for security notices; absent for ordinary accounting intake. */
+  securityRoute?: "known-identity" | "needs-chris";
 }
 
 export interface AccountingLinearPair {
@@ -69,7 +76,11 @@ export function parseAccountingLinearPairInput(payload: unknown): AccountingLine
   if (!Array.isArray(value.attachments) || value.attachments.length > 25) {
     throw new TypeError("attachments must be a bounded array");
   }
+  if (value.securityRoute !== undefined && !SECURITY_ROUTES.has(String(value.securityRoute))) {
+    throw new TypeError("securityRoute is invalid");
+  }
   return Object.freeze({
+    ...(value.securityRoute !== undefined ? { securityRoute: value.securityRoute as "known-identity" | "needs-chris" } : {}),
     sourceKeys,
     messageId,
     sourceChannel: "gmail",
@@ -111,6 +122,18 @@ function exactMatches(issues: LinearIssue[], sourceKeys: string[]) {
   });
 }
 
+// Known identity + routine event: logged, labeled and closed with no owner. needs-chris: assigned to
+// Christopher at high priority. Ordinary accounting intake keeps the reviewer assignment.
+function routing(input: AccountingLinearPairInput, reviewStateId: string, doneStateId: string) {
+  if (input.securityRoute === "known-identity") {
+    return { stateId: doneStateId, labelIds: [KNOWN_IDENTITY_LABEL_ID], priority: input.priority };
+  }
+  if (input.securityRoute === "needs-chris") {
+    return { stateId: reviewStateId, assigneeId: REVIEWER_ID, labelIds: [NEEDS_CHRIS_LABEL_ID], priority: 1 };
+  }
+  return { stateId: reviewStateId, assigneeId: REVIEWER_ID, priority: input.priority };
+}
+
 function issueCreateInput(
   input: AccountingLinearPairInput,
   source: boolean,
@@ -122,10 +145,8 @@ function issueCreateInput(
       teamId: CAT_TEAM_ID,
       projectId: CAT_PROJECT_ID,
       parentId: CAT_PARENT_ID,
-      stateId: CAT_REVIEW_STATE_ID,
-      assigneeId: REVIEWER_ID,
+      ...routing(input, CAT_REVIEW_STATE_ID, CAT_DONE_STATE_ID),
       title: `[Maya intake][Accounting] ${input.subject}`.slice(0, 140),
-      priority: input.priority,
       description: [
         "Maya CAT source: true",
         ...sourceKeyLines,
@@ -150,10 +171,8 @@ function issueCreateInput(
   return {
     teamId: WORK_TEAM_ID,
     parentId: parent.id,
-    stateId: WORK_REVIEW_STATE_ID,
-    assigneeId: REVIEWER_ID,
+    ...routing(input, WORK_REVIEW_STATE_ID, WORK_DONE_STATE_ID),
     title: `[MAYA] Accounting intake: ${input.subject}`.slice(0, 140),
-    priority: input.priority,
     description: [
       "[MAYA] Mailbox intake decision",
       `CAT source issue: ${parent.identifier}`,

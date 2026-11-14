@@ -121,3 +121,26 @@ describe("accounting Linear orchestration", () => {
     expect(result.work.parentRepaired).toBe(true);
   });
 });
+
+describe("security identity routing", () => {
+  it("accepts an optional securityRoute and rejects unknown values", () => {
+    expect(parseAccountingLinearPairInput({ ...payload, securityRoute: "known-identity" }).securityRoute).toBe("known-identity");
+    expect(() => parseAccountingLinearPairInput({ ...payload, securityRoute: "whatever" })).toThrow(/securityRoute/u);
+  });
+  it("files known-identity notices unassigned, labeled and Done; needs-chris notices assigned", async () => {
+    for (const [route, assigned] of [["known-identity", false], ["needs-chris", true]] as const) {
+      const { calls, fetchImpl } = sequence([
+        { data: { sources: { nodes: [] }, work: { nodes: [] } } },
+        { data: { issueCreate: { success: true, issue: source } } },
+        { data: { issueCreate: { success: true, issue: work } } },
+      ]);
+      await ensureAccountingLinearPair(parseAccountingLinearPairInput({ ...payload, securityRoute: route }), { fetchImpl, apiKey: "k" });
+      for (const call of calls.slice(1)) {
+        const input = (call.body.variables as { input: Record<string, unknown> }).input;
+        expect(Boolean(input.assigneeId)).toBe(assigned);
+        if (!assigned) { expect(input.labelIds).toBeTruthy(); expect(input.stateId).toBeTruthy(); }
+        else expect(input.priority).toBe(1);
+      }
+    }
+  });
+});
