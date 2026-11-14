@@ -1,6 +1,6 @@
 # A3 — pe-connect: one company gateway for staff AI agents
 
-**Status:** draft, waiting for Chris. Nothing is built, installed or connected.  
+**Status:** build to staging approved by Chris on 2026-11-13, with seeded test data only. Not approved: connecting any agent product, reading production data, or the pilot. Those wait on decisions 3 to 8.  
 **Proposed by:** Chris, drafted with Claude  
 **Owner:** Chris (CTO / AI Administrator)  
 **Date:** 2026-11-13, revised twice the same day after two Ringer review rounds (section 11)  
@@ -202,14 +202,14 @@ Either way, approval needs the numbers in open decisions 4 to 7: a cap on phase-
 
 Needed before phase one:
 
-1. **10x gate:** exemption or measured math (section 8)?
-2. **Where the code lives:** a new repo `pe-connect`, or a folder in an existing repo?
+1. **10x gate:** DECIDED 2026-11-13 (Chris): exempt as mission-grade infrastructure. Every later workflow skill still needs its own A3.
+2. **Where the code lives:** DECIDED 2026-11-13 (Chris): a new repo, `Clvrwrk/mcp.proexteriorsus.net`. Its spec and tickets are that repo's GitHub issues. Staging host `mcp-staging.proexteriorsus.net`; `mcp.proexteriorsus.net` is reserved.
 3. **Pilot product:** Grok Bot Enterprise is the only candidate whose public pages describe a destination allowlist. ChatGPT dots qualifies only if the gateway works with its cloud browser and network switched off. If neither passes the section 5 gate and the section 6 conditions, defer.
 4. **Pilot people and length:** which three people, for how many weeks?
 5. **Cost limits:** the cap on phase-one engineering hours, and the ceiling on monthly run cost.
 6. **Stop rule:** the measured result that ends the pilot early.
 7. **Audit log:** where it is stored, how long it is kept, and who may read it.
-8. **Roles:** the named roles (the "roles matrix") have not been located. Who finds or writes the list, and by when? Chris then approves, revises or defers the attached role-to-capability table.
+8. **Roles:** DECIDED 2026-11-13 (Chris): the map of the 27 HR catalog roles to the four read capabilities is approved as written; it is recorded in `Clvrwrk/mcp.proexteriorsus.net` `docs/admin/role-map-from-catalog.md`. It replaces a nine-role residential map approved earlier the same day, whose role keys did not match the HR catalog. Not loaded yet: the catalog seed is still in CRM_PWA PR 308 and the job and org chart tools are not built.
 
 For a later write phase, not blocking phase one:
 
@@ -219,6 +219,7 @@ For a later write phase, not blocking phase one:
 
 ## 10. Decision
 
+- [x] **Approve building to staging only** (Chris, 2026-11-13): seeded test data, no agent product connected, no production data.
 - [ ] **Approve phase one.** In order: decisions 1 to 8 recorded; one product passes every step of the section 5 gate and the section 6 conditions; PR 308 applied and its reader built; the six read-only tools built and deployed on Hetzner with every gateway checklist item met; role-by-tool, wrong-office, injection, health and audit tests pass; three named people pilot it. Build by ____. Pilot from ____ to ____. Report on use, cost and rollback due ____. Posting, dispositions and every other connector are excluded.
 - [ ] **Defer:** revisit on ____, condition: ____
 - [ ] **Kill:** reason: ____
