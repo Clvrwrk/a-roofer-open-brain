@@ -96,11 +96,15 @@ function groupDetail(rows, header, cfg) {
   for (const r of rows) {
     const invNum = col(r, cfg.invoiceCol);
     if (!invNum) continue;
-    if (!invoices.has(invNum)) invoices.set(invNum, { header: r, lines: [], notes: [] });
+    if (!invoices.has(invNum)) invoices.set(invNum, { header: r, lines: [], notes: [], charges: {} });
     const inv = invoices.get(invNum);
     const isLine = cfg.isLineRow(col, r);
     if (isLine) inv.lines.push({ row: r, extraDesc: [] });
     else {
+      // Printed footer rows (SUB-TOTAL, delivery, freight, restock, tax) carry an amount but
+      // no quantity. Keep the amounts: they are the invoice's own arithmetic.
+      const charge = cfg.chargeOf ? cfg.chargeOf(col, r) : null;
+      if (charge) inv.charges[charge.key] = charge.amount;
       const d = col(r, cfg.descCol);
       if (d) (inv.lines.length ? inv.lines[inv.lines.length - 1].extraDesc : inv.notes).push(d);
     }
@@ -167,11 +171,25 @@ async function ingestSrsDetail(vendorId, file) {
     invoiceCol: "INVOICE_NUMBER",
     descCol: "DESC_COL",
     isLineRow: (c, r) => c(r, "QTY_SHIP_COL") !== "" && c(r, "NET_AMOUNT_COL") !== "",
+    chargeOf: (c, r) => {
+      const d = c(r, "DESC_COL"), amount = num(c(r, "NET_AMOUNT_COL"));
+      if (amount === null || !isFinite(amount)) return null;
+      const key = /SUB-TOTAL/i.test(d) ? "subTotal" : /^DELIVERY/i.test(d) ? "delivery"
+        : /^FREIGHT/i.test(d) ? "freight" : /^Sales Tax/i.test(d) ? "tax" : /^RESTOCK/i.test(d) ? "restock" : null;
+      return key ? { key, amount } : null;
+    },
   });
   let n = 0;
   for (const [invNum, inv] of invoices) {
     const h = inv.header, c = (name) => col(h, name);
     const terms = c("TERMS");
+    // Same columns the PDF arm fills. Written only when the CSV prints a SUB-TOTAL, so an
+    // export without footer rows never blanks values a richer source already supplied.
+    const ch = inv.charges;
+    const money = ch.subTotal === undefined ? {} : {
+      sub_total: ch.subTotal, sales_tax: ch.tax ?? 0, restock_fee: ch.restock ?? 0,
+      ship_cost: (ch.delivery ?? 0) + (ch.freight ?? 0),
+    };
     const originals = extractOriginalInvoices(
       [...inv.notes, ...inv.lines.flatMap((l) => l.extraDesc), ...inv.lines.map((l) => col(l.row, "DESC_COL"))],
       invNum,
@@ -193,10 +211,14 @@ async function ingestSrsDetail(vendorId, file) {
       ship_via: c("SHIP_VIA") || null,
       order_type: c("ORDER_TYPE") || null,
       total_due: num(c("TOTAL_DUE")),
+      ...money,
       raw: {
         return_address: c("RETURN_ADDRESS"), notes: inv.notes, source_file: basename(file),
         original_invoice_number: originals[0] ?? null,
         original_invoice_numbers: originals,
+        delivery_charge: ch.delivery ?? null, freight_charge: ch.freight ?? null,
+        reference_number: c("REFERENCE_NUMBER") || null, job_number: c("JOB_NUMBER") || null,
+        ordered_by: c("ORDERED_BY") || null, agents: c("AGENTS") || null,
       },
       updated_at: new Date().toISOString(),
     });
