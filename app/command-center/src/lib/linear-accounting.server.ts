@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@lib/runtime-env";
+import { assertAssignmentAllowed, linearAuth, NEEDS_CHRIS_LABEL_ID } from "@lib/linear-client.server";
 
 const LINEAR_ENDPOINT = "https://api.linear.app/graphql";
 const CAT_TEAM_ID = "fca0aed7-1eac-43ea-aa9b-280d487fcc86";
@@ -89,6 +89,7 @@ async function linearGraphql<T>(
   fetchImpl: typeof fetch,
   apiKey: string,
 ) {
+  assertAssignmentAllowed(variables);
   const response = await fetchImpl(LINEAR_ENDPOINT, {
     method: "POST",
     headers: { authorization: apiKey, "content-type": "application/json" },
@@ -124,6 +125,8 @@ function issueCreateInput(
       parentId: CAT_PARENT_ID,
       stateId: CAT_REVIEW_STATE_ID,
       assigneeId: REVIEWER_ID,
+    labelIds: [NEEDS_CHRIS_LABEL_ID],
+      labelIds: [NEEDS_CHRIS_LABEL_ID],
       title: `[Maya intake][Accounting] ${input.subject}`.slice(0, 140),
       priority: input.priority,
       description: [
@@ -152,6 +155,7 @@ function issueCreateInput(
     parentId: parent.id,
     stateId: WORK_REVIEW_STATE_ID,
     assigneeId: REVIEWER_ID,
+    labelIds: [NEEDS_CHRIS_LABEL_ID],
     title: `[MAYA] Accounting intake: ${input.subject}`.slice(0, 140),
     priority: input.priority,
     description: [
@@ -207,9 +211,10 @@ export async function ensureAccountingLinearPair(
   input: AccountingLinearPairInput,
   {
     fetchImpl = fetch,
-    apiKey = getRuntimeEnv().LINEAR_API_KEY?.trim() ?? "",
+    apiKey,
   }: { fetchImpl?: typeof fetch; apiKey?: string } = {},
 ): Promise<AccountingLinearPair> {
+  apiKey ??= (await linearAuth.authorization()) ?? "";
   if (!apiKey) throw new Error("Linear is not configured");
   const descriptionFilters = input.sourceKeys.map((key) => ({ description: { contains: `Maya source key: ${key}` } }));
   const data = await linearGraphql<{
