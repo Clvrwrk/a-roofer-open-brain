@@ -5,6 +5,12 @@
 # This file adds repo-specific review rules that enforce the hard rules in
 # CLAUDE.md / CONVENTIONS.md. Posture matches org default: ADVISORY ONLY.
 #
+# Cost cut: CodeRabbit is the on-request second opinion. Auto-review stays off
+# unless the PR is labelled coderabbit-review (or someone asks
+# @coderabbitai review). Drafts are skipped and each push does not re-review.
+# Content paths are excluded so prose-only PRs stay with the internal ringer
+# swarm (same intent as open PR #35).
+#
 # Schema: https://docs.coderabbit.ai/reference/configuration
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # =============================================================================
@@ -17,7 +23,7 @@ tone_instructions: >
   No praise padding.
 
 reviews:
-  profile: "chill"
+  profile: "assertive"
   request_changes_workflow: false   # advisory only — never blocks a merge
 
   high_level_summary: true
@@ -25,20 +31,29 @@ reviews:
   poem: false
 
   auto_review:
-    enabled: true
-    auto_incremental_review: true        # review on every push (per-commit loop)
-    auto_pause_after_reviewed_commits: 0 # never go silent on busy PRs
+    enabled: false
+    labels:
+      - "coderabbit-review"
     drafts: false
-    # main is the default branch (always reviewed). Production work converges on
-    # the *-live contrib branches, so review PRs targeting those too.
+    auto_incremental_review: false
+    auto_pause_after_reviewed_commits: 0 # never go silent on busy PRs
+    # main is the default branch. Production work converges on the *-live
+    # contrib branches, so a labelled or requested review covers those too.
     base_branches:
       - "main"
       - "contrib/cleverwork/.*-live"
 
+  # New path_filters win. They keep the intent of open PR #35 (skip
+  # prose-only changes): every folder that PR excludes is markdown or docs.
+  # This list is broader than #35. A blanket "!**/*.md" also skips agents/**
+  # and skills/** markdown, plus CLAUDE.md, AGENTS.md, and CONVENTIONS.md.
   path_filters:
-    - "!archive/**"          # historical dumps; not for review
-    - "!**/*.excalidraw"
-    - "!**/*.log"
+    - "!**/*.md"
+    - "!**/*.mdx"
+    - "!docs/**"
+    - "!**/docs/**"
+    - "!**/*.{png,jpg,jpeg,gif,webp,avif,svg,ico,mp4}"
+    - "!src/data/journal.ts"
 
   # --- Hard-rule enforcement (from CLAUDE.md rules 1-11 + CONVENTIONS.md) ------
   path_instructions:
