@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CenterPoint Dashboard · Mockup</title>
+<link rel="icon" href="assets/app-icon.svg">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/components.css">
+<style>
+/* Mockup-only layout. Every value is a --pe-* token (K-01). The cpd- classes are proposals:
+   the chart, flow strip and stat row are new patterns and need a ds PR before any build (G-04). */
+.cpd-viewbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--pe-space-3); margin-bottom: var(--pe-space-4); }
+.cpd-asof { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.cpd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--pe-space-3); margin-bottom: var(--pe-space-4); }
+.cpd-kpis .pe-btn { justify-self: start; margin-top: var(--pe-space-1); }
+.cpd-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--pe-space-4); }
+.cpd-span-12 { grid-column: span 12; } .cpd-span-8 { grid-column: span 8; } .cpd-span-7 { grid-column: span 7; }
+.cpd-span-6 { grid-column: span 6; } .cpd-span-5 { grid-column: span 5; } .cpd-span-4 { grid-column: span 4; }
+@media (max-width: 1100px) { .cpd-span-8, .cpd-span-7, .cpd-span-6, .cpd-span-5, .cpd-span-4 { grid-column: span 12; } }
+.cpd-panel { min-width: 0; display: flex; flex-direction: column; }
+.cpd-panel .pe-panel-head h2 { font-size: var(--pe-font-size-lg); }
+.cpd-panel .pe-panel-body { flex: 1; min-width: 0; }
+.cpd-note { margin: var(--pe-space-2) 0 0; font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.cpd-legend { display: flex; flex-wrap: wrap; gap: var(--pe-space-1) var(--pe-space-4); margin: 0 0 var(--pe-space-2); padding: 0; list-style: none; font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.cpd-legend li { display: inline-flex; align-items: center; gap: var(--pe-space-1); }
+.cpd-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.cpd-chart { position: relative; width: 100%; }
+.cpd-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cpd-chart text { font-family: var(--pe-font-family-sans); font-size: var(--pe-font-size-xs); fill: var(--pe-text-muted); font-variant-numeric: tabular-nums; }
+.cpd-chart .cpd-val { fill: var(--pe-text-secondary); font-weight: var(--pe-font-weight-semibold); }
+.cpd-chart .cpd-grid-line { stroke: var(--pe-border); stroke-width: 1; }
+.cpd-chart .cpd-base { stroke: var(--pe-border-strong); stroke-width: 1; }
+.cpd-chart .cpd-hit { fill: transparent; cursor: default; }
+.cpd-chart .cpd-hit:hover + .cpd-hover, .cpd-chart .cpd-hover { fill: var(--pe-surface-hover); }
+.cpd-tip { position: fixed; z-index: var(--pe-z-toast); pointer-events: none; min-width: 160px; max-width: 280px; padding: var(--pe-space-2) var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-text); box-shadow: var(--pe-elevation-overlay); font-size: var(--pe-font-size-xs); }
+.cpd-tip strong { display: block; margin-bottom: var(--pe-space-1); font-size: var(--pe-font-size-sm); }
+.cpd-tip div { display: flex; justify-content: space-between; gap: var(--pe-space-3); font-variant-numeric: tabular-nums; }
+.cpd-tip span { display: inline-flex; align-items: center; gap: var(--pe-space-1); color: var(--pe-text-secondary); }
+.cpd-tableview { margin-top: var(--pe-space-2); font-size: var(--pe-font-size-xs); }
+.cpd-tableview summary { cursor: pointer; color: var(--pe-link); text-decoration: underline; width: max-content; }
+.cpd-tableview .pe-table-wrap { margin-top: var(--pe-space-2); }
+.cpd-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--pe-space-3); margin: 0; }
+.cpd-stats div { display: grid; gap: 2px; padding: var(--pe-space-3); border-radius: var(--pe-radius-control); background: var(--pe-surface-sunken); }
+.cpd-stats dt { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); font-weight: var(--pe-font-weight-semibold); }
+.cpd-stats dd { margin: 0; font-size: var(--pe-font-size-h3); font-weight: var(--pe-font-weight-bold); font-variant-numeric: tabular-nums; }
+.cpd-stats small { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.cpd-flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--pe-space-2); margin: 0; padding: 0; list-style: none; }
+.cpd-flow li { display: grid; gap: 2px; padding: var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); }
+.cpd-flow li[data-attn] { border-color: var(--pe-warning-fill); background: var(--pe-warning-soft); }
+.cpd-flow .cpd-flow-n { font-size: var(--pe-font-size-h2); font-weight: var(--pe-font-weight-bold); font-variant-numeric: tabular-nums; }
+.cpd-flow .cpd-flow-l { font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); letter-spacing: var(--pe-font-tracking-label); text-transform: uppercase; color: var(--pe-text-muted); }
+.cpd-flow small { font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+@media (max-width: 1100px) { .cpd-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .cpd-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cpd-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--pe-space-1); margin: 0; padding: 0; list-style: none; }
+.cpd-days li { display: grid; gap: 2px; justify-items: center; padding: var(--pe-space-2) var(--pe-space-1); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.cpd-days li b { font-size: var(--pe-font-size-lg); color: var(--pe-text); font-variant-numeric: tabular-nums; }
+.cpd-days li[aria-current] { border: var(--pe-border-width-strong) solid var(--pe-structure-text); }
+.cpd-days li[data-empty] b { color: var(--pe-text-disabled); }
+.cpd-meter-cell { display: flex; align-items: center; gap: var(--pe-space-2); min-width: 120px; }
+.cpd-meter-cell .pe-meter { flex: 1; min-width: 60px; }
+.cpd-gaps { margin: 0; padding-left: var(--pe-space-5); display: grid; gap: var(--pe-space-1); color: var(--pe-text-secondary); }
+.cpd-mockbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2) var(--pe-space-3); margin-bottom: var(--pe-space-4); padding: var(--pe-space-2) var(--pe-space-3); border: var(--pe-border-width-strong) dashed var(--pe-warning-fill); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.cpd-mockbar span { flex: 1; min-width: 12ch; }
+@media (max-width: 760px) { .cpd-mockbar span { flex-basis: 100%; order: 3; } .cpd-mockbar strong { flex: 1; } .cpd-viewbar .pe-seg { width: 100%; } .cpd-viewbar .pe-seg button { flex: 1; } }
+.cpd-view[hidden] { display: none !important; }
+</style>
+</head>
+<body class="pe-app">
+<a class="pe-skip" href="#main">Skip to content</a>
+<div class="pe-shell" id="surface">
+<nav class="pe-rail" aria-label="Command Center">
+  <a class="pe-brand" href="#"><img src="assets/pro-exteriors-logo.svg" alt="Pro Exteriors, Command Center home" width="208" height="91"></a>
+  <div class="pe-nav">
+    <details class="pe-nav-group" open><summary>Money</summary><ul class="pe-nav-list">
+      <li><a class="pe-nav-link" href="#">Friday WIP/AR</a></li>
+      <li><a class="pe-nav-link" href="#">13-Week Cash Flow</a></li>
+      <li><a class="pe-nav-link" href="#">Invoice Audit</a></li>
+    </ul></details>
+    <details class="pe-nav-group" open><summary>Sales and service</summary><ul class="pe-nav-list">
+      <li><a class="pe-nav-link" href="#">Sales Pipeline</a></li>
+      <li><a class="pe-nav-link" href="#" aria-current="page">CenterPoint dashboard</a></li>
+    </ul></details>
+  </div>
+</nav>
+<nav class="pe-rail-icons" aria-label="Command Center, compact">
+  <a class="pe-rail-item" href="#" title="Friday WIP/AR">WA</a>
+  <a class="pe-rail-item" href="#" title="Sales Pipeline">SP</a>
+  <a class="pe-rail-item" href="#" title="CenterPoint dashboard" aria-current="page">CP</a>
+</nav>
+<div class="pe-shell-body">
+<header class="pe-header">
+  <a class="pe-header-logo" href="#"><img src="assets/pro-exteriors-logo.svg" alt="Pro Exteriors, home" height="32"></a>
+  <div class="pe-header-title"><p class="pe-eyebrow">Commercial service · CenterPoint</p><h1 id="view-title">Executive view</h1></div>
+  <div class="pe-header-actions"><button class="pe-btn" type="button" aria-label="Help"><svg class="pe-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span class="pe-btn-label">Help</span></button></div>
+</header>
+<main class="pe-main" id="main" tabindex="-1">
+<div class="cpd-mockbar" role="note"><strong>Mockup, not a build</strong><span>Real CenterPoint figures from 17 Nov 2026. Customer and staff names are masked. This bar is a review aid, not part of the design.</span><button class="pe-btn" type="button" id="theme">Dark</button></div>
+
+<div class="cpd-viewbar">
+  <div class="pe-seg" role="group" aria-label="Dashboard view">
+    <button type="button" data-view="exec" aria-pressed="true">Executive</button>
+    <button type="button" data-view="ops" aria-pressed="false">Operations</button>
+    <button type="button" data-view="sales" aria-pressed="false">Sales</button>
+  </div>
+  <p class="cpd-asof">CenterPoint pull 17 Nov 2026 · Sep 2025 to date · test company and draft invoices excluded</p>
+</div>
+
+<!-- ═══════════════════════════ EXECUTIVE ═══════════════════════════ -->
+<section class="cpd-view" data-view="exec" aria-labelledby="view-title">
+  <div class="cpd-kpis">
+    <div class="pe-kpi"><span class="pe-eyebrow">Open receivables</span><span class="pe-kpi-value">107 jobs</span><span class="pe-kpi-sub">$247,955 owed · 4 jobs past 60 days ($26,251)</span><a class="pe-btn" href="#ar">Open AR list</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Closed, never billed</span><span class="pe-kpi-value">149 jobs</span><span class="pe-kpi-sub">Closed out with $0 invoiced · $215,403 priced on them</span><a class="pe-btn" href="#">Review jobs</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">CenterPoint ≠ QuickBooks</span><span class="pe-kpi-value">40 jobs</span><span class="pe-kpi-sub">18 billed differently ($74,122) · 11 only in QB · 9 only in CP</span><a class="pe-btn" href="#qb">Reconcile</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Quotes waiting</span><span class="pe-kpi-value">156 quotes</span><span class="pe-kpi-sub">$4.80M open · 75 older than 90 days</span><a class="pe-btn" href="#" data-goto="sales">Open sales view</a></div>
+  </div>
+
+  <div class="cpd-grid">
+    <section class="pe-panel cpd-panel cpd-span-8" aria-labelledby="h-bc">
+      <div class="pe-panel-head"><h2 id="h-bc">Billed and collected by month</h2><span class="pe-tag">$943,674 billed · $696,471 collected</span></div>
+      <div class="pe-panel-body">
+        <div class="cpd-chart" data-chart="billedCollected"></div>
+        <p class="cpd-note">Billed = non-draft invoices by invoice date. Collected = payments by received date. November is month to date. QuickBooks already carries these invoices, so this is never added to company revenue.</p>
+      </div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-4" aria-labelledby="h-money">
+      <div class="pe-panel-head"><h2 id="h-money">Money at a glance</h2></div>
+      <div class="pe-panel-body">
+        <dl class="cpd-stats">
+          <div><dt>Billed</dt><dd>$943,674</dd><small>672 service tickets</small></div>
+          <div><dt>Collected</dt><dd>$696,471</dd><small>74% of billed</small></div>
+          <div><dt>Gross margin</dt><dd>57.4%</dd><small>467 jobs with costed invoices</small></div>
+          <div><dt>Invoice to paid</dt><dd>41 days</dd><small>median, 360 paid jobs</small></div>
+          <div><dt>Customers billed</dt><dd>45</dd><small>top 10 = 88% of billing</small></div>
+          <div><dt>Sold in sales book</dt><dd>$995,199</dd><small>9 deals since Feb 2026</small></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-5" aria-labelledby="h-aging" id="ar">
+      <div class="pe-panel-head"><h2 id="h-aging">Receivables by age</h2><span class="pe-tag">$247,955 · 107 jobs</span></div>
+      <div class="pe-panel-body">
+        <div class="cpd-chart" data-chart="aging"></div>
+        <p class="cpd-note">Age runs from the oldest open invoice date. CenterPoint sends no due date on any invoice, so "past due" cannot be shown yet.</p>
+      </div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-7" aria-labelledby="h-bigar">
+      <div class="pe-panel-head"><h2 id="h-bigar">Largest open balances</h2><a class="pe-btn pe-btn--quiet" href="#">All 107 in Friday WIP/AR</a></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Job</th><th>State</th><th class="pe-n">Open</th><th class="pe-n">Days</th><th>Status</th></tr></thead>
+          <tbody data-rows="bigAr"></tbody>
+        </table></div>
+        <p class="cpd-note">The 8 largest of 107. A home card links to the full list rather than paging it (T-01).</p>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-mix">
+      <div class="pe-panel-head"><h2 id="h-mix">Billing by work type</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="workType"></div>
+        <p class="cpd-note">Scope work is 30% of jobs and 66% of billing; leaks are 68% of jobs and 33% of billing.</p></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-state">
+      <div class="pe-panel-head"><h2 id="h-state">Billing by state</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="state"></div>
+        <p class="cpd-note">Louisiana, Alabama and California jobs have no billing yet.</p></div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-7" aria-labelledby="h-cust">
+      <div class="pe-panel-head"><h2 id="h-cust">Customers by billing</h2><span class="pe-tag">45 customers</span></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap" data-list="customers"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Customer</th><th class="pe-n">Jobs</th><th class="pe-n">Billed</th><th class="pe-n">Share</th><th class="pe-n">Open</th></tr></thead>
+          <tbody data-rows="customers"></tbody>
+        </table><div class="pe-show-all"><button type="button" data-show-all="customers"></button></div></div>
+        <p class="cpd-note">Names are masked in this mockup. One customer is 40% of all billing and 53% of what is owed.</p>
+      </div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-5" aria-labelledby="h-qb" id="qb">
+      <div class="pe-panel-head"><h2 id="h-qb">CenterPoint against QuickBooks</h2><span class="pe-tag">484 job numbers</span></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Result</th><th class="pe-n">Jobs</th><th class="pe-n">Billed gap</th></tr></thead>
+          <tbody>
+            <tr><td data-headline><span class="pe-status pe-status--good">Match</span></td><td class="pe-n" data-label="Jobs">444</td><td class="pe-n" data-label="Billed gap">$0</td></tr>
+            <tr><td data-headline><span class="pe-status pe-status--warning">Billed differs</span></td><td class="pe-n" data-label="Jobs">18</td><td class="pe-n" data-label="Billed gap">−$74,122</td></tr>
+            <tr><td data-headline><span class="pe-status pe-status--warning">Only in QuickBooks</span></td><td class="pe-n" data-label="Jobs">11</td><td class="pe-n" data-label="Billed gap">−$766</td></tr>
+            <tr><td data-headline><span class="pe-status pe-status--warning">Only in CenterPoint</span></td><td class="pe-n" data-label="Jobs">9</td><td class="pe-n" data-label="Billed gap">$2,641</td></tr>
+            <tr><td data-headline><span class="pe-status pe-status--info">Collected differs</span></td><td class="pe-n" data-label="Jobs">2</td><td class="pe-n" data-label="Billed gap">$0</td></tr>
+          </tbody>
+        </table></div>
+        <p class="cpd-note">Matched on QuickBooks invoice number = CenterPoint job number (v_work_invoice_qbo_recon). A negative gap means QuickBooks billed more.</p>
+      </div>
+    </section>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ OPERATIONS ═══════════════════════════ -->
+<section class="cpd-view" data-view="ops" aria-labelledby="view-title" hidden>
+  <div class="cpd-kpis">
+    <div class="pe-kpi"><span class="pe-eyebrow">Not scheduled</span><span class="pe-kpi-value">27 tickets</span><span class="pe-kpi-sub">$48,894 priced · 12.9 days in status on average</span><a class="pe-btn" href="#">Schedule</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Ready to invoice</span><span class="pe-kpi-value">17 jobs</span><span class="pe-kpi-sub">Completed, $0 billed · $14,915 priced · 7.5 days waiting</span><a class="pe-btn" href="#">Open queue</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Booked from today</span><span class="pe-kpi-value">7 visits</span><span class="pe-kpi-sub">Next 14 days · last 4 weeks averaged 17 a week</span><a class="pe-btn" href="#">Open schedule</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">On site now</span><span class="pe-kpi-value">5 jobs</span><span class="pe-kpi-sub">In progress · $6,888 priced</span><a class="pe-btn" href="#">See jobs</a></div>
+  </div>
+
+  <div class="cpd-grid">
+    <section class="pe-panel cpd-panel cpd-span-12" aria-labelledby="h-flow">
+      <div class="pe-panel-head"><h2 id="h-flow">Where every service ticket is</h2><span class="pe-tag">672 tickets</span></div>
+      <div class="pe-panel-body">
+        <ol class="cpd-flow">
+          <li data-attn><span class="cpd-flow-l">Ticket created</span><span class="cpd-flow-n">27</span><small>$48,894 priced</small></li>
+          <li><span class="cpd-flow-l">Scheduled</span><span class="cpd-flow-n">7</span><small>$19,452 priced</small></li>
+          <li><span class="cpd-flow-l">In progress</span><span class="cpd-flow-n">5</span><small>$6,888 priced</small></li>
+          <li data-attn><span class="cpd-flow-l">Completed</span><span class="cpd-flow-n">17</span><small>not invoiced yet</small></li>
+          <li><span class="cpd-flow-l">Invoiced</span><span class="cpd-flow-n">107</span><small>$247,955 open</small></li>
+          <li><span class="cpd-flow-l">Closed out</span><span class="cpd-flow-n">509</span><small>149 with $0 billed</small></li>
+        </ol>
+        <p class="cpd-note">Stages use CenterPoint's own status words. An amber edge marks a stage where work is waiting on the office, not the crew.</p>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-8" aria-labelledby="h-visits">
+      <div class="pe-panel-head"><h2 id="h-visits">Visits by week</h2><span class="pe-tag">last 12 weeks and this week</span></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="visitsWeek"></div>
+        <p class="cpd-note">Week of 16 Nov holds 14 visits so far. Visit date is CenterPoint's visit start date, never the date the job was scheduled.</p></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-4" aria-labelledby="h-cycle">
+      <div class="pe-panel-head"><h2 id="h-cycle">How long each step takes</h2></div>
+      <div class="pe-panel-body">
+        <dl class="cpd-stats">
+          <div><dt>Ticket to first visit</dt><dd>3 days</dd><small>median · average 8.1 · 616 jobs</small></div>
+          <div><dt>Visit to invoice</dt><dd>2 days</dd><small>median · average 4.9 · 474 jobs</small></div>
+          <div><dt>Invoice to paid</dt><dd>41 days</dd><small>median · average 47 · 360 jobs</small></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-5" aria-labelledby="h-days">
+      <div class="pe-panel-head"><h2 id="h-days">Visits by day</h2><span class="pe-tag">16 to 24 Nov</span></div>
+      <div class="pe-panel-body">
+        <ul class="cpd-days" data-rows="days"></ul>
+        <p class="cpd-note">Only 7 visits are booked from today through 30 Nov. Leak calls arrive same week, so the forward book always looks thin; the gap to watch is the 27 unscheduled tickets.</p>
+      </div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-7" aria-labelledby="h-monthly">
+      <div class="pe-panel-head"><h2 id="h-monthly">Tickets opened by month</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="ticketsMonth"></div>
+        <p class="cpd-note">October was the busiest month on record: 116 tickets, 111 visits and $213,088 billed.</p></div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-12" aria-labelledby="h-crew">
+      <div class="pe-panel-head"><h2 id="h-crew">Crew time, last 90 days</h2><span class="pe-tag">13 people</span></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap" data-list="crew"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Person</th><th>Role</th><th class="pe-n">Clocked hours</th><th class="pe-n">Hours on jobs</th><th class="pe-n">Travel hours</th><th>Share of clocked time on jobs</th><th class="pe-n">Visits led, 28 days</th></tr></thead>
+          <tbody data-rows="crew"></tbody>
+        </table><div class="pe-show-all"><button type="button" data-show-all="crew"></button></div></div>
+        <p class="cpd-note">Clocked hours and job hours cover the same days, so they are shown side by side and never added. A dash means the person logs job time without a day clock-in. Names are masked; a dash in Role means CenterPoint has no position for that profile.</p>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-cities">
+      <div class="pe-panel-head"><h2 id="h-cities">Busiest cities by jobs</h2><span class="pe-tag">10 busiest</span></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="cities"></div></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-opsgaps">
+      <div class="pe-panel-head"><h2 id="h-opsgaps">What CenterPoint cannot tell us yet</h2></div>
+      <div class="pe-panel-body">
+        <ul class="cpd-gaps">
+          <li>Visit end time: CenterPoint has a start time only, so crew-day utilisation is from clock-ins, not the schedule.</li>
+          <li>Crew size per visit: one lead technician per job; helpers appear only in labor rows.</li>
+          <li>Materials per job: only invoice-level material totals, no purchase orders.</li>
+          <li>570 of 680 service properties are not yet linked to the property spine, so no map of repeat-leak buildings.</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SALES ═══════════════════════════ -->
+<section class="cpd-view" data-view="sales" aria-labelledby="view-title" hidden>
+  <div class="cpd-kpis">
+    <div class="pe-kpi"><span class="pe-eyebrow">New leads, no quote</span><span class="pe-kpi-value">41 leads</span><span class="pe-kpi-sub">22 reroof, 18 repair, 1 maintenance</span><a class="pe-btn" href="#">Quote them</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Quotes over 90 days</span><span class="pe-kpi-value">75 quotes</span><span class="pe-kpi-sub">$3.15M · 16 are older than 180 days ($1.10M)</span><a class="pe-btn" href="#">Follow up</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Pending decision</span><span class="pe-kpi-value">6 quotes</span><span class="pe-kpi-sub">$168,750 · one coating job carries all the value</span><a class="pe-btn" href="#">Open pending</a></div>
+    <div class="pe-kpi"><span class="pe-eyebrow">Sold</span><span class="pe-kpi-value">9 deals</span><span class="pe-kpi-sub">$995,199 since Feb 2026 · 8 are reroofs</span><a class="pe-btn" href="#">Open sold deals</a></div>
+  </div>
+
+  <div class="cpd-grid">
+    <section class="pe-panel cpd-panel cpd-span-5" aria-labelledby="h-funnel">
+      <div class="pe-panel-head"><h2 id="h-funnel">Sales book</h2><span class="pe-tag">371 leads since Sep 2025</span></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="funnel"></div>
+        <dl class="cpd-stats" style="margin-top: var(--pe-space-3)">
+          <div><dt>Win rate by count</dt><dd>5.2%</dd><small>9 sold of 174 decided</small></div>
+          <div><dt>Win rate by value</dt><dd>33.4%</dd><small>$995K of $2.98M decided</small></div>
+        </dl>
+        <p class="cpd-note">Small repair leads are most of the losses; reroofs win by value.</p></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-7" aria-labelledby="h-type">
+      <div class="pe-panel-head"><h2 id="h-type">Won, lost and open by job type</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="byType"></div>
+        <p class="cpd-note">Quoted price of each lead; the bar is sold, lost and open added together. Reroof wins 8 of 17 decided; repairs win 1 of 154.</p></div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-leads">
+      <div class="pe-panel-head"><h2 id="h-leads">New leads by month</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="leadsMonth"></div></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-6" aria-labelledby="h-qval">
+      <div class="pe-panel-head"><h2 id="h-qval">Quoted value by month the lead came in</h2></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="quotedMonth"></div></div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-5" aria-labelledby="h-qage">
+      <div class="pe-panel-head"><h2 id="h-qage">Open quotes by age</h2><span class="pe-tag">156 · $4.80M</span></div>
+      <div class="pe-panel-body"><div class="cpd-chart" data-chart="quoteAge"></div>
+        <p class="cpd-note">Two thirds of open quote value is older than 90 days. Median open quote is 86 days old.</p></div>
+    </section>
+    <section class="pe-panel cpd-panel cpd-span-7" aria-labelledby="h-bigq">
+      <div class="pe-panel-head"><h2 id="h-bigq">Largest open quotes</h2><a class="pe-btn pe-btn--quiet" href="#">All 156 in Sales Pipeline</a></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Job</th><th>Type</th><th>State</th><th class="pe-n">Quoted</th><th class="pe-n">Age, days</th><th>Status</th></tr></thead>
+          <tbody data-rows="bigQuotes"></tbody>
+        </table></div>
+        <p class="cpd-note">The 8 largest of 156. Together they are $2.10M, 44% of the open book.</p>
+      </div>
+    </section>
+
+    <section class="pe-panel cpd-panel cpd-span-12" aria-labelledby="h-reps">
+      <div class="pe-panel-head"><h2 id="h-reps">By salesperson</h2><span class="pe-tag">11 owners</span></div>
+      <div class="pe-panel-body">
+        <div class="pe-table-wrap" data-list="reps"><table class="pe-table pe-table--stack">
+          <thead><tr><th>Owner</th><th>Role</th><th class="pe-n">New</th><th class="pe-n">Open quotes</th><th class="pe-n">Open value</th><th class="pe-n">Sold</th><th class="pe-n">Sold value</th><th class="pe-n">Lost</th><th class="pe-n">Win rate by value</th></tr></thead>
+          <tbody data-rows="reps"></tbody>
+        </table><div class="pe-show-all"><button type="button" data-show-all="reps"></button></div></div>
+        <p class="cpd-note">Owner is the CenterPoint profile on the lead; a dash in Role means CenterPoint has no position for that profile. One person owns 62% of open quote value. Names are masked.</p>
+      </div>
+    </section>
+  </div>
+</section>
+
+</main>
+</div>
+</div>
+<nav class="pe-tabbar" aria-label="Sections">
+  <a class="pe-tab" href="#"><span>WIP/AR</span></a>
+  <a class="pe-tab" href="#"><span>Cash flow</span></a>
+  <a class="pe-tab" href="#"><span>Pipeline</span></a>
+  <a class="pe-tab" href="#" aria-current="page"><span>CenterPoint</span></a>
+</nav>
+<div class="cpd-tip" id="tip" hidden></div>
+
+<script>
+// ─── Data: pulled 2026-11-17 from mv_work_job_money, v_work_job_visits, v_work_labor_day, v_work_invoice_qbo_recon ───
+const MONTHS = ['Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26','May 26','Jun 26','Jul 26','Aug 26','Sep 26','Oct 26','Nov 26'];
+const D = {
+  billed:    [0,1559.55,5474.84,1888.48,15124.78,67290.34,112116.12,53041.85,110489.35,106478.49,74702.01,51555.74,95552.13,213087.55,35312.31],
+  collected: [0,0,1084.29,2211.81,15749.32,8925.45,47351.70,95957.17,53842.91,62200.30,144524.91,56667.96,70117.22,69157.92,68680.02],
+  leads:     [2,1,2,0,6,19,21,43,23,55,44,33,30,48,44],
+  quotedVal: [474000,0,2216,0,36373.30,528046.34,348804.83,1179436.58,380745.83,599339.06,1504310.03,1291078.56,481481.93,551679.32,401551.16],
+  tickets:   [4,3,13,5,34,46,43,76,49,71,42,57,54,116,62],
+  aging: [['0–30 days',130614.12,59],['31–60 days',91089.27,44],['61–90 days',2957.58,2],['90+ days',23293.76,2]],
+  workType: [['Scope',627375.33,198],['Leak',306748.21,456],['Inspection',9550.00,18]],
+  state: [['Texas',777717.64,558],['Georgia',163158.02,105],['Oklahoma',2797.88,3],['Louisiana',0,4],['Alabama',0,1],['California',0,1]],
+  weeks: [['24 Aug',8,2,0],['31 Aug',10,0,0],['7 Sep',6,6,0],['14 Sep',8,5,0],['21 Sep',12,2,0],['28 Sep',22,8,0],['5 Oct',28,7,0],['12 Oct',13,10,0],['19 Oct',2,13,0],['26 Oct',11,7,0],['2 Nov',15,4,0],['9 Nov',15,1,0],['16 Nov',9,5,0]],
+  days: [['Mon','16 Nov',7],['Tue','17 Nov',3,true],['Wed','18 Nov',3],['Thu','19 Nov',1],['Fri','20 Nov',0],['Mon','23 Nov',0],['Tue','24 Nov',0]],
+  cities: [['Plano, TX',52,93000.75],['Dallas, TX',52,72045.33],['Fort Worth, TX',42,48734.62],['San Antonio, TX',37,40851.94],['Arlington, TX',23,26606.37],['Atlanta, GA',18,10010.04],['Frisco, TX',14,13555.42],['Denton, TX',14,13343.13],['Murphy, TX',13,10213.12],['Sherman, TX',12,29635.73]],
+  funnel: [['Leads in',371],['Moved past new lead',330],['Decided',174],['Sold',9]],
+  byType: [['Reroof',895586.56,547601.38,2187078.04],['Repairs',99612.00,1321806.35,1873183.94],['Coating',0,22506.51,737904.20],['Maintenance',0,0,4783.96]],
+  quoteAge: [['0–30 days',431993.96,24],['31–60 days',783123.39,39],['61–90 days',439298.38,18],['91–180 days',2045619.62,59],['180+ days',1102914.79,16]],
+  bigAr: [['CP-25-1449','TX',19048.26,117],['CP-25-1759','TX',15603.25,39],['CP-25-1922','GA',10500.00,21],['CP-25-1795','TX',9989.17,32],['CP-25-1747','TX',8777.75,40],['CP-25-1698','GA',8750.00,21],['CP-25-1924','GA',7650.00,11],['CP-25-1757','GA',6398.52,35]],
+  bigQuotes: [['CP-25-1637','Reroof','TX',420525,98,'Quoted'],['CP-25-1305','Reroof','TX',357480,202,'Quoted'],['CP-251002','Coating','TX',329500,419,'Quoted'],['CP-25-1801','Reroof','MO',231500,46,'Quoted'],['CP-25-1665','Reroof','TX',210000,89,'Quoted'],['CP-25-1405','Repairs','GA',203800,166,'Quoted'],['CP-25-1540','Reroof','TX',182500,130,'Quoted'],['CP-25-1735','Coating','CA',168750,60,'Pending']],
+  // [billed, jobs, open] — names masked; order is by billing
+  customers: [[379769.49,167,131220.85],[130842.62,103,54775.64],[109867.11,65,11124.72],[42748.21,18,14748.54],[37893.49,19,469.51],[37160.70,5,987.12],[32590.98,15,0],[26881.00,3,24381.00],[18538.86,5,0],[17740.61,1,0],[13430.37,9,0],[11817.46,5,0],[9825.15,2,0],[9335.37,3,5200],[6543.68,5,1047.50],[6000,1,0],[5390.30,3,2500],[4944.30,3,1499.85],[4873,1,0],[4325,2,-18],[3991.51,2,0],[3800,1,0],[3316.98,3,-734.17],[1849.77,2,0],[1848.34,1,0],[1476.30,1,0],[1443.17,1,0],[1423.24,1,0],[1416.89,3,0],[1333.75,2,0],[1208.83,1,0],[1205.80,1,0],[1000,1,0],[980,1,0],[873.16,1,0],[849.69,1,0],[750,1,0],[677.83,1,0],[668.88,1,0],[609.38,1,0],[600,1,0],[500,1,0],[500,1,0],[457.32,1,0],[375,1,0]],
+  // [person, role, clocked, onJobs, travel, visitsLed28d]
+  crew: [['Person 2','Service foreman',677.51,503.45,118.60,13],['Person 3','Service foreman',629.49,463.63,160.74,30],['Person 5','—',563.31,427.90,142.29,0],['Person 6','—',502.70,419.32,96.38,21],['Person 8','—',346.07,248.20,50.25,0],['Person 7','—',316.75,264.39,56.41,0],['Person 4','Owner',null,134.11,15.37,7],['Person 9','—',null,27.05,4.54,0],['Person 11','—',19.97,17.49,4.17,0],['Person 1','Service manager',null,7.72,4.55,3],['Person 17','—',null,5.02,0,0],['Person 18','—',null,1.80,0.48,0],['Person 14','—',null,0,0,4]],
+  // [owner, role, new, openN, openVal, soldN, soldVal, lostN, lostVal]
+  reps: [['Person 1','Service manager',26,98,2980693.53,8,896648.56,123,1778938.59],['Person 9','—',5,44,932442.02,0,0,6,65625.20],['Person 10','—',1,6,830636.65,1,98550,4,117659.45],['Person 2','Service foreman',1,4,39930.94,0,0,9,1042.50],['Person 3','Service foreman',4,2,11204.50,0,0,13,10132.50],['Person 12','—',0,1,7000,0,0,0,0],['Person 6','—',2,1,1042.50,0,0,2,0],['Person 4','Owner',1,0,0,0,0,4,5300],['Person 13','—',0,0,0,0,0,3,2216],['Person 16','—',0,0,0,0,0,1,0],['No owner','—',1,0,0,0,0,0,0]],
+};
+
+// ─── Formatting ───
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const usd = v => (v < 0 ? '−' : '') + '$' + Math.round(Math.abs(v)).toLocaleString('en-US');
+const usdK = v => { const a = Math.abs(v); const s = a >= 1e6 ? (a / 1e6).toFixed(a >= 1e7 ? 0 : 2).replace(/\.?0+$/, '') + 'M' : a >= 1e3 ? Math.round(a / 1e3) + 'K' : Math.round(a); return (v < 0 ? '−$' : '$') + s; };
+const num = v => Math.round(v).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const VIZ = ['var(--pe-viz-1)', 'var(--pe-viz-2)', 'var(--pe-viz-3)', 'var(--pe-viz-4)', 'var(--pe-viz-other)'];
+
+// ─── Tooltip ───
+const tip = $('#tip');
+function showTip(ev, title, rows) {
+  tip.innerHTML = `<strong>${esc(title)}</strong>` + rows.map(([c, l, v]) => `<div><span>${c ? `<i class="cpd-swatch" style="background:${c}"></i>` : ''}${esc(l)}</span><b>${esc(v)}</b></div>`).join('');
+  tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+const hideTip = () => { tip.hidden = true; };
+
+// Rounded data-end bar: 4px radius on the end away from the baseline only.
+function barPath(x, y, w, h, horizontal) {
+  const r = Math.min(4, (horizontal ? h : w) / 2, horizontal ? w : h);
+  if (h <= 0 || w <= 0) return '';
+  if (!horizontal) return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+  return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`;
+}
+function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+// Axis: about five ticks on round steps (1, 2, 5 × 10ⁿ; 2.5 only when it stays whole).
+function niceAxis(v) { const raw = Math.max(v, 1) / 5, p = 10 ** Math.floor(Math.log10(raw)); const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(st => st >= raw && Number.isInteger(st)) || 10 * p; return { step, max: Math.ceil(v / step) * step || step }; }
+
+function legend(series) {
+  if (series.length < 2) return '';
+  return `<ul class="cpd-legend">${series.map(s => `<li><i class="cpd-swatch" style="background:${s.color}"></i>${esc(s.name)}</li>`).join('')}</ul>`;
+}
+function tableView(head, rows) {
+  return `<details class="cpd-tableview"><summary>Show as table</summary><div class="pe-table-wrap"><table class="pe-table"><thead><tr>${head.map((h, i) => `<th${i ? ' class="pe-n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${i ? ' class="pe-n"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+}
+
+// Vertical bars: grouped (default) or stacked. One y axis only.
+function vbars(el, { cats, series, fmt = usdK, tipFmt = usd, stacked = false, height = 220 }) {
+  const W = Math.max(280, el.clientWidth), H = height, L = 48, R = 4, T = 8, B = 24;
+  const pw = W - L - R, ph = H - T - B, n = cats.length;
+  const totals = cats.map((_, i) => series.reduce((a, s) => a + s.values[i], 0));
+  const ax = niceAxis(stacked ? Math.max(...totals) : Math.max(...series.flatMap(s => s.values))), max = ax.max;
+  const band = pw / n, inner = Math.min(band * 0.72, stacked ? 40 : 18 * series.length + 2 * (series.length - 1));
+  const bw = stacked ? inner : (inner - 2 * (series.length - 1)) / series.length;
+  const y = v => T + ph - (v / max) * ph;
+  let g = '';
+  for (let k = 0; k <= Math.round(max / ax.step); k++) { const v = ax.step * k, yy = y(v); g += `<line class="${k ? 'cpd-grid-line' : 'cpd-base'}" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end">${fmt(v)}</text>`; }
+  const step = Math.ceil(n / Math.max(1, Math.floor(pw / 46)));
+  let bars = '';
+  cats.forEach((c, i) => {
+    const x0 = L + band * i + (band - inner) / 2;
+    bars += `<g data-i="${i}"><rect class="cpd-hit" x="${L + band * i}" y="${T}" width="${band}" height="${ph}"/>`;
+    let acc = 0;
+    series.forEach((s, j) => {
+      const v = s.values[i]; if (!v) return;
+      if (stacked) {
+        const top = y(acc + v), bottom = y(acc); const h = bottom - top - (acc ? 2 : 0);
+        const isTop = series.slice(j + 1).every(t => !t.values[i]);
+        bars += isTop ? `<path d="${barPath(x0, top, bw, h)}" style="fill:${s.color}"/>` : `<rect x="${x0}" y="${top}" width="${bw}" height="${Math.max(0, h)}" style="fill:${s.color}"/>`;
+        acc += v;
+      } else {
+        const x = x0 + j * (bw + 2); bars += `<path d="${barPath(x, y(v), bw, y(0) - y(v))}" style="fill:${s.color}"/>`;
+      }
+    });
+    bars += `</g>`;
+    if (i % step === 0) g += `<text x="${L + band * i + band / 2}" y="${H - 6}" text-anchor="middle">${esc(c)}</text>`;
+  });
+  el.innerHTML = legend(series) + `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(el.dataset.label || '')}">${g}${bars}</svg>` +
+    tableView(['', ...series.map(s => s.name)], cats.map((c, i) => [c, ...series.map(s => tipFmt(s.values[i]))]));
+  $$('g[data-i]', el).forEach(gr => {
+    const i = +gr.dataset.i, hit = gr.firstChild;
+    gr.addEventListener('mousemove', e => { hit.style.fill = 'var(--pe-surface-hover)'; showTip(e, cats[i], series.map(s => [s.color, s.name, tipFmt(s.values[i])]).concat(stacked && series.length > 1 ? [[null, 'Total', tipFmt(totals[i])]] : [])); });
+    gr.addEventListener('mouseleave', () => { hit.style.fill = ''; hideTip(); });
+  });
+}
+
+// Horizontal bars: one value per row (or stacked parts), value labelled at the bar end.
+function hbars(el, { rows, series, fmt = usd, sub, stacked = false }) {
+  const W = Math.max(280, el.clientWidth), rowH = 30, T = 4, labelW = Math.min(150, W * 0.34), valW = 84;
+  const H = T + rows.length * rowH + 4, pw = W - labelW - valW - 8;
+  const totals = rows.map(r => series.reduce((a, s) => a + s.get(r), 0));
+  const max = niceMax(Math.max(...totals));
+  let out = '';
+  rows.forEach((r, i) => {
+    const yy = T + i * rowH, bh = 14, by = yy + (rowH - bh) / 2;
+    out += `<g data-i="${i}"><rect class="cpd-hit" x="0" y="${yy}" width="${W}" height="${rowH}"/>`;
+    out += `<text x="0" y="${yy + rowH / 2 + 4}" style="fill:var(--pe-text-secondary)">${esc(r[0])}</text>`;
+    let acc = 0;
+    series.forEach((s, j) => {
+      const v = s.get(r); if (!v) return;
+      const x = labelW + (acc / max) * pw + (acc ? 2 : 0), w = (v / max) * pw - (acc ? 2 : 0);
+      const isEnd = series.slice(j + 1).every(t => !t.get(r));
+      out += isEnd ? `<path d="${barPath(x, by, Math.max(1, w), bh, true)}" style="fill:${s.color}"/>` : `<rect x="${x}" y="${by}" width="${Math.max(1, w)}" height="${bh}" style="fill:${s.color}"/>`;
+      acc += v;
+    });
+    out += `<line class="cpd-base" x1="${labelW}" x2="${labelW}" y1="${yy + 4}" y2="${yy + rowH - 4}"/>`;
+    out += `<text class="cpd-val" x="${labelW + (totals[i] / max) * pw + 6}" y="${yy + rowH / 2 + 4}">${esc(fmt(totals[i]))}</text></g>`;
+  });
+  el.innerHTML = legend(series) + `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(el.dataset.label || '')}">${out}</svg>` +
+    tableView(['', ...series.map(s => s.name), ...(sub ? [sub.name] : [])], rows.map(r => [r[0], ...series.map(s => fmt(s.get(r))), ...(sub ? [sub.get(r)] : [])]));
+  $$('g[data-i]', el).forEach(gr => {
+    const r = rows[+gr.dataset.i], hit = gr.firstChild;
+    gr.addEventListener('mousemove', e => { hit.style.fill = 'var(--pe-surface-hover)'; showTip(e, r[0], series.map(s => [s.color, s.name, fmt(s.get(r))]).concat(sub ? [[null, sub.name, sub.get(r)]] : [])); });
+    gr.addEventListener('mouseleave', () => { hit.style.fill = ''; hideTip(); });
+  });
+}
+
+const CHARTS = {
+  billedCollected: el => vbars(el, { cats: MONTHS, series: [{ name: 'Billed', color: VIZ[2], values: D.billed }, { name: 'Collected', color: VIZ[3], values: D.collected }] }),
+  aging: el => hbars(el, { rows: D.aging, series: [{ name: 'Owed', color: VIZ[2], get: r => r[1] }], sub: { name: 'Jobs', get: r => r[2] } }),
+  workType: el => hbars(el, { rows: D.workType, series: [{ name: 'Billed', color: VIZ[2], get: r => r[1] }], sub: { name: 'Jobs', get: r => r[2] } }),
+  state: el => hbars(el, { rows: D.state, series: [{ name: 'Billed', color: VIZ[2], get: r => r[1] }], sub: { name: 'Jobs', get: r => r[2] } }),
+  visitsWeek: el => vbars(el, { cats: D.weeks.map(w => w[0]), stacked: true, fmt: num, tipFmt: num, series: [{ name: 'Leak', color: VIZ[0], values: D.weeks.map(w => w[1]) }, { name: 'Scope', color: VIZ[1], values: D.weeks.map(w => w[2]) }] }),
+  ticketsMonth: el => vbars(el, { cats: MONTHS, fmt: num, tipFmt: num, series: [{ name: 'Tickets opened', color: VIZ[2], values: D.tickets }] }),
+  cities: el => hbars(el, { rows: D.cities, fmt: num, series: [{ name: 'Jobs', color: VIZ[2], get: r => r[1] }], sub: { name: 'Billed', get: r => usd(r[2]) } }),
+  funnel: el => hbars(el, { rows: D.funnel, fmt: num, series: [{ name: 'Leads', color: VIZ[2], get: r => r[1] }] }),
+  byType: el => hbars(el, { rows: D.byType, fmt: usdK, series: [{ name: 'Sold', color: VIZ[3], get: r => r[1] }, { name: 'Lost', color: VIZ[4], get: r => r[2] }, { name: 'Open', color: VIZ[2], get: r => r[3] }] }),
+  leadsMonth: el => vbars(el, { cats: MONTHS, fmt: num, tipFmt: num, series: [{ name: 'New leads', color: VIZ[2], values: D.leads }] }),
+  quotedMonth: el => vbars(el, { cats: MONTHS, series: [{ name: 'Quoted value', color: VIZ[2], values: D.quotedVal }] }),
+  quoteAge: el => hbars(el, { rows: D.quoteAge, fmt: usdK, series: [{ name: 'Open value', color: VIZ[2], get: r => r[1] }], sub: { name: 'Quotes', get: r => r[2] } }),
+};
+
+// ─── Lists (T-01: 10 rows, then "Show all N") ───
+const ROWS = {
+  bigAr: () => D.bigAr.map(([j, s, v, d]) => `<tr><td data-headline>${j}</td><td data-label="State">${s}</td><td class="pe-n" data-label="Open">${usd(v)}</td><td class="pe-n" data-label="Days">${d}</td><td data-label="Status">${d > 90 ? '<span class="pe-status pe-status--danger">Over 90 days</span>' : d > 30 ? '<span class="pe-status pe-status--warning">31 to 90 days</span>' : '<span class="pe-status pe-status--neutral">Current</span>'}</td></tr>`),
+  bigQuotes: () => D.bigQuotes.map(([j, t, s, v, d, st]) => `<tr><td data-headline>${j}</td><td data-label="Type">${t}</td><td data-label="State">${s}</td><td class="pe-n" data-label="Quoted">${usd(v)}</td><td class="pe-n" data-label="Age, days">${d}</td><td data-label="Status"><span class="pe-status ${st === 'Pending' ? 'pe-status--info' : d > 90 ? 'pe-status--warning' : 'pe-status--neutral'}">${st}${st !== 'Pending' && d > 90 ? ', over 90 days' : ''}</span></td></tr>`),
+  customers: () => { const tot = D.customers.reduce((a, c) => a + c[0], 0); return D.customers.map(([b, n, o], i) => `<tr><td data-headline>Customer ${i + 1}</td><td class="pe-n" data-label="Jobs">${n}</td><td class="pe-n" data-label="Billed">${usd(b)}</td><td class="pe-n" data-label="Share">${(b / tot * 100).toFixed(1)}%</td><td class="pe-n" data-label="Open">${o ? usd(o) : '—'}</td></tr>`); },
+  crew: () => D.crew.map(([p, r, c, j, t, v]) => { const share = c ? j / c : null; return `<tr><td data-headline>${p}</td><td data-label="Role">${r}</td><td class="pe-n" data-label="Clocked hours">${c == null ? '<span title="Logs job time with no day clock-in">—</span>' : num(c)}</td><td class="pe-n" data-label="Hours on jobs">${num(j)}</td><td class="pe-n" data-label="Travel hours">${num(t)}</td><td data-label="Share of clocked time on jobs">${share == null ? '<span class="pe-muted" title="No clock-in to compare against">—</span>' : `<span class="cpd-meter-cell"><span class="pe-meter" role="img" aria-label="${Math.round(share * 100)} percent"><span style="width:${Math.min(100, share * 100)}%"></span></span><span class="pe-num">${Math.round(share * 100)}%</span></span>`}</td><td class="pe-n" data-label="Visits led, 28 days">${v}</td></tr>`; }),
+  reps: () => D.reps.map(([p, r, nw, on, ov, sn, sv, ln, lv]) => `<tr><td data-headline>${p}</td><td data-label="Role">${r}</td><td class="pe-n" data-label="New">${nw}</td><td class="pe-n" data-label="Open quotes">${on}</td><td class="pe-n" data-label="Open value">${ov ? usd(ov) : '—'}</td><td class="pe-n" data-label="Sold">${sn}</td><td class="pe-n" data-label="Sold value">${sv ? usd(sv) : '—'}</td><td class="pe-n" data-label="Lost">${ln}</td><td class="pe-n" data-label="Win rate by value">${sv + lv ? Math.round(sv / (sv + lv) * 100) + '%' : '—'}</td></tr>`),
+  days: () => D.days.map(([dw, dd, n, today]) => `<li${today ? ' aria-current="date"' : ''}${n ? '' : ' data-empty'}><span>${dw}</span><b>${n}</b><span>${dd}</span></li>`),
+};
+const LIMIT = 10, shown = {};
+function renderRows(key) {
+  const host = $(`[data-rows="${key}"]`), rows = ROWS[key](); const all = shown[key];
+  host.innerHTML = (all ? rows : rows.slice(0, key in { customers: 1, crew: 1, reps: 1 } ? LIMIT : rows.length)).join('');
+  const btn = $(`[data-show-all="${key}"]`);
+  if (btn) { btn.parentElement.hidden = rows.length <= LIMIT; btn.textContent = all ? 'Show first 10' : `Show all ${rows.length}`; btn.setAttribute('aria-expanded', all ? 'true' : 'false'); }
+}
+function store(k, v) { try { localStorage.setItem('cpd.' + k, JSON.stringify(v)); } catch (e) {} }
+function load(k) { try { return JSON.parse(localStorage.getItem('cpd.' + k)); } catch (e) { return null; } }
+
+// ─── View switch (F-04: one .pe-seg answers one question) ───
+const TITLES = { exec: 'Executive view', ops: 'Operations view', sales: 'Sales manager view' };
+function drawCharts(scope) { $$('[data-chart]', scope).forEach(el => { if (el.offsetParent !== null) CHARTS[el.dataset.chart](el); }); }
+function setView(v) {
+  if (!TITLES[v]) v = 'exec';
+  $$('.pe-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  $$('section.cpd-view').forEach(s => { s.hidden = s.dataset.view !== v; });
+  $('#view-title').textContent = TITLES[v];
+  document.title = `${TITLES[v]} · CenterPoint · Mockup`;
+  history.replaceState(null, '', '#view=' + v);
+  store('view', v);
+  drawCharts($(`section.cpd-view[data-view="${v}"]`));
+}
+$$('.pe-seg button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+$$('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); setView(a.dataset.goto); scrollTo(0, 0); }));
+$$('[data-show-all]').forEach(b => b.addEventListener('click', () => { const k = b.dataset.showAll; shown[k] = !shown[k]; store('all.' + k, shown[k]); renderRows(k); }));
+Object.keys(ROWS).forEach(k => { shown[k] = !!load('all.' + k); renderRows(k); });
+
+// Theme (review aid): dark is per surface (C-08).
+const root = document.documentElement;
+function setTheme(t) { root.dataset.theme = t; $('#theme').textContent = t === 'dark' ? 'Light' : 'Dark'; $('#theme').setAttribute('aria-pressed', String(t === 'dark')); store('theme', t); }
+$('#theme').addEventListener('click', () => setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark'));
+setTheme(load('theme') || 'light');
+
+const fromHash = (location.hash.match(/view=(\w+)/) || [])[1];
+addEventListener('hashchange', () => { const v = (location.hash.match(/view=(\w+)/) || [])[1]; if (v) setView(v); });
+setView(fromHash || load('view') || 'exec');
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => drawCharts(document), 120); });
+</script>
+</body>
+</html>
