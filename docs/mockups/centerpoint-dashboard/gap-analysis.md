@@ -26,7 +26,7 @@ Every figure in the mockup was read from the live PE Supabase on 2026-11-17 thro
 4. **149 closed jobs with $0 billed** ($215,403 priced). Some are surely warranty, callbacks or inspections. CenterPoint has no flag for that, so the dashboard cannot yet tell revenue leaks from no-charge work.
 5. **Roles.** Only 4 of 25 staff profiles carry a position. The crew and salesperson tables show a dash for the rest.
 6. **Visit end time and crew size.** CenterPoint has a visit start time only and one lead technician per job, so utilisation comes from clock-ins, not the schedule.
-7. **Sales to service link.** The 9 sold deals ($995,199) carry no link to a service ticket or invoice in the work tables, so "sold, not yet started" cannot be shown.
+7. **Sales to service link.** Not checked yet: whether a sold deal ($995,199 across 9) can be tied to the service or production ticket that delivers it. Until it is, the mockup shows "Sold" and not "Sold, not yet started".
 8. **No next-step dates on quotes.** The sales book has no follow-up date, so "follow up" can only sort by age.
 9. **Property spine.** 570 of 680 service properties are not linked to a property, so there is no map or repeat-visit view per building.
 10. **Data freshness.** CenterPoint is pulled once a day (19:45 CT) and the money view refreshes hourly. The dashboard should show the pull time, as the mockup does.
