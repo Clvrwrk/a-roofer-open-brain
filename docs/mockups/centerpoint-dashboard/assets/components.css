@@ -1,0 +1,680 @@
+/* @proexteriors/ds v1.0 — components. Uses only dist/tokens.css custom properties (rule K-01).
+   Class prefix pe- (rule K-04). Rule ids in comments point to RULES.md. */
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+.pe-app, .pe-app * { box-sizing: border-box; }
+.pe-app { margin: 0; background: var(--pe-page); color: var(--pe-text); font: var(--pe-font-weight-regular) var(--pe-font-size-body)/var(--pe-font-leading-body) var(--pe-font-family-sans); -webkit-font-smoothing: antialiased; }
+.pe-app h1, .pe-h1 { margin: 0; font-size: var(--pe-font-size-h1); line-height: var(--pe-font-leading-tight); font-weight: var(--pe-font-weight-bold); color: var(--pe-text); text-wrap: balance; }
+.pe-app h2, .pe-h2 { margin: 0; font-size: var(--pe-font-size-h2); line-height: var(--pe-font-leading-tight); font-weight: var(--pe-font-weight-bold); }
+.pe-app h3, .pe-h3 { margin: 0; font-size: var(--pe-font-size-h3); line-height: var(--pe-font-leading-snug); font-weight: var(--pe-font-weight-semibold); }
+.pe-eyebrow { margin: 0; font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); letter-spacing: var(--pe-font-tracking-label); text-transform: uppercase; color: var(--pe-text-muted); }
+/* A-03: links inside text are underlined, never colour alone (WCAG 1.4.1, the axe link-in-text-block failure). */
+.pe-app a { color: var(--pe-link); text-decoration: underline; text-underline-offset: 2px; }
+.pe-app a:hover { color: var(--pe-link-hover); }
+/* A-02: one focus ring everywhere. */
+.pe-app :focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 2px; }
+.pe-app [hidden] { display: none !important; }
+.pe-num { font-variant-numeric: tabular-nums; }
+.pe-muted { color: var(--pe-text-muted); }
+.pe-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.pe-skip { position: fixed; top: var(--pe-space-2); left: var(--pe-space-2); z-index: var(--pe-z-toast); transform: translateY(-150%); padding: var(--pe-space-3); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-structure-text); }
+.pe-skip:focus { transform: none; }
+@media (prefers-reduced-motion: reduce) { .pe-app *, .pe-app *::before, .pe-app *::after { transition: none !important; animation: none !important; } }
+
+/* ── Shell (S-01..S-09): CRM AppShell is the reference ───────────────── */
+.pe-shell { min-height: 100dvh; display: grid; grid-template-columns: var(--pe-size-rail) minmax(0, 1fr); overflow-x: clip; }
+.pe-shell-body { min-width: 0; display: flex; flex-direction: column; }
+.pe-main { flex: 1; min-width: 0; padding: var(--pe-space-4) var(--pe-space-8) var(--pe-space-12); overflow-x: clip; width: 100%; max-width: var(--pe-size-content-max); }
+.pe-rail { position: sticky; top: 0; align-self: start; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; padding: var(--pe-space-6) var(--pe-space-4); background: var(--pe-structure); color: var(--pe-on-structure); }
+.pe-rail :focus-visible, .pe-rail-icons :focus-visible { outline-color: var(--pe-focus-on-structure); }
+/* S-02: the full logo, on a white chip, at the top of the rail, linking home. Never a monogram tile, never a different mark. */
+.pe-brand { display: block; margin-bottom: var(--pe-space-5); padding: var(--pe-space-2); border-radius: var(--pe-radius-control); background: var(--pe-gray-0); }
+.pe-brand img { display: block; width: 100%; max-width: var(--pe-size-logo-rail-width); height: auto; margin-inline: auto; }
+.pe-nav { display: grid; gap: 2px; }
+.pe-nav-group > summary, .pe-nav-top { display: flex; align-items: center; gap: 10px; min-height: var(--pe-size-control-touch); padding: 0 var(--pe-space-2); border-radius: var(--pe-radius-control); list-style: none; cursor: pointer; color: var(--pe-on-structure) !important; font-size: 15px; font-weight: var(--pe-font-weight-bold); text-decoration: none !important; }
+.pe-nav-group > summary::-webkit-details-marker { display: none; }
+.pe-nav-group > summary::after { content: "›"; margin-left: auto; color: var(--pe-on-structure-muted); transition: transform var(--pe-motion-fast) var(--pe-motion-ease); }
+.pe-nav-group[open] > summary::after { transform: rotate(90deg); }
+.pe-nav-icon { display: grid; place-items: center; color: var(--pe-wayfinding); }
+.pe-nav-list { display: grid; gap: 2px; margin: 0 0 var(--pe-space-2); padding: 0; list-style: none; }
+.pe-nav-link { display: flex; align-items: center; justify-content: space-between; gap: var(--pe-space-2); min-height: 44px; padding: 6px var(--pe-space-3) 6px 36px; border-radius: var(--pe-radius-control); color: var(--pe-on-structure) !important; text-decoration: none !important; font-weight: var(--pe-font-weight-semibold); line-height: 1.3; }
+.pe-nav-group > summary:hover, .pe-nav-top:hover, .pe-nav-link:hover { background: color-mix(in srgb, var(--pe-on-structure) 8%, transparent); }
+/* S-03 (1.3.1): the active item is a pale navy band with navy text and icon (14.6:1), in both modes. The old deep-navy band was 1.09:1 against the rail, so only a 3px gold marker showed it.
+   The colour carries !important so it beats the link colour above; apps never restyle the active item. */
+.pe-nav-link[aria-current], .pe-nav-top[aria-current], .pe-rail-item[aria-current] { background: var(--pe-nav-selected); color: var(--pe-on-nav-selected) !important; }
+:is(.pe-nav-link, .pe-nav-top, .pe-rail-item)[aria-current] :is(.pe-nav-icon, svg) { color: var(--pe-on-nav-selected); }
+.pe-nav-link[aria-current]:hover, .pe-nav-top[aria-current]:hover, .pe-rail-item[aria-current]:hover { background: var(--pe-nav-selected); }
+.pe-nav-link[data-planned] { opacity: .78; font-weight: var(--pe-font-weight-medium); }
+.pe-count { min-width: 22px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: var(--pe-radius-pill); background: var(--pe-action); color: var(--pe-on-action); font: var(--pe-font-weight-bold) var(--pe-font-size-xs)/1 var(--pe-font-family-sans); font-variant-numeric: tabular-nums; }
+.pe-rail-icons { display: none; }
+.pe-rail-item { display: grid; place-items: center; width: var(--pe-size-control-touch); height: var(--pe-size-control-touch); border: 0; border-radius: var(--pe-radius-control); background: none; color: var(--pe-on-structure); cursor: pointer; }
+/* A-04: rail icon links are on navy; never let the page link colour (blue on navy, 3.2:1) win. */
+.pe-rail-icons a.pe-rail-item, .pe-rail-icons a.pe-rail-item:visited { color: var(--pe-on-structure); text-decoration: none; }
+/* S-04: one header on every viewport — eyebrow, h1, then actions in this order: Search, Help, Report a bug, Me. */
+.pe-header { display: flex; align-items: center; gap: var(--pe-space-4); padding: var(--pe-space-5) var(--pe-space-8) var(--pe-space-2); }
+.pe-header-logo { display: none; flex: none; }
+.pe-header-logo img { display: block; height: var(--pe-size-logo-header-height); width: auto; }
+.pe-header-title { flex: 1; min-width: 0; }
+.pe-header-actions { display: flex; align-items: center; gap: var(--pe-space-2); flex: none; }
+.pe-tabbar { display: none; }
+@media (max-width: 1100px) {
+  .pe-shell { grid-template-columns: var(--pe-size-rail-collapsed) minmax(0, 1fr); }
+  .pe-rail { display: none; }
+  .pe-rail-icons { display: flex; flex-direction: column; align-items: center; gap: 6px; position: sticky; top: 0; align-self: start; height: 100dvh; padding: var(--pe-space-4) var(--pe-space-3); background: var(--pe-structure); }
+  .pe-header-logo { display: block; }
+  .pe-header, .pe-main { padding-inline: var(--pe-space-6); }
+  .pe-header-actions .pe-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
+@media (max-width: 760px) {
+  .pe-shell { display: block; }
+  .pe-rail-icons { display: none; }
+  .pe-header { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo actions" "title title"; gap: var(--pe-space-2); padding: calc(10px + env(safe-area-inset-top, 0px)) var(--pe-space-4) var(--pe-space-1); }
+  .pe-header-logo { grid-area: logo; display: flex; align-items: center; min-height: var(--pe-size-control-touch); }
+  .pe-header-actions { grid-area: actions; justify-self: end; gap: var(--pe-space-1); }
+  .pe-header-title { grid-area: title; }
+  .pe-header-title h1 { font-size: var(--pe-font-size-h2); }
+  .pe-main { padding: var(--pe-space-2) var(--pe-space-4) calc(var(--pe-size-tabbar) + 32px + env(safe-area-inset-bottom, 0px)); }
+  /* S-06: phones get a docked tab bar of at most five destinations. */
+  .pe-tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: fixed; inset: auto 0 0; z-index: var(--pe-z-header); min-height: var(--pe-size-tabbar); padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: var(--pe-surface); border-top: var(--pe-border-width) solid var(--pe-border); }
+  .pe-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; color: var(--pe-text-muted) !important; text-decoration: none !important; font-size: 11px; font-weight: var(--pe-font-weight-semibold); }
+  /* A-04: navy as text always uses --pe-structure-text, which lightens in dark mode. */
+  .pe-tab[aria-current] { color: var(--pe-structure-text) !important; }
+}
+
+/* ── Sign-in (S-10): one layout for every app's login screen ─────────── */
+.pe-signin { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: var(--pe-space-6) var(--pe-space-4); background: var(--pe-structure); color: var(--pe-on-structure); font: var(--pe-font-weight-regular) var(--pe-font-size-body)/var(--pe-font-leading-body) var(--pe-font-family-sans); }
+.pe-signin * { box-sizing: border-box; }
+.pe-signin-card { width: min(100%, 420px); display: grid; gap: var(--pe-space-4); padding: var(--pe-space-8) var(--pe-space-6); background: var(--pe-surface); color: var(--pe-text); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); }
+.pe-signin-logo { display: block; width: 100%; max-width: var(--pe-size-logo-rail-width); height: auto; margin-bottom: var(--pe-space-2); }
+.pe-signin-app { margin: 0; font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); letter-spacing: var(--pe-font-tracking-label); text-transform: uppercase; color: var(--pe-text-muted); }
+.pe-signin h1 { margin: 0; font-size: var(--pe-font-size-h1); line-height: var(--pe-font-leading-tight); font-weight: var(--pe-font-weight-bold); color: var(--pe-text); }
+.pe-signin p { margin: 0; color: var(--pe-text-secondary); }
+.pe-signin .pe-signin-go { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: var(--pe-size-control-primary-touch); padding: 0 var(--pe-space-5); margin-top: var(--pe-space-2); border-radius: var(--pe-radius-control); background: var(--pe-action); color: var(--pe-on-action); font-weight: var(--pe-font-weight-bold); font-size: var(--pe-font-size-lg); text-decoration: none; }
+.pe-signin .pe-signin-go:hover { background: var(--pe-action-hover); color: var(--pe-on-action); }
+.pe-signin .pe-signin-go:active { background: var(--pe-action-pressed); }
+.pe-signin .pe-signin-go:focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 2px; }
+.pe-signin-error { padding: var(--pe-space-3) var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-danger); border-radius: var(--pe-radius-control); background: var(--pe-danger-soft); color: var(--pe-danger-text) !important; }
+.pe-signin-note { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted) !important; }
+@media (prefers-reduced-motion: reduce) { .pe-signin * { transition: none !important; } }
+
+/* ── Buttons (B-01..B-07) ──────────────────────────────────────────── */
+.pe-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--pe-space-2); min-height: var(--pe-size-control); padding: 0 var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-text); font: var(--pe-font-weight-semibold) var(--pe-font-size-body)/1.2 var(--pe-font-family-sans); text-decoration: none !important; white-space: nowrap; cursor: pointer; transition: background var(--pe-motion-fast) var(--pe-motion-ease); }
+.pe-btn:hover { background: var(--pe-surface-hover); }
+/* B-01: one flag-red primary per view. A second high-emphasis action is .pe-btn--structure (navy). */
+.pe-btn--primary { border-color: var(--pe-action); background: var(--pe-action); color: var(--pe-on-action) !important; }
+.pe-btn--primary:hover { background: var(--pe-action-hover); border-color: var(--pe-action-hover); }
+.pe-btn--primary:active { background: var(--pe-action-pressed); }
+.pe-btn--structure { border-color: var(--pe-structure); background: var(--pe-structure); color: var(--pe-on-structure) !important; }
+.pe-btn--structure:hover { background: var(--pe-structure-deep); }
+.pe-btn--quiet { border-color: transparent; background: transparent; color: var(--pe-structure-text) !important; }
+.pe-btn--quiet:hover { background: var(--pe-structure-tint); }
+.pe-btn--danger { border-color: var(--pe-danger); color: var(--pe-danger-text) !important; background: var(--pe-danger-soft); }
+.pe-btn--icon { width: var(--pe-size-control); padding: 0; }
+/* B-05: an action the server would refuse stays in place, greyed, focusable, with its reason under it. Never hidden. */
+.pe-btn[aria-disabled="true"], .pe-btn:disabled { opacity: .5; cursor: not-allowed; }
+.pe-reason { display: block; margin-top: var(--pe-space-1); font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+@media (max-width: 760px) { .pe-btn { min-height: var(--pe-size-control-touch); } .pe-btn--primary { min-height: var(--pe-size-control-primary-touch); } .pe-btn--icon { width: var(--pe-size-control-touch); } }
+
+/* ── Pills, tags, status (P-01..P-04) ──────────────────────────────── */
+.pe-tag { display: inline-flex; align-items: center; gap: var(--pe-space-1); min-height: 22px; padding: 0 var(--pe-space-2); border-radius: var(--pe-radius-pill); background: var(--pe-structure-tint); color: var(--pe-text-secondary); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-semibold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pe-status { display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 var(--pe-space-2); border-radius: var(--pe-radius-pill); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); white-space: nowrap; }
+.pe-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pe-status--good { background: var(--pe-good-soft); color: var(--pe-good); }
+.pe-status--warning { background: var(--pe-warning-soft); color: var(--pe-warning); }
+.pe-status--danger { background: var(--pe-danger-soft); color: var(--pe-danger-text); }
+.pe-status--info { background: var(--pe-info-soft); color: var(--pe-info); }
+.pe-status--neutral { background: var(--pe-surface-sunken); color: var(--pe-text-secondary); }
+/* P-03: a KPI pill is a work queue with a count and one action; numbers that change nothing live in subtext. */
+.pe-kpi { display: grid; gap: var(--pe-space-1); padding: var(--pe-space-3) var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-kpi-value { font-size: var(--pe-font-size-h2); font-weight: var(--pe-font-weight-bold); font-variant-numeric: tabular-nums; }
+.pe-kpi-sub { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+
+/* ── Panels (L-01..L-04): borders, not shadows ─────────────────────── */
+.pe-panel { border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--pe-space-2) var(--pe-space-4); padding: var(--pe-space-3) var(--pe-space-4); border-bottom: var(--pe-border-width) solid var(--pe-border); }
+.pe-panel-body { padding: var(--pe-space-4); }
+.pe-stack { display: grid; gap: var(--pe-space-4); }
+.pe-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2); }
+
+/* ── Forms and the filter bar (F-01..F-10) ─────────────────────────── */
+.pe-field { display: grid; gap: var(--pe-space-1); min-width: 0; }
+.pe-label { font-size: var(--pe-font-size-sm); font-weight: var(--pe-font-weight-semibold); color: var(--pe-text-secondary); }
+.pe-input, .pe-select { width: 100%; min-height: var(--pe-size-control); padding: 0 var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-text); font: var(--pe-font-size-body)/1.2 var(--pe-font-family-sans); }
+@media (max-width: 760px) { .pe-input, .pe-select { min-height: var(--pe-size-control-touch); font-size: var(--pe-font-size-input); } }
+.pe-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--pe-space-3); padding: var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-filters > .pe-field { flex: 1 1 170px; }
+.pe-filters > .pe-field--grow { flex: 2 1 280px; }
+/* F-04: one scope control answers one question (To audit · Due now · All), never several checkboxes. */
+.pe-seg { display: inline-flex; gap: var(--pe-space-1); padding: var(--pe-space-1); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface-sunken); }
+.pe-seg button { min-height: 32px; padding: 0 var(--pe-space-3); border: 0; border-radius: var(--pe-radius-control); background: transparent; color: var(--pe-text-secondary); font: var(--pe-font-weight-semibold) var(--pe-font-size-sm)/1 var(--pe-font-family-sans); cursor: pointer; }
+/* 1.3.1: the selected segment is a solid navy fill (16.1:1 light, 12.5:1 dark against the track). A white chip on the grey track was 1.10:1. */
+.pe-seg button[aria-pressed="true"] { background: var(--pe-structure-text); color: var(--pe-on-structure-text); }
+.pe-more-filters { flex: 1 1 100%; }
+.pe-more-filters > summary { cursor: pointer; color: var(--pe-structure-text); font-weight: var(--pe-font-weight-semibold); }
+.pe-filterline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--pe-space-2) var(--pe-space-4); margin: var(--pe-space-3) 2px var(--pe-space-4); font-size: var(--pe-font-size-sm); color: var(--pe-text-secondary); }
+
+/* ── Nest tree (N-01..N-14): Invoice Audit and CRM Jobs are the reference ─ */
+.pe-nest { display: grid; gap: var(--pe-space-2); min-width: 0; }
+.pe-node { border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); min-width: 0; }
+.pe-node .pe-node { border-radius: var(--pe-radius-control); }
+.pe-node > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2) var(--pe-space-3); min-height: var(--pe-size-control-touch); padding: var(--pe-space-2) var(--pe-space-4); list-style: none; cursor: pointer; }
+.pe-node > summary::-webkit-details-marker { display: none; }
+.pe-node > summary::before { content: "›"; display: inline-grid; place-items: center; width: 16px; color: var(--pe-text-muted); transition: transform var(--pe-motion-fast) var(--pe-motion-ease); }
+.pe-node[open] > summary::before { transform: rotate(90deg); }
+.pe-node[open] > summary { border-bottom: var(--pe-border-width) solid var(--pe-border); }
+.pe-node-name { font-weight: var(--pe-font-weight-bold); color: var(--pe-text); min-width: 0; overflow-wrap: anywhere; }
+.pe-node[data-level="0"] > summary { background: var(--pe-structure); color: var(--pe-on-structure); border-radius: calc(var(--pe-radius-card) - 1px); }
+.pe-node[data-level="0"][open] > summary { border-radius: calc(var(--pe-radius-card) - 1px) calc(var(--pe-radius-card) - 1px) 0 0; }
+.pe-node[data-level="0"] > summary .pe-node-name, .pe-node[data-level="0"] > summary::before { color: var(--pe-on-structure); }
+.pe-node[data-level="0"] > summary .pe-tag { background: color-mix(in srgb, var(--pe-on-structure) 14%, transparent); color: var(--pe-on-structure); }
+.pe-node-children { display: grid; gap: var(--pe-space-2); padding: var(--pe-space-2) var(--pe-space-2) var(--pe-space-2) var(--pe-size-nest-indent); }
+.pe-node-meta { display: flex; flex-wrap: wrap; gap: var(--pe-space-1) var(--pe-space-2); margin-left: auto; }
+/* N-09: a progress bar at every level, rolled up from the deepest line. */
+.pe-progress { flex: 0 0 120px; height: 6px; border-radius: var(--pe-radius-pill); background: var(--pe-surface-sunken); overflow: hidden; }
+.pe-progress > span { display: block; height: 100%; background: var(--pe-good); }
+.pe-node[data-level="0"] .pe-progress { background: color-mix(in srgb, var(--pe-on-structure) 20%, transparent); }
+.pe-node[hidden] { display: none; }
+/* N-07: interactive controls inside a summary stop propagation (ds.js) and never toggle the node. */
+.pe-node-action { margin-left: var(--pe-space-2); }
+
+/* ── Tables and long lists (T-01..T-11) ────────────────────────────── */
+/* T-04: a wide table scrolls its own wrapper on both axes; never pair overflow-x:auto with overflow-y:visible. */
+.pe-table-wrap { overflow: auto; max-width: 100%; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--pe-font-size-body); }
+.pe-table th, .pe-table td { padding: 0 var(--pe-space-3); height: var(--pe-size-row-compact); border-bottom: var(--pe-border-width) solid var(--pe-border); text-align: left; vertical-align: middle; background: var(--pe-surface); white-space: nowrap; }
+.pe-table thead th { position: sticky; top: 0; z-index: var(--pe-z-sticky); height: var(--pe-size-row); background: var(--pe-surface-sunken); color: var(--pe-text-secondary); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); letter-spacing: var(--pe-font-tracking-label); text-transform: uppercase; }
+/* T-06: numbers right-aligned in tabular figures; labels left. */
+.pe-table .pe-n, .pe-table td.pe-n, .pe-table th.pe-n { text-align: right; font-variant-numeric: tabular-nums; }
+/* T-05: zebra and hover are painted on td, so frozen cells stay opaque. */
+.pe-table tbody tr:nth-child(even) td { background: var(--pe-page); }
+.pe-table tbody tr:hover td { background: var(--pe-surface-selected); }
+.pe-table .pe-freeze { position: sticky; left: 0; z-index: 1; box-shadow: inset -1px 0 var(--pe-border); }
+.pe-table thead .pe-freeze { z-index: calc(var(--pe-z-sticky) + 1); }
+.pe-table--wrap th, .pe-table--wrap td { white-space: normal; height: auto; padding-block: var(--pe-space-2); }
+.pe-table td.pe-clip { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }
+/* T-10: on phones a table becomes one card per row: label and value pairs, headline columns first. */
+@media (max-width: 760px) {
+  .pe-table--stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .pe-table--stack, .pe-table--stack tbody, .pe-table--stack tr, .pe-table--stack td { display: block; width: 100%; }
+  .pe-table--stack tr { padding: var(--pe-space-3) var(--pe-space-4); border-bottom: var(--pe-border-width) solid var(--pe-border); }
+  .pe-table--stack td { display: flex; justify-content: space-between; gap: var(--pe-space-3); height: auto; min-height: 28px; padding: 2px 0; border: 0; white-space: normal; background: transparent !important; }
+  .pe-table--stack td::before { content: attr(data-label); color: var(--pe-text-muted); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-semibold); }
+  .pe-table--stack td[data-headline] { font-weight: var(--pe-font-weight-bold); font-size: var(--pe-font-size-lg); }
+  .pe-table--stack td[data-headline]::before { content: none; }
+  .pe-table--stack .pe-freeze { position: static; box-shadow: none; }
+}
+/* T-01: an unbounded list opens at 10 rows; the pane is the same height collapsed and expanded (ds.js measures it). */
+.pe-list-pane { overflow: auto; }
+.pe-show-all { display: flex; justify-content: center; padding: var(--pe-space-2); border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-show-all button { border: 0; background: none; color: var(--pe-link); font: var(--pe-font-weight-semibold) var(--pe-font-size-sm)/1 var(--pe-font-family-sans); text-decoration: underline; cursor: pointer; }
+
+/* ── Feedback (E-01..E-06) ─────────────────────────────────────────── */
+/* E-01: every filtered list has an empty state that names the way out. */
+.pe-empty { display: grid; justify-items: start; gap: var(--pe-space-2); padding: var(--pe-space-6); border: var(--pe-border-width) dashed var(--pe-border-strong); border-radius: var(--pe-radius-card); background: var(--pe-surface); color: var(--pe-text-secondary); }
+.pe-notice { padding: var(--pe-space-3) var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-border); border-left: 4px solid var(--pe-info); border-radius: var(--pe-radius-control); background: var(--pe-surface); }
+.pe-notice--warning { border-left-color: var(--pe-warning-fill); }
+.pe-notice--danger { border-left-color: var(--pe-danger); }
+.pe-notice--good { border-left-color: var(--pe-good); }
+.pe-toast { position: fixed; right: var(--pe-space-4); bottom: calc(var(--pe-space-4) + env(safe-area-inset-bottom, 0px)); z-index: var(--pe-z-toast); max-width: min(420px, calc(100vw - 32px)); padding: var(--pe-space-3) var(--pe-space-4); border-radius: var(--pe-radius-control); background: var(--pe-gray-900); color: var(--pe-gray-0); box-shadow: var(--pe-elevation-overlay); }
+.pe-dialog { width: min(520px, calc(100vw - 32px)); padding: 0; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); color: var(--pe-text); box-shadow: var(--pe-elevation-overlay); }
+.pe-dialog::backdrop { background: var(--pe-overlay); }
+.pe-dialog-body { padding: var(--pe-space-5); display: grid; gap: var(--pe-space-3); }
+.pe-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--pe-space-2); padding: var(--pe-space-3) var(--pe-space-5); border-top: var(--pe-border-width) solid var(--pe-border); }
+
+/* Logo on dark grounds (S-02, 1.4.1). Two files: the standard logo (navy + red) for light grounds, and
+   pro-exteriors-logo-on-dark.svg (white + red) for navy and dark grounds. Put both in the markup and the theme picks:
+   <img class="pe-logo--on-light" src="logo.svg"><img class="pe-logo--on-dark" src="logo-on-dark.svg" alt="">.
+   .pe-logo--navy on a wrapper forces the white logo where the ground is navy in both modes. */
+.pe-logo--on-dark { display: none !important; }
+:is([data-theme="dark"], .pe-dark, .pe-logo--navy) .pe-logo--on-light { display: none !important; }
+:is([data-theme="dark"], .pe-dark, .pe-logo--navy) .pe-logo--on-dark { display: block !important; }
+/* The rail chip is white in both modes, so the logo on it never swaps. */
+.pe-brand .pe-logo--on-light { display: block !important; }
+.pe-brand .pe-logo--on-dark { display: none !important; }
+/* A single-file logo that has not been given its pair yet keeps a white chip in dark, so it is never navy on navy. */
+:is([data-theme="dark"], .pe-dark) :is(.pe-header-logo img, img.pe-signin-logo):not(.pe-logo--on-light, .pe-logo--on-dark) { background: var(--pe-gray-0); border-radius: var(--pe-radius-control); padding: 2px 6px; box-sizing: content-box; }
+
+/* Icons (S-11, 1.4.1): an icon is drawn in the ink of the text beside it, so it turns white on navy and on dark
+   grounds with no second file. Inline svg only; an <img> icon cannot follow its ground. */
+.pe-icon { display: inline-block; flex: none; width: 20px; height: 20px; color: inherit; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.2em; }
+.pe-icon--on-structure { color: var(--pe-on-structure); }
+
+/* Dark surfaces (1.4.1): the dark layers sit closer together than the light ones, so the edges that tell one
+   layer from the next are restated one step stronger. */
+:is([data-theme="dark"], .pe-dark) .pe-btn--structure { border-color: var(--pe-border-control); }
+:is([data-theme="dark"], .pe-dark) .pe-rail { border-right: var(--pe-border-width) solid var(--pe-border); }
+:is([data-theme="dark"], .pe-dark) .pe-status--neutral { background: var(--pe-surface-hover); box-shadow: inset 0 0 0 var(--pe-border-width) var(--pe-border-strong); }
+:is([data-theme="dark"], .pe-dark) .pe-progress { background: var(--pe-border); }
+:is([data-theme="dark"], .pe-dark) .pe-node[data-level="0"] > summary { box-shadow: inset 0 0 0 var(--pe-border-width) var(--pe-border-control); }
+:is([data-theme="dark"], .pe-dark) :is(.pe-panel, .pe-signin-card, .pe-dialog, .pe-kpi, .pe-filters, .pe-table-wrap) { border-color: var(--pe-border-strong); }
+:is([data-theme="dark"], .pe-dark) .pe-notice { border-top-color: var(--pe-border-strong); border-right-color: var(--pe-border-strong); border-bottom-color: var(--pe-border-strong); }
+
+/* ── Column groups (T-12, L-04): wide data fits by default; sideways only after the person expands a group ── */
+/* Markup: <table class="pe-table" data-pe-colgroups="surface-id"> with a first header row tr.pe-grouprow holding
+   th[data-pe-colgroup="money"] > button, and cells th/td[data-pe-col="money"] (+ data-pe-more for the extra columns). */
+.pe-table .pe-grouprow th { height: auto; padding-block: var(--pe-space-1); background: var(--pe-surface); border-bottom: 0; text-transform: none; letter-spacing: 0; }
+.pe-table[data-pe-colgroups] thead tr:not(.pe-grouprow) th { top: var(--pe-grouprow-h, 0px); }
+.pe-colgroup-toggle { display: inline-flex; align-items: center; gap: var(--pe-space-1); min-height: 28px; padding: 0 var(--pe-space-2); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-text); font: var(--pe-font-weight-semibold) var(--pe-font-size-xs)/1 var(--pe-font-family-sans); cursor: pointer; }
+.pe-colgroup-toggle::before { content: "▸"; transition: transform var(--pe-motion-fast) var(--pe-motion-ease); }
+.pe-colgroup-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.pe-colgroup-toggle:hover { background: var(--pe-surface-hover); }
+.pe-table [data-pe-more] { display: none; }
+.pe-table [data-pe-more][data-pe-open] { display: table-cell; }
+@media (max-width: 760px) {
+  /* Cards scroll down, never sideways, and their group buttons are hidden with the header, so every column shows. */
+  .pe-table--stack [data-pe-more] { display: flex; }
+}
+
+/* ── Custody ledger (P-05): one line per loan, newest first, never edited ── */
+.pe-ledger { margin: 0; padding: 0; list-style: none; }
+.pe-ledger-line { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--pe-space-4); align-items: center; padding: var(--pe-space-3) var(--pe-space-4); border-bottom: var(--pe-border-width) solid var(--pe-border); }
+.pe-ledger-line > * { min-width: 0; }
+.pe-ledger-line p { margin: 0; }
+.pe-ledger-line--open { background: var(--pe-surface-selected); box-shadow: inset 3px 0 var(--pe-warning-fill); }
+.pe-ledger-who { display: grid; gap: var(--pe-space-1); }
+.pe-ledger-days { min-width: 9ch; text-align: right; font-variant-numeric: tabular-nums; font-weight: var(--pe-font-weight-semibold); }
+.pe-stamp { display: inline-grid; justify-items: center; min-width: 72px; padding: var(--pe-space-1) var(--pe-space-2); border: var(--pe-border-width-strong) solid var(--pe-border-strong); border-radius: var(--pe-radius-control); background: var(--pe-surface); color: var(--pe-text-secondary); }
+.pe-stamp-label { font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); letter-spacing: var(--pe-font-tracking-label); text-transform: uppercase; }
+.pe-stamp-date { color: var(--pe-text); font-size: var(--pe-font-size-lg); font-weight: var(--pe-font-weight-bold); line-height: var(--pe-font-leading-tight); font-variant-numeric: tabular-nums; }
+.pe-stamp--in { border-color: var(--pe-good); color: var(--pe-good); }
+.pe-stamp--due { border-color: var(--pe-warning); border-style: dashed; color: var(--pe-warning); }
+.pe-stamp--late { border-color: var(--pe-danger); background: var(--pe-danger-soft); color: var(--pe-danger-text); }
+.pe-stamp--late .pe-stamp-date { color: var(--pe-danger-text); }
+@media (max-width: 760px) {
+  .pe-ledger-line { grid-template-columns: auto minmax(0, 1fr); }
+  .pe-ledger-line > .pe-stamp:not(:first-child) { grid-column: 1; }
+  .pe-ledger-days { text-align: left; }
+}
+
+/* ── Evidence capture (E-05): a required photo set is a checklist with progress ── */
+.pe-evidence { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--pe-space-2); }
+.pe-evidence-slot { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--pe-space-3); align-items: center; padding: var(--pe-space-2) var(--pe-space-3); border: var(--pe-border-width) dashed var(--pe-border-strong); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-evidence-slot[data-taken] { border-style: solid; border-color: var(--pe-border); }
+.pe-evidence-thumb { width: 56px; height: 42px; object-fit: cover; border-radius: var(--pe-radius-control); background: var(--pe-surface-sunken); }
+
+/* ── Maps (MP-01..MP-12, 1.4.0): one shared map, drawn by js/map.js, always next to a list ── */
+.pe-map { margin: 0; display: flex; flex-direction: column; gap: var(--pe-space-3); min-width: 0; }
+.pe-map__canvas { display: block; width: 100%; height: auto; font-family: var(--pe-font-family-sans); }
+.pe-map__region { fill: var(--pe-map-base); stroke: var(--pe-map-edge); stroke-width: 1.2; stroke-linejoin: round; }
+.pe-map__region.is-on { fill: var(--pe-map-mark); }
+.pe-map__region[class*="is-step-"] { stroke: var(--pe-map-step-edge); } /* step fills can sit near the base; the edge carries the 3:1 */
+.pe-map__region.is-step-1 { fill: var(--pe-map-step-1); }
+.pe-map__region.is-step-2 { fill: var(--pe-map-step-2); }
+.pe-map__region.is-step-3 { fill: var(--pe-map-step-3); }
+.pe-map__region.is-step-4 { fill: var(--pe-map-step-4); }
+.pe-map__hatch-bg { fill: var(--pe-map-base); }
+.pe-map__hatch-line { fill: var(--pe-map-planned); }
+.pe-map__region.is-hit { cursor: pointer; outline: none; }
+.pe-map__region.is-hit.is-on:hover,
+.pe-map__region.is-hit.is-step-3:hover,
+.pe-map__region.is-hit.is-step-4:hover { fill: var(--pe-map-mark-hover); }
+/* MP-05: gold on a backing band in a colour chosen per fill (measured in contrast.md), so the edge reads on every step. */
+.pe-map__ring-back { fill: none; stroke-width: 22; pointer-events: none; }
+.pe-map__ring-back.is-on-base { stroke: var(--pe-map-ring-back-base); }
+.pe-map__ring-back.is-on-mark { stroke: var(--pe-map-ring-back-mark); }
+.pe-map__ring-back.is-on-step-1 { stroke: var(--pe-map-ring-back-step-1); }
+.pe-map__ring-back.is-on-step-2 { stroke: var(--pe-map-ring-back-step-2); }
+.pe-map__ring-back.is-on-step-3 { stroke: var(--pe-map-ring-back-step-3); }
+.pe-map__ring-back.is-on-step-4 { stroke: var(--pe-map-ring-back-step-4); }
+.pe-map__ring { fill: none; stroke: var(--pe-map-selected); stroke-width: 10; pointer-events: none; }
+.pe-map__focus-halo { fill: none; stroke: var(--pe-map-focus-halo); stroke-width: 7; pointer-events: none; }
+.pe-map__focus { fill: none; stroke: var(--pe-focus); stroke-width: 3.5; pointer-events: none; }
+.pe-map__label { pointer-events: none; text-anchor: middle; }
+/* MP-13: a halo in the state's own fill keeps glyphs on their measured background where a label meets the gold edge or the coast. */
+.pe-map__label { paint-order: stroke; stroke-width: 4px; stroke-linejoin: round; }
+.pe-map__label.is-on-mark { fill: var(--pe-map-mark-text); stroke: var(--pe-map-mark); }
+.pe-map__label.is-on-step-1 { fill: var(--pe-map-step-1-text); stroke: var(--pe-map-step-1); }
+.pe-map__label.is-on-step-2 { fill: var(--pe-map-step-2-text); stroke: var(--pe-map-step-2); }
+.pe-map__label.is-on-step-3 { fill: var(--pe-map-step-3-text); stroke: var(--pe-map-step-3); }
+.pe-map__label.is-on-step-4 { fill: var(--pe-map-step-4-text); stroke: var(--pe-map-step-4); }
+.pe-map__code { font-size: 15px; font-weight: var(--pe-font-weight-bold); }
+.pe-map__value { font-size: 12px; font-weight: var(--pe-font-weight-semibold); }
+.pe-map__label--compact { font-size: 21px; font-weight: var(--pe-font-weight-bold); }
+.pe-map__badge, .pe-map__flag, .pe-map__leader, .pe-map__callout { pointer-events: none; } /* clicks go to the region underneath */
+.pe-map__badge rect { stroke: var(--pe-map-edge); stroke-width: 1.2; }
+.pe-map__badge.is-selected rect { stroke: var(--pe-map-selected); stroke-width: 4; } /* MP-05 on a pill that covers its state */
+.pe-map__badge.is-on-mark rect { fill: var(--pe-map-mark); }
+.pe-map__badge.is-on-step-1 rect { fill: var(--pe-map-step-1); }
+.pe-map__badge.is-on-step-2 rect { fill: var(--pe-map-step-2); }
+.pe-map__badge.is-on-step-3 rect { fill: var(--pe-map-step-3); }
+.pe-map__badge.is-on-step-4 rect { fill: var(--pe-map-step-4); }
+.pe-map__flag rect, .pe-map__flag circle { fill: var(--pe-map-flag); }
+.pe-map__flag text { fill: var(--pe-map-on-flag); font-size: 12px; font-weight: var(--pe-font-weight-bold); text-anchor: middle; }
+.pe-map__callout line, .pe-map__leader { stroke: var(--pe-map-callout); stroke-width: 1; }
+.pe-map__callout circle { fill: var(--pe-structure-text); }
+.pe-map__callout text { fill: var(--pe-structure-text); font-size: 13px; font-weight: var(--pe-font-weight-bold); }
+.pe-map__callout-value { fill: var(--pe-map-callout); font-weight: var(--pe-font-weight-semibold); }
+
+/* Street map: greyscale base, navy square office, four pin groups with codes (MP-08). */
+.pe-map__frame { position: relative; overflow: hidden; border: var(--pe-border-width) solid var(--pe-border-strong); border-radius: var(--pe-radius-control); background: var(--pe-map-tile); }
+.pe-map__google { width: 100%; aspect-ratio: 16 / 9; min-height: 320px; }
+.pe-map__area { fill: var(--pe-map-area); stroke: var(--pe-map-area-edge); stroke-width: 2.5; stroke-dasharray: 9 6; }
+.pe-map__area-label rect { fill: var(--pe-map-pin-halo); stroke: var(--pe-map-area-edge); stroke-width: 1.5; }
+.pe-map__area-label text { fill: var(--pe-map-area-edge); font-size: 13px; font-weight: var(--pe-font-weight-bold); text-anchor: middle; }
+.pe-map__inset-box { fill: none; stroke: var(--pe-map-area-edge); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.pe-map__office rect { fill: var(--pe-map-office); stroke: var(--pe-map-pin-halo); stroke-width: 3; }
+.pe-map__office text { fill: var(--pe-map-mark-text); font-size: 13px; font-weight: var(--pe-font-weight-bold); text-anchor: middle; }
+.pe-map__pin { cursor: pointer; outline: none; }
+.pe-map__pin[aria-hidden="true"] { cursor: default; }
+.pe-map__pin-dot { fill: var(--pe-map-pin-other); stroke: var(--pe-map-pin-halo); stroke-width: 3; }
+.pe-map__pin--1 .pe-map__pin-dot { fill: var(--pe-map-pin-1); }
+.pe-map__pin--2 .pe-map__pin-dot { fill: var(--pe-map-pin-2); }
+.pe-map__pin--3 .pe-map__pin-dot { fill: var(--pe-map-pin-3); }
+.pe-map__pin--4 .pe-map__pin-dot { fill: var(--pe-map-pin-4); }
+.pe-map__pin text { fill: var(--pe-map-on-pin); font-size: 13px; font-weight: var(--pe-font-weight-bold); text-anchor: middle; pointer-events: none; }
+.pe-map__pin text.is-large { font-size: 15px; }
+.pe-map__pin-ring { fill: none; stroke: var(--pe-map-area-edge); stroke-width: 4; opacity: 0; }
+.pe-map__pin-gap { fill: none; stroke: var(--pe-map-pin-halo); stroke-width: 4; opacity: 0; }
+.pe-map__pin-focus { fill: none; stroke: var(--pe-focus); stroke-width: 3; opacity: 0; }
+.pe-map__pin.is-selected .pe-map__pin-ring,
+.pe-map__pin.is-selected .pe-map__pin-gap,
+.pe-map__pin:focus-visible .pe-map__pin-focus { opacity: 1; }
+.pe-map__attribution rect { fill: var(--pe-map-tile-light); opacity: 0.9; }
+.pe-map__attribution text { fill: var(--pe-map-callout); font-size: 11px; text-anchor: end; }
+/* Google provider: the same pins as HTML markers. */
+.pe-map__pin-html { display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 6px; border: 3px solid var(--pe-map-pin-halo); border-radius: 17px; background: var(--pe-map-pin-other); color: var(--pe-map-on-pin); font: var(--pe-font-weight-bold) 13px/1 var(--pe-font-family-sans); box-sizing: border-box; }
+.pe-map__pin-html.pe-map__pin--1 { background: var(--pe-map-pin-1); }
+.pe-map__pin-html.pe-map__pin--2 { background: var(--pe-map-pin-2); }
+.pe-map__pin-html.pe-map__pin--3 { background: var(--pe-map-pin-3); }
+.pe-map__pin-html.pe-map__pin--4 { background: var(--pe-map-pin-4); }
+.pe-map__pin-html.is-selected { box-shadow: 0 0 0 3px var(--pe-map-area-edge); }
+.pe-map__pin-html.pe-map__office-html { border-radius: 5px; background: var(--pe-map-office); color: var(--pe-map-mark-text); }
+
+/* Legend, note and the paired list (MP-06): the list carries every fact the map shows. */
+.pe-map__legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2) var(--pe-space-4); margin: 0; padding: 0; list-style: none; font-size: var(--pe-font-size-sm); }
+.pe-map__legend li { display: inline-flex; align-items: center; gap: var(--pe-space-2); }
+.pe-map__note { margin: 0; font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.pe-map__list { border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); overflow: hidden; }
+.pe-map__list :is(ol, ul) { margin: 0; padding: 0; list-style: none; }
+.pe-map__list [data-pe-map-item] { display: flex; align-items: center; gap: var(--pe-space-3); min-height: 44px; padding: var(--pe-space-2) var(--pe-space-3); border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-map__list [data-pe-map-item]:first-child { border-top: 0; }
+.pe-map__list [data-pe-map-item][aria-current="true"] { background: var(--pe-surface-selected); box-shadow: inset 4px 0 0 var(--pe-structure-text); }
+/* The control inside a row: one button (or link) that fills the row; a trailing .pe-num aligns right. */
+.pe-map__row { all: unset; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2) var(--pe-space-3); width: 100%; min-height: inherit; cursor: pointer; }
+.pe-map__row .pe-num { margin-left: auto; }
+.pe-map__row:focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 4px; border-radius: var(--pe-radius-control); }
+@media (max-width: 760px) { .pe-map__list [data-pe-map-item] { min-height: 48px; } }
+
+/* ── Agent work and handoffs (AG-01..AG-10, 1.5.0): proposals a person decides, packets, lanes, the schedule board ── */
+/* AG-01: the agent badge. Navy pill with the agent's name; an optional 12px icon goes first. */
+.pe-agent { display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 var(--pe-space-2); border: var(--pe-border-width) solid var(--pe-border-strong); border-radius: var(--pe-radius-pill); background: var(--pe-structure); color: var(--pe-on-structure); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); white-space: nowrap; }
+.pe-agent svg { width: 12px; height: 12px; flex: none; }
+/* AG-02: the proposal card. Badge, one sentence of what it proposes, the reasons, then the drafts and one way in. */
+.pe-proposal { display: grid; gap: 10px; justify-items: start; padding: var(--pe-space-4); border: var(--pe-border-width) solid var(--pe-border-strong); border-radius: var(--pe-radius-card); background: var(--pe-structure-tint); }
+.pe-proposal > * { margin: 0; }
+.pe-proposal__why { justify-self: stretch; padding-left: 18px; display: grid; gap: 2px; font-size: var(--pe-font-size-sm); color: var(--pe-text-secondary); }
+/* AG-04: a draft the agent wrote and nobody has sent. Dashed edge means not final (the same meaning as a proposed bar). */
+.pe-draft { justify-self: stretch; padding: 10px var(--pe-space-3); border: var(--pe-border-width) dashed var(--pe-border-strong); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-sm); color: var(--pe-text-secondary); }
+/* AG-05: the packet score is a count ("11 of 14 met") over a navy meter. Never red or green, never a bare percentage. */
+.pe-score { display: flex; align-items: baseline; gap: var(--pe-space-2); }
+.pe-score b { font-size: var(--pe-font-size-display); font-weight: var(--pe-font-weight-heavy); line-height: 1; font-variant-numeric: tabular-nums; }
+.pe-meter { height: 8px; border-radius: var(--pe-radius-pill); background: var(--pe-surface-sunken); overflow: hidden; }
+.pe-meter > span { display: block; height: 100%; background: var(--pe-structure-text); }
+
+/* AG-07: lanes. Each lane names its stage and count; cards are the jobs. Columns fold as the width shrinks, never scroll sideways (L-04). */
+.pe-lanes { display: grid; grid-template-columns: repeat(var(--pe-lanes, 5), minmax(0, 1fr)); gap: var(--pe-space-3); align-items: start; }
+.pe-lane { display: grid; gap: var(--pe-space-2); min-width: 0; padding: var(--pe-space-3); border-radius: var(--pe-radius-card); background: var(--pe-surface-sunken); }
+.pe-lane .pe-lane__head { display: flex; justify-content: space-between; align-items: center; gap: var(--pe-space-2); margin: 0; font-size: var(--pe-font-size-sm); font-weight: var(--pe-font-weight-bold); }
+.pe-lane-card { display: grid; gap: 6px; min-width: 0; padding: var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-sm); }
+.pe-lane-card--hold { border-style: dashed; border-color: var(--pe-border-strong); }
+.pe-lane-card__meta { font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+@media (max-width: 1100px) { .pe-lanes { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); } }
+
+/* AG-08: the schedule board. Rows are crews, columns are days, the forecast is the first row. Set --pe-board-days on .pe-board. */
+.pe-board { border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); overflow: hidden; }
+.pe-board__row { display: grid; grid-template-columns: var(--pe-board-who, 168px) repeat(var(--pe-board-days, 10), minmax(0, 1fr)); align-items: center; min-height: 52px; border-bottom: var(--pe-border-width) solid var(--pe-border); background-image: linear-gradient(to right, var(--pe-border) 1px, transparent 1px); background-size: calc((100% - var(--pe-board-who, 168px)) / var(--pe-board-days, 10)) 100%; background-position: var(--pe-board-who, 168px) 0; background-repeat: repeat-x; }
+.pe-board__row:last-child { border-bottom: 0; }
+.pe-board__row > * { grid-row: 1; min-width: 0; }
+.pe-board__who { grid-column: 1; align-self: stretch; display: grid; align-content: center; padding: 6px var(--pe-space-3); border-right: var(--pe-border-width) solid var(--pe-border); background: var(--pe-surface); font-size: var(--pe-font-size-sm); font-weight: var(--pe-font-weight-bold); }
+.pe-board__who small { font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-regular); color: var(--pe-text-muted); }
+.pe-board__row--head { min-height: 40px; background-color: var(--pe-surface-sunken); }
+.pe-board__row--head > span { padding: var(--pe-space-1) var(--pe-space-2); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); color: var(--pe-text-secondary); }
+.pe-board__row--head > .pe-board__who { background: var(--pe-surface-sunken); font-size: var(--pe-font-size-sm); color: var(--pe-text); }
+.pe-board__day { align-self: stretch; padding: var(--pe-space-1) var(--pe-space-2); font-size: var(--pe-font-size-xs); line-height: 1.35; color: var(--pe-text-secondary); }
+.pe-board__day--off { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--pe-surface-sunken) 6px 12px); }
+/* A day past a work limit: amber plus the words that say which limit (A-06). */
+.pe-board__day--limit { background: var(--pe-warning-soft); color: var(--pe-warning); font-weight: var(--pe-font-weight-semibold); }
+.pe-board__bar { margin: 6px var(--pe-space-1); padding: 6px var(--pe-space-2); overflow: hidden; border: var(--pe-border-width) solid var(--pe-structure-text); border-radius: var(--pe-radius-control); background: var(--pe-structure-tint); color: var(--pe-structure-text); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); line-height: 1.3; text-decoration: none; }
+.pe-board__bar small { display: block; overflow: hidden; font-size: inherit; font-weight: var(--pe-font-weight-medium); color: var(--pe-text-secondary); white-space: nowrap; text-overflow: ellipsis; }
+/* Proposed or waiting: dashed edge on white, and the word in the bar. */
+.pe-board__bar--proposed { border-style: dashed; background: var(--pe-surface); }
+.pe-board__mark { margin: 6px var(--pe-space-1); padding: var(--pe-space-1) 6px; border-radius: var(--pe-radius-control); background: var(--pe-surface-sunken); font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); text-align: center; }
+/* Below the tablet breakpoint the grid gives way to the same visits as a list by day (L-04). */
+.pe-board-list { display: none; margin: 0; padding: 0; list-style: none; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-board-list > li { display: grid; gap: 2px; min-height: var(--pe-size-control-touch); padding: var(--pe-space-2) var(--pe-space-4); border-top: var(--pe-border-width) solid var(--pe-border); font-size: var(--pe-font-size-sm); }
+.pe-board-list > li:first-child { border-top: 0; }
+.pe-board-list__day { padding-block: var(--pe-space-2); min-height: 0; background: var(--pe-surface-sunken); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); color: var(--pe-text-secondary); }
+@media (max-width: 760px) { .pe-board { display: none; } .pe-board-list { display: block; } }
+
+/* AG-11 (1.7.0): the phone schedule. Visit rows, days off and the "Not scheduled" card for the list by day. */
+.pe-board-list--show { display: block; }
+.pe-board-list > li.pe-board-list__day { display: flex; align-items: center; justify-content: space-between; gap: var(--pe-space-2); position: sticky; top: 0; z-index: 1; }
+.pe-board-list__day[data-today] { color: var(--pe-structure-text); }
+.pe-board-list > li.pe-board-list__visit { padding: 0; }
+.pe-board-list__visit > :is(a, button) { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; column-gap: var(--pe-space-3); align-items: center; width: 100%; min-height: var(--pe-size-control-touch); padding: var(--pe-space-2) var(--pe-space-4); border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.pe-board-list__edge { align-self: stretch; min-height: 32px; border-radius: var(--pe-radius-pill); background: var(--pe-structure-text); }
+.pe-board-list__what { display: grid; gap: 2px; min-width: 0; }
+.pe-board-list__what > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pe-board-list__what > span { font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.pe-board-list__word { font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); color: var(--pe-text-secondary); white-space: nowrap; }
+/* Proposed or waiting: a dashed edge and the word in a dashed pill (AG-04), never a status fill. */
+.pe-board-list__visit--proposed .pe-board-list__edge { background: repeating-linear-gradient(to bottom, var(--pe-structure-text) 0 5px, transparent 5px 9px); }
+.pe-board-list__visit--proposed .pe-board-list__word { padding: 2px var(--pe-space-2); border: var(--pe-border-width) dashed var(--pe-structure-text); border-radius: var(--pe-radius-pill); color: var(--pe-structure-text); }
+.pe-board-list > li.pe-board-list__off { min-height: 40px; align-content: center; background: repeating-linear-gradient(135deg, transparent 0 6px, var(--pe-surface-sunken) 6px 12px); font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.pe-board-list > li.pe-board-list__quiet { min-height: 40px; align-content: center; font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+/* Accepted jobs with no visit yet: dashed, because they are not final (AG-04). A <details> that names the count. */
+.pe-board-waiting { border: var(--pe-border-width) dashed var(--pe-border-strong); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-board-waiting > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--pe-space-2); min-height: var(--pe-size-control-touch); padding: 0 var(--pe-space-4); list-style: none; font-weight: var(--pe-font-weight-bold); cursor: pointer; }
+.pe-board-waiting > summary::-webkit-details-marker { display: none; }
+.pe-board-waiting > ul { margin: 0; padding: 0; list-style: none; }
+.pe-board-waiting > ul > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pe-space-2); align-items: center; padding: var(--pe-space-2) var(--pe-space-4); border-top: var(--pe-border-width) solid var(--pe-border); font-size: var(--pe-font-size-sm); }
+.pe-board-waiting > ul > li span { display: block; font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+/* AG-11: the day picker. Ten working days in two rows of five, each with its visit count. Never scrolls sideways (L-04). */
+.pe-daypick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--pe-space-1); margin: 0; padding: var(--pe-space-2); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background: var(--pe-surface); }
+.pe-daypick > button { position: relative; display: grid; justify-items: center; gap: 2px; min-height: var(--pe-size-control-touch); padding: var(--pe-space-1) 0; overflow: hidden; border: var(--pe-border-width) solid transparent; border-radius: var(--pe-radius-control); background: transparent; color: var(--pe-text-secondary); font: var(--pe-font-weight-semibold) var(--pe-font-size-xs)/1.2 var(--pe-font-family-sans); cursor: pointer; }
+.pe-daypick > button b { font-size: var(--pe-font-size-body); color: var(--pe-text); }
+.pe-daypick > button span { font-weight: var(--pe-font-weight-regular); color: var(--pe-text-muted); }
+.pe-daypick > button[aria-current="date"] { border-color: var(--pe-structure-text); }
+.pe-daypick > button[aria-pressed="true"] { background: var(--pe-structure-text); color: var(--pe-on-structure-text); }
+.pe-daypick > button[aria-pressed="true"] :is(b, span) { color: var(--pe-on-structure-text); }
+/* A day when a crew is off: a hatched strip along the foot of the day, and the key below says so in words (A-06). */
+.pe-daypick > button.is-off::after { content: ""; position: absolute; inset: auto 0 0; height: 5px; background: repeating-linear-gradient(135deg, transparent 0 3px, var(--pe-border-strong) 3px 6px); }
+.pe-daypick__key { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: var(--pe-space-2); padding: var(--pe-space-1) var(--pe-space-1) 0; font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.pe-daypick__key i { display: inline-block; width: 14px; height: 5px; margin-right: 4px; vertical-align: middle; background: repeating-linear-gradient(135deg, transparent 0 3px, var(--pe-border-strong) 3px 6px); }
+
+/* S-12 (1.7.0): the bottom sheet. A native <dialog class="pe-sheet"> opened with showModal(): on a phone it docks to the
+   bottom edge; from 761px it sits centred on the bottom edge at most 560px wide. Filters and a record's quick view use it. */
+.pe-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 100%; max-height: 86dvh; margin: 0; padding: 0 0 env(safe-area-inset-bottom, 0px); overflow: auto; border: 0; border-radius: var(--pe-radius-card) var(--pe-radius-card) 0 0; background: var(--pe-surface); color: var(--pe-text); box-shadow: var(--pe-elevation-overlay); }
+.pe-sheet::backdrop { background: var(--pe-overlay); }
+@media (min-width: 761px) { .pe-sheet { inset: auto 0 0; width: min(560px, 100vw); margin-inline: auto; } }
+.pe-sheet--static { position: static; display: block; box-shadow: none; border: var(--pe-border-width) solid var(--pe-border); }
+.pe-sheet__grab { width: 40px; height: 4px; margin: var(--pe-space-2) auto 0; border-radius: var(--pe-radius-pill); background: var(--pe-border-strong); }
+.pe-sheet__head { display: flex; align-items: flex-start; gap: var(--pe-space-2); padding: var(--pe-space-3) var(--pe-space-4) var(--pe-space-2); }
+.pe-sheet__head > div { flex: 1; min-width: 0; }
+.pe-sheet__head h2 { margin: 2px 0 0; font-size: var(--pe-font-size-h2); line-height: var(--pe-font-leading-tight); }
+.pe-sheet__facts { display: grid; margin: 0; padding: 0 var(--pe-space-4); }
+.pe-sheet__facts > div { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--pe-space-3); align-items: start; padding: var(--pe-space-3) 0; border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-sheet__facts dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.pe-sheet__facts dd { margin: 0; min-width: 0; }
+.pe-sheet__facts dd span { display: block; font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.pe-sheet__facts svg { margin-top: 2px; color: var(--pe-text-secondary); }
+.pe-sheet__group { display: grid; gap: var(--pe-space-2); padding: var(--pe-space-2) var(--pe-space-4) var(--pe-space-3); }
+.pe-sheet__group > b { font-size: var(--pe-font-size-sm); }
+.pe-sheet__group .pe-seg { display: flex; }
+.pe-sheet__group .pe-seg button { flex: 1; min-height: 40px; }
+.pe-sheet__choice { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--pe-space-3); align-items: center; min-height: var(--pe-size-control-touch); padding: var(--pe-space-1) 0; border-top: var(--pe-border-width) solid var(--pe-border); cursor: pointer; }
+.pe-sheet__choice:first-of-type { border-top: 0; }
+.pe-sheet__choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--pe-structure-text); }
+.pe-sheet__choice span { display: block; font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); }
+.pe-sheet__actions { display: grid; gap: var(--pe-space-2); padding: var(--pe-space-3) var(--pe-space-4) var(--pe-space-4); border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-sheet__actions .pe-btn { width: 100%; }
+
+/* AG-09: the step strip. An ordered list; the number, the words in the step and aria-current carry the state, not colour alone. */
+.pe-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--pe-space-2); margin: 0; padding: 0; list-style: none; counter-reset: pe-step; }
+.pe-steps > li { counter-increment: pe-step; display: grid; gap: var(--pe-space-1); align-content: start; padding: var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-sm); }
+.pe-steps > li::before { content: counter(pe-step); display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--pe-radius-pill); background: var(--pe-surface-sunken); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); }
+.pe-steps > li.is-done::before { background: var(--pe-good-soft); color: var(--pe-good); }
+.pe-steps > li[aria-current="step"] { border: var(--pe-border-width-strong) solid var(--pe-structure-text); }
+.pe-steps > li[aria-current="step"]::before { background: var(--pe-structure); color: var(--pe-on-structure); }
+
+/* AG-10: the impact list in a change dialog. One row per thing that moves or person who is told, with how they are told. */
+.pe-impact { margin: 0; padding: 0; list-style: none; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); font-size: var(--pe-font-size-sm); }
+.pe-impact > li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--pe-space-3); padding: 10px var(--pe-space-4); border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-impact > li:first-child { border-top: 0; }
+.pe-impact > li > :first-child { flex: 1 1 200px; min-width: 0; }
+/* ---------- OC: Org chart (1.6.0, approved by Chris 2026-11-13 as hr mockups O1-O9) ---------- */
+.pe-orgchart { margin: 0; min-width: 0; }
+.pe-orgchart__canvas { position: relative; height: calc(100dvh - 300px); min-height: 520px; overflow: hidden; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-card); background-color: var(--pe-surface-sunken); background-image: radial-gradient(var(--pe-border-strong) 1px, transparent 1.2px); background-size: 20px 20px; cursor: grab; touch-action: none; }
+.pe-orgchart__canvas:active { cursor: grabbing; }
+.pe-orgchart__canvas:focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 2px; }
+.pe-orgchart__stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.pe-orgchart__lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.pe-orgchart__lines path { fill: none; stroke: var(--pe-border-strong); stroke-width: 1.5; }
+.pe-orgchart__crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-1); padding: var(--pe-space-1) var(--pe-space-2); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-sm); }
+.pe-orgchart__canvas > .pe-orgchart__crumbs { position: absolute; z-index: 2; left: var(--pe-space-3); top: var(--pe-space-3); max-width: calc(100% - 200px); }
+.pe-orgchart__crumbs button { border: 0; background: none; padding: var(--pe-space-1); color: var(--pe-link); text-decoration: underline; font: inherit; cursor: pointer; }
+.pe-orgchart__crumbs b { padding: var(--pe-space-1); }
+.pe-orgchart__zoom { position: absolute; z-index: 2; right: var(--pe-space-3); top: var(--pe-space-3); display: flex; gap: var(--pe-space-1); }
+.pe-orgchart__zoom .pe-btn { background: var(--pe-surface); }
+.pe-orgchart__legend { position: absolute; z-index: 2; left: var(--pe-space-3); bottom: var(--pe-space-3); display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-2) var(--pe-space-3); max-width: calc(100% - 24px); padding: var(--pe-space-2) var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface); font-size: var(--pe-font-size-xs); }
+.pe-orgchart__key { display: inline-flex; align-items: center; gap: 6px; }
+.pe-orgchart__key::before { content: ""; width: 12px; height: 12px; border-radius: 2px; background: var(--k, var(--pe-viz-other)); }
+.pe-orgchart__key--open::before { background: transparent; border: 1.5px dashed var(--pe-text-muted); }
+/* OC-03: a seat. The 4px edge carries the one colour meaning (OC-07); open seats are dashed. */
+.pe-orgchart__box { position: absolute; box-sizing: border-box; width: 208px; display: flex; flex-direction: column; gap: 2px; padding: var(--pe-space-2) var(--pe-space-3) var(--pe-space-2) calc(var(--pe-space-3) + 4px); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-control); background: var(--pe-surface); text-align: left; font: inherit; color: var(--pe-text); cursor: pointer; overflow: hidden; }
+.pe-orgchart__box::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--k, var(--pe-viz-other)); }
+.pe-orgchart__box[data-color="none"]::before { background: var(--pe-border); }
+.pe-orgchart__box:hover { background: var(--pe-surface-hover); }
+.pe-orgchart__box:focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 2px; }
+.pe-orgchart__box[aria-pressed="true"] { border-color: var(--pe-structure-text); box-shadow: inset 0 0 0 1px var(--pe-structure-text); background: var(--pe-surface-selected); }
+.pe-orgchart__box[data-open="true"] { border-style: dashed; border-color: var(--pe-text-muted); background: var(--pe-surface); }
+.pe-orgchart__box[data-hl="true"] { outline: 3px solid var(--pe-focus); outline-offset: 2px; }
+.pe-orgchart__who { display: flex; align-items: center; gap: var(--pe-space-2); min-width: 0; }
+.pe-orgchart__text { display: grid; min-width: 0; }
+.pe-orgchart__av { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pe-structure-tint); color: var(--pe-structure-text); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); }
+.pe-orgchart__av--agent { background: var(--pe-info-soft); color: var(--pe-info); }
+.pe-orgchart__name { font-weight: var(--pe-font-weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-orgchart__title { font-size: var(--pe-font-size-xs); color: var(--pe-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-orgchart__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pe-space-1) var(--pe-space-2); margin-top: auto; padding-bottom: var(--pe-space-2); font-size: var(--pe-font-size-xs); color: var(--pe-text-muted); }
+.pe-orgchart__meta .pe-status { min-height: 20px; }
+.pe-orgchart__box[data-style="compact"] .pe-orgchart__av, .pe-orgchart__box[data-style="compact"] .pe-orgchart__meta { display: none; }
+/* OC-05/OC-06: team count, "+ N more", office group label. */
+.pe-orgchart__count { position: absolute; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 88px; height: 24px; padding: 0 var(--pe-space-2); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-pill); background: var(--pe-surface); font: var(--pe-font-weight-semibold) var(--pe-font-size-xs)/1 var(--pe-font-family-sans); color: var(--pe-text-secondary); cursor: pointer; white-space: nowrap; }
+.pe-orgchart__more { position: absolute; box-sizing: border-box; height: 28px; padding: 0 var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border-control); border-radius: var(--pe-radius-pill); background: var(--pe-surface); color: var(--pe-link); font: var(--pe-font-weight-semibold) var(--pe-font-size-xs)/1 var(--pe-font-family-sans); text-decoration: underline; cursor: pointer; }
+.pe-orgchart__count:hover, .pe-orgchart__more:hover { background: var(--pe-surface-hover); }
+.pe-orgchart__count:focus-visible, .pe-orgchart__more:focus-visible { outline: var(--pe-border-width-strong) solid var(--pe-focus); outline-offset: 2px; }
+.pe-orgchart__group { position: absolute; box-sizing: border-box; display: inline-flex; align-items: center; height: 26px; padding: 0 var(--pe-space-3); border-radius: var(--pe-radius-pill); background: var(--pe-structure); color: var(--pe-on-structure); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); white-space: nowrap; }
+/* OC-09: below the tablet breakpoint the canvas is a drill-down list, one manager at a time. */
+.pe-orgchart__phone { display: none; }
+@media (max-width: 760px) {
+  .pe-orgchart__canvas { display: none; }
+  .pe-orgchart__phone { display: grid; gap: var(--pe-space-2); }
+  .pe-orgchart__phone .pe-orgchart__box { position: relative; width: 100%; min-height: 48px; }
+  .pe-orgchart__phone .pe-orgchart__mgr { border-color: var(--pe-structure-text); border-width: 2px; }
+  .pe-orgchart__reports { display: grid; gap: var(--pe-space-2); margin-left: var(--pe-space-4); padding-left: var(--pe-space-4); border-left: 2px solid var(--pe-border-strong); }
+}
+
+/* ── W: Work surfaces (1.8.0, approved by Chris 2026-11-14 as hr offices & assets mockups OF1-OF13, AS1-AS6) ── */
+/* W-01 section links: one row of links to the parts of one record. Links, not tabs: each part has its own URL. */
+.pe-sections { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); background: var(--pe-surface-sunken); }
+.pe-sections a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--pe-space-3); border-radius: var(--pe-radius-control); color: var(--pe-text); font-weight: var(--pe-font-weight-semibold); text-decoration: none; }
+.pe-sections a:hover { text-decoration: underline; }
+.pe-sections a[aria-current="page"] { background: var(--pe-structure-text); color: var(--pe-on-structure-text); }
+/* W-02 start-here block: the one thing waiting on this person, holding the view's one flag-red primary (B-01). */
+.pe-start { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pe-space-4); align-items: center; padding: var(--pe-space-5); background: var(--pe-surface); border: var(--pe-border-width-strong) solid var(--pe-structure-text); border-left-width: 6px; border-radius: var(--pe-radius-card); }
+.pe-start p { margin: 0; }
+.pe-start__h { margin: var(--pe-space-1) 0; font-size: var(--pe-font-size-h2); font-weight: var(--pe-font-weight-bold); line-height: var(--pe-font-leading-snug); text-wrap: balance; }
+.pe-start__act { display: grid; gap: var(--pe-space-2); justify-items: end; max-width: 420px; }
+.pe-start__act .pe-reason { text-align: right; }
+/* W-03 numbered to-do list: what comes next, in date order, one action each. */
+.pe-todos { margin: 0; padding: 0; list-style: none; }
+.pe-todo { display: grid; grid-template-columns: 28px 80px minmax(0, 1fr) auto auto; gap: var(--pe-space-3); align-items: center; padding: var(--pe-space-3) var(--pe-space-4); border-top: var(--pe-border-width) solid var(--pe-border); }
+.pe-todo:first-child { border-top: 0; }
+.pe-todo__n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--pe-radius-pill); background: var(--pe-structure-tint); color: var(--pe-structure-text); font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-bold); }
+.pe-todo__when { color: var(--pe-text-secondary); font-size: var(--pe-font-size-sm); font-weight: var(--pe-font-weight-semibold); }
+.pe-todo__what { display: grid; }
+/* W-04 matrix cell: a mark plus a word for screen readers; never colour alone (P-01). */
+.pe-cell { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: var(--pe-border-width) solid transparent; border-radius: var(--pe-radius-control); font: inherit; font-size: var(--pe-font-size-sm); font-weight: var(--pe-font-weight-heavy); cursor: pointer; }
+.pe-cell--good { background: var(--pe-good-soft); color: var(--pe-good); }
+.pe-cell--warning { background: var(--pe-warning-soft); color: var(--pe-warning); }
+.pe-cell--danger { background: var(--pe-danger-soft); color: var(--pe-danger-text); }
+.pe-cell--neutral { background: var(--pe-surface-sunken); color: var(--pe-text-secondary); }
+.pe-cell[aria-current="true"] { border-color: var(--pe-structure-text); box-shadow: 0 0 0 2px var(--pe-structure-tint); }
+.pe-matrix td.pe-matrix__c, .pe-matrix th.pe-matrix__c { padding-inline: var(--pe-space-1); text-align: center; }
+.pe-matrix abbr { text-decoration: none; }
+/* W-05 occupancy board: units down, nights across. Booked is solid navy; needed is dashed with a word in the legend. */
+.pe-occ { display: grid; gap: var(--pe-space-1); }
+.pe-occ__row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--pe-space-3); align-items: center; }
+.pe-occ__who { display: grid; }
+.pe-occ__track { display: grid; grid-template-columns: repeat(var(--pe-occ-days, 10), 1fr); gap: 2px; }
+.pe-occ__row--head .pe-occ__track { color: var(--pe-text-secondary); font-size: var(--pe-font-size-xs); }
+.pe-occ__cell { display: inline-block; height: 26px; border-radius: 4px; background: var(--pe-surface-sunken); }
+.pe-occ__cell--on { background: var(--pe-structure); }
+.pe-occ__cell--needed { background: var(--pe-surface); border: 2px dashed var(--pe-structure-text); }
+.pe-occ__key { display: inline-flex; gap: var(--pe-space-2); align-items: center; font-size: var(--pe-font-size-sm); }
+.pe-occ__key .pe-occ__cell { width: 22px; height: 14px; }
+/* W-06 level bar: stock on hand against a minimum (the tick) and a maximum (the end). The number is always beside it. */
+.pe-level { position: relative; display: block; width: 100%; min-width: 90px; height: 10px; border: var(--pe-border-width) solid var(--pe-border-strong); border-radius: var(--pe-radius-control); background: var(--pe-surface-sunken); }
+.pe-level > span { position: absolute; inset: 0 auto 0 0; border-radius: var(--pe-radius-control); background: var(--pe-structure-text); }
+.pe-level > i { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--pe-text); }
+/* W-07 file drop zone: the E-04 empty state for a surface that holds files. */
+.pe-drop { display: grid; justify-items: center; gap: var(--pe-space-2); padding: var(--pe-space-5); border: 2px dashed var(--pe-border-control); border-radius: var(--pe-radius-card); background: var(--pe-surface-sunken); text-align: center; }
+.pe-drop--sm { padding: var(--pe-space-4); }
+.pe-drop.is-over { border-color: var(--pe-structure-text); background: var(--pe-structure-tint); }
+.pe-drop__icon { width: 28px; height: 28px; color: var(--pe-text-secondary); }
+@media (max-width: 760px) {
+  .pe-start { grid-template-columns: 1fr; padding: var(--pe-space-4); }
+  .pe-start__h { font-size: var(--pe-font-size-h3); }
+  .pe-start__act { justify-items: stretch; max-width: none; }
+  .pe-start__act .pe-reason { text-align: left; }
+  .pe-start__act .pe-row { display: grid; }
+  .pe-start__act .pe-btn { width: 100%; min-height: var(--pe-size-control-touch); }
+  .pe-start__act .pe-btn--primary { min-height: var(--pe-size-control-primary-touch); }
+  .pe-todo { grid-template-columns: 24px minmax(0, 1fr); row-gap: var(--pe-space-1); }
+  .pe-todo__when, .pe-todo__what, .pe-todo__act { grid-column: 2; }
+  .pe-todo > .pe-status { grid-column: 2; justify-self: start; }
+  .pe-todo__act .pe-btn { width: 100%; min-height: var(--pe-size-control-touch); }
+  .pe-occ__row { grid-template-columns: 1fr; }
+  .pe-occ__row--head > :first-child { display: none; }
+}
+:is([data-theme="dark"], .pe-dark) .pe-occ__cell--on { background: var(--pe-structure-text); }
+/* W-08 edit in place (1.9.0): a record's field edits where it sits. Text becomes a field, a choice a dropdown;
+   the row flashes good when stored and danger when refused (B-07). Behaviour: js/edit.js. */
+.pe-edits { display: grid; }
+.pe-edit { display: grid; grid-template-columns: minmax(96px, 150px) minmax(0, 1fr) auto; gap: var(--pe-space-3); align-items: center; min-height: var(--pe-size-control); padding: var(--pe-space-2); border-top: var(--pe-border-width) solid var(--pe-border); border-radius: var(--pe-radius-control); }
+.pe-edit:first-child { border-top: 0; }
+.pe-edit__label { color: var(--pe-text-muted); font-size: var(--pe-font-size-sm); }
+.pe-edit__value { display: grid; gap: 2px; min-width: 0; font-weight: var(--pe-font-weight-semibold); overflow-wrap: anywhere; }
+.pe-edit__value .pe-input, .pe-edit__value .pe-select { width: 100%; }
+.pe-edit__note { font-size: var(--pe-font-size-xs); font-weight: var(--pe-font-weight-regular); color: var(--pe-text-muted); }
+.pe-edit__act svg { width: 16px; height: 16px; flex: none; }
+.pe-edit__act { display: flex; gap: var(--pe-space-1); justify-content: end; align-items: center; min-width: var(--pe-size-control); }
+.pe-edit:not([data-pe-ro]) .pe-edit__value { cursor: text; }
+.pe-edit:not([data-pe-ro], .is-editing, .is-saved, .is-refused, .is-conflict):hover { background: var(--pe-surface-sunken); }
+.is-refused .pe-edit__note { color: var(--pe-danger-text); }
+.is-conflict .pe-edit__note { color: var(--pe-text); }
+.pe-edit[data-pe-ro] .pe-edit__value { font-weight: var(--pe-font-weight-regular); }
+.pe-edit.is-editing { background: var(--pe-surface); outline: var(--pe-border-width-strong) solid var(--pe-focus); }
+.pe-edit.is-saving .pe-edit__value { color: var(--pe-text-secondary); }
+.pe-edit.is-saved, .pe-editcell.is-saved, tr.is-saved > td { background: var(--pe-good-soft); }
+.pe-edit.is-refused, .pe-editcell.is-refused { background: var(--pe-danger-soft); }
+.pe-edit.is-conflict { background: var(--pe-warning-soft); }
+.pe-editcell { all: unset; box-sizing: border-box; display: inline-flex; gap: var(--pe-space-1); align-items: center; max-width: 100%; padding: 2px var(--pe-space-1); margin: -2px calc(-1 * var(--pe-space-1)); border-radius: var(--pe-radius-control); cursor: text; overflow-wrap: anywhere; }
+.pe-editcell:hover { background: var(--pe-surface-sunken); }
+.pe-editcell:focus-visible { outline: 2px solid var(--pe-focus); outline-offset: 2px; }
+.pe-editcell > svg { flex: none; width: 14px; height: 14px; color: var(--pe-text-muted); }
+.pe-toast[hidden] { display: none; }
+.pe-toast .pe-toast__act { min-height: 0; margin-left: var(--pe-space-2); padding: 2px var(--pe-space-2); color: var(--pe-gray-0) !important; text-decoration: underline !important; }
+.pe-toast .pe-toast__act:hover { background: transparent; }
+/* W-09 popover under its row: a short form (hours, a key, a booking) opened from a row, never a new page. */
+.pe-pop { margin: var(--pe-space-2) 0 var(--pe-space-3); border: var(--pe-border-width) solid var(--pe-border-strong); border-radius: var(--pe-radius-card); background: var(--pe-surface); box-shadow: var(--pe-elevation-overlay); }
+.pe-pop[hidden] { display: none; }
+.pe-pop__head { display: flex; justify-content: space-between; align-items: center; gap: var(--pe-space-3); padding: var(--pe-space-3) var(--pe-space-4); border-bottom: var(--pe-border-width) solid var(--pe-border); }
+.pe-pop__body { display: grid; gap: var(--pe-space-3); padding: var(--pe-space-4); }
+.pe-pop__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pe-space-3); }
+@media (max-width: 760px) {
+  .pe-edit { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l a" "v a"; }
+  .pe-edit__label { grid-area: l; } .pe-edit__value { grid-area: v; } .pe-edit__act { grid-area: a; }
+  .pe-pop__grid { grid-template-columns: 1fr; }
+  .pe-pop .pe-btn { min-height: var(--pe-size-control-touch); }
+}
