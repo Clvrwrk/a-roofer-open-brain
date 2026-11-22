@@ -8,7 +8,20 @@
  *   node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=smoke
  *   node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=backfill
  *   node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=thursday
+ *   node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=cdc
  *   node integrations/bridges/quickbooks/mirror-backfill.mjs --only=accounts,purchases --dry-run
+ *
+ * Presence flags (mig 348). Nothing is ever deleted from the mirror:
+ *   - every row a pull returns gets last_seen_at / last_seen_run_key, and its
+ *     missing_since / qbo_deleted_at are cleared;
+ *   - after a COMPLETE full pull of an entity, rows it did not return get
+ *     missing_since (qbo_mark_missing), unless the pull returned far fewer rows
+ *     than the mirror holds (guard: --missing-guard, default 0.8);
+ *   - the change feed (QuickBooks CDC, GET /cdc) reports deletions; those rows
+ *     get qbo_deleted_at (qbo_mark_deleted). It runs after every full pull and
+ *     on its own with --mode=cdc.
+ * Readers use the v_qbo_<table>_current views; v_qbo_ar_reconciliation checks the
+ * mirror against the AgedReceivableDetail report after each run.
  *
  * Env: SUPABASE_* from repo .env; QUICKBOOKS_* from master.env or process.env.
  * Requires QUICKBOOKS_ACCESS_MODE=read_only and QUICKBOOKS_WRITE_ENABLED=false.
@@ -19,7 +32,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   accessMode,
   isReadOnlyMode,
@@ -218,13 +231,25 @@ const REPORTS = [
 ];
 
 const SMOKE_ENTITIES = new Set(["company", "accounts", "vendors", "purchases", "reports"]);
+// Full-pull modes: a run in one of these, not truncated by --max-pages, may flag missing rows.
+const FULL_PULL_MODES = new Set(["backfill", "thursday"]);
+const MISSING_GUARD_DEFAULT = 0.8;
+// QuickBooks CDC returns changes from at most the last 30 days.
+const CDC_MAX_LOOKBACK_MS = 29.5 * 24 * 3600 * 1000;
+const CDC_OVERLAP_MS = 10 * 60 * 1000;
+const CDC_MAX_PER_ENTITY = 1000;
+// AR reconciliation tolerance (share of the report's open invoice total).
+const AR_DRIFT_TOLERANCE = 0.01;
 const PAGE_SIZE = 100; // QBO max page; never trust a full page of 1000 without splitting windows
 const MAX_PAGES_DEFAULT = 10000;
 
-main().catch((err) => {
-  console.error("STATUS=FAIL", err.message);
-  process.exit(1);
-});
+// Run only when executed directly, so tests can import the pure helpers.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((err) => {
+    console.error("STATUS=FAIL", err.message);
+    process.exit(1);
+  });
+}
 
 async function main() {
   loadEnvFiles();
@@ -236,6 +261,8 @@ async function main() {
   const pageSize = Number(args["page-size"] || PAGE_SIZE);
   const maxPages = Number(args["max-pages"] || (mode === "smoke" ? 3 : MAX_PAGES_DEFAULT));
   const accountingMethod = String(args["accounting-method"] || "Cash");
+  const missingGuard = Number(args["missing-guard"] || MISSING_GUARD_DEFAULT);
+  const flagMissing = FULL_PULL_MODES.has(mode) && !args["no-flag-missing"];
 
   if (!isReadOnlyMode()) {
     throw new Error(
@@ -258,6 +285,12 @@ async function main() {
       .filter(Boolean);
   } else if (mode === "smoke") {
     selected = [...SMOKE_ENTITIES];
+  } else if (mode === "cdc") {
+    selected = ["cdc"];
+  }
+  // Full pulls finish with a change-feed pass so deletions are recorded the same night.
+  if (FULL_PULL_MODES.has(mode) && !args.only && !args["no-cdc"] && !selected.includes("cdc")) {
+    selected.push("cdc");
   }
 
   const nowIso = new Date().toISOString();
@@ -312,6 +345,28 @@ async function main() {
 
   try {
     for (const key of selected) {
+      if (key === "cdc") {
+        const t0 = Date.now();
+        const result = await syncCdc(
+          () => token,
+          async () => {
+            const r = await refreshAccessTokenPersisting();
+            token = r.accessToken;
+            return token;
+          },
+          realm,
+          pullBatch,
+          dryRun,
+          supabaseUrl,
+          supabaseKey,
+          summary,
+        );
+        summary.entities.cdc = { ...result, ms: Date.now() - t0 };
+        console.log(
+          `  cdc: changed=${result.changed} deleted=${result.deleted} flagged_deleted=${result.flaggedDeleted} ms=${Date.now() - t0}`,
+        );
+        continue;
+      }
       const spec = ENTITY_SPECS.find((e) => e.key === key);
       if (!spec) {
         summary.warnings.push(`unknown entity: ${key}`);
@@ -339,12 +394,25 @@ async function main() {
           supabaseKey,
           pageSize,
           maxPages,
+          { flagMissing, missingGuard, warnings: summary.warnings },
         );
       }
       summary.entities[key] = { ...result, ms: Date.now() - t0 };
       console.log(
-        `  ${key}: fetched=${result.fetched} upserted=${result.upserted} pages=${result.pages || 0} ms=${Date.now() - t0}`,
+        `  ${key}: fetched=${result.fetched} upserted=${result.upserted} pages=${result.pages || 0}` +
+          (result.flaggedMissing != null ? ` flagged_missing=${result.flaggedMissing}` : "") +
+          ` ms=${Date.now() - t0}`,
       );
+    }
+
+    // Nightly check: mirror open AR against the AgedReceivableDetail report (mig 348).
+    if (!dryRun && (selected.includes("invoices") || selected.includes("cdc"))) {
+      try {
+        summary.ar_reconciliation = await checkArReconciliation(supabaseUrl, supabaseKey, realm, summary.warnings);
+      } catch (recErr) {
+        summary.warnings.push(`ar_reconciliation: ${recErr.message}`);
+        console.warn(`  ar_reconciliation warning: ${recErr.message}`);
+      }
     }
 
     summary.status = "ok";
@@ -372,7 +440,11 @@ async function main() {
             started_at: nowIso,
             finished_at: new Date().toISOString(),
             entities: selected,
-            stats: { ...summary.entities, register_views: summary.register_views },
+            stats: {
+              ...summary.entities,
+              register_views: summary.register_views,
+              ar_reconciliation: summary.ar_reconciliation,
+            },
             warnings: summary.warnings,
             content_hash: sha(summary),
           },
@@ -422,24 +494,56 @@ async function syncSingleton(token, realm, spec, pullBatch, dryRun, sbUrl, sbKey
   return { fetched: 1, upserted: dryRun ? 0 : 1, pages: 1 };
 }
 
-async function syncQueryEntity(getToken, refresh, realm, spec, pullBatch, dryRun, sbUrl, sbKey, pageSize, maxPages) {
+async function syncQueryEntity(
+  getToken,
+  refresh,
+  realm,
+  spec,
+  pullBatch,
+  dryRun,
+  sbUrl,
+  sbKey,
+  pageSize,
+  maxPages,
+  { flagMissing = false, missingGuard = MISSING_GUARD_DEFAULT, warnings = [] } = {},
+) {
+  // Every row this pull returns is stamped last_seen_at >= pullStartedIso (same clock).
+  const pullStartedIso = new Date().toISOString();
   let start = 1;
   let pages = 0;
   let fetched = 0;
   let upserted = 0;
   let maxUpdated = null;
+  let complete = false;
+  // Stable order so startposition paging cannot skip or repeat rows mid-run.
+  let orderBy = " orderby Id";
+  let orderByFallback = false;
 
   while (pages < maxPages) {
     let token = getToken();
     const select = spec.select === "*" ? "*" : spec.select;
-    const sql = `select ${select} from ${spec.qbo} startposition ${start} maxresults ${pageSize}`;
+    const sql = () => `select ${select} from ${spec.qbo}${orderBy} startposition ${start} maxresults ${pageSize}`;
     let data;
     try {
-      data = await qboQuery(token, sql);
+      data = await qboQuery(token, sql());
     } catch (err) {
       if (/AuthenticationFailed|Unauthorized|401/i.test(err.message)) {
         token = await refresh();
-        data = await qboQuery(token, sql);
+        data = await qboQuery(token, sql());
+      } else if (orderBy && pages === 0 && /Invalid query|QueryParserError|parse|orderby/i.test(err.message)) {
+        // Entity does not accept ORDERBY Id: fall back to the unordered query, and do not
+        // flag missing rows from an unordered pull (paging may have skipped rows).
+        orderBy = "";
+        orderByFallback = true;
+        warnings.push(`${spec.key}: orderby Id not accepted (${err.message}); paged unordered, missing-row flagging skipped`);
+        try {
+          data = await qboQuery(token, sql());
+        } catch (err2) {
+          if (/Invalid query|Object Not Found/i.test(err2.message) && fetched === 0) {
+            return { fetched: 0, upserted: 0, pages: 0, skipped: err2.message };
+          }
+          throw err2;
+        }
       } else if (/Invalid query|Object Not Found/i.test(err.message) && fetched === 0 && pages === 0) {
         // Entity may be unavailable for this company/edition
         return { fetched: 0, upserted: 0, pages: 0, skipped: err.message };
@@ -449,7 +553,10 @@ async function syncQueryEntity(getToken, refresh, realm, spec, pullBatch, dryRun
     }
 
     const rows = data?.QueryResponse?.[spec.qbo] || [];
-    if (!rows.length) break;
+    if (!rows.length) {
+      complete = true;
+      break;
+    }
 
     const mapped = rows.map((r) => {
       const m = spec.map(r, realm, pullBatch);
@@ -465,13 +572,200 @@ async function syncQueryEntity(getToken, refresh, realm, spec, pullBatch, dryRun
 
     pages += 1;
     process.stdout.write(`\r  ${spec.key} page ${pages} start=${start} total=${fetched}   `);
-    if (rows.length < pageSize) break;
+    if (rows.length < pageSize) {
+      complete = true;
+      break;
+    }
     start += pageSize;
   }
   if (pages) process.stdout.write("\n");
 
   await touchWatermark(sbUrl, sbKey, realm, spec.qbo, pullBatch, fetched, dryRun, maxUpdated);
-  return { fetched, upserted, pages };
+
+  const result = { fetched, upserted, pages };
+  if (orderByFallback) result.orderby = "unsupported";
+
+  if (flagMissing && !dryRun) {
+    const decision = await flagMissingRows(sbUrl, sbKey, realm, spec, {
+      complete,
+      orderByFallback,
+      fetched,
+      pullStartedIso,
+      missingGuard,
+    });
+    if (decision.skipped) {
+      warnings.push(`${spec.key}: missing-row flagging skipped (${decision.skipped})`);
+      result.flagMissingSkipped = decision.skipped;
+    } else {
+      result.flaggedMissing = decision.flagged;
+    }
+  }
+  return result;
+}
+
+/**
+ * After a full pull: stamp missing_since on rows the pull did not return.
+ * Update-only (qbo_mark_missing); a row seen again later is cleared by the upsert.
+ */
+async function flagMissingRows(sbUrl, sbKey, realm, spec, { complete, orderByFallback, fetched, pullStartedIso, missingGuard }) {
+  const verdict = missingFlagVerdict({ complete, orderByFallback, fetched, activeBefore: null, missingGuard });
+  if (verdict) return { skipped: verdict };
+  // Rows the mirror still treats as present that this pull did not touch.
+  const notSeen = await supabaseCount(sbUrl, sbKey, spec.table, {
+    realm_id: `eq.${realm}`,
+    missing_since: "is.null",
+    qbo_deleted_at: "is.null",
+    last_seen_at: `lt.${pullStartedIso}`,
+  });
+  const guard = missingFlagVerdict({ complete, orderByFallback, fetched, activeBefore: fetched + notSeen, missingGuard });
+  if (guard) return { skipped: guard };
+  if (notSeen === 0) return { flagged: 0 };
+  const flagged = await supabaseRpc(sbUrl, sbKey, "qbo_mark_missing", {
+    p_table: spec.table,
+    p_realm: realm,
+    p_run_started: pullStartedIso,
+  });
+  return { flagged: Number(flagged) || 0 };
+}
+
+/**
+ * Decide whether a pull may flag missing rows. Returns a reason to skip, or null.
+ * Exported for tests.
+ */
+export function missingFlagVerdict({ complete, orderByFallback, fetched, activeBefore, missingGuard = MISSING_GUARD_DEFAULT }) {
+  if (!complete) return "pull truncated by --max-pages";
+  if (orderByFallback) return "unordered paging";
+  if (activeBefore == null) return null;
+  if (activeBefore > 0 && fetched < missingGuard * activeBefore) {
+    return `pull returned ${fetched} of ${activeBefore} present rows (< ${Math.round(missingGuard * 100)}%)`;
+  }
+  return null;
+}
+
+// --- change feed (CDC) --------------------------------------------------------
+
+/**
+ * QuickBooks Change Data Capture: GET /cdc?entities=X&changedSince=ISO (read-only).
+ * Changed entities are upserted like a full pull; entities reported with
+ * status "Deleted" are flagged qbo_deleted_at (nothing is deleted).
+ */
+async function syncCdc(getToken, refresh, realm, pullBatch, dryRun, sbUrl, sbKey, summary) {
+  const callStartedIso = new Date().toISOString();
+  const prior = await readWatermark(sbUrl, sbKey, realm, "CDC");
+  const changedSince = cdcChangedSince(prior, Date.now());
+  const specs = ENTITY_SPECS.filter((e) => e.kind === "query");
+  let changed = 0;
+  let deleted = 0;
+  let flaggedDeleted = 0;
+  const perEntity = {};
+
+  for (const spec of specs) {
+    const path = `cdc?entities=${spec.qbo}&changedSince=${encodeURIComponent(changedSince)}`;
+    let data;
+    try {
+      data = await qboGet(getToken(), path);
+    } catch (err) {
+      if (/AuthenticationFailed|Unauthorized|401/i.test(err.message)) {
+        data = await qboGet(await refresh(), path);
+      } else {
+        summary.warnings.push(`cdc ${spec.qbo}: ${err.message}`);
+        perEntity[spec.key] = { error: err.message };
+        continue;
+      }
+    }
+    const { live, removed } = splitCdcEntities(data, spec.qbo);
+    if (live.length + removed.length >= CDC_MAX_PER_ENTITY) {
+      summary.warnings.push(
+        `cdc ${spec.qbo}: ${live.length + removed.length} changes returned (cap ${CDC_MAX_PER_ENTITY}); the full pull covers the rest`,
+      );
+    }
+    if (!dryRun && live.length) {
+      await supabaseUpsert(
+        sbUrl,
+        sbKey,
+        spec.table,
+        live.map((r) => spec.map(r, realm, pullBatch)),
+        "realm_id,qbo_id",
+      );
+    }
+    let flagged = 0;
+    if (!dryRun && removed.length) {
+      flagged = Number(
+        await supabaseRpc(sbUrl, sbKey, "qbo_mark_deleted", {
+          p_table: spec.table,
+          p_realm: realm,
+          p_rows: removed,
+        }),
+      ) || 0;
+    }
+    changed += live.length;
+    deleted += removed.length;
+    flaggedDeleted += flagged;
+    perEntity[spec.key] = { changed: live.length, deleted: removed.length, flagged };
+  }
+
+  // Only advance the watermark when every entity read cleanly.
+  const clean = Object.values(perEntity).every((v) => !v.error);
+  if (clean) await touchWatermark(sbUrl, sbKey, realm, "CDC", pullBatch, changed + deleted, dryRun, callStartedIso);
+  return { changed, deleted, flaggedDeleted, changedSince, perEntity, watermarkAdvanced: clean && !dryRun };
+}
+
+/** changedSince for the next CDC call: prior watermark minus an overlap, never older than QuickBooks allows. Exported for tests. */
+export function cdcChangedSince(priorWatermarkIso, nowMs) {
+  const floor = nowMs - CDC_MAX_LOOKBACK_MS;
+  const prior = priorWatermarkIso ? Date.parse(priorWatermarkIso) - CDC_OVERLAP_MS : NaN;
+  const since = Number.isFinite(prior) ? Math.max(prior, floor) : floor;
+  return new Date(since).toISOString();
+}
+
+/**
+ * Split a CDC response into live entities and deletions for one entity name.
+ * Shape: { CDCResponse: [ { QueryResponse: [ { Invoice: [ ... ] } ] } ] }.
+ * A deleted entity carries status "Deleted", its Id and MetaData only. Exported for tests.
+ */
+export function splitCdcEntities(data, entityName) {
+  const live = [];
+  const removed = [];
+  for (const cdc of data?.CDCResponse || []) {
+    for (const qr of cdc?.QueryResponse || []) {
+      for (const e of qr?.[entityName] || []) {
+        if (String(e?.status || "").toLowerCase() === "deleted") {
+          removed.push({ id: String(e.Id), deleted_at: e?.MetaData?.LastUpdatedTime || null });
+        } else if (e?.Id != null) {
+          live.push(e);
+        }
+      }
+    }
+  }
+  return { live, removed };
+}
+
+// --- AR reconciliation ---------------------------------------------------------
+
+async function checkArReconciliation(sbUrl, sbKey, realm, warnings) {
+  const rows = await supabaseSelect(sbUrl, sbKey, "v_qbo_ar_reconciliation", { realm_id: `eq.${realm}` });
+  const r = rows[0];
+  if (!r) return { status: "no_rows" };
+  const out = {
+    status: r.status,
+    report_as_of: r.report_as_of,
+    report_invoice_open: Number(r.report_invoice_open),
+    mirror_current_open: Number(r.mirror_current_open),
+    flagged_open: Number(r.flagged_open || 0),
+    difference: Number(r.invoice_open_difference),
+    difference_pct: r.invoice_open_difference_pct == null ? null : Number(r.invoice_open_difference_pct),
+  };
+  console.log(
+    `  ar_reconciliation: status=${out.status} report=${out.report_invoice_open} mirror=${out.mirror_current_open} ` +
+      `diff=${out.difference} (${out.difference_pct}%) flagged_open=${out.flagged_open}`,
+  );
+  if (out.status !== "ok") {
+    warnings.push(
+      `ar_reconciliation: ${out.status}; mirror open ${out.mirror_current_open} vs report ${out.report_invoice_open} ` +
+        `(tolerance ${AR_DRIFT_TOLERANCE * 100}%)`,
+    );
+  }
+  return out;
 }
 
 async function syncReports(token, realm, pullBatch, dryRun, sbUrl, sbKey, accountingMethod) {
@@ -556,6 +850,11 @@ function baseRow(entity, realm, pullBatch) {
     pull_batch: pullBatch,
     fetched_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    // Presence flags (mig 348): a returned row exists in QuickBooks now.
+    last_seen_run_key: pullBatch,
+    last_seen_at: new Date().toISOString(),
+    missing_since: null,
+    qbo_deleted_at: null,
   };
 }
 
@@ -783,6 +1082,37 @@ async function supabaseUpsert(supabaseUrl, key, table, rows, onConflict) {
       throw new Error(`Supabase upsert ${table} failed: ${res.status} ${body.slice(0, 400)}`);
     }
   }
+}
+
+/** Exact row count for a filtered table (PostgREST HEAD + count=exact). */
+async function supabaseCount(supabaseUrl, key, table, filters) {
+  const params = new URLSearchParams({ select: "qbo_id", ...filters });
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${params}`, {
+    method: "HEAD",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=exact", Range: "0-0" },
+  });
+  if (!res.ok && res.status !== 206) throw new Error(`Supabase count ${table} failed: ${res.status}`);
+  const range = res.headers.get("content-range") || "";
+  const total = Number(range.split("/")[1]);
+  if (!Number.isFinite(total)) throw new Error(`Supabase count ${table}: no total in content-range "${range}"`);
+  return total;
+}
+
+async function supabaseSelect(supabaseUrl, key, table, filters = {}) {
+  const params = new URLSearchParams({ select: "*", ...filters });
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${params}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) throw new Error(`Supabase select ${table} failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  return res.json();
+}
+
+async function readWatermark(supabaseUrl, key, realm, entity) {
+  const rows = await supabaseSelect(supabaseUrl, key, "qbo_sync_watermarks", {
+    realm_id: `eq.${realm}`,
+    entity: `eq.${entity}`,
+  });
+  return rows[0]?.watermark_at || null;
 }
 
 /** Call a Postgres function exposed via PostgREST RPC. */
