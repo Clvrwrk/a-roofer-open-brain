@@ -71,6 +71,43 @@ ORDER BY txn_date DESC;
 SELECT * FROM qbo_register('Amex (1002)');
 ```
 
+### Presence flags: rows QuickBooks no longer returns (mig 348)
+
+The mirror never deletes. Until 2026-11-22 it also never noticed a deletion, so an invoice deleted, or voided and re-created, in QuickBooks stayed open in the mirror. On 2026-11-22 that was 223 invoices ($2.44M open), which is why the mirror showed $4.39M open AR against $1.92M in QuickBooks and why payments on replacement invoices looked missing.
+
+Every mirrored entity table now carries:
+
+| Column | Set by | Meaning |
+| --- | --- | --- |
+| `last_seen_at`, `last_seen_run_key` | every upsert | The last full pull or change-feed read that returned the row |
+| `missing_since` | `qbo_mark_missing()` after a complete full pull | QuickBooks did not return the row. Cleared automatically if it comes back |
+| `qbo_deleted_at` | `qbo_mark_deleted()` from the change feed | QuickBooks CDC reported the entity as Deleted |
+
+**Read actuals from the `_current` views**, never the base tables: `v_qbo_invoices_current`, `v_qbo_payments_current`, `v_qbo_bills_current`, `v_qbo_purchases_current` and one per entity table. `v_qbo_job_cost_lines_all` (and so `v_qbo_job_costs` and the WIP board), `v_qbo_register_lines` and `v_work_invoice_qbo_recon` already read current rows only.
+
+| Object | Purpose |
+| --- | --- |
+| `v_qbo_removed_rows` | Every flagged transaction, for review |
+| `v_qbo_ar_report_lines` | Detail lines of the latest AgedReceivableDetail report |
+| `v_qbo_ar_reconciliation` | Mirror open invoices vs the report; `status = drift` beyond 1% |
+| `v_qbo_ar_invoice_recon` | The same, per invoice (`match`, `mirror_only`, `report_only`, `balance_differs`, `flagged_removed`) |
+
+Safety rules in the job:
+
+- Flagging runs only after a **complete** full pull (`backfill` or `thursday` mode, not cut short by `--max-pages`) that paged with `orderby Id`.
+- If a pull returns fewer than 80% of the rows the mirror holds as present, nothing is flagged and the run records a warning (`--missing-guard` to change the share). A bad API response cannot mark the mirror deleted.
+- `--no-flag-missing` and `--no-cdc` turn the two passes off for a run.
+
+### Change feed (CDC)
+
+After every full pull the job reads QuickBooks Change Data Capture (`GET /cdc?entities=<Entity>&changedSince=<ISO>`, read-only) for each entity. Changed entities are upserted; entities reported `status: "Deleted"` get `qbo_deleted_at`. The watermark is `qbo_sync_watermarks` entity `CDC`; each call overlaps the last by 10 minutes and never reaches back more than the 30 days QuickBooks keeps. It also runs on its own:
+
+```bash
+node integrations/bridges/quickbooks/mirror-backfill.mjs --mode=cdc
+```
+
+`--mode=cdc` is cheap (one GET per entity) and can run hourly for near-real-time payments, alongside the nightly full pull.
+
 ## Client
 
 `integrations/bridges/quickbooks/read-only-client.mjs` — GET + SELECT query only; OAuth refresh POST to Intuit token endpoint only.
@@ -94,9 +131,9 @@ Gates:
 
 Run JSON: `integrations/bridges/quickbooks/.mirror-runs/` (gitignored).
 
-## Host timer (Thursday)
+## Host timer
 
-`scripts/qbo-thursday-sync.sh` — same pattern as ABC nightly. Install on agent host:
+`scripts/qbo-thursday-sync.sh` — same pattern as ABC nightly. Despite the name, `qbo_sync_runs` shows it running **nightly at 02:00 UTC** (checked 2026-11-22); the Thursday line below is the original plan. Install on agent host:
 
 ```cron
 # Thursday 20:00 America/Chicago ≈ Friday AR prep

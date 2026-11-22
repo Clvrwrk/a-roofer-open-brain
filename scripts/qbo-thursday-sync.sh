@@ -4,7 +4,7 @@
 #
 #   bash scripts/qbo-thursday-sync.sh
 #
-# Cron (Thu 20:00 America/Chicago):
+# Cron (originally Thu 20:00 America/Chicago; the host runs it nightly at 02:00 UTC as of 2026-11-22):
 #   0 20 * * 4 TZ="America/Chicago" /usr/bin/env bash /opt/openbrain/a-roofers-open-brain/scripts/qbo-thursday-sync.sh
 set -euo pipefail
 
