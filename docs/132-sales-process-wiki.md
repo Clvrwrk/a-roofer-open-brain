@@ -37,6 +37,10 @@ A company wiki page that lays out every sales track from lead to closed file. Ea
 - Kansas City, Multi-Family/Commercial, Insurance Program and Florida still have no office seat holders in owner roles.
 - AccuLynx milestone to phase as imported today: Lead → P1 (P3 when an estimate exists), Prospect → P2/P3, Approved → P4–P6, Completed → P8, Invoiced → P9.
 
-## Updating it
+## Live team folder
+
+The published page declares the `mcp` capability for the **github** connector (`get_file_contents` only) and reads `docs/wiki/sales-process/pages/` live: on open, then every two minutes while open. It reads `main`, falling back to `claude/sales-process-wiki-fdacec` until this branch merges. A Markdown file there becomes a page; front matter `track` (`rr`, `ri`, `cr`, `ci`, `svc`) and `stage` (`p1`–`p10`, `s1`–`s6`) also place it inside that track or stage. Other files are listed with a GitHub link. How-to: [`pages/README.md`](wiki/sales-process/pages/README.md). Readers without the GitHub connector or repo access see only the published wiki. Markdown is rendered with marked 12.0.2 and sanitized with DOMPurify 3.1.6; mermaid 10.9.1 loads only when a page has a diagram.
+
+## Updating the built-in content
 
 Edit `docs/wiki/sales-process/index.html` (content lives in the `TRACKS`, `resBase()`, `COM_RETAIL`, `COM_INS` and `SERVICE` objects), then republish to the same artifact URL. No customer or staff names appear on the page; lead-source names that are individuals were deliberately left out.

@@ -175,6 +175,31 @@ tr:last-child td { border-bottom: 0; }
 
 .srcs { font-size: 12px; color: var(--pe-text-muted); display: grid; gap: 4px; }
 .srcs b { color: var(--pe-text-2); }
+/* Live folder */
+.livebar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12px; color: var(--pe-on-structure-muted); padding-bottom: 16px; }
+.livebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pe-on-structure-muted); display: inline-block; margin-right: 6px; }
+.livebar.ok .dot { background: #a2d0b0; }
+.livebar.warn .dot { background: var(--pe-wayfinding); }
+.livebar button { appearance: none; font: 600 12px var(--font); color: var(--pe-on-structure); background: transparent; border: 1px solid var(--pe-on-structure-muted); border-radius: var(--r-control); padding: 4px 10px; cursor: pointer; }
+.notes { display: grid; gap: 10px; }
+.notes:empty { display: none; }
+.note { border: 1px dashed var(--pe-border-control); border-radius: var(--r-control); padding: 14px 16px; background: var(--pe-surface); min-width: 0; }
+.note .from { font-size: 12px; color: var(--pe-text-muted); margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.md { min-width: 0; overflow-wrap: anywhere; display: grid; gap: 10px; }
+.md h1 { font-size: 20px; margin: 4px 0 0; } .md h2 { font-size: 18px; margin: 4px 0 0; } .md h3 { font-size: 16px; } .md h4 { font-size: 13px; }
+.md ul, .md ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.md table { display: block; overflow-x: auto; border: 1px solid var(--pe-border); border-radius: var(--r-control); }
+.md pre { background: var(--pe-sunken); border: 1px solid var(--pe-border); border-radius: var(--r-control); padding: 10px 12px; overflow-x: auto; font-size: 12px; margin: 0; }
+.md code { font-size: 12px; }
+.md blockquote { margin: 0; padding: 4px 12px; border-left: 3px solid var(--pe-border-strong); color: var(--pe-text-2); }
+.md .wiki-mermaid { overflow-x: auto; background: var(--pe-surface); border: 1px solid var(--pe-border); border-radius: var(--r-control); padding: 10px; }
+.md .wiki-mermaid svg { max-width: 100%; height: auto; }
+.filelist { display: grid; gap: 8px; }
+.filerow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--pe-border); border-radius: var(--r-control); background: var(--pe-surface); }
+.filerow .fn { font-weight: 600; overflow-wrap: anywhere; }
+details.page { background: var(--pe-surface); border: 1px solid var(--pe-border-strong); border-radius: var(--r-card); scroll-margin-top: 72px; }
+details.page > summary { cursor: pointer; padding: 14px 18px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+details.page > .md { padding: 0 18px 18px; }
 footer { border-top: 1px solid var(--pe-border); }
 footer .wrap { padding-block: 20px 40px; font-size: 12px; color: var(--pe-text-muted); display: grid; gap: 4px; }
 @media (max-width: 600px) { .mast h1 { font-size: 24px; } details.stage > summary { padding: 14px; } .stagebody { padding: 14px; } .card { padding: 16px; } .whorow { grid-template-columns: 1fr; gap: 4px; } .kv div { grid-template-columns: 1fr; gap: 2px; } }
@@ -186,6 +211,7 @@ footer .wrap { padding-block: 20px 40px; font-size: 12px; color: var(--pe-text-m
     <div class="brandline">Pro Exteriors · Company wiki</div>
     <h1>Sales Process Wiki</h1>
     <p>Every sales track from first call to closed file: residential retail, residential insurance, commercial retail, commercial insurance and commercial repair. Open any stage to see what happens, who owns it, what must be true to move on, and which documents and systems carry it.</p>
+    <div class="livebar" id="livebar" role="status"><span><span class="dot"></span>Team folder: connecting…</span></div>
   </div>
 </header>
 <nav class="tabs" aria-label="Wiki sections"><div class="wrap" id="tabs"></div></nav>
@@ -195,6 +221,8 @@ footer .wrap { padding-block: 20px 40px; font-size: 12px; color: var(--pe-text-m
   <div>Residential stages and gates follow the CRM job journey (gate list v1, approved by Chris on October 5, 2026). Commercial pages marked “Proposed” describe practice that the company systems do not yet record; confirm them before they are used for training.</div>
 </div></footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
 const ROLES = {
   sc:{n:"Sales Consultant / PM",d:"The job’s rep. Owns the customer relationship from first contact through final inspection, and supplies evidence for every later gate."},
@@ -554,6 +582,7 @@ function renderStage(t, s){
        <div class="section"><h4>Clocks</h4>${s.timers&&s.timers.length?`<ul class="clean small">${s.timers.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:`<p class="small muted">No clock set for this stage.</p>`}</div>
      </div>
      ${s.watch&&s.watch.length?`<div class="watch"><h4>Watch for</h4><ul class="clean small">${s.watch.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+     <div class="notes" data-notes="${id}"></div>
    </div></details>`;
 }
 
@@ -561,6 +590,7 @@ function renderTrack(t){
   return `<section class="view">
    <div class="trackhead"><div class="meta">${pill(t.status[0], t.status[1])}</div><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p></div>
    <div class="facts">${t.facts.map(f=>`<div class="fact"><b>${esc(f[0])}</b><span>${esc(f[1])}</span></div>`).join("")}</div>
+   <div class="notes" data-notes="${t.id}"></div>
    ${renderFlow(t)}
    <div class="section"><h3>Stage deep dives</h3><div class="stages">${t.stages.map(s=>renderStage(t,s)).join("")}</div></div>
    <div class="card srcs"><b>Where this page comes from</b>${t.sources.map(x=>`<span>${esc(x)}</span>`).join("")}</div>
@@ -723,8 +753,199 @@ function renderOpen(){
   </section>`;
 }
 
+/* ---------- live team folder (GitHub connector) ---------- */
+const GH = {server:"github", tool:"get_file_contents", owner:"Clvrwrk", repo:"a-roofer-open-brain", dir:"docs/wiki/sales-process/pages",
+  refs:["refs/heads/main","refs/heads/claude/sales-process-wiki-fdacec"]};
+const TRACK_NAMES = Object.fromEntries(TRACKS.map(t=>[t.id,t.title]));
+const LIVE = {state:"connecting", ref:null, files:[], pages:{}, checkedAt:null, msg:"", mcp:null, unwatch:null};
+
+function setLivebar(){
+  const bar = $("#livebar"); if(!bar) return;
+  const n = LIVE.files.length;
+  const when = LIVE.checkedAt ? new Date(LIVE.checkedAt).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "";
+  bar.className = "livebar " + (LIVE.state==="live" ? "ok" : LIVE.state==="connecting" ? "" : "warn");
+  bar.textContent = "";
+  const s = document.createElement("span"); const d = document.createElement("span"); d.className = "dot"; s.append(d);
+  s.append(LIVE.state==="live" ? `Team folder: ${n} file${n===1?"":"s"} · checked ${when} · updates on its own` :
+           LIVE.state==="connecting" ? "Team folder: connecting…" : "Team folder: " + LIVE.msg);
+  bar.append(s);
+  if(LIVE.state==="live"){ const a = document.createElement("a"); a.href = "#folder"; a.textContent = "Open the folder"; a.style.color = "var(--pe-on-structure)"; bar.append(a); }
+  if(LIVE.state==="approval"){ const b = document.createElement("button"); b.type = "button"; b.textContent = "Allow GitHub for this page"; b.onclick = () => connectLive(true); bar.append(b); }
+}
+
+function errorMessage(e){
+  const c = e && e.code;
+  if(c==="server_not_connected") return "add the GitHub connector in claude.ai Settings › Connectors to see files added to the folder.";
+  if(c==="needs_reauth") return "reconnect GitHub in claude.ai Settings › Connectors.";
+  if(c==="selection_required") return "choose which GitHub connector to use when claude.ai asks.";
+  if(c==="not_in_manifest") return "GitHub access is turned off for this page. Turn it on from the page’s Permissions menu.";
+  if(c==="approval_required") return "this page needs your approval to read the folder through GitHub.";
+  if(c==="blocked_by_policy") return "your organization blocks this GitHub tool for you.";
+  if(c==="not_granted" || c==="capability_disabled" || c==="capability_removed") return "live updates are not available in this view.";
+  if(c==="tool_error") return "GitHub could not read the folder (" + String(e.message||"").slice(0,120) + ").";
+  if(c==="server_unavailable" || c==="rate_limited") return "GitHub did not answer. Showing the last check.";
+  return "the folder could not be read just now.";
+}
+
+function resourceText(result){
+  const blocks = (result && result.content) || [];
+  const r = blocks.find(b => b.type==="resource" && b.resource && typeof b.resource.text==="string");
+  if(r) return r.resource.text;
+  return typeof result.payload==="string" ? result.payload : "";
+}
+
+function parsePage(raw){
+  const meta = {}; let body = raw;
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if(m){ body = raw.slice(m[0].length); m[1].split(/\r?\n/).forEach(l => { const k = l.match(/^([A-Za-z_]+):\s*(.*)$/); if(k) meta[k[1].toLowerCase()] = k[2].trim().replace(/^["']|["']$/g,""); }); }
+  if(!meta.title){ const h = body.match(/^#\s+(.+)$/m); if(h) meta.title = h[1].trim(); }
+  return {meta, body};
+}
+
+function githubUrl(rel){
+  const branch = (LIVE.ref||"").replace("refs/heads/","");
+  try { return new URL(rel, `https://github.com/${GH.owner}/${GH.repo}/blob/${branch}/${GH.dir}/`).href; } catch(e){ return null; }
+}
+
+let mermaidLoading = null;
+function loadMermaid(){
+  if(window.mermaid) return Promise.resolve(window.mermaid);
+  if(!mermaidLoading) mermaidLoading = new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"; s.onload = () => res(window.mermaid); s.onerror = rej; document.head.append(s); });
+  return mermaidLoading;
+}
+let mermaidSeq = 0;
+async function drawMermaid(root){
+  const blocks = [...root.querySelectorAll(".wiki-mermaid:not([data-done])")]; if(!blocks.length) return;
+  try {
+    const mm = await loadMermaid();
+    const dark = document.documentElement.getAttribute("data-theme")==="dark" || (document.documentElement.getAttribute("data-theme")!=="light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    mm.initialize({startOnLoad:false, securityLevel:"strict", theme: dark ? "dark" : "neutral", fontFamily:"Inter, system-ui, sans-serif"});
+    for(const b of blocks){ b.setAttribute("data-done","1"); try { const {svg} = await mm.render("wm" + (++mermaidSeq), b.dataset.src); b.innerHTML = svg; } catch(err){ b.textContent = b.dataset.src; } }
+  } catch(err){ blocks.forEach(b => { b.setAttribute("data-done","1"); b.textContent = b.dataset.src; }); }
+}
+
+function renderMarkdown(body){
+  const wrap = document.createElement("div"); wrap.className = "md";
+  if(!window.marked || !window.DOMPurify){ const pre = document.createElement("pre"); pre.textContent = body; wrap.append(pre); return wrap; }
+  const html = window.DOMPurify.sanitize(window.marked.parse(body, {gfm:true}), {FORBID_TAGS:["style","form","input","button","iframe","object","embed"], FORBID_ATTR:["style"]});
+  wrap.innerHTML = html;
+  wrap.querySelectorAll("pre > code.language-mermaid").forEach(code => { const d = document.createElement("div"); d.className = "wiki-mermaid"; d.dataset.src = code.textContent; d.textContent = "Drawing diagram…"; code.parentElement.replaceWith(d); });
+  wrap.querySelectorAll("img").forEach(img => { const a = document.createElement("a"); const u = githubUrl(img.getAttribute("src")||""); a.textContent = "Image: " + (img.getAttribute("alt") || img.getAttribute("src") || "open"); if(u && u.startsWith("https://")){ a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; } img.replaceWith(a); });
+  wrap.querySelectorAll("a[href]").forEach(a => { const h = a.getAttribute("href"); if(h.startsWith("#")) return; const u = /^https:\/\//.test(h) ? h : (/^[a-z]+:/i.test(h) ? null : githubUrl(h)); if(u){ a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; } else a.removeAttribute("href"); });
+  return wrap;
+}
+
+function noteFor(page){
+  const box = document.createElement("div"); box.className = "note";
+  const from = document.createElement("div"); from.className = "from";
+  const p = document.createElement("span"); p.className = "pill neutral"; p.textContent = "From the team folder"; from.append(p);
+  const f = document.createElement("span"); f.textContent = page.name; from.append(f);
+  box.append(from, renderMarkdown(page.body));
+  return box;
+}
+
+function slug(s){ return s.toLowerCase().replace(/\.[a-z0-9]+$/,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "page"; }
+
+function paintLive(){
+  setLivebar();
+  document.querySelectorAll("[data-notes]").forEach(el => { el.textContent = ""; });
+  const pages = Object.values(LIVE.pages).filter(p => LIVE.files.some(f => f.path===p.path)).sort((a,b) => (Number(a.meta.order)||99) - (Number(b.meta.order)||99) || a.name.localeCompare(b.name));
+  pages.forEach(pg => {
+    const t = (pg.meta.track||"").toLowerCase(), s = (pg.meta.stage||"").toLowerCase();
+    if(!t) return;
+    const el = document.querySelector(`[data-notes="${CSS.escape(s ? t+"-"+s : t)}"]`) || document.querySelector(`[data-notes="${CSS.escape(t)}"]`);
+    if(el) el.append(noteFor(pg));
+  });
+  const fv = $("#folderview"); if(fv) renderFolderInto(fv, pages);
+  drawMermaid(document);
+}
+
+function renderFolderInto(root, pages){
+  root.textContent = "";
+  if(LIVE.state!=="live"){
+    const c = document.createElement("div"); c.className = "card section";
+    const h = document.createElement("h3"); h.textContent = LIVE.state==="connecting" ? "Reading the folder…" : "The folder is not available in this view";
+    const p = document.createElement("p"); p.className = "small"; p.textContent = LIVE.state==="connecting" ? "Files appear here once GitHub answers." : "Reason: " + LIVE.msg;
+    c.append(h, p); root.append(c); return;
+  }
+  const list = document.createElement("div"); list.className = "card section";
+  const h = document.createElement("h3"); h.textContent = `Every file in the folder (${LIVE.files.length})`;
+  const fl = document.createElement("div"); fl.className = "filelist";
+  LIVE.files.forEach(f => {
+    const row = document.createElement("div"); row.className = "filerow";
+    const left = document.createElement("div"); const nm = document.createElement("div"); nm.className = "fn"; nm.textContent = f.name;
+    const pg = LIVE.pages[f.path]; const sub = document.createElement("div"); sub.className = "small muted";
+    if(pg){ const t = (pg.meta.track||"").toLowerCase(); sub.textContent = t ? "Shown in " + (TRACK_NAMES[t]||t) + (pg.meta.stage ? " › " + pg.meta.stage.toUpperCase() : "") + " and below" : "Page below"; }
+    else sub.textContent = (f.name.split(".").pop()||"file").toUpperCase() + " file · " + Math.max(1, Math.round((f.size||0)/1024)) + " KB";
+    left.append(nm, sub);
+    const a = document.createElement("a"); a.textContent = "Open in GitHub"; if(typeof f.html_url==="string" && f.html_url.startsWith("https://")){ a.href = f.html_url; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    row.append(left, a); fl.append(row);
+  });
+  list.append(h, fl); root.append(list);
+  pages.forEach(pg => {
+    const d = document.createElement("details"); d.className = "page"; d.id = "page-" + slug(pg.name);
+    const s = document.createElement("summary"); s.textContent = pg.meta.title || pg.name;
+    if(pg.meta.track){ const p = document.createElement("span"); p.className = "pill neutral"; p.textContent = (TRACK_NAMES[pg.meta.track.toLowerCase()]||pg.meta.track) + (pg.meta.stage ? " › " + pg.meta.stage.toUpperCase() : ""); s.append(" ", p); }
+    d.append(s, renderMarkdown(pg.body)); root.append(d);
+  });
+}
+
+async function onListing(result){
+  let items = result.payload;
+  if(typeof items==="string"){ try { items = JSON.parse(items); } catch(e){ items = []; } }
+  if(!Array.isArray(items)) items = [];
+  const files = items.filter(f => f && f.type==="file" && typeof f.name==="string").sort((a,b) => a.name.localeCompare(b.name));
+  const sig = files.map(f => f.path + "@" + f.sha).join("|");
+  LIVE.checkedAt = (result.cache && result.cache.storedAt) || Date.now();
+  if(LIVE.state==="live" && sig===LIVE.sig){ setLivebar(); return; }
+  LIVE.sig = sig; LIVE.files = files; LIVE.state = "live";
+  const mds = files.filter(f => /\.(md|markdown)$/i.test(f.name) && (!LIVE.pages[f.path] || LIVE.pages[f.path].sha!==f.sha));
+  paintLive();
+  for(const f of mds){
+    try {
+      const r = await LIVE.mcp.callTool(GH.server, GH.tool, {owner:GH.owner, repo:GH.repo, path:f.path, ref:LIVE.ref}, {cache:false});
+      const {meta, body} = parsePage(resourceText(r));
+      LIVE.pages[f.path] = {path:f.path, name:f.name, sha:f.sha, meta, body};
+    } catch(e){ LIVE.pages[f.path] = {path:f.path, name:f.name, sha:f.sha, meta:{title:f.name}, body:"This page could not be read: " + errorMessage(e)}; }
+  }
+  if(mds.length) paintLive();
+}
+
+async function connectLive(fromClick){
+  const use = window.claude && window.claude.use;
+  const mcp = use ? await window.claude.use("mcp") : null;
+  if(!mcp){ LIVE.state = "off"; LIVE.msg = "live updates work inside claude.ai. Showing the published wiki."; paintLive(); return; }
+  LIVE.mcp = mcp; LIVE.state = "connecting"; setLivebar();
+  let lastErr = null;
+  for(const ref of GH.refs){
+    try {
+      const r = await mcp.callTool(GH.server, GH.tool, {owner:GH.owner, repo:GH.repo, path:GH.dir, ref}, {cache:false});
+      LIVE.ref = ref; await onListing(r); lastErr = null; break;
+    } catch(e){ lastErr = e; if(e.code!=="tool_error") break; }
+  }
+  if(!LIVE.ref){
+    LIVE.state = lastErr && lastErr.code==="approval_required" ? "approval" : "error";
+    LIVE.msg = lastErr && lastErr.code==="tool_error" ? "the folder does not exist yet on the main branch." : errorMessage(lastErr);
+    LIVE.files = []; paintLive(); return;
+  }
+  if(LIVE.unwatch) LIVE.unwatch();
+  LIVE.unwatch = mcp.watchTool(GH.server, GH.tool, {owner:GH.owner, repo:GH.repo, path:GH.dir, ref:LIVE.ref}, ev => {
+    if(ev.type==="data"){ onListing(ev.result); return; }
+    const c = ev.error && ev.error.code;
+    if(["needs_reauth","server_not_connected","blocked_by_policy","approval_required","not_in_manifest","selection_required"].includes(c)){
+      LIVE.files = []; LIVE.pages = {}; LIVE.state = c==="approval_required" ? "approval" : "error"; LIVE.msg = errorMessage(ev.error); paintLive();
+    } else if(LIVE.state!=="live"){ LIVE.state = "error"; LIVE.msg = errorMessage(ev.error); paintLive(); }
+  }, {refetchInterval: 120000});
+}
+
+function renderFolder(){
+  return `<section class="view"><div><h2>Team folder</h2>
+    <p class="lede">Everything in <code>docs/wiki/sales-process/pages/</code> in the a-roofer-open-brain repository, read live through your GitHub connector. Add a Markdown file there and it appears here, and in the track or stage its header names, without republishing the wiki. The page checks the folder every two minutes while it is open.</p></div>
+    <div id="folderview" class="view"></div></section>`;
+}
+
 /* ---------- router ---------- */
-const VIEWS = [["overview","Overview"],...TRACKS.map(t=>[t.id,t.tab]),["who","Who does what"],["docs","Documents & glossary"],["open","Open questions"]];
+const VIEWS = [["overview","Overview"],...TRACKS.map(t=>[t.id,t.tab]),["who","Who does what"],["docs","Documents & glossary"],["open","Open questions"],["folder","Team folder"]];
 function renderTabs(cur){
   $("#tabs").innerHTML = VIEWS.map(v=>`<a class="tab" href="#${v[0]}" ${v[0]===cur?'aria-current="page"':""}>${esc(v[1])}</a>`).join("");
 }
@@ -735,7 +956,8 @@ function route(){
   if(m && VIEWS.some(v=>v[0]===m[1])){ view = m[1]; stage = m[2] ? h : null; }
   renderTabs(view);
   const t = TRACKS.find(x=>x.id===view);
-  $("#app").innerHTML = t ? renderTrack(t) : view==="who" ? renderWho() : view==="docs" ? renderDocs() : view==="open" ? renderOpen() : renderOverview();
+  $("#app").innerHTML = t ? renderTrack(t) : view==="who" ? renderWho() : view==="docs" ? renderDocs() : view==="open" ? renderOpen() : view==="folder" ? renderFolder() : renderOverview();
+  paintLive();
   if(stage){ const el = document.getElementById(stage); if(el){ el.open = true; el.scrollIntoView({block:"start"}); } }
   else window.scrollTo(0,0);
 }
@@ -746,4 +968,5 @@ document.addEventListener("click", e=>{
 });
 window.addEventListener("hashchange", route);
 route();
+connectLive(false);
 </script>
